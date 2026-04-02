@@ -25,7 +25,12 @@ class Message(BaseModel):
 
 # setup
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+if not SUPABASE_URL:
+    raise ValueError("NEXT_PUBLIC_SUPABASE_URL env var missing")
+
 SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY")
+if not SUPABASE_KEY:
+    raise ValueError("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY env var missing")
 
 supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 embeddings = OpenAIEmbeddings()
@@ -43,11 +48,11 @@ retriever_tool = create_retriever_tool(
     "Search for github issues",
 )
 
-llm = ChatOpenAI(temperature=0)
+llm = ChatOpenAI(model_kwargs={"temperature": 0})  # type: ignore
 tools = [retriever_tool, note_tool]
 agent = create_agent(llm, tools)
 
 @app.post("/chat")
 def chat(msg: Message):
-    result = agent.invoke({"input": msg.message})
+    result = agent.invoke({"input": msg.message})  # type: ignore
     return {"reply": result.get("output", str(result))}

@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // allowedDevOrigins for Next.js 16.2+ experimental
 };
 
 export default nextConfig;
