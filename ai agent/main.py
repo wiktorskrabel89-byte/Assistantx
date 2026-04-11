@@ -68,8 +68,8 @@ retriever_tool = create_retriever_tool(
     "Search for github issues",
 )
 
-# gpt-4.5: best OpenAI model for chat (fast, multimodal, highly capable)
-llm_chat = ChatOpenAI(model="gpt-4.5", temperature=0)
+# gpt-4.5-preview: best OpenAI model for chat (fast, multimodal, highly capable)
+llm_chat = ChatOpenAI(model="gpt-4.5-preview", temperature=0)
 tools = [retriever_tool, note_tool]
 agent = create_agent(llm_chat, tools)
 
@@ -118,7 +118,7 @@ async def chat(msg: Message):
         ]
 
         async def stream_chat():
-            yield f"data: {json.dumps({'model': 'GPT-4.5'})}\n\n"
+            yield f"data: {json.dumps({'model': 'GPT-4.5 Preview'})}\n\n"
             async for chunk in llm_chat.astream(chat_messages):
                 if chunk.content:
                     yield f"data: {json.dumps({'token': chunk.content})}\n\n"
