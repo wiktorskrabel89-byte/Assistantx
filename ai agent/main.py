@@ -16,6 +16,7 @@ from langchain_community.vectorstores import SupabaseVectorStore
 from langchain.agents import create_agent
 from langchain_core.tools import create_retriever_tool
 from langchain_core.messages import HumanMessage, SystemMessage
+from openai import AsyncOpenAI
 from github.github import fetch_github_issues
 from note import note_tool
 
@@ -37,7 +38,10 @@ app.add_middleware(
 
 class Message(BaseModel):
     message: str
-    mode: str = "auto"  # "chat", "code", "auto"
+    mode: str = "auto"  # "chat", "code", "auto", "image"
+
+class ImageRequest(BaseModel):
+    prompt: str
 
 # setup
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
@@ -64,13 +68,16 @@ retriever_tool = create_retriever_tool(
     "Search for github issues",
 )
 
-# gpt-4o-mini: faster & cheaper than gpt-4
-llm_chat = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# gpt-4o: best OpenAI model for chat (fast, multimodal, highly capable)
+llm_chat = ChatOpenAI(model="gpt-4o", temperature=0)
 tools = [retriever_tool, note_tool]
 agent = create_agent(llm_chat, tools)
 
-# claude-haiku: much faster than claude-opus for code generation
-llm_code = ChatAnthropic(model="claude-haiku-4-5", temperature=0)
+# claude-sonnet-4-5: best Claude model for coding (top benchmark scores, fast)
+llm_code = ChatAnthropic(model="claude-sonnet-4-5", temperature=0)
+
+# OpenAI async client for image generation
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 CODE_KEYWORDS = [
     "kod", "code", "funkcja", "function", "skrypt", "script",
@@ -96,7 +103,7 @@ async def chat(msg: Message):
         ]
 
         async def stream_code():
-            yield f"data: {json.dumps({'model': 'Claude'})}\n\n"
+            yield f"data: {json.dumps({'model': 'Claude Sonnet'})}\n\n"
             async for chunk in llm_code.astream(messages):
                 if chunk.content:
                     yield f"data: {json.dumps({'token': chunk.content})}\n\n"
@@ -106,10 +113,22 @@ async def chat(msg: Message):
 
     else:
         async def stream_chat():
-            yield f"data: {json.dumps({'model': 'OpenAI'})}\n\n"
+            yield f"data: {json.dumps({'model': 'GPT-4o'})}\n\n"
             async for chunk in llm_chat.astream([HumanMessage(content=msg.message)]):
                 if chunk.content:
                     yield f"data: {json.dumps({'token': chunk.content})}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(stream_chat(), media_type="text/event-stream")
+
+@app.post("/image")
+async def generate_image(req: ImageRequest):
+    response = await openai_client.images.generate(
+        model="dall-e-3",
+        prompt=req.prompt,
+        size="1024x1024",
+        quality="standard",
+        n=1,
+    )
+    image_url = response.data[0].url
+    return {"url": image_url, "model": "DALL-E 3"}

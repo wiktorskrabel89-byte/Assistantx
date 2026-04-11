@@ -1,8 +1,8 @@
 "use client";
 import { useState, useCallback } from "react";
 
-type Mode = "auto" | "chat" | "code";
-type ChatEntry = { user: string; ai: string; model: string | null };
+type Mode = "auto" | "chat" | "code" | "image";
+type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string };
 
 export default function Home() {
   const [message, setMessage] = useState("");
@@ -15,6 +15,31 @@ export default function Home() {
     const userMsg = message;
     setMessage("");
     setLoading(true);
+
+    if (mode === "image") {
+      setChat((prev) => [...prev, { user: userMsg, ai: "Generuję obraz...", model: "DALL-E 3" }]);
+      try {
+        const res = await fetch("/api/image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: userMsg }),
+        });
+        const data = await res.json();
+        setChat((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            user: userMsg,
+            ai: data.error ?? "",
+            model: "DALL-E 3",
+            imageUrl: data.url ?? undefined,
+          };
+          return updated;
+        });
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     // Add entry with empty AI reply that we'll stream into
     setChat((prev) => [...prev, { user: userMsg, ai: "", model: null }]);
@@ -72,16 +97,24 @@ export default function Home() {
 
   const modeLabels: Record<Mode, string> = {
     auto: "Auto",
-    chat: "Rozmowa (OpenAI)",
-    code: "Kod (Claude)",
+    chat: "Rozmowa (GPT-4o)",
+    code: "Kod (Claude Sonnet)",
+    image: "Obraz (DALL-E 3)",
+  };
+
+  const modeColors: Record<Mode, string> = {
+    auto: "#0070f3",
+    chat: "#0070f3",
+    code: "#7c3aed",
+    image: "#059669",
   };
 
   return (
     <main style={{ padding: 20, maxWidth: 800 }}>
       <h1>Moje AI</h1>
 
-      <div style={{ marginBottom: 16, display: "flex", gap: 8 }}>
-        {(["auto", "chat", "code"] as Mode[]).map((m) => (
+      <div style={{ marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {(["auto", "chat", "code", "image"] as Mode[]).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
@@ -89,7 +122,7 @@ export default function Home() {
               padding: "6px 14px",
               borderRadius: 6,
               border: "1px solid #ccc",
-              background: mode === m ? "#0070f3" : "#fff",
+              background: mode === m ? modeColors[m] : "#fff",
               color: mode === m ? "#fff" : "#000",
               cursor: "pointer",
               fontWeight: mode === m ? "bold" : "normal",
@@ -104,9 +137,17 @@ export default function Home() {
         <div key={i} style={{ marginBottom: 16 }}>
           <p><b>Ty:</b> {c.user}</p>
           <p><b>AI {c.model ? `(${c.model})` : ""}:</b></p>
-          <pre style={{ whiteSpace: "pre-wrap", background: "#f4f4f4", padding: 12, borderRadius: 6, minHeight: 24 }}>
-            {c.ai || (i === chat.length - 1 && loading ? "▋" : "")}
-          </pre>
+          {c.imageUrl ? (
+            <img
+              src={c.imageUrl}
+              alt={c.user}
+              style={{ maxWidth: "100%", borderRadius: 8, display: "block" }}
+            />
+          ) : (
+            <pre style={{ whiteSpace: "pre-wrap", background: "#f4f4f4", padding: 12, borderRadius: 6, minHeight: 24 }}>
+              {c.ai || (i === chat.length - 1 && loading ? "▋" : "")}
+            </pre>
+          )}
         </div>
       ))}
 
@@ -115,16 +156,23 @@ export default function Home() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Napisz coś..."
+          placeholder={mode === "image" ? "Opisz obraz do wygenerowania..." : "Napisz coś..."}
           disabled={loading}
           style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid #ccc", opacity: loading ? 0.6 : 1 }}
         />
         <button
           onClick={sendMessage}
           disabled={loading}
-          style={{ padding: "8px 16px", borderRadius: 6, background: loading ? "#999" : "#0070f3", color: "#fff", border: "none", cursor: loading ? "not-allowed" : "pointer" }}
+          style={{
+            padding: "8px 16px",
+            borderRadius: 6,
+            background: loading ? "#999" : modeColors[mode],
+            color: "#fff",
+            border: "none",
+            cursor: loading ? "not-allowed" : "pointer",
+          }}
         >
-          {loading ? "..." : "Wyślij"}
+          {loading ? (mode === "image" ? "Generuję..." : "...") : (mode === "image" ? "Generuj" : "Wyślij")}
         </button>
       </div>
     </main>
