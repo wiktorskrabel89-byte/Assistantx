@@ -68,13 +68,13 @@ retriever_tool = create_retriever_tool(
     "Search for github issues",
 )
 
-# gpt-4o: best OpenAI model for chat (fast, multimodal, highly capable)
-llm_chat = ChatOpenAI(model="gpt-4o", temperature=0)
+# gpt-4.5-preview: best OpenAI model for chat (fast, multimodal, highly capable)
+llm_chat = ChatOpenAI(model="gpt-4.5-preview", temperature=0)
 tools = [retriever_tool, note_tool]
 agent = create_agent(llm_chat, tools)
 
-# claude-sonnet-4-5: best Claude model for coding (top benchmark scores, fast)
-llm_code = ChatAnthropic(model="claude-sonnet-4-5", temperature=0)
+# claude-sonnet-4-6: best Claude model for coding (top benchmark scores, fast)
+llm_code = ChatAnthropic(model="claude-sonnet-4-6", temperature=0)
 
 # OpenAI async client for image generation
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -98,12 +98,12 @@ async def chat(msg: Message):
 
     if mode == "code":
         messages = [
-            SystemMessage(content="You are an expert programmer. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."),
+            SystemMessage(content="You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."),
             HumanMessage(content=msg.message),
         ]
 
         async def stream_code():
-            yield f"data: {json.dumps({'model': 'Claude Sonnet'})}\n\n"
+            yield f"data: {json.dumps({'model': 'Claude Sonnet 4.6'})}\n\n"
             async for chunk in llm_code.astream(messages):
                 if chunk.content:
                     yield f"data: {json.dumps({'token': chunk.content})}\n\n"
@@ -112,9 +112,14 @@ async def chat(msg: Message):
         return StreamingResponse(stream_code(), media_type="text/event-stream")
 
     else:
+        chat_messages = [
+            SystemMessage(content="Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational."),
+            HumanMessage(content=msg.message),
+        ]
+
         async def stream_chat():
-            yield f"data: {json.dumps({'model': 'GPT-4o'})}\n\n"
-            async for chunk in llm_chat.astream([HumanMessage(content=msg.message)]):
+            yield f"data: {json.dumps({'model': 'GPT-4.5 Preview'})}\n\n"
+            async for chunk in llm_chat.astream(chat_messages):
                 if chunk.content:
                     yield f"data: {json.dumps({'token': chunk.content})}\n\n"
             yield "data: [DONE]\n\n"
