@@ -1,18 +1,20 @@
 import warnings
 warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
 import json
+import base64
 from pathlib import Path
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_anthropic import ChatAnthropic
 from langchain_community.vectorstores import SupabaseVectorStore
+from langchain_community.tools import DuckDuckGoSearchRun
 from langchain.agents import create_agent
 from langchain_core.tools import create_retriever_tool
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -32,7 +34,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
-    allow_methods=["POST"],
+    allow_methods=["POST", "GET", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -42,6 +44,11 @@ class Message(BaseModel):
 
 class ImageRequest(BaseModel):
     prompt: str
+
+class UploadRequest(BaseModel):
+    file_base64: str
+    mime_type: str
+    message: str = ""
 
 # setup
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
@@ -70,7 +77,8 @@ retriever_tool = create_retriever_tool(
 
 # gpt-4.5-preview: best OpenAI model for chat (fast, multimodal, highly capable)
 llm_chat = ChatOpenAI(model="gpt-4.5-preview", temperature=0)
-tools = [retriever_tool, note_tool]
+search_tool = DuckDuckGoSearchRun()
+tools = [retriever_tool, note_tool, search_tool]
 agent = create_agent(llm_chat, tools)
 
 # claude-sonnet-4-6: best Claude model for coding (top benchmark scores, fast)
@@ -137,3 +145,25 @@ async def generate_image(req: ImageRequest):
     )
     image_url = response.data[0].url
     return {"url": image_url, "model": "DALL-E 3"}
+
+@app.post("/upload")
+async def upload_file(req: UploadRequest):
+    image_data = base64.b64decode(req.file_base64)
+    base64_str = base64.b64encode(image_data).decode("utf-8")
+
+    messages = [
+        SystemMessage(content="You are a helpful assistant with vision capabilities. Detect the language of the user's message and always respond in that same language."),
+        HumanMessage(content=[
+            {"type": "image_url", "image_url": {"url": f"data:{req.mime_type};base64,{base64_str}"}},
+            {"type": "text", "text": req.message or "What do you see in this image?"},
+        ]),
+    ]
+
+    async def stream_upload():
+        yield f"data: {json.dumps({'model': 'GPT-4.5 Preview'})}\n\n"
+        async for chunk in llm_chat.astream(messages):
+            if chunk.content:
+                yield f"data: {json.dumps({'token': chunk.content})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(stream_upload(), media_type="text/event-stream")
