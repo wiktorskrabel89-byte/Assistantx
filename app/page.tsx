@@ -82,8 +82,8 @@ export default function Home() {
   };
 
   const startVoice = () => {
-    type SpeechRecognitionCtor = new () => SpeechRecognition;
-    const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
     const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Voice input not supported in this browser. Use Chrome.");
