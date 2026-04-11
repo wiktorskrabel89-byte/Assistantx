@@ -94,7 +94,8 @@ export default function Home() {
     rec.interimResults = false;
     rec.onstart = () => setListening(true);
     rec.onend = () => setListening(false);
-    rec.onresult = (e: SpeechRecognitionEvent) => setMessage(e.results[0][0].transcript);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => setMessage(e.results[0][0].transcript);
     rec.start();
   };
 
