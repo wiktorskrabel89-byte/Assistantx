@@ -169,7 +169,11 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
     };
 
     ws.onerror = () => {
-      setErrorMsg("WebSocket failed. Run `npm run dev` (not dev:next) to start the custom server.");
+      setErrorMsg(
+        window.location.hostname.endsWith("vercel.app") || !window.location.hostname.includes("localhost")
+          ? "Voice mode requires a Node.js server and doesn't work on Vercel. Run locally with `npm run dev`."
+          : "WebSocket connection failed. Make sure you started the server with `npm run dev` (not dev:next)."
+      );
       setStatus("error");
     };
 

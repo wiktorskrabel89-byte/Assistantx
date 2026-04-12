@@ -474,7 +474,17 @@ export default function Home() {
                 </button>
               </>
             )}
-            <button onClick={() => setVoiceOpen(true)} className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${dark ? "border-purple-500 text-purple-400 hover:bg-purple-900/30" : "border-purple-400 text-purple-600 hover:bg-purple-50"}`} title="Voice conversation">
+            <button
+              onClick={() => {
+                if (typeof window !== "undefined" && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
+                  alert("Voice mode requires a local Node.js server and doesn't work on Vercel.\n\nRun the app locally with:\n  npm run dev");
+                  return;
+                }
+                setVoiceOpen(true);
+              }}
+              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${dark ? "border-purple-500 text-purple-400 hover:bg-purple-900/30" : "border-purple-400 text-purple-600 hover:bg-purple-50"}`}
+              title="Voice conversation (requires local server)"
+            >
               🎙 Voice
             </button>
             <button onClick={() => setDark((d) => !d)} className={`px-3 py-1.5 text-sm rounded-lg border ${dark ? "border-yellow-400 text-yellow-400" : "border-gray-400"} hover:opacity-80 transition-colors`}>
