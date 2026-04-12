@@ -476,8 +476,8 @@ export default function Home() {
             )}
             <button
               onClick={() => {
-                if (typeof window !== "undefined" && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
-                  alert("Voice mode requires a local Node.js server and doesn't work on Vercel.\n\nRun the app locally with:\n  npm run dev");
+                if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
+                  alert("Voice mode doesn't work on Vercel (serverless).\n\nDeploy to Render or run locally with:\n  npm run dev");
                   return;
                 }
                 setVoiceOpen(true);
