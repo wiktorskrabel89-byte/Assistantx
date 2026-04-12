@@ -4,19 +4,10 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
-const DIRECT_MODELS = [
-  { mode: "deepseek",      id: "deepseek/deepseek-v3.2",              label: "DeepSeek V3.2",      category: "code" as const, color: "bg-sky-600" },
-  { mode: "claude-code",   id: "anthropic/claude-sonnet-4.6",         label: "Claude Sonnet 4.6", category: "code" as const, color: "bg-violet-600" },
-  { mode: "gpt5mini",      id: "openai/gpt-5-mini",                   label: "GPT-5 Mini",         category: "code" as const, color: "bg-green-600" },
-  { mode: "claude-opus",   id: "anthropic/claude-opus-4.6",           label: "Claude Opus 4.6",   category: "chat" as const, color: "bg-orange-500" },
-  { mode: "gemini",        id: "google/gemini-3-flash-preview",       label: "Gemini 3 Flash",     category: "chat" as const, color: "bg-blue-500" },
-  { mode: "llama",         id: "meta-llama/llama-3.3-70b-instruct",   label: "Llama 3.3 70B",     category: "chat" as const, color: "bg-rose-500" },
-] as const;
+const CODE_MODEL = "deepseek/deepseek-v3.2";
+const CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct";
 
-const DIRECT_MODEL_IDS = DIRECT_MODELS.map((m) => m.id);
-type DirectMode = typeof DIRECT_MODELS[number]["mode"];
-
-type Mode = "auto" | DirectMode | "image" | "upload";
+type Mode = "auto" | "code" | "chat" | "image" | "upload";
 type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string; filePreview?: string };
 
 export default function Home() {
@@ -240,7 +231,11 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg, mode, modelId: DIRECT_MODELS.find((m) => m.mode === mode)?.id, allowedModels: DIRECT_MODEL_IDS }),
+        body: JSON.stringify({
+          message: userMsg,
+          mode,
+          modelId: mode === "code" ? CODE_MODEL : mode === "chat" ? CHAT_MODEL : undefined,
+        }),
       });
 
       const reader = res.body!.getReader();
@@ -308,51 +303,21 @@ export default function Home() {
 
         {/* Mode buttons */}
         <div className="flex gap-2 flex-wrap mb-4">
-          {/* Auto Router */}
-          <button
-            onClick={() => setMode("auto")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-              mode === "auto" ? "bg-blue-600 text-white border-transparent" : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
-            }`}
-          >
-            🔀 Auto Router
-          </button>
-          {/* Code models */}
-          <span className={`text-xs self-center px-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Code:</span>
-          {DIRECT_MODELS.filter((m) => m.category === "code").map((m) => (
-            <button
-              key={m.mode}
-              onClick={() => setMode(m.mode)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                mode === m.mode ? `${m.color} text-white border-transparent` : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
-              }`}
-            >
-              💻 {m.label}
-            </button>
-          ))}
-          {/* Chat models */}
-          <span className={`text-xs self-center px-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Chat:</span>
-          {DIRECT_MODELS.filter((m) => m.category === "chat").map((m) => (
-            <button
-              key={m.mode}
-              onClick={() => setMode(m.mode)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                mode === m.mode ? `${m.color} text-white border-transparent` : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
-              }`}
-            >
-              💬 {m.label}
-            </button>
-          ))}
-          {/* Image */}
-          <button
-            onClick={() => setMode("image")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-              mode === "image" ? "bg-emerald-600 text-white border-transparent" : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
-            }`}
-          >
-            🎨 Image
-          </button>
-          {/* File upload */}
+          {(["auto", "code", "chat", "image"] as Mode[]).map((m) => {
+            const colors: Record<string, string> = { auto: "bg-blue-600", code: "bg-violet-600", chat: "bg-blue-500", image: "bg-emerald-600" };
+            const labels: Record<string, string> = { auto: "🔀 Auto", code: "💻 Code", chat: "💬 Chat", image: "🎨 Image" };
+            return (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                  mode === m ? `${colors[m]} text-white border-transparent` : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
+                }`}
+              >
+                {labels[m]}
+              </button>
+            );
+          })}
           <button
             onClick={() => fileInputRef.current?.click()}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
@@ -500,7 +465,7 @@ export default function Home() {
             <button
               onClick={sendMessage}
               disabled={loading || (!message && !file)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${mode === "image" ? "bg-emerald-600" : mode === "upload" ? "bg-orange-500" : mode === "auto" ? "bg-blue-600" : (DIRECT_MODELS.find((d) => d.mode === mode)?.color ?? "bg-blue-600")}`}
+              className={`px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${mode === "image" ? "bg-emerald-600" : mode === "upload" ? "bg-orange-500" : mode === "code" ? "bg-violet-600" : mode === "chat" ? "bg-blue-500" : "bg-blue-600"}`}
             >
               {loading ? (mode === "image" ? "⏳" : "...") : (mode === "image" ? "Generate" : "Send")}
             </button>
