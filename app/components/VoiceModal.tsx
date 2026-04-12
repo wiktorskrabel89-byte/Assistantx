@@ -106,14 +106,14 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
             session: {
               type: "realtime",
               model: "google-ai-studio/gemini-2.5-flash",
-              instructions: "You are a helpful voice assistant. Always respond in the same language the user speaks. Be concise and friendly.",
+              instructions: "You are a helpful voice assistant. Wait for the user to speak first — do NOT greet or say anything until the user speaks. Once the user speaks, detect their language and always respond ONLY in that exact same language for the entire conversation. Be concise and friendly.",
               output_modalities: ["audio", "text"],
               audio: {
                 input: {
                   transcription: { model: "assemblyai/u3-rt-pro" },
                   turn_detection: {
                     type: "semantic_vad",
-                    eagerness: "medium",
+                    eagerness: "low",
                     create_response: true,
                     interrupt_response: true,
                   },
