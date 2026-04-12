@@ -1,5 +1,6 @@
 // Custom Next.js server — adds WebSocket proxy for Inworld Realtime API
 // Browser WS (/api/realtime) ←→ this server ←→ Inworld wss://
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");

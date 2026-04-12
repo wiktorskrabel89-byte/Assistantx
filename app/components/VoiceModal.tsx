@@ -63,7 +63,6 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
         });
         audioCtx = new AudioContext({ sampleRate: 24000 });
         const source = audioCtx.createMediaStreamSource(micStream);
-        // eslint-disable-next-line @typescript-eslint/no-deprecated
         processor = audioCtx.createScriptProcessor(4096, 1, 1);
         const sampleRatio = audioCtx.sampleRate / 24000;
 
