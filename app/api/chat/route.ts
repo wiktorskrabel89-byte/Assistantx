@@ -16,6 +16,7 @@ const MODEL_LABELS: Record<string, string> = {
   "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
   "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
   "meta-llama/llama-4-scout:free": "Llama 4 Scout",
+  "deepseek/deepseek-v3.2": "DeepSeek V3.2",
   "deepseek/deepseek-r1:free": "DeepSeek R1",
   "deepseek/deepseek-r1": "DeepSeek R1",
   "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash",
@@ -55,7 +56,11 @@ export async function POST(req: Request) {
     : "Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.";
 
   const useAutoRouter = isAuto;
-  const selectedModel = useAutoRouter ? "openrouter/auto" : "meta-llama/llama-3.3-70b-instruct:free";
+  const selectedModel = useAutoRouter
+    ? "openrouter/auto"
+    : mode === "code"
+    ? "deepseek/deepseek-v3.2"
+    : "meta-llama/llama-3.3-70b-instruct:free";
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,

@@ -299,7 +299,7 @@ export default function Home() {
   const modeLabels: Record<Mode, string> = {
     auto: "🔀 Auto Router",
     chat: "💬 Chat",
-    code: "💻 Code",
+    code: "💻 Code (DeepSeek V3.2)",
     image: "🎨 Image",
     upload: "📎 File",
   };
