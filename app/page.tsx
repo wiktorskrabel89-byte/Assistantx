@@ -58,7 +58,12 @@ const ChatList = memo(function ChatList({
               ) : (
                 <div className={`${cardBg} border px-4 py-3 rounded-2xl rounded-tl-sm text-sm`}>
                   {!c.ai && i === chat.length - 1 && loading ? (
-                    <span className="animate-pulse">▋</span>
+                    <span className="flex items-center gap-1 text-gray-400 text-xs py-1">
+                      <span className="animate-bounce [animation-delay:0ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
+                      <span className="animate-bounce [animation-delay:150ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
+                      <span className="animate-bounce [animation-delay:300ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
+                      <span className="ml-1">Thinking...</span>
+                    </span>
                   ) : (
                     <ReactMarkdown
                       components={{
