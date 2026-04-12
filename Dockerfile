@@ -19,8 +19,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy custom server (WebSocket proxy)
+# Copy custom server (WebSocket proxy) + ws package it depends on
 COPY --from=builder /app/server.js ./
+COPY --from=builder /app/node_modules/ws ./node_modules/ws
 
 EXPOSE 3000
 ENV PORT=3000
