@@ -77,27 +77,65 @@ export default function Home() {
       .replace(/^\s*[-*+]\s/gm, "")
       .trim();
 
+  const speakAbortRef = useRef(false);
+
   const speak = async (text: string, idx: number) => {
-    if (speaking !== null) return;
-    setSpeaking(idx);
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: stripMarkdown(text) }),
-      });
-      const data = await res.json();
-      if (data.audioContent) {
-        const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
-        audio.onended = () => setSpeaking(null);
-        audio.onerror = () => setSpeaking(null);
-        await audio.play();
-      } else {
-        setSpeaking(null);
-      }
-    } catch {
+    // If already speaking — stop
+    if (speaking !== null) {
+      speakAbortRef.current = true;
       setSpeaking(null);
+      return;
     }
+    speakAbortRef.current = false;
+    setSpeaking(idx);
+
+    const clean = stripMarkdown(text);
+    // Split into sentences so first sentence plays immediately
+    const sentences = clean
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 3)
+      .slice(0, 20);
+
+    if (sentences.length === 0) { setSpeaking(null); return; }
+
+    const fetchAudio = async (sentence: string): Promise<HTMLAudioElement | null> => {
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: sentence }),
+        });
+        const data = await res.json();
+        if (data.audioContent) return new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+      } catch { /* ignore */ }
+      return null;
+    };
+
+    try {
+      // Pre-fetch first 2 sentences in parallel immediately
+      const queue: Promise<HTMLAudioElement | null>[] = [fetchAudio(sentences[0])];
+      if (sentences[1]) queue.push(fetchAudio(sentences[1]));
+      let nextToFetch = 2;
+
+      for (let i = 0; i < sentences.length; i++) {
+        if (speakAbortRef.current) break;
+        // Kick off the next fetch while waiting for current
+        if (nextToFetch < sentences.length) {
+          queue.push(fetchAudio(sentences[nextToFetch]));
+          nextToFetch++;
+        }
+        const audio = await queue[i];
+        if (!audio || speakAbortRef.current) continue;
+        await new Promise<void>((resolve) => {
+          audio.onended = () => resolve();
+          audio.onerror = () => resolve();
+          audio.play().catch(() => resolve());
+        });
+      }
+    } catch { /* ignore */ }
+
+    setSpeaking(null);
   };
 
   const exportChat = () => {
@@ -424,11 +462,11 @@ export default function Home() {
                     {c.ai && !c.imageUrl && (
                       <button
                         onClick={() => speak(c.ai, i)}
-                        disabled={speaking !== null}
+                        disabled={speaking !== null && speaking !== i}
                         className={`text-xs ml-1 mt-1 transition-colors ${speaking === i ? "text-blue-400 animate-pulse" : "text-gray-400 hover:text-blue-400"}`}
-                        title="Read aloud"
+                        title={speaking === i ? "Stop" : "Read aloud"}
                       >
-                        {speaking === i ? "🔊 Speaking..." : "🔊 Listen"}
+                        {speaking === i ? "🔊 Stop" : "🔊 Listen"}
                       </button>
                     )}
                   </div>
