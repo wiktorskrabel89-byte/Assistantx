@@ -4,30 +4,19 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
-const ROUTER_MODELS = [
-  { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5", tag: "Anthropic" },
-  { id: "anthropic/claude-opus-4.6", label: "Claude Opus 4.6", tag: "Anthropic" },
-  { id: "openai/gpt-5", label: "GPT-5", tag: "OpenAI" },
-  { id: "openai/gpt-5-mini", label: "GPT-5 Mini", tag: "OpenAI" },
-  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tag: "Google" },
-  { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash", tag: "Google" },
-  { id: "deepseek/deepseek-r1", label: "DeepSeek R1", tag: "DeepSeek" },
-  { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B", tag: "Meta" },
-  { id: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B", tag: "Qwen" },
-  { id: "x-ai/grok-4", label: "Grok 4", tag: "xAI" },
+const DIRECT_MODELS = [
+  { mode: "deepseek",      id: "deepseek/deepseek-v3.2",              label: "DeepSeek V3.2",      category: "code" as const, color: "bg-sky-600" },
+  { mode: "claude-code",   id: "anthropic/claude-sonnet-4.6",         label: "Claude Sonnet 4.6", category: "code" as const, color: "bg-violet-600" },
+  { mode: "gpt5mini",      id: "openai/gpt-5-mini",                   label: "GPT-5 Mini",         category: "code" as const, color: "bg-green-600" },
+  { mode: "claude-opus",   id: "anthropic/claude-opus-4.6",           label: "Claude Opus 4.6",   category: "chat" as const, color: "bg-orange-500" },
+  { mode: "gemini",        id: "google/gemini-3-flash-preview",       label: "Gemini 3 Flash",     category: "chat" as const, color: "bg-blue-500" },
+  { mode: "llama",         id: "meta-llama/llama-3.3-70b-instruct",   label: "Llama 3.3 70B",     category: "chat" as const, color: "bg-rose-500" },
 ] as const;
 
-const FREE_ROUTER_MODELS = [
-  { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B", tag: "Google" },
-  { id: "google/gemma-4-26b-a4b-it:free", label: "Gemma 4 26B", tag: "Google" },
-  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B", tag: "Meta" },
-  { id: "meta-llama/llama-4-scout:free", label: "Llama 4 Scout", tag: "Meta" },
-  { id: "deepseek/deepseek-r1:free", label: "DeepSeek R1", tag: "DeepSeek" },
-  { id: "qwen/qwen3-235b-a22b:free", label: "Qwen 3 235B", tag: "Qwen" },
-  { id: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1", tag: "Mistral" },
-] as const;
+const DIRECT_MODEL_IDS = DIRECT_MODELS.map((m) => m.id);
+type DirectMode = typeof DIRECT_MODELS[number]["mode"];
 
-type Mode = "auto" | "chat" | "code" | "image" | "upload";
+type Mode = "auto" | DirectMode | "image" | "upload";
 type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string; filePreview?: string };
 
 export default function Home() {
@@ -41,9 +30,6 @@ export default function Home() {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
   const [speaking, setSpeaking] = useState<number | null>(null);
-  const [routerModels, setRouterModels] = useState<string[]>(ROUTER_MODELS.map((m) => m.id));
-  const [freeOnly, setFreeOnly] = useState(false);
-  const activeRouterModels = freeOnly ? FREE_ROUTER_MODELS.map((m) => m.id) : routerModels;
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,12 +107,6 @@ export default function Home() {
     } catch {
       setSpeaking(null);
     }
-  };
-
-  const toggleRouterModel = (id: string) => {
-    setRouterModels((prev) =>
-      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
-    );
   };
 
   const exportChat = () => {
@@ -260,7 +240,7 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg, mode, allowedModels: activeRouterModels }),
+        body: JSON.stringify({ message: userMsg, mode, modelId: DIRECT_MODELS.find((m) => m.mode === mode)?.id, allowedModels: DIRECT_MODEL_IDS }),
       });
 
       const reader = res.body!.getReader();
@@ -294,23 +274,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [message, mode, loading, file, filePreview, routerModels, activeRouterModels]);
-
-  const modeLabels: Record<Mode, string> = {
-    auto: "🔀 Auto Router",
-    chat: "💬 Chat",
-    code: "💻 Code (DeepSeek V3.2)",
-    image: "🎨 Image",
-    upload: "📎 File",
-  };
-
-  const modeColors: Record<Mode, string> = {
-    auto: "bg-blue-600",
-    chat: "bg-blue-600",
-    code: "bg-purple-600",
-    image: "bg-emerald-600",
-    upload: "bg-orange-500",
-  };
+  }, [message, mode, loading, file, filePreview]);
 
   const bg = dark ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900";
   const cardBg = dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
@@ -344,25 +308,58 @@ export default function Home() {
 
         {/* Mode buttons */}
         <div className="flex gap-2 flex-wrap mb-4">
-          {(["auto", "chat", "code", "image"] as Mode[]).map((m) => (
+          {/* Auto Router */}
+          <button
+            onClick={() => setMode("auto")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+              mode === "auto" ? "bg-blue-600 text-white border-transparent" : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
+            }`}
+          >
+            🔀 Auto Router
+          </button>
+          {/* Code models */}
+          <span className={`text-xs self-center px-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Code:</span>
+          {DIRECT_MODELS.filter((m) => m.category === "code").map((m) => (
             <button
-              key={m}
-              onClick={() => setMode(m)}
+              key={m.mode}
+              onClick={() => setMode(m.mode)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                mode === m ? `${modeColors[m]} text-white border-transparent` : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
+                mode === m.mode ? `${m.color} text-white border-transparent` : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
               }`}
             >
-              {modeLabels[m]}
+              💻 {m.label}
             </button>
           ))}
-          {/* File upload button */}
+          {/* Chat models */}
+          <span className={`text-xs self-center px-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Chat:</span>
+          {DIRECT_MODELS.filter((m) => m.category === "chat").map((m) => (
+            <button
+              key={m.mode}
+              onClick={() => setMode(m.mode)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                mode === m.mode ? `${m.color} text-white border-transparent` : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
+              }`}
+            >
+              💬 {m.label}
+            </button>
+          ))}
+          {/* Image */}
+          <button
+            onClick={() => setMode("image")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+              mode === "image" ? "bg-emerald-600 text-white border-transparent" : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
+            }`}
+          >
+            🎨 Image
+          </button>
+          {/* File upload */}
           <button
             onClick={() => fileInputRef.current?.click()}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-              mode === "upload" ? `${modeColors.upload} text-white border-transparent` : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
+              mode === "upload" ? "bg-orange-500 text-white border-transparent" : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
             }`}
           >
-            {modeLabels.upload}
+            📎 File
           </button>
           <input
             ref={fileInputRef}
@@ -372,48 +369,6 @@ export default function Home() {
             onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           />
         </div>
-
-        {mode === "auto" && (
-          <div className={`mb-3 p-3 rounded-xl border ${cardBg}`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-gray-400">Auto Router — allowed models</span>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setFreeOnly((v) => !v)}
-                  className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-colors ${
-                    freeOnly ? "bg-emerald-600 text-white border-transparent" : `border-gray-300 ${dark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"}`
-                  }`}
-                  title="Only use free models (no cost)">
-                  ✦ Free only
-                </button>
-                {!freeOnly && (
-                  <>
-                    <button onClick={() => setRouterModels(ROUTER_MODELS.map((m) => m.id))} className="text-xs text-blue-400 hover:underline">All</button>
-                    <button onClick={() => setRouterModels([])} className="text-xs text-gray-400 hover:underline">None</button>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(freeOnly ? FREE_ROUTER_MODELS : ROUTER_MODELS).map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => !freeOnly && toggleRouterModel(m.id)}
-                  disabled={freeOnly}
-                  className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
-                    freeOnly
-                      ? "bg-emerald-600/20 text-emerald-400 border-emerald-700 cursor-default"
-                      : routerModels.includes(m.id)
-                      ? "bg-blue-600 text-white border-transparent"
-                      : `border-gray-300 ${dark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"}`
-                  }`}
-                >
-                  {m.label} <span className="opacity-60 text-[10px]">{m.tag}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* File preview */}
         {filePreview && file?.type.startsWith("image/") && (
