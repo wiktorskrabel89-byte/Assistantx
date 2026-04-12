@@ -457,7 +457,8 @@ export default function Home() {
   const codeBg = dark ? "bg-gray-950" : "bg-gray-100";
 
   return (
-    <div className={`min-h-screen ${bg} transition-colors duration-200`}>
+    <>
+      <div className={`min-h-screen ${bg} transition-colors duration-200`}>
       <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col h-screen">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -575,5 +576,6 @@ export default function Home() {
       </div>
     </div>
     {voiceOpen && <VoiceModal onClose={() => setVoiceOpen(false)} dark={dark} />}
+    </>
   );
 }
