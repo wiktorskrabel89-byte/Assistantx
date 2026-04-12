@@ -110,6 +110,7 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
               output_modalities: ["audio", "text"],
               audio: {
                 input: {
+                  transcription: { model: "assemblyai/u3-rt-pro" },
                   turn_detection: {
                     type: "semantic_vad",
                     eagerness: "medium",
@@ -134,6 +135,29 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
           ws.send(JSON.stringify({ type: "response.cancel" }));
           agentBuf = "";
           setTranscript((prev) => [...prev, { role: "user", text: "…" }]);
+          break;
+
+        case "conversation.item.input_audio_transcription.delta":
+          if (typeof msg.delta === "string") {
+            setTranscript((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "user") {
+                const current = last.text === "…" ? msg.delta : last.text + msg.delta;
+                return [...prev.slice(0, -1), { role: "user", text: current as string }];
+              }
+              return [...prev, { role: "user", text: msg.delta as string }];
+            });
+          }
+          break;
+
+        case "conversation.item.input_audio_transcription.completed":
+          if (typeof msg.transcript === "string") {
+            setTranscript((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "user") return [...prev.slice(0, -1), { role: "user", text: msg.transcript as string }];
+              return [...prev, { role: "user", text: msg.transcript as string }];
+            });
+          }
           break;
 
         case "response.output_audio.delta":
