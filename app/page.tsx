@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -9,7 +9,117 @@ const CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct";
 
 type Mode = "auto" | "code" | "chat" | "image" | "upload";
 type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string; filePreview?: string };
+// ── Memoized chat list — does NOT re-render on input keystrokes ───────────
+type ChatListProps = {
+  chat: ChatEntry[];
+  loading: boolean;
+  dark: boolean;
+  cardBg: string;
+  codeBg: string;
+  copied: number | null;
+  speaking: number | null;
+  chatEndRef: React.RefObject<HTMLDivElement | null>;
+  onSpeak: (text: string, idx: number) => void;
+  onCopyCode: (code: string, idx: number) => void;
+};
 
+const ChatList = memo(function ChatList({
+  chat, loading, dark, cardBg, codeBg, copied, speaking, chatEndRef, onSpeak, onCopyCode,
+}: ChatListProps) {
+  let codeBlockIdx = 0;
+  return (
+    <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1">
+      {chat.length === 0 && (
+        <div className="text-center text-gray-400 mt-16 text-lg">
+          👋 Send a message to start chatting
+        </div>
+      )}
+      {chat.map((c, i) => (
+        <div key={i} className="space-y-2">
+          {/* User bubble */}
+          <div className="flex justify-end">
+            <div className="max-w-[80%]">
+              {c.filePreview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={c.filePreview} alt="file" className="h-20 rounded-xl mb-1 ml-auto block" />
+              )}
+              <div className="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm text-sm">
+                {c.user}
+              </div>
+            </div>
+          </div>
+          {/* AI bubble */}
+          <div className="flex justify-start">
+            <div className="max-w-[85%] space-y-1">
+              <div className="text-xs text-gray-400 ml-1">{c.model ?? "AI"}</div>
+              {c.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={c.imageUrl} alt={c.user} className="rounded-xl max-w-full" />
+              ) : (
+                <div className={`${cardBg} border px-4 py-3 rounded-2xl rounded-tl-sm text-sm`}>
+                  {!c.ai && i === chat.length - 1 && loading ? (
+                    <span className="animate-pulse">▋</span>
+                  ) : (
+                    <ReactMarkdown
+                      components={{
+                        code({ className, children, ...props }) {
+                          const match = /language-(\w+)/.exec(className ?? "");
+                          const codeStr = String(children).replace(/\n$/, "");
+                          const isBlock = match || codeStr.includes("\n");
+                          if (isBlock) {
+                            const idx = codeBlockIdx++;
+                            return (
+                              <div className="relative my-2">
+                                <div className={`flex items-center justify-between px-3 py-1 rounded-t-lg text-xs text-gray-400 ${dark ? "bg-gray-900" : "bg-gray-200"}`}>
+                                  <span>{match?.[1] ?? "code"}</span>
+                                  <button onClick={() => onCopyCode(codeStr, idx)} className="hover:text-white transition-colors">
+                                    {copied === idx ? "✓ Copied!" : "Copy"}
+                                  </button>
+                                </div>
+                                <SyntaxHighlighter
+                                  style={dark ? oneDark : oneLight}
+                                  language={match?.[1] ?? "text"}
+                                  PreTag="div"
+                                >
+                                  {codeStr}
+                                </SyntaxHighlighter>
+                              </div>
+                            );
+                          }
+                          return <code className={`${codeBg} px-1 rounded text-xs`} {...props}>{children}</code>;
+                        },
+                        p({ children }) { return <p className="mb-2 last:mb-0">{children}</p>; },
+                        ul({ children }) { return <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>; },
+                        ol({ children }) { return <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>; },
+                        blockquote({ children }) { return <blockquote className={`border-l-4 border-gray-400 pl-3 italic my-2 ${dark ? "text-gray-400" : "text-gray-600"}`}>{children}</blockquote>; },
+                        h1({ children }) { return <h1 className="text-xl font-bold mb-2">{children}</h1>; },
+                        h2({ children }) { return <h2 className="text-lg font-bold mb-2">{children}</h2>; },
+                        h3({ children }) { return <h3 className="text-base font-bold mb-1">{children}</h3>; },
+                      }}
+                    >
+                      {c.ai}
+                    </ReactMarkdown>
+                  )}
+                </div>
+              )}
+              {c.ai && !c.imageUrl && (
+                <button
+                  onClick={() => onSpeak(c.ai, i)}
+                  disabled={speaking !== null && speaking !== i}
+                  className={`text-xs ml-1 mt-1 transition-colors ${speaking === i ? "text-blue-400 animate-pulse" : "text-gray-400 hover:text-blue-400"}`}
+                  title={speaking === i ? "Stop" : "Read aloud"}
+                >
+                  {speaking === i ? "🔊 Stop" : "🔊 Listen"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div ref={chatEndRef} />
+    </div>
+  );
+});
 export default function Home() {
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState<ChatEntry[]>([]);
@@ -60,12 +170,12 @@ export default function Home() {
     setMode("upload");
   };
 
-  const copyCode = (code: string, idx: number) => {
+  const copyCode = useCallback((code: string, idx: number) => {
     navigator.clipboard.writeText(code).then(() => {
       setCopied(idx);
       setTimeout(() => setCopied(null), 2000);
     });
-  };
+  }, []);
 
   const stripMarkdown = (text: string) =>
     text
@@ -77,7 +187,7 @@ export default function Home() {
       .replace(/^\s*[-*+]\s/gm, "")
       .trim();
 
-  const speak = (text: string, idx: number) => {
+  const speak = useCallback((text: string, idx: number) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
 
     // Stop if already speaking
@@ -87,12 +197,17 @@ export default function Home() {
       return;
     }
 
-    const clean = stripMarkdown(text);
-    if (!clean.trim()) return;
+    const clean = text
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/`[^`]*`/g, "")
+      .replace(/#{1,6}\s/g, "")
+      .replace(/[*_~]/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/^\s*[-*+]\s/gm, "")
+      .trim();
+    if (!clean) return;
 
     const utter = new SpeechSynthesisUtterance(clean);
-
-    // Pick a good voice — prefer a natural-sounding one if available
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(
       (v) => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Premium") || v.name.includes("Enhanced"))
@@ -106,7 +221,7 @@ export default function Home() {
     utter.onend = () => setSpeaking(null);
     utter.onerror = () => setSpeaking(null);
     window.speechSynthesis.speak(utter);
-  };
+  }, [speaking]);
 
   const exportChat = () => {
     const text = chat
@@ -284,8 +399,6 @@ export default function Home() {
   const inputBg = dark ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400";
   const codeBg = dark ? "bg-gray-950" : "bg-gray-100";
 
-  let codeBlockIdx = 0;
-
   return (
     <div className={`min-h-screen ${bg} transition-colors duration-200`}>
       <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col h-screen">
@@ -354,98 +467,18 @@ export default function Home() {
         )}
 
         {/* Chat messages */}
-        <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1">
-          {chat.length === 0 && (
-            <div className="text-center text-gray-400 mt-16 text-lg">
-              👋 Send a message to start chatting
-            </div>
-          )}
-          {chat.map((c, i) => {
-            return (
-              <div key={i} className="space-y-2">
-                {/* User bubble */}
-                <div className="flex justify-end">
-                  <div className="max-w-[80%]">
-                    {c.filePreview && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={c.filePreview} alt="file" className="h-20 rounded-xl mb-1 ml-auto block" />
-                    )}
-                    <div className="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm text-sm">
-                      {c.user}
-                    </div>
-                  </div>
-                </div>
-                {/* AI bubble */}
-                <div className="flex justify-start">
-                  <div className="max-w-[85%] space-y-1">
-                    <div className="text-xs text-gray-400 ml-1">{c.model ?? "AI"}</div>
-                    {c.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={c.imageUrl} alt={c.user} className="rounded-xl max-w-full" />
-                    ) : (
-                      <div className={`${cardBg} border px-4 py-3 rounded-2xl rounded-tl-sm text-sm`}>
-                        {!c.ai && i === chat.length - 1 && loading ? (
-                          <span className="animate-pulse">▋</span>
-                        ) : (
-                          <ReactMarkdown
-                            components={{
-                              code({ className, children, ...props }) {
-                                const match = /language-(\w+)/.exec(className ?? "");
-                                const codeStr = String(children).replace(/\n$/, "");
-                                const isBlock = match || codeStr.includes("\n");
-                                if (isBlock) {
-                                  const idx = codeBlockIdx++;
-                                  return (
-                                    <div className="relative my-2">
-                                      <div className={`flex items-center justify-between px-3 py-1 rounded-t-lg text-xs text-gray-400 ${dark ? "bg-gray-900" : "bg-gray-200"}`}>
-                                        <span>{match?.[1] ?? "code"}</span>
-                                        <button onClick={() => copyCode(codeStr, idx)} className="hover:text-white transition-colors">
-                                          {copied === idx ? "✓ Copied!" : "Copy"}
-                                        </button>
-                                      </div>
-                                      <SyntaxHighlighter
-                                        style={dark ? oneDark : oneLight}
-                                        language={match?.[1] ?? "text"}
-                                        PreTag="div"
-                                      >
-                                        {codeStr}
-                                      </SyntaxHighlighter>
-                                    </div>
-                                  );
-                                }
-                                return <code className={`${codeBg} px-1 rounded text-xs`} {...props}>{children}</code>;
-                              },
-                              p({ children }) { return <p className="mb-2 last:mb-0">{children}</p>; },
-                              ul({ children }) { return <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>; },
-                              ol({ children }) { return <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>; },
-                              blockquote({ children }) { return <blockquote className={`border-l-4 border-gray-400 pl-3 italic my-2 ${dark ? "text-gray-400" : "text-gray-600"}`}>{children}</blockquote>; },
-                              h1({ children }) { return <h1 className="text-xl font-bold mb-2">{children}</h1>; },
-                              h2({ children }) { return <h2 className="text-lg font-bold mb-2">{children}</h2>; },
-                              h3({ children }) { return <h3 className="text-base font-bold mb-1">{children}</h3>; },
-                            }}
-                          >
-                            {c.ai}
-                          </ReactMarkdown>
-                        )}
-                      </div>
-                    )}
-                    {c.ai && !c.imageUrl && (
-                      <button
-                        onClick={() => speak(c.ai, i)}
-                        disabled={speaking !== null && speaking !== i}
-                        className={`text-xs ml-1 mt-1 transition-colors ${speaking === i ? "text-blue-400 animate-pulse" : "text-gray-400 hover:text-blue-400"}`}
-                        title={speaking === i ? "Stop" : "Read aloud"}
-                      >
-                        {speaking === i ? "🔊 Stop" : "🔊 Listen"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          <div ref={chatEndRef} />
-        </div>
+        <ChatList
+          chat={chat}
+          loading={loading}
+          dark={dark}
+          cardBg={cardBg}
+          codeBg={codeBg}
+          copied={copied}
+          speaking={speaking}
+          chatEndRef={chatEndRef}
+          onSpeak={speak}
+          onCopyCode={copyCode}
+        />
 
         {/* Input area */}
         <div className={`${cardBg} border rounded-2xl p-3 flex flex-col gap-2`}>
