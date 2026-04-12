@@ -61,10 +61,10 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
         micStream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true },
         });
-        audioCtx = new AudioContext();
+        audioCtx = new AudioContext({ sampleRate: 24000 });
         const source = audioCtx.createMediaStreamSource(micStream);
         // eslint-disable-next-line @typescript-eslint/no-deprecated
-        processor = audioCtx.createScriptProcessor(2048, 1, 1);
+        processor = audioCtx.createScriptProcessor(4096, 1, 1);
         const sampleRatio = audioCtx.sampleRate / 24000;
 
         processor.onaudioprocess = (e) => {
@@ -105,8 +105,8 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
             type: "session.update",
             session: {
               type: "realtime",
-              model: "openai/gpt-4o-mini",
-              instructions: "You are a helpful voice assistant. Be concise and friendly.",
+              model: "google-ai-studio/gemini-2.5-flash",
+              instructions: "You are a helpful voice assistant. Always respond in English. Be concise and friendly.",
               output_modalities: ["audio", "text"],
               audio: {
                 input: {
