@@ -106,7 +106,7 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
             session: {
               type: "realtime",
               model: "google-ai-studio/gemini-2.5-flash",
-              instructions: "You are a helpful voice assistant. Always respond in English. Be concise and friendly.",
+              instructions: "You are a helpful voice assistant. Always respond in the same language the user speaks. Be concise and friendly.",
               output_modalities: ["audio", "text"],
               audio: {
                 input: {
