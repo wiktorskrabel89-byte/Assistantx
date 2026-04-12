@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: "Llama 4 Scout (Vision)" })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: "Gemini 2.5 Flash (Vision)" })}\n\n`));
 
           const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
               "X-Title": "Moje AI",
             },
             body: JSON.stringify({
-              model: "meta-llama/llama-4-scout:free",
+              model: "google/gemini-2.5-flash-preview",
               stream: true,
               messages: [
                 {
