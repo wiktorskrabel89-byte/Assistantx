@@ -4,17 +4,8 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
-const CODE_MODELS = [
-  "deepseek/deepseek-v3.2",
-  "anthropic/claude-sonnet-4.6",
-  "openai/gpt-5-mini",
-];
-
-const CHAT_MODELS = [
-  "anthropic/claude-opus-4.6",
-  "google/gemini-3-flash-preview",
-  "meta-llama/llama-3.3-70b-instruct",
-];
+const CODE_MODEL = "deepseek/deepseek-v3.2";
+const CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct";
 
 type Mode = "auto" | "code" | "chat" | "image" | "upload";
 type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string; filePreview?: string };
@@ -243,7 +234,7 @@ export default function Home() {
         body: JSON.stringify({
           message: userMsg,
           mode,
-          allowedModels: mode === "code" ? CODE_MODELS : mode === "chat" ? CHAT_MODELS : [...CODE_MODELS, ...CHAT_MODELS],
+          modelId: mode === "code" ? CODE_MODEL : mode === "chat" ? CHAT_MODEL : undefined,
         }),
       });
 

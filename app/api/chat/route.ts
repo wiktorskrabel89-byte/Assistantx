@@ -34,15 +34,15 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const { message, mode: rawMode, allowedModels } = await req.json();
+  const { message, mode: rawMode, modelId, allowedModels } = await req.json();
   const encoder = new TextEncoder();
 
-  const isCodeMode = rawMode === "code";
+  const isCodeMode = rawMode === "code" || modelId === "deepseek/deepseek-v3.2";
   const systemPrompt = isCodeMode
     ? "You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."
     : "Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.";
 
-  const selectedModel = "openrouter/auto";
+  const selectedModel = modelId ?? "openrouter/auto";
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   };
 
   // Restrict auto router to the relevant model pool
-  if (Array.isArray(allowedModels) && allowedModels.length > 0) {
+  if (!modelId && Array.isArray(allowedModels) && allowedModels.length > 0) {
     requestBody.plugins = [{ id: "auto-router", allowed_models: allowedModels }];
   }
 
