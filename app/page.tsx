@@ -52,7 +52,6 @@ const ChatList = memo(function ChatList({
           {/* AI bubble */}
           <div className="flex justify-start">
             <div className="max-w-[85%] space-y-1">
-              <div className="text-xs text-gray-400 ml-1">{c.model ?? "AI"}</div>
               {c.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={c.imageUrl} alt={c.user} className="rounded-xl max-w-full" />
