@@ -105,12 +105,11 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
             type: "session.update",
             session: {
               type: "realtime",
-              model: "xai/grok-4-1-fast-non-reasoning-latest",
+              model: "openai/gpt-4o-mini",
               instructions: "You are a helpful voice assistant. Be concise and friendly.",
               output_modalities: ["audio", "text"],
               audio: {
                 input: {
-                  transcription: { model: "assemblyai/u3-rt-pro" },
                   turn_detection: {
                     type: "semantic_vad",
                     eagerness: "medium",
@@ -120,7 +119,6 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
                 },
                 output: { model: "inworld-tts-1.5-max", voice: "Abby" },
               },
-              providerData: { stt: { voice_profile: false } },
             },
           }));
           break;
@@ -160,7 +158,8 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
           break;
 
         case "error": {
-          const errMsg = typeof msg.message === "string" ? msg.message : "Inworld error";
+          const errObj = msg.error as { message?: string } | undefined;
+          const errMsg = errObj?.message || (typeof msg.message === "string" ? msg.message : "Inworld error");
           setErrorMsg(errMsg);
           setStatus("error");
           break;
