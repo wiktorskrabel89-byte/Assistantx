@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect, useRef, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { VoiceModal } from "./components/VoiceModal";
 
 const CODE_MODEL = "deepseek/deepseek-v3.2";
 const CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct";
@@ -124,6 +125,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const [mode, setMode] = useState<Mode>("auto");
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dark, setDark] = useState(false);
   const [listening, setListening] = useState(false);
@@ -471,6 +473,9 @@ export default function Home() {
                 </button>
               </>
             )}
+            <button onClick={() => setVoiceOpen(true)} className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${dark ? "border-purple-500 text-purple-400 hover:bg-purple-900/30" : "border-purple-400 text-purple-600 hover:bg-purple-50"}`} title="Voice conversation">
+              🎙 Voice
+            </button>
             <button onClick={() => setDark((d) => !d)} className={`px-3 py-1.5 text-sm rounded-lg border ${dark ? "border-yellow-400 text-yellow-400" : "border-gray-400"} hover:opacity-80 transition-colors`}>
               {dark ? "☀ Light" : "🌙 Dark"}
             </button>
@@ -569,5 +574,6 @@ export default function Home() {
         </div>
       </div>
     </div>
+    {voiceOpen && <VoiceModal onClose={() => setVoiceOpen(false)} dark={dark} />}
   );
 }
