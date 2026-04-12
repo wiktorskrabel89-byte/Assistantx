@@ -24,14 +24,14 @@ export async function POST(req: Request) {
     ? "You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."
     : "Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.";
 
-  const modelLabel = mode === "code" ? "GPT-5.4 Pro (Code)" : "GPT-4.5 (Chat)";
+  const modelLabel = mode === "code" ? "GPT-5.4 (Code)" : "GPT-4.5 (Chat)";
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: modelLabel })}\n\n`));
         const response = await openai.chat.completions.create({
-          model: mode === "code" ? "gpt-5.4-pro" : "gpt-4.5",
+          model: mode === "code" ? "gpt-5.4" : "gpt-4.5",
           stream: true,
           messages: [
             { role: "system", content: systemPrompt },
