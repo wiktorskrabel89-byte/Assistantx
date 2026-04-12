@@ -134,6 +134,10 @@ export default function Home() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmChunksRef = useRef<string[]>([]);
 
   // Load chat history from Supabase on mount
   useEffect(() => {
@@ -238,41 +242,76 @@ export default function Home() {
     await fetch("/api/history", { method: "DELETE" }).catch(() => {});
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recRef = useRef<any>(null);
-
-  const startVoice = () => {
-    if (listening && recRef.current) {
-      recRef.current.stop();
-      return;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Voice input not supported in this browser. Use Chrome.");
-      return;
-    }
-    const rec = new SpeechRecognition();
-    rec.lang = "pl-PL";
-    rec.interimResults = false;
-    rec.onstart = () => setListening(true);
-    rec.onend = () => { setListening(false); recRef.current = null; };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => setMessage((prev) => prev + (prev ? " " : "") + e.results[0][0].transcript);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onerror = (e: any) => {
+  const startVoice = async () => {
+    if (listening) {
+      // Stop recording and transcribe
+      processorRef.current?.disconnect();
+      processorRef.current = null;
+      audioContextRef.current?.close();
+      audioContextRef.current = null;
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
       setListening(false);
-      recRef.current = null;
-      if (e.error === "not-allowed" || e.error === "service-not-allowed")
-        alert("Brak dostępu do mikrofonu. Kliknij kłódkę w pasku adresu i zezwól na mikrofon.");
-      else if (e.error === "audio-capture")
-        alert("Mikrofon niedostępny. Sprawdź czy jest podłączony.");
-      else if (e.error === "no-speech") { /* user didn't say anything — OK */ }
-      else alert(`Błąd rozpoznawania mowy: ${e.error}`);
-    };
-    recRef.current = rec;
-    try { rec.start(); } catch (err) { console.error("rec.start() failed:", err); setListening(false); recRef.current = null; }
+
+      const chunks = pcmChunksRef.current.splice(0);
+      if (chunks.length === 0) return;
+
+      setLoading(true);
+      try {
+        const res = await fetch("/api/stt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chunks }),
+        });
+        const data = await res.json();
+        if (data.transcript) setMessage((prev) => prev + (prev ? " " : "") + data.transcript);
+        else if (data.error) console.error("STT error:", data.error);
+      } catch (err) {
+        console.error("STT request failed:", err);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Start recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      pcmChunksRef.current = [];
+
+      const ctx = new AudioContext();
+      audioContextRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      const sampleRatio = ctx.sampleRate / 16000;
+      processor.onaudioprocess = (e) => {
+        const input = e.inputBuffer.getChannelData(0);
+        const outLen = Math.floor(input.length / sampleRatio);
+        const out = new Int16Array(outLen);
+        for (let i = 0; i < outLen; i++) {
+          const s = input[Math.floor(i * sampleRatio)];
+          out[i] = Math.max(-32768, Math.min(32767, Math.round(s * 32767)));
+        }
+        const bytes = new Uint8Array(out.buffer);
+        let bin = "";
+        for (let b = 0; b < bytes.length; b++) bin += String.fromCharCode(bytes[b]);
+        pcmChunksRef.current.push(btoa(bin));
+      };
+
+      source.connect(processor);
+      processor.connect(ctx.destination);
+      setListening(true);
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : "";
+      const msg = err instanceof Error ? err.message : String(err);
+      if (name === "NotAllowedError") alert("Brak dostępu do mikrofonu. Kliknij kłódkę w pasku adresu i zezwól na mikrofon.");
+      else if (name === "NotFoundError") alert("Mikrofon niedostępny. Sprawdź czy jest podłączony.");
+      else alert(`Błąd mikrofonu: ${msg}`);
+    }
   };
 
   const saveToHistory = async (entry: ChatEntry) => {
