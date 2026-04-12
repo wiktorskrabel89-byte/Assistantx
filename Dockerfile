@@ -19,9 +19,10 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy custom server (WebSocket proxy) + ws package it depends on
+# Copy custom server (WebSocket proxy) and install its runtime dependency
 COPY --from=builder /app/server.js ./
-COPY --from=builder /app/node_modules/ws ./node_modules/ws
+COPY --from=builder /app/package*.json ./
+RUN npm install ws --no-save
 
 EXPOSE 3000
 ENV PORT=3000
