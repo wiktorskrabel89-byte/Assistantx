@@ -133,6 +133,7 @@ export default function Home() {
   const [speaking, setSpeaking] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load chat history from Supabase on mount
   useEffect(() => {
@@ -187,41 +188,37 @@ export default function Home() {
       .replace(/^\s*[-*+]\s/gm, "")
       .trim();
 
-  const speak = useCallback((text: string, idx: number) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-
+  const speak = useCallback(async (text: string, idx: number) => {
     // Stop if already speaking
     if (speaking !== null) {
-      window.speechSynthesis.cancel();
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       setSpeaking(null);
       return;
     }
 
-    const clean = text
-      .replace(/```[\s\S]*?```/g, "")
-      .replace(/`[^`]*`/g, "")
-      .replace(/#{1,6}\s/g, "")
-      .replace(/[*_~]/g, "")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/^\s*[-*+]\s/gm, "")
-      .trim();
+    const clean = stripMarkdown(text);
     if (!clean) return;
 
-    const utter = new SpeechSynthesisUtterance(clean);
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(
-      (v) => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Premium") || v.name.includes("Enhanced"))
-    ) ?? voices.find((v) => v.lang.startsWith("en")) ?? voices[0];
-    if (preferred) utter.voice = preferred;
-
-    utter.rate = 1.05;
-    utter.pitch = 1;
-
     setSpeaking(idx);
-    utter.onend = () => setSpeaking(null);
-    utter.onerror = () => setSpeaking(null);
-    window.speechSynthesis.speak(utter);
-  }, [speaking]);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: clean.slice(0, 2000) }),
+      });
+      if (!res.ok) throw new Error(`TTS ${res.status}`);
+      const { audioContent } = await res.json();
+      if (!audioContent) throw new Error("No audio");
+      const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
+      audioRef.current = audio;
+      audio.onended = () => { setSpeaking(null); audioRef.current = null; };
+      audio.onerror = () => { setSpeaking(null); audioRef.current = null; };
+      audio.play();
+    } catch (err) {
+      console.error("TTS failed:", err);
+      setSpeaking(null);
+    }
+  }, [speaking, stripMarkdown]);
 
   const exportChat = () => {
     const text = chat
