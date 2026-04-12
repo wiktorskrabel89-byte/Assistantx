@@ -500,7 +500,7 @@ export default function Home() {
             <button
               onClick={sendMessage}
               disabled={loading || (!message && !file)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${modeColors[mode]}`}
+              className={`px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${mode === "image" ? "bg-emerald-600" : mode === "upload" ? "bg-orange-500" : mode === "auto" ? "bg-blue-600" : (DIRECT_MODELS.find((d) => d.mode === mode)?.color ?? "bg-blue-600")}`}
             >
               {loading ? (mode === "image" ? "⏳" : "...") : (mode === "image" ? "Generate" : "Send")}
             </button>
