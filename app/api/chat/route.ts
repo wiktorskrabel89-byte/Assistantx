@@ -46,21 +46,22 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const { message, mode: rawMode, allowedModels } = await req.json();
-  const isAuto = rawMode === "auto";
-  const mode = isAuto ? (isCodeRequest(message) ? "code" : "chat") : rawMode;
+  const { message, modelId, mode: rawMode, allowedModels } = await req.json();
+  const isAuto = !modelId && rawMode === "auto";
   const encoder = new TextEncoder();
 
-  const systemPrompt = mode === "code"
+  // Determine system prompt based on model or request content
+  const CODE_MODEL_IDS = [
+    "deepseek/deepseek-v3.2",
+    "anthropic/claude-sonnet-4.6",
+    "openai/gpt-5-mini",
+  ];
+  const isCodeMode = modelId ? CODE_MODEL_IDS.includes(modelId) : isCodeRequest(message);
+  const systemPrompt = isCodeMode
     ? "You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."
     : "Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.";
 
-  const useAutoRouter = isAuto;
-  const selectedModel = useAutoRouter
-    ? "openrouter/auto"
-    : mode === "code"
-    ? "deepseek/deepseek-v3.2"
-    : "meta-llama/llama-3.3-70b-instruct:free";
+  const selectedModel = modelId ?? "openrouter/auto";
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
@@ -71,7 +72,8 @@ export async function POST(req: Request) {
     ],
   };
 
-  if (useAutoRouter && Array.isArray(allowedModels) && allowedModels.length > 0) {
+  // For auto router, restrict to the 6 configured direct models
+  if (isAuto && Array.isArray(allowedModels) && allowedModels.length > 0) {
     requestBody.plugins = [{ id: "auto-router", allowed_models: allowedModels }];
   }
 
@@ -115,8 +117,8 @@ export async function POST(req: Request) {
                 const routed = parsed.model as string | undefined;
                 const label = routed
                   ? (MODEL_LABELS[routed] ?? routed.split("/").pop() ?? "Auto Router")
-                  : (useAutoRouter ? "Auto Router" : (MODEL_LABELS[selectedModel] ?? "Llama 3.3 70B"));
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: useAutoRouter ? `🔀 ${label}` : label })}\n\n`));
+                  : (isAuto ? "Auto Router" : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI"));
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: isAuto ? `🔀 ${label}` : label })}\n\n`));
                 modelSent = true;
               }
               const token = parsed.choices?.[0]?.delta?.content;
@@ -128,7 +130,7 @@ export async function POST(req: Request) {
         }
 
         if (!modelSent) {
-          const fallback = useAutoRouter ? "🔀 Auto Router" : (MODEL_LABELS[selectedModel] ?? "Llama 3.3 70B");
+          const fallback = isAuto ? "🔀 Auto Router" : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: fallback })}\n\n`));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
