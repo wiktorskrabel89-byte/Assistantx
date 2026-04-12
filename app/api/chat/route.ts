@@ -24,8 +24,8 @@ export async function POST(req: Request) {
     ? "You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."
     : "Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.";
 
-  const groqModel = mode === "code" ? "deepseek-r1-distill-llama-70b" : "llama-3.3-70b-versatile";
-  const modelLabel = mode === "code" ? "DeepSeek R1 (Code)" : "Llama 3.3 70B (Chat)";
+  const groqModel = "llama-3.3-70b-versatile";
+  const modelLabel = mode === "code" ? "Llama 3.3 70B (Code)" : "Llama 3.3 70B (Chat)";
 
   const stream = new ReadableStream({
     async start(controller) {

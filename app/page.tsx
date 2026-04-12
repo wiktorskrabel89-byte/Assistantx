@@ -348,10 +348,9 @@ export default function Home() {
                       <img src={c.imageUrl} alt={c.user} className="rounded-xl max-w-full" />
                     ) : (
                       <div className={`${cardBg} border px-4 py-3 rounded-2xl rounded-tl-sm text-sm`}>
-                        {c.ai || (i === chat.length - 1 && loading ? (
+                        {!c.ai && i === chat.length - 1 && loading ? (
                           <span className="animate-pulse">▋</span>
-                        ) : null)}
-                        {c.ai && (
+                        ) : (
                           <ReactMarkdown
                             components={{
                               code({ className, children, ...props }) {
@@ -393,7 +392,6 @@ export default function Home() {
                           </ReactMarkdown>
                         )}
                       </div>
-                    )}
                   </div>
                 </div>
               </div>
