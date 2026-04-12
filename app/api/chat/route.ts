@@ -1,17 +1,5 @@
 export const maxDuration = 60;
 
-const CODE_KEYWORDS = [
-  "kod", "code", "funkcja", "function", "skrypt", "script",
-  "napisz", "wygeneruj", "implement", "stwórz", "fix", "napraw",
-  "class", "klasa", "def ", "const ", "let ", "var ", "import ",
-  "snippet", "przykład kodu",
-];
-
-function isCodeRequest(message: string): boolean {
-  const lower = message.toLowerCase();
-  return CODE_KEYWORDS.some((k) => lower.includes(k));
-}
-
 const MODEL_LABELS: Record<string, string> = {
   "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
   "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
@@ -46,22 +34,15 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const { message, modelId, mode: rawMode, allowedModels } = await req.json();
-  const isAuto = !modelId && rawMode === "auto";
+  const { message, mode: rawMode, allowedModels } = await req.json();
   const encoder = new TextEncoder();
 
-  // Determine system prompt based on model or request content
-  const CODE_MODEL_IDS = [
-    "deepseek/deepseek-v3.2",
-    "anthropic/claude-sonnet-4.6",
-    "openai/gpt-5-mini",
-  ];
-  const isCodeMode = modelId ? CODE_MODEL_IDS.includes(modelId) : isCodeRequest(message);
+  const isCodeMode = rawMode === "code";
   const systemPrompt = isCodeMode
     ? "You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."
     : "Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.";
 
-  const selectedModel = modelId ?? "openrouter/auto";
+  const selectedModel = "openrouter/auto";
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
@@ -73,8 +54,8 @@ export async function POST(req: Request) {
     ],
   };
 
-  // For auto router, restrict to the 6 configured direct models
-  if (isAuto && Array.isArray(allowedModels) && allowedModels.length > 0) {
+  // Restrict auto router to the relevant model pool
+  if (Array.isArray(allowedModels) && allowedModels.length > 0) {
     requestBody.plugins = [{ id: "auto-router", allowed_models: allowedModels }];
   }
 
