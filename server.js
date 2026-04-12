@@ -48,15 +48,16 @@ app.prepare().then(() => {
       console.log("[Realtime] Connected to Inworld API");
     });
 
-    browserWs.on("message", (msg) => {
+    browserWs.on("message", (msg, isBinary) => {
       if (inworldWs.readyState === WebSocket.OPEN) {
-        inworldWs.send(msg);
+        // Inworld requires JSON text frames — never send binary
+        inworldWs.send(isBinary ? msg : msg.toString(), { binary: false });
       }
     });
 
-    inworldWs.on("message", (data) => {
+    inworldWs.on("message", (data, isBinary) => {
       if (browserWs.readyState === WebSocket.OPEN) {
-        browserWs.send(data.toString());
+        browserWs.send(isBinary ? data : data.toString(), { binary: isBinary });
       }
     });
 
