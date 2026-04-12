@@ -17,6 +17,7 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
+  const [speaking, setSpeaking] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -61,6 +62,72 @@ export default function Home() {
       setCopied(idx);
       setTimeout(() => setCopied(null), 2000);
     });
+  };
+
+  const stripMarkdown = (text: string) =>
+    text
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/`[^`]*`/g, "")
+      .replace(/#{1,6}\s/g, "")
+      .replace(/[*_~]/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/^\s*[-*+]\s/gm, "")
+      .trim();
+
+  const speak = async (text: string, idx: number) => {
+    if (speaking !== null) return;
+    setSpeaking(idx);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: stripMarkdown(text) }),
+      });
+      const data = await res.json();
+      if (data.audioContent) {
+        const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+        audio.onended = () => setSpeaking(null);
+        audio.onerror = () => setSpeaking(null);
+        await audio.play();
+      } else {
+        setSpeaking(null);
+      }
+    } catch {
+      setSpeaking(null);
+    }
+  };
+
+  const stripMarkdown = (text: string) =>
+    text
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/`[^`]*`/g, "")
+      .replace(/#{1,6}\s/g, "")
+      .replace(/[*_~]/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/^\s*[-*+]\s/gm, "")
+      .trim();
+
+  const speak = async (text: string, idx: number) => {
+    if (speaking !== null) return;
+    setSpeaking(idx);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: stripMarkdown(text) }),
+      });
+      const data = await res.json();
+      if (data.audioContent) {
+        const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+        audio.onended = () => setSpeaking(null);
+        audio.onerror = () => setSpeaking(null);
+        await audio.play();
+      } else {
+        setSpeaking(null);
+      }
+    } catch {
+      setSpeaking(null);
+    }
   };
 
   const exportChat = () => {
@@ -392,6 +459,16 @@ export default function Home() {
                           </ReactMarkdown>
                         )}
                       </div>
+                    {c.ai && !c.imageUrl && (
+                      <button
+                        onClick={() => speak(c.ai, i)}
+                        disabled={speaking !== null}
+                        className={`text-xs ml-1 mt-1 transition-colors ${speaking === i ? "text-blue-400 animate-pulse" : "text-gray-400 hover:text-blue-400"}`}
+                        title="Read aloud"
+                      >
+                        {speaking === i ? "🔊 Speaking..." : "🔊 Listen"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
