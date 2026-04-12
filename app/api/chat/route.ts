@@ -99,8 +99,8 @@ export async function POST(req: Request) {
                 const routed = parsed.model as string | undefined;
                 const label = routed
                   ? (MODEL_LABELS[routed] ?? routed.split("/").pop() ?? "Auto Router")
-                  : (isAuto ? "Auto Router" : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI"));
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: isAuto ? `🔀 ${label}` : label })}\n\n`));
+                  : (selectedModel === "openrouter/auto" ? "Auto Router" : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI"));
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: selectedModel === "openrouter/auto" ? `🔀 ${label}` : label })}\n\n`));
                 modelSent = true;
               }
               const token = parsed.choices?.[0]?.delta?.content;
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
         }
 
         if (!modelSent) {
-          const fallback = isAuto ? "🔀 Auto Router" : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
+          const fallback = selectedModel === "openrouter/auto" ? "🔀 Auto Router" : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: fallback })}\n\n`));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
