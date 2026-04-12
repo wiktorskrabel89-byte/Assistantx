@@ -25,7 +25,7 @@ export async function POST(req: Request) {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: "GPT-4.5 Preview" })}\n\n`));
           const response = await openai.chat.completions.create({
-            model: "gpt-4.5-preview",
+            model: "gpt-4o",
             stream: true,
             messages: [
               { role: "system", content: "You are a helpful assistant with vision capabilities. Detect the language of the user's message and always respond in that same language." },
