@@ -500,6 +500,7 @@ export default function Home() {
                           </ReactMarkdown>
                         )}
                       </div>
+                    )}
                     {c.ai && !c.imageUrl && (
                       <button
                         onClick={() => speak(c.ai, i)}
