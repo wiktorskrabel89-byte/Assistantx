@@ -86,7 +86,7 @@ const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> =
   },
 ];
 
-function detectLanguage(text: string): { lang: string; name: string } | null {
+export function detectLanguage(text: string): { lang: string; name: string } | null {
   const trimmed = text.trim();
   if (trimmed.length < 2) return null;
   const scores: Record<string, { name: string; score: number }> = {};

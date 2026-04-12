@@ -8,7 +8,9 @@
     "dev:api": "cd \"ai agent\" && python -m uvicorn main:app --host 127.0.0.1 --port 8000",
     "build": "next build",
     "start": "node server.js",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.0",
