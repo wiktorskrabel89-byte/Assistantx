@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently --names \"NEXT,FASTAPI\" --prefix-colors \"blue,green\" \"next dev\" \"cd \\\"ai agent\\\" && python -m uvicorn main:app --host 127.0.0.1 --port 8000\"",
-    "dev:next": "next dev",
+    "dev": "concurrently --names \"NEXT,FASTAPI\" --prefix-colors \"blue,green\" \"node server.js\" \"cd \\\"ai agent\\\" && python -m uvicorn main:app --host 127.0.0.1 --port 8000\"",
+    "dev:next": "node server.js",
     "dev:api": "cd \"ai agent\" && python -m uvicorn main:app --host 127.0.0.1 --port 8000",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node server.js",
     "lint": "eslint"
   },
   "dependencies": {
