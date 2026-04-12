@@ -1,5 +1,3 @@
-import Groq from "groq-sdk";
-
 export const maxDuration = 60;
 
 const CODE_KEYWORDS = [
@@ -14,36 +12,96 @@ function isCodeRequest(message: string): boolean {
   return CODE_KEYWORDS.some((k) => lower.includes(k));
 }
 
+const MODEL_LABELS: Record<string, string> = {
+  "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
+  "meta-llama/llama-4-scout:free": "Llama 4 Scout",
+  "deepseek/deepseek-r1:free": "DeepSeek R1",
+  "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash",
+  "mistralai/mistral-small-3.1-24b-instruct:free": "Mistral Small 3.1",
+  "qwen/qwen3-235b-a22b:free": "Qwen 3 235B",
+};
+
 export async function POST(req: Request) {
-  const { message, mode: rawMode } = await req.json();
-  const mode = rawMode === "auto" ? (isCodeRequest(message) ? "code" : "chat") : rawMode;
+  const { message, mode: rawMode, allowedModels } = await req.json();
+  const isAuto = rawMode === "auto";
+  const mode = isAuto ? (isCodeRequest(message) ? "code" : "chat") : rawMode;
   const encoder = new TextEncoder();
-  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
   const systemPrompt = mode === "code"
     ? "You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."
     : "Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.";
 
-  const groqModel = "llama-3.3-70b-versatile";
-  const modelLabel = mode === "code" ? "Llama 3.3 70B (Code)" : "Llama 3.3 70B (Chat)";
+  const useAutoRouter = isAuto;
+  const selectedModel = useAutoRouter ? "openrouter/auto" : "meta-llama/llama-3.3-70b-instruct:free";
+
+  const requestBody: Record<string, unknown> = {
+    model: selectedModel,
+    stream: true,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: message },
+    ],
+  };
+
+  if (useAutoRouter && Array.isArray(allowedModels) && allowedModels.length > 0) {
+    requestBody.models = allowedModels;
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: modelLabel })}\n\n`));
-        const response = await groq.chat.completions.create({
-          model: groqModel,
-          stream: true,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: message },
-          ],
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://moje-ai.vercel.app",
+            "X-Title": "Moje AI",
+          },
+          body: JSON.stringify(requestBody),
         });
-        for await (const chunk of response) {
-          const text = chunk.choices[0]?.delta?.content;
-          if (text) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: text })}\n\n`));
+
+        if (!response.ok) {
+          const err = await response.text();
+          throw new Error(`OpenRouter error ${response.status}: ${err}`);
+        }
+
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let modelSent = false;
+        let buf = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const raw = line.slice(6).trim();
+            if (raw === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(raw);
+              if (!modelSent) {
+                const routed = parsed.model as string | undefined;
+                const label = routed
+                  ? (MODEL_LABELS[routed] ?? routed.split("/").pop() ?? "Auto Router")
+                  : (useAutoRouter ? "Auto Router" : (MODEL_LABELS[selectedModel] ?? "Llama 3.3 70B"));
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: useAutoRouter ? `🔀 ${label}` : label })}\n\n`));
+                modelSent = true;
+              }
+              const token = parsed.choices?.[0]?.delta?.content;
+              if (token) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
+              }
+            } catch { /* ignore malformed */ }
           }
+        }
+
+        if (!modelSent) {
+          const fallback = useAutoRouter ? "🔀 Auto Router" : (MODEL_LABELS[selectedModel] ?? "Llama 3.3 70B");
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: fallback })}\n\n`));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (e) {
