@@ -428,6 +428,7 @@ export default function Home() {
           message: userMsg,
           mode,
           modelId: mode === "code" ? CODE_MODEL : mode === "chat" ? CHAT_MODEL : undefined,
+          history: chat.filter((c) => c.ai && !c.imageUrl).map((c) => ({ user: c.user, ai: c.ai })),
         }),
       });
 
