@@ -39,8 +39,8 @@ export async function POST(req: Request) {
 
   const isCodeMode = rawMode === "code" || modelId === "deepseek/deepseek-v3.2";
   const systemPrompt = isCodeMode
-    ? "You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."
-    : "Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.";
+    ? "You are an expert programmer. Respond in the same language the user writes in. For short or ambiguous messages default to English. Note: 'elo', 'siema', 'hej', 'cześć' are Polish. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."
+    : "Respond in the same language the user writes in. For short or ambiguous messages default to English. Note: 'elo', 'siema', 'hej', 'cześć' are Polish. Be helpful, friendly and conversational.";
 
   const selectedModel = modelId ?? "openrouter/auto";
 
