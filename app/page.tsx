@@ -241,7 +241,14 @@ export default function Home() {
     await fetch("/api/history", { method: "DELETE" }).catch(() => {});
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recRef = useRef<any>(null);
+
   const startVoice = () => {
+    if (listening && recRef.current) {
+      recRef.current.stop();
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition;
@@ -253,10 +260,19 @@ export default function Home() {
     rec.lang = "pl-PL";
     rec.interimResults = false;
     rec.onstart = () => setListening(true);
-    rec.onend = () => setListening(false);
+    rec.onend = () => { setListening(false); recRef.current = null; };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => setMessage(e.results[0][0].transcript);
-    rec.start();
+    rec.onresult = (e: any) => setMessage((prev) => prev + (prev ? " " : "") + e.results[0][0].transcript);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onerror = (e: any) => {
+      setListening(false);
+      recRef.current = null;
+      if (e.error === "not-allowed") alert("Brak dostępu do mikrofonu. Sprawdź uprawnienia w przeglądarce.");
+      else if (e.error === "no-speech") { /* cicho ignoruj */ }
+      else console.error("SpeechRecognition error:", e.error);
+    };
+    recRef.current = rec;
+    try { rec.start(); } catch (err) { console.error("rec.start() failed:", err); setListening(false); recRef.current = null; }
   };
 
   const saveToHistory = async (entry: ChatEntry) => {
