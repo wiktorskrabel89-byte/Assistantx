@@ -373,6 +373,15 @@ export default function Home() {
         const reader = res.body!.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let pendingTokens = "";
+        let rafId: number | null = null;
+        const flushTokens = () => {
+          rafId = null;
+          if (!pendingTokens) return;
+          const tokens = pendingTokens;
+          pendingTokens = "";
+          setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + tokens }; return a; });
+        };
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -389,10 +398,15 @@ export default function Home() {
                 setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], model: parsed.model }; return a; });
               }
               if (parsed.token) {
-                setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + parsed.token }; return a; });
+                pendingTokens += parsed.token;
+                if (rafId === null) rafId = requestAnimationFrame(flushTokens);
               }
             } catch { /* ignore */ }
           }
+        }
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        if (pendingTokens) {
+          setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + pendingTokens }; return a; });
         }
         const last = await new Promise<ChatEntry>((resolve) => setChat((prev) => { resolve(prev[prev.length - 1]); return prev; }));
         await saveToHistory(last);
@@ -420,6 +434,15 @@ export default function Home() {
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let pendingTokens = "";
+      let rafId: number | null = null;
+      const flushTokens = () => {
+        rafId = null;
+        if (!pendingTokens) return;
+        const tokens = pendingTokens;
+        pendingTokens = "";
+        setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + tokens }; return a; });
+      };
 
       while (true) {
         const { value, done } = await reader.read();
@@ -438,10 +461,15 @@ export default function Home() {
               setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], model: parsed.model }; return a; });
             }
             if (parsed.token) {
-              setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + parsed.token }; return a; });
+              pendingTokens += parsed.token;
+              if (rafId === null) rafId = requestAnimationFrame(flushTokens);
             }
           } catch { /* ignore */ }
         }
+      }
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (pendingTokens) {
+        setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + pendingTokens }; return a; });
       }
       const final = await new Promise<ChatEntry>((resolve) => setChat((prev) => { resolve(prev[prev.length - 1]); return prev; }));
       await saveToHistory(final);
