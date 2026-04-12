@@ -4,6 +4,15 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
+const ROUTER_MODELS = [
+  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B", tag: "General" },
+  { id: "meta-llama/llama-4-scout:free", label: "Llama 4 Scout", tag: "Vision" },
+  { id: "deepseek/deepseek-r1:free", label: "DeepSeek R1", tag: "Reasoning" },
+  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash", tag: "Fast" },
+  { id: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1", tag: "Efficient" },
+  { id: "qwen/qwen3-235b-a22b:free", label: "Qwen 3 235B", tag: "Large" },
+] as const;
+
 type Mode = "auto" | "chat" | "code" | "image" | "upload";
 type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string; filePreview?: string };
 
@@ -18,6 +27,7 @@ export default function Home() {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
   const [speaking, setSpeaking] = useState<number | null>(null);
+  const [routerModels, setRouterModels] = useState<string[]>(ROUTER_MODELS.map((m) => m.id));
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -97,37 +107,10 @@ export default function Home() {
     }
   };
 
-  const stripMarkdown = (text: string) =>
-    text
-      .replace(/```[\s\S]*?```/g, "")
-      .replace(/`[^`]*`/g, "")
-      .replace(/#{1,6}\s/g, "")
-      .replace(/[*_~]/g, "")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/^\s*[-*+]\s/gm, "")
-      .trim();
-
-  const speak = async (text: string, idx: number) => {
-    if (speaking !== null) return;
-    setSpeaking(idx);
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: stripMarkdown(text) }),
-      });
-      const data = await res.json();
-      if (data.audioContent) {
-        const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
-        audio.onended = () => setSpeaking(null);
-        audio.onerror = () => setSpeaking(null);
-        await audio.play();
-      } else {
-        setSpeaking(null);
-      }
-    } catch {
-      setSpeaking(null);
-    }
+  const toggleRouterModel = (id: string) => {
+    setRouterModels((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
+    );
   };
 
   const exportChat = () => {
@@ -261,7 +244,7 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg, mode }),
+        body: JSON.stringify({ message: userMsg, mode, allowedModels: routerModels }),
       });
 
       const reader = res.body!.getReader();
@@ -295,13 +278,13 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [message, mode, loading, file, filePreview]);
+  }, [message, mode, loading, file, filePreview, routerModels]);
 
   const modeLabels: Record<Mode, string> = {
-    auto: "🤖 Auto",
-    chat: "💬 Chat (GPT-4.5)",
-    code: "💻 Code (Claude 4.6)",
-    image: "🎨 Image (DALL-E 3)",
+    auto: "🔀 Auto Router",
+    chat: "💬 Chat",
+    code: "💻 Code",
+    image: "🎨 Image",
     upload: "📎 File",
   };
 
@@ -373,6 +356,34 @@ export default function Home() {
             onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           />
         </div>
+
+        {/* Auto Router model configurator */}
+        {mode === "auto" && (
+          <div className={`mb-3 p-3 rounded-xl border ${cardBg}`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-400">Auto Router — allowed models</span>
+              <div className="flex gap-2">
+                <button onClick={() => setRouterModels(ROUTER_MODELS.map((m) => m.id))} className="text-xs text-blue-400 hover:underline">All</button>
+                <button onClick={() => setRouterModels([])} className="text-xs text-gray-400 hover:underline">None</button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ROUTER_MODELS.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => toggleRouterModel(m.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
+                    routerModels.includes(m.id)
+                      ? "bg-blue-600 text-white border-transparent"
+                      : `border-gray-300 ${dark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"}`
+                  }`}
+                >
+                  {m.label} <span className="opacity-60 text-[10px]">{m.tag}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* File preview */}
         {filePreview && file?.type.startsWith("image/") && (
