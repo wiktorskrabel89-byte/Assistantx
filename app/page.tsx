@@ -5,12 +5,16 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const ROUTER_MODELS = [
-  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B", tag: "General" },
-  { id: "meta-llama/llama-4-scout:free", label: "Llama 4 Scout", tag: "Vision" },
-  { id: "deepseek/deepseek-r1:free", label: "DeepSeek R1", tag: "Reasoning" },
-  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash", tag: "Fast" },
-  { id: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1", tag: "Efficient" },
-  { id: "qwen/qwen3-235b-a22b:free", label: "Qwen 3 235B", tag: "Large" },
+  { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5", tag: "Anthropic" },
+  { id: "anthropic/claude-opus-4.6", label: "Claude Opus 4.6", tag: "Anthropic" },
+  { id: "openai/gpt-5", label: "GPT-5", tag: "OpenAI" },
+  { id: "openai/gpt-5-mini", label: "GPT-5 Mini", tag: "OpenAI" },
+  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tag: "Google" },
+  { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash", tag: "Google" },
+  { id: "deepseek/deepseek-r1", label: "DeepSeek R1", tag: "DeepSeek" },
+  { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B", tag: "Meta" },
+  { id: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B", tag: "Qwen" },
+  { id: "x-ai/grok-4", label: "Grok 4", tag: "xAI" },
 ] as const;
 
 type Mode = "auto" | "chat" | "code" | "image" | "upload";
