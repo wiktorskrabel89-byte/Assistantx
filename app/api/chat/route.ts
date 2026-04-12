@@ -141,7 +141,7 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const { message, mode: rawMode, modelId, allowedModels } = await req.json();
+  const { message, mode: rawMode, modelId, allowedModels, history } = await req.json();
   const encoder = new TextEncoder();
 
   const isCodeMode = rawMode === "code" || modelId === "deepseek/deepseek-v3.2";
@@ -165,12 +165,20 @@ export async function POST(req: Request) {
 
   const selectedModel = modelId ?? "openrouter/auto";
 
+  const historyMessages: Array<{ role: string; content: string }> = Array.isArray(history)
+    ? history.flatMap((h: { user: string; ai: string }) => [
+        { role: "user", content: h.user },
+        { role: "assistant", content: h.ai },
+      ])
+    : [];
+
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
     stream: true,
     max_tokens: 4096,
     messages: [
       { role: "system", content: systemPrompt },
+      ...historyMessages,
       { role: "user", content: message },
     ],
   };
