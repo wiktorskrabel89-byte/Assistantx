@@ -14,11 +14,34 @@ function isCodeRequest(message: string): boolean {
 
 const MODEL_LABELS: Record<string, string> = {
   "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
+  "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
   "meta-llama/llama-4-scout:free": "Llama 4 Scout",
   "deepseek/deepseek-r1:free": "DeepSeek R1",
+  "deepseek/deepseek-r1": "DeepSeek R1",
   "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash",
+  "google/gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
+  "google/gemini-3-flash-preview": "Gemini 3 Flash",
+  "google/gemini-3-pro-preview": "Gemini 3 Pro",
   "mistralai/mistral-small-3.1-24b-instruct:free": "Mistral Small 3.1",
   "qwen/qwen3-235b-a22b:free": "Qwen 3 235B",
+  "qwen/qwen3-235b-a22b": "Qwen 3 235B",
+  "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5",
+  "anthropic/claude-opus-4.5": "Claude Opus 4.5",
+  "anthropic/claude-opus-4.6": "Claude Opus 4.6",
+  "anthropic/claude-haiku-4.5": "Claude Haiku 4.5",
+  "openai/gpt-5": "GPT-5",
+  "openai/gpt-5-mini": "GPT-5 Mini",
+  "openai/gpt-5-nano": "GPT-5 Nano",
+  "openai/gpt-5.1": "GPT-5.1",
+  "openai/gpt-5.2": "GPT-5.2",
+  "openai/gpt-5.2-pro": "GPT-5.2 Pro",
+  "openai/gpt-oss-120b": "GPT OSS 120B",
+  "x-ai/grok-4": "Grok 4",
+  "x-ai/grok-3": "Grok 3",
+  "x-ai/grok-3-mini": "Grok 3 Mini",
+  "minimax/minimax-m2.5": "MiniMax M2.5",
+  "moonshotai/kimi-k2-thinking": "Kimi K2 Thinking",
+  "perplexity/sonar": "Perplexity Sonar",
 };
 
 export async function POST(req: Request) {
@@ -44,7 +67,7 @@ export async function POST(req: Request) {
   };
 
   if (useAutoRouter && Array.isArray(allowedModels) && allowedModels.length > 0) {
-    requestBody.models = allowedModels;
+    requestBody.plugins = [{ id: "auto-router", allowed_models: allowedModels }];
   }
 
   const stream = new ReadableStream({
