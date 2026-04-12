@@ -232,6 +232,10 @@ export async function POST(req: Request) {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: selectedModel === "openrouter/auto" ? `🔀 ${label}` : label })}\n\n`));
                 modelSent = true;
               }
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning;
+              if (reasoning) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ reasoning })}\n\n`));
+              }
               const token = parsed.choices?.[0]?.delta?.content;
               if (token) {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));

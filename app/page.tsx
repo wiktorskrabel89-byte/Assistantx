@@ -9,7 +9,7 @@ const CODE_MODEL = "deepseek/deepseek-v3.2";
 const CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct";
 
 type Mode = "auto" | "code" | "chat" | "image" | "upload";
-type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string; filePreview?: string };
+type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string; filePreview?: string; reasoning?: string };
 // ── Memoized chat list — does NOT re-render on input keystrokes ───────────
 type ChatListProps = {
   chat: ChatEntry[];
@@ -22,10 +22,12 @@ type ChatListProps = {
   chatEndRef: React.RefObject<HTMLDivElement | null>;
   onSpeak: (text: string, idx: number) => void;
   onCopyCode: (code: string, idx: number) => void;
+  openReasoning: Set<number>;
+  onToggleReasoning: (i: number) => void;
 };
 
 const ChatList = memo(function ChatList({
-  chat, loading, dark, cardBg, codeBg, copied, speaking, chatEndRef, onSpeak, onCopyCode,
+  chat, loading, dark, cardBg, codeBg, copied, speaking, chatEndRef, onSpeak, onCopyCode, openReasoning, onToggleReasoning,
 }: ChatListProps) {
   let codeBlockIdx = 0;
   return (
@@ -52,6 +54,21 @@ const ChatList = memo(function ChatList({
           {/* AI bubble */}
           <div className="flex justify-start">
             <div className="max-w-[85%] space-y-1">
+              {c.reasoning && (
+                <div className={`mb-1 text-xs rounded-xl px-3 py-2 border ${dark ? "bg-purple-950/30 border-purple-800/30 text-purple-300" : "bg-purple-50 border-purple-200 text-purple-700"}`}>
+                  <button onClick={() => onToggleReasoning(i)} className="w-full text-left flex items-center gap-2 font-medium">
+                    <span>💭 Rozumowanie</span>
+                    {loading && i === chat.length - 1
+                      ? <span className="animate-pulse ml-1">●</span>
+                      : <span className="ml-auto">{openReasoning.has(i) ? "▲" : "▼"}</span>}
+                  </button>
+                  {(openReasoning.has(i) || (loading && i === chat.length - 1)) && (
+                    <div className="mt-2 whitespace-pre-wrap max-h-40 overflow-y-auto opacity-80 leading-relaxed">
+                      {c.reasoning}
+                    </div>
+                  )}
+                </div>
+              )}
               {c.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={c.imageUrl} alt={c.user} className="rounded-xl max-w-full" />
@@ -137,6 +154,10 @@ export default function Home() {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
   const [speaking, setSpeaking] = useState<number | null>(null);
+  const [openReasoning, setOpenReasoning] = useState<Set<number>>(new Set());
+  const toggleReasoning = useCallback((i: number) => {
+    setOpenReasoning((prev) => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
+  }, []);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -442,12 +463,21 @@ export default function Home() {
       let buffer = "";
       let pendingTokens = "";
       let rafId: number | null = null;
+      let pendingReasoning = "";
+      let rafReasoningId: number | null = null;
       const flushTokens = () => {
         rafId = null;
         if (!pendingTokens) return;
         const tokens = pendingTokens;
         pendingTokens = "";
         setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + tokens }; return a; });
+      };
+      const flushReasoning = () => {
+        rafReasoningId = null;
+        if (!pendingReasoning) return;
+        const r = pendingReasoning;
+        pendingReasoning = "";
+        setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], reasoning: (a[a.length - 1].reasoning ?? "") + r }; return a; });
       };
 
       while (true) {
@@ -466,6 +496,10 @@ export default function Home() {
             if (parsed.model) {
               setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], model: parsed.model }; return a; });
             }
+            if (parsed.reasoning) {
+              pendingReasoning += parsed.reasoning;
+              if (rafReasoningId === null) rafReasoningId = requestAnimationFrame(flushReasoning);
+            }
             if (parsed.token) {
               pendingTokens += parsed.token;
               if (rafId === null) rafId = requestAnimationFrame(flushTokens);
@@ -476,6 +510,10 @@ export default function Home() {
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (pendingTokens) {
         setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + pendingTokens }; return a; });
+      }
+      if (rafReasoningId !== null) cancelAnimationFrame(rafReasoningId);
+      if (pendingReasoning) {
+        setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], reasoning: (a[a.length - 1].reasoning ?? "") + pendingReasoning }; return a; });
       }
       const final = await new Promise<ChatEntry>((resolve) => setChat((prev) => { resolve(prev[prev.length - 1]); return prev; }));
       await saveToHistory(final);
@@ -582,6 +620,8 @@ export default function Home() {
           chatEndRef={chatEndRef}
           onSpeak={speak}
           onCopyCode={copyCode}
+          openReasoning={openReasoning}
+          onToggleReasoning={toggleReasoning}
         />
 
         {/* Input area */}
