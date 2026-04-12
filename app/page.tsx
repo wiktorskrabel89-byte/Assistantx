@@ -264,9 +264,12 @@ export default function Home() {
     rec.onerror = (e: any) => {
       setListening(false);
       recRef.current = null;
-      if (e.error === "not-allowed") alert("Brak dostępu do mikrofonu. Sprawdź uprawnienia w przeglądarce.");
-      else if (e.error === "no-speech") { /* cicho ignoruj */ }
-      else console.error("SpeechRecognition error:", e.error);
+      if (e.error === "not-allowed" || e.error === "service-not-allowed")
+        alert("Brak dostępu do mikrofonu. Kliknij kłódkę w pasku adresu i zezwól na mikrofon.");
+      else if (e.error === "audio-capture")
+        alert("Mikrofon niedostępny. Sprawdź czy jest podłączony.");
+      else if (e.error === "no-speech") { /* user didn't say anything — OK */ }
+      else alert(`Błąd rozpoznawania mowy: ${e.error}`);
     };
     recRef.current = rec;
     try { rec.start(); } catch (err) { console.error("rec.start() failed:", err); setListening(false); recRef.current = null; }
