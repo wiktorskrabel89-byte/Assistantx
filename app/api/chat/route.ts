@@ -145,14 +145,23 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
 
   const isCodeMode = rawMode === "code" || modelId === "deepseek/deepseek-v3.2";
+  const isDeepSeek = typeof modelId === "string" && modelId.includes("deepseek");
+  const isGemini = typeof modelId === "string" && modelId.includes("gemini");
   const detected = detectLanguage(message);
   const langInstruction = detected
     ? `Always respond in ${detected.name}. Do not switch languages.`
     : "Respond in English.";
 
-  const systemPrompt = isCodeMode
-    ? `You are an expert programmer. ${langInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical.`
-    : `You are a helpful assistant. ${langInstruction} Be friendly and conversational.`;
+  let systemPrompt: string;
+  if (isDeepSeek) {
+    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations.`;
+  } else if (isGemini) {
+    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read.`;
+  } else if (isCodeMode) {
+    systemPrompt = `You are an expert programmer. ${langInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical.`;
+  } else {
+    systemPrompt = `You are a helpful assistant. ${langInstruction} Be friendly and conversational.`;
+  }
 
   const selectedModel = modelId ?? "openrouter/auto";
 
