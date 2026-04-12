@@ -77,65 +77,35 @@ export default function Home() {
       .replace(/^\s*[-*+]\s/gm, "")
       .trim();
 
-  const speakAbortRef = useRef(false);
+  const speak = (text: string, idx: number) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
 
-  const speak = async (text: string, idx: number) => {
-    // If already speaking — stop
+    // Stop if already speaking
     if (speaking !== null) {
-      speakAbortRef.current = true;
+      window.speechSynthesis.cancel();
       setSpeaking(null);
       return;
     }
-    speakAbortRef.current = false;
-    setSpeaking(idx);
 
     const clean = stripMarkdown(text);
-    // Split into sentences so first sentence plays immediately
-    const sentences = clean
-      .split(/(?<=[.!?])\s+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 3)
-      .slice(0, 20);
+    if (!clean.trim()) return;
 
-    if (sentences.length === 0) { setSpeaking(null); return; }
+    const utter = new SpeechSynthesisUtterance(clean);
 
-    const fetchAudio = async (sentence: string): Promise<HTMLAudioElement | null> => {
-      try {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: sentence }),
-        });
-        const data = await res.json();
-        if (data.audioContent) return new Audio(`data:audio/mp3;base64,${data.audioContent}`);
-      } catch { /* ignore */ }
-      return null;
-    };
+    // Pick a good voice — prefer a natural-sounding one if available
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(
+      (v) => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Premium") || v.name.includes("Enhanced"))
+    ) ?? voices.find((v) => v.lang.startsWith("en")) ?? voices[0];
+    if (preferred) utter.voice = preferred;
 
-    try {
-      // Pre-fetch first 2 sentences in parallel immediately
-      const queue: Promise<HTMLAudioElement | null>[] = [fetchAudio(sentences[0])];
-      if (sentences[1]) queue.push(fetchAudio(sentences[1]));
-      let nextToFetch = 2;
+    utter.rate = 1.05;
+    utter.pitch = 1;
 
-      for (let i = 0; i < sentences.length; i++) {
-        if (speakAbortRef.current) break;
-        // Kick off the next fetch while waiting for current
-        if (nextToFetch < sentences.length) {
-          queue.push(fetchAudio(sentences[nextToFetch]));
-          nextToFetch++;
-        }
-        const audio = await queue[i];
-        if (!audio || speakAbortRef.current) continue;
-        await new Promise<void>((resolve) => {
-          audio.onended = () => resolve();
-          audio.onerror = () => resolve();
-          audio.play().catch(() => resolve());
-        });
-      }
-    } catch { /* ignore */ }
-
-    setSpeaking(null);
+    setSpeaking(idx);
+    utter.onend = () => setSpeaking(null);
+    utter.onerror = () => setSpeaking(null);
+    window.speechSynthesis.speak(utter);
   };
 
   const exportChat = () => {
