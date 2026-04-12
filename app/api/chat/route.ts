@@ -66,6 +66,7 @@ export async function POST(req: Request) {
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
     stream: true,
+    max_tokens: 4096,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: message },
