@@ -81,6 +81,8 @@ const ChatList = memo(function ChatList({
                       <span className="animate-bounce [animation-delay:300ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
                       <span className="ml-1">Thinking...</span>
                     </span>
+                  ) : i === chat.length - 1 && loading ? (
+                    <span className="whitespace-pre-wrap leading-relaxed">{c.ai}</span>
                   ) : (
                     <ReactMarkdown
                       components={{
