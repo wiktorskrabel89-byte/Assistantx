@@ -1,6 +1,6 @@
 export const maxDuration = 60;
 
-const CODE_MODEL = "deepseek/deepseek-v3.2";
+const CODE_MODEL = "openai/gpt-5.4";
 const CHAT_MODEL = "google/gemini-2.5-flash-lite";
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -150,6 +150,7 @@ const MODEL_LABELS: Record<string, string> = {
   "anthropic/claude-opus-4.5": "Claude Opus 4.5",
   "anthropic/claude-opus-4.6": "Claude Opus 4.6",
   "anthropic/claude-haiku-4.5": "Claude Haiku 4.5",
+  "openai/gpt-5.4": "GPT-5.4",
   "openai/gpt-5": "GPT-5",
   "openai/gpt-5-mini": "GPT-5 Mini",
   "openai/gpt-5-nano": "GPT-5 Nano",

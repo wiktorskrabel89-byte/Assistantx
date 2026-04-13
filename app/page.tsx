@@ -4,6 +4,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { createClient as createSupabaseClient } from "@/lib/client";
+import { getLinkedProviders, getOAuthScopes, isOAuthProvider, type OAuthProvider } from "@/lib/integrations";
+import { IntegrationsPanel } from "./components/IntegrationsPanel";
+import { RoadmapPanel } from "./components/RoadmapPanel";
 import { VoiceModal } from "./components/VoiceModal";
 import {
   CHAT_MODELS,
@@ -19,6 +23,7 @@ import {
 type Mode = "auto" | "code" | "chat" | "search" | "image" | "upload";
 type StyleMode = "concise" | "detailed" | "step-by-step";
 type ResponseAction = "summarize" | "checklist" | "translate" | "commit";
+type CloudSyncStatus = "checking" | "syncing" | "synced" | "error" | "local";
 
 type ChatEntry = {
   id: string;
@@ -116,6 +121,7 @@ type ArtifactPanelProps = {
 
 const STORAGE_KEY = "moje-ai.workspace-state.v3";
 const NEW_CHAT_TITLE = "New chat";
+const LEGACY_DEFAULT_CODE_MODEL = "deepseek/deepseek-v3.2";
 const TEXT_LANGUAGE_OPTIONS = [
   { code: "auto", label: "Auto detect" },
   ...VOICE_LANGUAGE_OPTIONS.filter((option) => option.code !== "auto"),
@@ -289,14 +295,20 @@ function upgradeState(value: StoredState | null): StoredState | null {
       ? workspace.activeChatId
       : chats[0].id;
 
+    const settings = {
+      ...createSettings(),
+      ...workspace.settings,
+    };
+
+    if (settings.codeModel === LEGACY_DEFAULT_CODE_MODEL) {
+      settings.codeModel = DEFAULT_CODE_MODEL;
+    }
+
     return {
       ...workspace,
       chats,
       activeChatId,
-      settings: {
-        ...createSettings(),
-        ...workspace.settings,
-      },
+      settings,
       updatedAt: workspace.updatedAt || Date.now(),
       createdAt: workspace.createdAt || Date.now(),
     };
@@ -559,6 +571,15 @@ export default function Home() {
   const [speaking, setSpeaking] = useState<string | null>(null);
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [authProvider, setAuthProvider] = useState<OAuthProvider | null>(null);
+  const [linkedProviders, setLinkedProviders] = useState<OAuthProvider[]>([]);
+  const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>("checking");
+  const [cloudSyncMessage, setCloudSyncMessage] = useState("Checking session...");
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
+  const [cloudBootstrapped, setCloudBootstrapped] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -568,6 +589,9 @@ export default function Home() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const pcmChunksRef = useRef<string[]>([]);
   const importedShareRef = useRef(false);
+  const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null);
+  const stateRef = useRef(state);
+  const lastSyncedPayloadRef = useRef<string | null>(null);
 
   const activeWorkspace = useMemo(
     () => state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId) ?? state.workspaces[0],
@@ -585,6 +609,10 @@ export default function Home() {
   const cardBg = state.dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200";
   const inputBg = state.dark ? "bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400";
   const codeBg = state.dark ? "bg-gray-950" : "bg-gray-100";
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -638,6 +666,62 @@ export default function Home() {
   }, [loaded, state]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const supabase = createSupabaseClient();
+    supabaseRef.current = supabase;
+    let active = true;
+
+    const applySession = (email: string | null, provider: OAuthProvider | null, identities: OAuthProvider[]) => {
+      if (!active) return;
+      setUserEmail(email);
+      setAuthProvider(provider);
+      setLinkedProviders(identities);
+      setOauthLoading(null);
+      setAuthReady(true);
+
+      if (email) {
+        setCloudSyncEnabled(true);
+        setCloudBootstrapped(false);
+        setCloudSyncStatus("checking");
+        setCloudSyncMessage("Loading your cloud workspace...");
+      } else {
+        setCloudSyncEnabled(false);
+        setCloudBootstrapped(true);
+        setCloudSyncStatus("local");
+        setCloudSyncMessage("No active session. Workspace changes stay local.");
+      }
+    };
+
+    void supabase.auth.getUser().then(({ data, error }) => {
+      if (!active) return;
+      if (error) {
+        setAuthReady(true);
+        setCloudSyncEnabled(false);
+        setCloudBootstrapped(true);
+        setCloudSyncStatus("error");
+        setCloudSyncMessage(error.message);
+        return;
+      }
+
+      const providerValue = typeof data.user?.app_metadata?.provider === "string" ? data.user.app_metadata.provider : null;
+      const provider: OAuthProvider | null = isOAuthProvider(providerValue) ? providerValue : null;
+      applySession(data.user?.email ?? null, provider, getLinkedProviders(data.user?.identities));
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      const providerValue = typeof session?.user?.app_metadata?.provider === "string" ? session.user.app_metadata.provider : null;
+      const provider: OAuthProvider | null = isOAuthProvider(providerValue) ? providerValue : null;
+      applySession(session?.user?.email ?? null, provider, getLinkedProviders(session?.user?.identities));
+    });
+
+    return () => {
+      active = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     document.documentElement.classList.toggle("dark", state.dark);
   }, [state.dark]);
 
@@ -656,7 +740,7 @@ export default function Home() {
   }, [filePreview]);
 
   useEffect(() => {
-    if (!loaded || importedShareRef.current || typeof window === "undefined") return;
+    if (!loaded || !cloudBootstrapped || importedShareRef.current || typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const share = url.searchParams.get("share");
     if (!share) return;
@@ -689,7 +773,106 @@ export default function Home() {
     }
 
     importedShareRef.current = true;
-  }, [loaded]);
+  }, [cloudBootstrapped, loaded]);
+
+  useEffect(() => {
+    if (!loaded || !authReady || !userEmail || !cloudSyncEnabled) return;
+    let cancelled = false;
+
+    async function hydrateCloudState() {
+      try {
+        setCloudSyncStatus("checking");
+        setCloudSyncMessage("Loading your cloud workspace...");
+
+        const response = await fetch("/api/workspaces/state", { cache: "no-store" });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(typeof data.error === "string" ? data.error : "Failed to load cloud workspace state.");
+        }
+
+        const remoteState = upgradeState((data as { state?: StoredState | null }).state ?? null);
+
+        if (cancelled) return;
+
+        if (remoteState) {
+          lastSyncedPayloadRef.current = JSON.stringify(sanitizeForStorage(remoteState));
+          setState(remoteState);
+          setCloudBootstrapped(true);
+          setCloudSyncStatus("synced");
+          setCloudSyncMessage("Cloud workspace loaded.");
+          return;
+        }
+
+        const initialState = sanitizeForStorage(stateRef.current);
+        const payload = JSON.stringify(initialState);
+        const seedResponse = await fetch("/api/workspaces/state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        });
+        const seedData = await seedResponse.json().catch(() => ({}));
+
+        if (!seedResponse.ok) {
+          throw new Error(typeof seedData.error === "string" ? seedData.error : "Failed to initialize cloud workspace state.");
+        }
+
+        if (cancelled) return;
+        lastSyncedPayloadRef.current = payload;
+        setCloudBootstrapped(true);
+        setCloudSyncStatus("synced");
+        setCloudSyncMessage("Cloud workspace created.");
+      } catch (error) {
+        if (cancelled) return;
+        setCloudSyncEnabled(false);
+        setCloudBootstrapped(true);
+        setCloudSyncStatus("error");
+        setCloudSyncMessage(error instanceof Error ? error.message : "Cloud sync setup is incomplete.");
+      }
+    }
+
+    void hydrateCloudState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, cloudSyncEnabled, loaded, userEmail]);
+
+  useEffect(() => {
+    if (!loaded || !authReady || !userEmail || !cloudSyncEnabled || !cloudBootstrapped || typeof window === "undefined") return;
+
+    const payload = JSON.stringify(sanitizeForStorage(state));
+    if (payload === lastSyncedPayloadRef.current) return;
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        setCloudSyncStatus("syncing");
+        setCloudSyncMessage("Saving workspace changes...");
+
+        const response = await fetch("/api/workspaces/state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(typeof data.error === "string" ? data.error : "Failed to save workspace changes.");
+        }
+
+        lastSyncedPayloadRef.current = payload;
+        setCloudSyncStatus("synced");
+        setCloudSyncMessage("All workspace changes synced.");
+      } catch (error) {
+        setCloudSyncStatus("error");
+        setCloudSyncMessage(error instanceof Error ? error.message : "Failed to save workspace changes.");
+      }
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [authReady, cloudBootstrapped, cloudSyncEnabled, loaded, state, userEmail]);
 
   const updateWorkspace = useCallback((workspaceId: string, updater: (workspace: Workspace) => Workspace) => {
     setState((prev) => ({
@@ -762,6 +945,46 @@ export default function Home() {
     setComposerText(text);
   }, [setComposerText]);
 
+  const signOut = useCallback(async () => {
+    try {
+      setCloudSyncStatus("checking");
+      setCloudSyncMessage("Signing out...");
+      await fetch("/api/integrations/provider-tokens", { method: "DELETE" }).catch(() => undefined);
+      const supabase = supabaseRef.current;
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+    } finally {
+      if (typeof window !== "undefined") {
+        window.location.assign("/auth/login");
+      }
+    }
+  }, []);
+
+  const signInWithProvider = useCallback(async (provider: OAuthProvider) => {
+    const supabase = supabaseRef.current;
+    if (!supabase || typeof window === "undefined") return;
+
+    setOauthLoading(provider);
+    setCloudSyncStatus("checking");
+    setCloudSyncMessage(`Redirecting to ${provider === "google" ? "Google" : "GitHub"}...`);
+
+    const options = {
+      redirectTo: `${window.location.origin}/auth/callback`,
+      scopes: getOAuthScopes(provider),
+    };
+    const shouldLinkIdentity = Boolean(userEmail) && !linkedProviders.includes(provider) && authProvider !== provider;
+    const { error } = shouldLinkIdentity
+      ? await supabase.auth.linkIdentity({ provider, options })
+      : await supabase.auth.signInWithOAuth({ provider, options });
+
+    if (error) {
+      setOauthLoading(null);
+      setCloudSyncStatus("error");
+      setCloudSyncMessage(error.message);
+    }
+  }, [authProvider, linkedProviders, userEmail]);
+
   const speak = useCallback(async (text: string, id: string) => {
     if (speaking !== null) {
       if (audioRef.current) {
@@ -813,6 +1036,12 @@ export default function Home() {
     }
     setMode("upload");
   }, [filePreview]);
+
+  const stageImportedFile = useCallback((nextFile: File, prompt: string) => {
+    handleFile(nextFile);
+    setMessage(prompt);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [handleFile]);
 
   const startVoiceInput = useCallback(async () => {
     if (listening) {
@@ -1223,6 +1452,63 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }, [activeChat]);
 
+  const createVsCodeBundle = useCallback(() => {
+    const sections = [
+      `# VS Code handoff: ${activeChat.title}`,
+      `Generated: ${new Date().toISOString()}`,
+      ``,
+      `## Workspace`,
+      `- Workspace: ${activeWorkspace.name}`,
+      `- Chat: ${activeChat.title}`,
+      `- Chat model: ${activeWorkspace.settings.chatModel}`,
+      `- Code model: ${activeWorkspace.settings.codeModel}`,
+      `- Search model: ${activeWorkspace.settings.searchModel}`,
+      `- Style: ${activeWorkspace.settings.styleMode}`,
+      `- Language lock: ${activeWorkspace.settings.languageLock}`,
+    ];
+
+    if (activeWorkspace.settings.memoryNotes.trim()) {
+      sections.push("", "## Pinned memory", activeWorkspace.settings.memoryNotes.trim());
+    }
+
+    sections.push("", "## Conversation");
+    for (const entry of activeChat.messages) {
+      sections.push("", `### User`, entry.user || "");
+      if (entry.reasoning) sections.push("", "#### Reasoning", entry.reasoning);
+      sections.push("", `### Assistant${entry.model ? ` (${entry.model})` : ""}`, entry.ai || "");
+      if (entry.routeReason) sections.push("", `Route: ${entry.routeReason}`);
+      if (entry.imageUrl) sections.push("", `Image: ${entry.imageUrl}`);
+    }
+
+    if (artifacts.length > 0) {
+      sections.push("", "## Artifacts");
+      for (const artifact of artifacts) {
+        sections.push("", `### ${artifact.label} — ${artifact.sourceTitle}`, `\`\`\`${artifact.language}`, artifact.code, "\`\`\`");
+      }
+    }
+
+    return sections.join("\n");
+  }, [activeChat, activeWorkspace, artifacts]);
+
+  const copyVsCodePrompt = useCallback(async () => {
+    const bundle = createVsCodeBundle();
+    await navigator.clipboard.writeText(bundle);
+    setCopied("vscode-prompt");
+    setTimeout(() => setCopied(null), 2000);
+  }, [createVsCodeBundle]);
+
+  const downloadVsCodeBundle = useCallback(() => {
+    const bundle = createVsCodeBundle();
+    const safeTitle = (activeChat.title || "workspace").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "workspace";
+    const blob = new Blob([bundle], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${safeTitle}-vscode.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [activeChat.title, createVsCodeBundle]);
+
   const copyShareLink = useCallback(async () => {
     const payload: SharePayload = {
       title: activeChat.title,
@@ -1264,15 +1550,20 @@ export default function Home() {
     <>
       <div className={`min-h-screen ${bg}`}>
         <div className="mx-auto max-w-[1700px] px-4 py-4 h-screen grid gap-4 xl:grid-cols-[290px,minmax(0,1fr),360px] lg:grid-cols-[290px,minmax(0,1fr)] grid-cols-1">
-          <aside className={`rounded-3xl border p-4 flex flex-col gap-4 min-h-0 ${cardBg}`}>
+          <aside className={`rounded-3xl border p-4 flex flex-col gap-4 min-h-0 overflow-y-auto ${cardBg}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-xl font-bold">Moje AI</h1>
-                <p className="text-xs text-gray-500 mt-1">Personal workspaces stored in this browser.</p>
+                <p className="text-xs text-gray-500 mt-1">{userEmail ? `Signed in as ${userEmail}` : "Checking session..."}</p>
               </div>
-              <button onClick={() => setState((prev) => ({ ...prev, dark: !prev.dark }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-                {state.dark ? "Light" : "Dark"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setState((prev) => ({ ...prev, dark: !prev.dark }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+                  {state.dark ? "Light" : "Dark"}
+                </button>
+                <button onClick={() => void signOut()} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+                  Sign out
+                </button>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
@@ -1487,6 +1778,26 @@ export default function Home() {
                 </button>
               </div>
             </div>
+
+            <RoadmapPanel
+              dark={state.dark}
+              userEmail={userEmail}
+              cloudSyncStatus={cloudSyncStatus}
+              cloudSyncMessage={cloudSyncMessage}
+            />
+
+            <IntegrationsPanel
+              dark={state.dark}
+              linkedProviders={linkedProviders}
+              authProvider={authProvider}
+              oauthLoading={oauthLoading}
+              copied={copied}
+              hasArtifacts={artifacts.length > 0}
+              onConnectProvider={(provider) => void signInWithProvider(provider)}
+              onImportFile={stageImportedFile}
+              onCopyVsCodePrompt={() => void copyVsCodePrompt()}
+              onDownloadVsCodeBundle={downloadVsCodeBundle}
+            />
           </aside>
 
           <main className={`rounded-3xl border flex flex-col min-h-0 ${cardBg}`}>
@@ -1499,7 +1810,9 @@ export default function Home() {
                   {currentModelId ? ` • ${currentModelId}` : ""}
                   {` • ${activeWorkspace.settings.styleMode}`}
                   {activeWorkspace.settings.languageLock !== "auto" ? ` • ${activeWorkspace.settings.languageLock}` : ""}
+                  {` • Cloud ${cloudSyncStatus}`}
                 </div>
+                <div className="text-xs text-gray-500 mt-2">{cloudSyncMessage}</div>
               </div>
               <div className="flex gap-2 flex-wrap justify-end">
                 <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">{copied === "share-link" ? "Link copied" : "Share"}</button>
