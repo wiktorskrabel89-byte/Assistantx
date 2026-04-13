@@ -1,110 +1,388 @@
 "use client";
-import { useState, useCallback, useEffect, useRef, memo } from "react";
+
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { VoiceModal } from "./components/VoiceModal";
+import {
+  CHAT_MODELS,
+  CODE_MODELS,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_CODE_MODEL,
+  DEFAULT_SEARCH_MODEL,
+  DEFAULT_VOICE_LANGUAGE,
+  SEARCH_MODELS,
+  VOICE_LANGUAGE_OPTIONS,
+} from "@/lib/ai-config";
 
-const CODE_MODEL = "deepseek/deepseek-v3.2";
-const CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct";
+type Mode = "auto" | "code" | "chat" | "search" | "image" | "upload";
 
-type Mode = "auto" | "code" | "chat" | "image" | "upload";
-type ChatEntry = { user: string; ai: string; model: string | null; imageUrl?: string; filePreview?: string; reasoning?: string };
-// ── Memoized chat list — does NOT re-render on input keystrokes ───────────
+type ChatEntry = {
+  id: string;
+  user: string;
+  ai: string;
+  model: string | null;
+  imageUrl?: string;
+  filePreview?: string;
+  fileName?: string;
+  reasoning?: string;
+  createdAt: number;
+};
+
+type ChatThread = {
+  id: string;
+  title: string;
+  messages: ChatEntry[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+type WorkspaceSettings = {
+  chatModel: string;
+  codeModel: string;
+  searchModel: string;
+  memoryEnabled: boolean;
+  memoryNotes: string;
+  voiceLanguage: string;
+};
+
+type Workspace = {
+  id: string;
+  name: string;
+  chats: ChatThread[];
+  activeChatId: string;
+  settings: WorkspaceSettings;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type StoredState = {
+  workspaces: Workspace[];
+  activeWorkspaceId: string;
+  dark: boolean;
+};
+
+type Artifact = {
+  id: string;
+  language: string;
+  code: string;
+  label: string;
+  sourceTitle: string;
+};
+
+type SharePayload = {
+  title: string;
+  messages: Array<{
+    user: string;
+    ai: string;
+    model: string | null;
+    imageUrl?: string;
+    fileName?: string;
+    reasoning?: string;
+  }>;
+};
+
 type ChatListProps = {
   chat: ChatEntry[];
   loading: boolean;
   dark: boolean;
   cardBg: string;
   codeBg: string;
-  copied: number | null;
-  speaking: number | null;
+  copied: string | null;
+  speaking: string | null;
   chatEndRef: React.RefObject<HTMLDivElement | null>;
-  onSpeak: (text: string, idx: number) => void;
-  onCopyCode: (code: string, idx: number) => void;
-  openReasoning: Set<number>;
-  onToggleReasoning: (i: number) => void;
+  onSpeak: (text: string, id: string) => void;
+  onCopyCode: (code: string, id: string) => void;
+  openReasoning: Set<string>;
+  onToggleReasoning: (id: string) => void;
 };
 
+type ArtifactPanelProps = {
+  artifacts: Artifact[];
+  dark: boolean;
+  copied: string | null;
+  onCopyCode: (code: string, id: string) => void;
+};
+
+const STORAGE_KEY = "moje-ai.workspace-state.v3";
+const NEW_CHAT_TITLE = "New chat";
+
+function createId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createMessage(overrides: Partial<ChatEntry>): ChatEntry {
+  return {
+    id: createId(),
+    user: "",
+    ai: "",
+    model: null,
+    createdAt: Date.now(),
+    ...overrides,
+  };
+}
+
+function createSettings(): WorkspaceSettings {
+  return {
+    chatModel: DEFAULT_CHAT_MODEL,
+    codeModel: DEFAULT_CODE_MODEL,
+    searchModel: DEFAULT_SEARCH_MODEL,
+    memoryEnabled: true,
+    memoryNotes: "",
+    voiceLanguage: DEFAULT_VOICE_LANGUAGE,
+  };
+}
+
+function createChat(title = NEW_CHAT_TITLE): ChatThread {
+  const now = Date.now();
+  return {
+    id: createId(),
+    title,
+    messages: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function createWorkspace(name = "Personal"): Workspace {
+  const chat = createChat();
+  const now = Date.now();
+  return {
+    id: createId(),
+    name,
+    chats: [chat],
+    activeChatId: chat.id,
+    settings: createSettings(),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function createDefaultState(): StoredState {
+  const workspace = createWorkspace();
+  return {
+    workspaces: [workspace],
+    activeWorkspaceId: workspace.id,
+    dark: false,
+  };
+}
+
+function deriveTitle(text: string) {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return NEW_CHAT_TITLE;
+  return cleaned.length > 36 ? `${cleaned.slice(0, 36)}…` : cleaned;
+}
+
+function stripMarkdown(text: string) {
+  return text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`]*`/g, "")
+    .replace(/#{1,6}\s/g, "")
+    .replace(/[*_~]/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^\s*[-*+]\s/gm, "")
+    .trim();
+}
+
+function toBase64(text: string) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function fromBase64(base64: string) {
+  const binary = atob(base64);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function extractArtifacts(messages: ChatEntry[]): Artifact[] {
+  const artifacts: Artifact[] = [];
+  const blockRegex = /```([\w.+-]*)\n?([\s\S]*?)```/g;
+
+  for (const message of messages) {
+    if (!message.ai) continue;
+    let match: RegExpExecArray | null;
+    let index = 1;
+    while ((match = blockRegex.exec(message.ai)) !== null) {
+      const language = match[1] || "text";
+      const code = match[2].replace(/\n$/, "");
+      if (!code.trim()) continue;
+      artifacts.push({
+        id: `${message.id}-${index}`,
+        language,
+        code,
+        label: `${language.toUpperCase()} ${index}`,
+        sourceTitle: message.user || "AI response",
+      });
+      index += 1;
+    }
+  }
+
+  return artifacts;
+}
+
+function sanitizeForStorage(state: StoredState): StoredState {
+  return {
+    ...state,
+    workspaces: state.workspaces.map((workspace) => ({
+      ...workspace,
+      chats: workspace.chats.map((chat) => ({
+        ...chat,
+        messages: chat.messages.map((message) => ({
+          ...message,
+          filePreview: undefined,
+        })),
+      })),
+    })),
+  };
+}
+
+function upgradeState(value: StoredState | null): StoredState | null {
+  if (!value || !Array.isArray(value.workspaces) || value.workspaces.length === 0) return null;
+
+  const workspaces = value.workspaces.map((workspace) => {
+    const chats = Array.isArray(workspace.chats) && workspace.chats.length > 0
+      ? workspace.chats.map((chat) => ({
+          ...chat,
+          title: chat.title || NEW_CHAT_TITLE,
+          messages: Array.isArray(chat.messages)
+            ? chat.messages.map((message) => ({
+                ...message,
+                id: message.id || createId(),
+                createdAt: message.createdAt || Date.now(),
+              }))
+            : [],
+          updatedAt: chat.updatedAt || Date.now(),
+          createdAt: chat.createdAt || Date.now(),
+        }))
+      : [createChat()];
+
+    const activeChatId = chats.some((chat) => chat.id === workspace.activeChatId)
+      ? workspace.activeChatId
+      : chats[0].id;
+
+    return {
+      ...workspace,
+      chats,
+      activeChatId,
+      settings: {
+        ...createSettings(),
+        ...workspace.settings,
+      },
+      updatedAt: workspace.updatedAt || Date.now(),
+      createdAt: workspace.createdAt || Date.now(),
+    };
+  });
+
+  const activeWorkspaceId = workspaces.some((workspace) => workspace.id === value.activeWorkspaceId)
+    ? value.activeWorkspaceId
+    : workspaces[0].id;
+
+  return {
+    workspaces,
+    activeWorkspaceId,
+    dark: Boolean(value.dark),
+  };
+}
+
 const ChatList = memo(function ChatList({
-  chat, loading, dark, cardBg, codeBg, copied, speaking, chatEndRef, onSpeak, onCopyCode, openReasoning, onToggleReasoning,
+  chat,
+  loading,
+  dark,
+  cardBg,
+  codeBg,
+  copied,
+  speaking,
+  chatEndRef,
+  onSpeak,
+  onCopyCode,
+  openReasoning,
+  onToggleReasoning,
 }: ChatListProps) {
   let codeBlockIdx = 0;
+
   return (
-    <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1">
+    <div className="flex-1 overflow-y-auto space-y-4 pr-1">
       {chat.length === 0 && (
         <div className="text-center text-gray-400 mt-16 text-lg">
-          👋 Send a message to start chatting
+          Start a chat, switch models, search the web, or upload a file.
         </div>
       )}
-      {chat.map((c, i) => (
-        <div key={i} className="space-y-2">
-          {/* User bubble */}
+      {chat.map((entry, index) => (
+        <div key={entry.id} className="space-y-2">
           <div className="flex justify-end">
-            <div className="max-w-[80%]">
-              {c.filePreview && (
+            <div className="max-w-[82%]">
+              {entry.filePreview && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.filePreview} alt="file" className="h-20 rounded-xl mb-1 ml-auto block" />
+                <img src={entry.filePreview} alt="file" className="h-24 rounded-xl mb-1 ml-auto block" />
               )}
-              <div className="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm text-sm">
-                {c.user}
+              {entry.fileName && !entry.filePreview && (
+                <div className={`mb-1 text-xs inline-flex ml-auto px-2 py-1 rounded-full border ${dark ? "border-gray-600 text-gray-300" : "border-gray-300 text-gray-600"}`}>
+                  {entry.fileName}
+                </div>
+              )}
+              <div className="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm text-sm whitespace-pre-wrap break-words">
+                {entry.user}
               </div>
             </div>
           </div>
-          {/* AI bubble */}
+
           <div className="flex justify-start">
-            <div className="max-w-[85%] space-y-1">
-              {c.reasoning && (
+            <div className="max-w-[88%] space-y-1">
+              {entry.reasoning && (
                 <div className={`mb-1 text-xs rounded-xl px-3 py-2 border ${dark ? "bg-purple-950/30 border-purple-800/30 text-purple-300" : "bg-purple-50 border-purple-200 text-purple-700"}`}>
-                  <button onClick={() => onToggleReasoning(i)} className="w-full text-left flex items-center gap-2 font-medium">
-                    <span>💭 Rozumowanie</span>
-                    {loading && i === chat.length - 1
-                      ? <span className="animate-pulse ml-1">●</span>
-                      : <span className="ml-auto">{openReasoning.has(i) ? "▲" : "▼"}</span>}
+                  <button onClick={() => onToggleReasoning(entry.id)} className="w-full text-left flex items-center gap-2 font-medium">
+                    <span>Reasoning</span>
+                    {loading && index === chat.length - 1
+                      ? <span className="animate-pulse ml-auto">●</span>
+                      : <span className="ml-auto">{openReasoning.has(entry.id) ? "▲" : "▼"}</span>}
                   </button>
-                  {(openReasoning.has(i) || (loading && i === chat.length - 1)) && (
+                  {(openReasoning.has(entry.id) || (loading && index === chat.length - 1)) && (
                     <div className="mt-2 whitespace-pre-wrap max-h-40 overflow-y-auto opacity-80 leading-relaxed">
-                      {c.reasoning}
+                      {entry.reasoning}
                     </div>
                   )}
                 </div>
               )}
-              {c.imageUrl ? (
+
+              {entry.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.imageUrl} alt={c.user} className="rounded-xl max-w-full" />
+                <img src={entry.imageUrl} alt={entry.user} className="rounded-xl max-w-full border border-gray-200 dark:border-gray-700" />
               ) : (
                 <div className={`${cardBg} border px-4 py-3 rounded-2xl rounded-tl-sm text-sm`}>
-                  {!c.ai && i === chat.length - 1 && loading ? (
+                  {!entry.ai && index === chat.length - 1 && loading ? (
                     <span className="flex items-center gap-1 text-gray-400 text-xs py-1">
                       <span className="animate-bounce [animation-delay:0ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
                       <span className="animate-bounce [animation-delay:150ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
                       <span className="animate-bounce [animation-delay:300ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
                       <span className="ml-1">Thinking...</span>
                     </span>
-                  ) : i === chat.length - 1 && loading ? (
-                    <span className="whitespace-pre-wrap leading-relaxed">{c.ai}</span>
+                  ) : index === chat.length - 1 && loading ? (
+                    <span className="whitespace-pre-wrap leading-relaxed break-words">{entry.ai}</span>
                   ) : (
                     <ReactMarkdown
                       components={{
                         code({ className, children, ...props }) {
                           const match = /language-(\w+)/.exec(className ?? "");
                           const codeStr = String(children).replace(/\n$/, "");
-                          const isBlock = match || codeStr.includes("\n");
+                          const isBlock = Boolean(match) || codeStr.includes("\n");
                           if (isBlock) {
-                            const idx = codeBlockIdx++;
+                            const blockId = `${entry.id}-inline-${codeBlockIdx++}`;
                             return (
-                              <div className="relative my-2">
-                                <div className={`flex items-center justify-between px-3 py-1 rounded-t-lg text-xs text-gray-400 ${dark ? "bg-gray-900" : "bg-gray-200"}`}>
+                              <div className="relative my-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+                                <div className={`flex items-center justify-between px-3 py-1 text-xs text-gray-400 ${dark ? "bg-gray-900" : "bg-gray-200"}`}>
                                   <span>{match?.[1] ?? "code"}</span>
-                                  <button onClick={() => onCopyCode(codeStr, idx)} className="hover:text-white transition-colors">
-                                    {copied === idx ? "✓ Copied!" : "Copy"}
+                                  <button onClick={() => onCopyCode(codeStr, blockId)} className="hover:text-white transition-colors">
+                                    {copied === blockId ? "Copied" : "Copy"}
                                   </button>
                                 </div>
-                                <SyntaxHighlighter
-                                  style={dark ? oneDark : oneLight}
-                                  language={match?.[1] ?? "text"}
-                                  PreTag="div"
-                                >
+                                <SyntaxHighlighter style={dark ? oneDark : oneLight} language={match?.[1] ?? "text"} PreTag="div">
                                   {codeStr}
                                 </SyntaxHighlighter>
                               </div>
@@ -112,7 +390,7 @@ const ChatList = memo(function ChatList({
                           }
                           return <code className={`${codeBg} px-1 rounded text-xs`} {...props}>{children}</code>;
                         },
-                        p({ children }) { return <p className="mb-2 last:mb-0">{children}</p>; },
+                        p({ children }) { return <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{children}</p>; },
                         ul({ children }) { return <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>; },
                         ol({ children }) { return <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>; },
                         blockquote({ children }) { return <blockquote className={`border-l-4 border-gray-400 pl-3 italic my-2 ${dark ? "text-gray-400" : "text-gray-600"}`}>{children}</blockquote>; },
@@ -121,21 +399,25 @@ const ChatList = memo(function ChatList({
                         h3({ children }) { return <h3 className="text-base font-bold mb-1">{children}</h3>; },
                       }}
                     >
-                      {c.ai}
+                      {entry.ai}
                     </ReactMarkdown>
                   )}
                 </div>
               )}
-              {c.ai && !c.imageUrl && (
-                <button
-                  onClick={() => onSpeak(c.ai, i)}
-                  disabled={speaking !== null && speaking !== i}
-                  className={`text-xs ml-1 mt-1 transition-colors ${speaking === i ? "text-blue-400 animate-pulse" : "text-gray-400 hover:text-blue-400"}`}
-                  title={speaking === i ? "Stop" : "Read aloud"}
-                >
-                  {speaking === i ? "🔊 Stop" : "🔊 Listen"}
-                </button>
-              )}
+
+              <div className="flex items-center gap-2 ml-1 text-xs text-gray-400">
+                {entry.model && <span>{entry.model}</span>}
+                {entry.ai && !entry.imageUrl && (
+                  <button
+                    onClick={() => onSpeak(entry.ai, entry.id)}
+                    disabled={speaking !== null && speaking !== entry.id}
+                    className={`${speaking === entry.id ? "text-blue-400 animate-pulse" : "hover:text-blue-400"}`}
+                    title={speaking === entry.id ? "Stop" : "Read aloud"}
+                  >
+                    {speaking === entry.id ? "Stop audio" : "Listen"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -144,22 +426,90 @@ const ChatList = memo(function ChatList({
     </div>
   );
 });
+
+const ArtifactPanel = memo(function ArtifactPanel({ artifacts, dark, copied, onCopyCode }: ArtifactPanelProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(artifacts[0]?.id ?? null);
+  const activeSelectedId = artifacts.some((artifact) => artifact.id === selectedId) ? selectedId : artifacts[0]?.id ?? null;
+  const selected = artifacts.find((artifact) => artifact.id === activeSelectedId) ?? artifacts[0] ?? null;
+  const showPreview = selected && ["html", "svg"].includes(selected.language.toLowerCase());
+
+  return (
+    <div className={`h-full rounded-3xl border flex flex-col overflow-hidden ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
+      <div className="px-4 py-4 border-b border-gray-200 dark:border-gray-800">
+        <h2 className="font-semibold text-sm">Artifacts</h2>
+        <p className="text-xs text-gray-500 mt-1">Code blocks from the active chat appear here.</p>
+      </div>
+
+      {artifacts.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center text-center text-sm text-gray-400 px-6">
+          No code artifacts yet. Ask for HTML, React, SQL, Python, or any other code block.
+        </div>
+      ) : (
+        <>
+          <div className="p-3 border-b border-gray-200 dark:border-gray-800 space-y-2 max-h-48 overflow-y-auto">
+            {artifacts.map((artifact) => (
+              <button
+                key={artifact.id}
+                onClick={() => setSelectedId(artifact.id)}
+                className={`w-full rounded-2xl border px-3 py-2 text-left transition-colors ${
+                  selected?.id === artifact.id
+                    ? dark
+                      ? "border-blue-500 bg-blue-950/30"
+                      : "border-blue-400 bg-blue-50"
+                    : dark
+                      ? "border-gray-800 hover:bg-gray-800"
+                      : "border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                <div className="text-sm font-medium">{artifact.label}</div>
+                <div className="text-xs text-gray-500 truncate mt-1">{artifact.sourceTitle}</div>
+              </button>
+            ))}
+          </div>
+
+          {selected && (
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+                <div>
+                  <div className="text-sm font-medium">{selected.label}</div>
+                  <div className="text-xs text-gray-500">{selected.language}</div>
+                </div>
+                <button onClick={() => onCopyCode(selected.code, `artifact-${selected.id}`)} className="text-xs text-blue-500 hover:underline">
+                  {copied === `artifact-${selected.id}` ? "Copied" : "Copy"}
+                </button>
+              </div>
+
+              {showPreview && (
+                <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+                  <div className="text-xs font-medium text-gray-500 mb-2">Preview</div>
+                  <iframe title="Artifact preview" srcDoc={selected.code} className="w-full h-48 rounded-xl border border-gray-200 dark:border-gray-700 bg-white" />
+                </div>
+              )}
+
+              <SyntaxHighlighter style={dark ? oneDark : oneLight} language={selected.language || "text"} PreTag="div">
+                {selected.code}
+              </SyntaxHighlighter>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+});
+
 export default function Home() {
+  const [state, setState] = useState<StoredState>(createDefaultState());
   const [message, setMessage] = useState("");
-  const [chat, setChat] = useState<ChatEntry[]>([]);
   const [mode, setMode] = useState<Mode>("auto");
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [dark, setDark] = useState(false);
   const [listening, setListening] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [copied, setCopied] = useState<number | null>(null);
-  const [speaking, setSpeaking] = useState<number | null>(null);
-  const [openReasoning, setOpenReasoning] = useState<Set<number>>(new Set());
-  const toggleReasoning = useCallback((i: number) => {
-    setOpenReasoning((prev) => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
-  }, []);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [speaking, setSpeaking] = useState<string | null>(null);
+  const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -167,64 +517,186 @@ export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const pcmChunksRef = useRef<string[]>([]);
+  const importedShareRef = useRef(false);
 
-  // Load chat history from Supabase on mount
+  const activeWorkspace = useMemo(
+    () => state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId) ?? state.workspaces[0],
+    [state]
+  );
+
+  const activeChat = useMemo(
+    () => activeWorkspace.chats.find((chat) => chat.id === activeWorkspace.activeChatId) ?? activeWorkspace.chats[0],
+    [activeWorkspace]
+  );
+
+  const artifacts = useMemo(() => extractArtifacts(activeChat.messages), [activeChat.messages]);
+
+  const bg = state.dark ? "bg-gray-950 text-gray-100" : "bg-gray-50 text-gray-900";
+  const cardBg = state.dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200";
+  const inputBg = state.dark ? "bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400";
+  const codeBg = state.dark ? "bg-gray-950" : "bg-gray-100";
+
   useEffect(() => {
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.messages?.length) {
-          setChat(
-            data.messages.map((m: { user_message: string; ai_message: string; model: string; image_url?: string }) => ({
-              user: m.user_message,
-              ai: m.ai_message,
-              model: m.model,
-              imageUrl: m.image_url ?? undefined,
-            }))
-          );
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+
+    async function loadState() {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        try {
+          const parsed = upgradeState(JSON.parse(raw) as StoredState);
+          if (!cancelled && parsed) {
+            setState(parsed);
+            setLoaded(true);
+            return;
+          }
+        } catch {
+          // Ignore invalid local data and fall back to legacy history import.
         }
-      })
-      .catch(() => {});
+      }
+
+      try {
+        const response = await fetch("/api/history");
+        const data = await response.json();
+        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
+          const nextState = createDefaultState();
+          nextState.workspaces[0].chats[0].title = "Imported chat";
+          nextState.workspaces[0].chats[0].messages = data.messages.map((item: { user_message: string; ai_message: string; model: string; image_url?: string }) => createMessage({
+            user: item.user_message,
+            ai: item.ai_message,
+            model: item.model,
+            imageUrl: item.image_url ?? undefined,
+          }));
+          setState(nextState);
+        }
+      } catch {
+        // Ignore missing history and keep the local default workspace.
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    }
+
+    void loadState();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Auto-scroll
+  useEffect(() => {
+    if (!loaded || typeof window === "undefined") return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeForStorage(state)));
+  }, [loaded, state]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", state.dark);
+  }, [state.dark]);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat]);
+  }, [activeChat.messages]);
 
-  // Dark mode class on html
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-  }, [dark]);
+    setOpenReasoning(new Set());
+  }, [activeChat.id]);
 
-  const handleFile = (f: File) => {
-    setFile(f);
-    const url = URL.createObjectURL(f);
-    setFilePreview(url);
-    setMode("upload");
-  };
+  useEffect(() => {
+    return () => {
+      if (filePreview?.startsWith("blob:")) URL.revokeObjectURL(filePreview);
+    };
+  }, [filePreview]);
 
-  const copyCode = useCallback((code: string, idx: number) => {
+  useEffect(() => {
+    if (!loaded || importedShareRef.current || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const share = url.searchParams.get("share");
+    if (!share) return;
+
+    try {
+      const payload = JSON.parse(fromBase64(share)) as SharePayload;
+      const importedChat: ChatThread = {
+        ...createChat(payload.title || "Shared chat"),
+        title: payload.title || "Shared chat",
+        messages: payload.messages.map((item) => createMessage(item)),
+      };
+
+      setState((prev) => ({
+        ...prev,
+        workspaces: prev.workspaces.map((workspace) => (
+          workspace.id !== prev.activeWorkspaceId
+            ? workspace
+            : {
+                ...workspace,
+                chats: [importedChat, ...workspace.chats],
+                activeChatId: importedChat.id,
+                updatedAt: Date.now(),
+              }
+        )),
+      }));
+      url.searchParams.delete("share");
+      window.history.replaceState({}, "", url.pathname);
+    } catch {
+      // Ignore malformed shared payloads.
+    }
+
+    importedShareRef.current = true;
+  }, [loaded]);
+
+  const updateWorkspace = useCallback((workspaceId: string, updater: (workspace: Workspace) => Workspace) => {
+    setState((prev) => ({
+      ...prev,
+      workspaces: prev.workspaces.map((workspace) => (
+        workspace.id === workspaceId ? { ...updater(workspace), updatedAt: Date.now() } : workspace
+      )),
+    }));
+  }, []);
+
+  const updateChat = useCallback((workspaceId: string, chatId: string, updater: (chat: ChatThread) => ChatThread) => {
+    setState((prev) => ({
+      ...prev,
+      workspaces: prev.workspaces.map((workspace) => {
+        if (workspace.id !== workspaceId) return workspace;
+        return {
+          ...workspace,
+          updatedAt: Date.now(),
+          chats: workspace.chats.map((chat) => (
+            chat.id === chatId ? { ...updater(chat), updatedAt: Date.now() } : chat
+          )),
+        };
+      }),
+    }));
+  }, []);
+
+  const updateLastMessage = useCallback((workspaceId: string, chatId: string, updater: (message: ChatEntry) => ChatEntry) => {
+    updateChat(workspaceId, chatId, (chat) => {
+      if (chat.messages.length === 0) return chat;
+      const messages = [...chat.messages];
+      messages[messages.length - 1] = updater(messages[messages.length - 1]);
+      return { ...chat, messages };
+    });
+  }, [updateChat]);
+
+  const copyCode = useCallback((code: string, id: string) => {
     navigator.clipboard.writeText(code).then(() => {
-      setCopied(idx);
+      setCopied(id);
       setTimeout(() => setCopied(null), 2000);
+    }).catch(() => {});
+  }, []);
+
+  const toggleReasoning = useCallback((id: string) => {
+    setOpenReasoning((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   }, []);
 
-  const stripMarkdown = (text: string) =>
-    text
-      .replace(/```[\s\S]*?```/g, "")
-      .replace(/`[^`]*`/g, "")
-      .replace(/#{1,6}\s/g, "")
-      .replace(/[*_~]/g, "")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/^\s*[-*+]\s/gm, "")
-      .trim();
-
-  const speak = useCallback(async (text: string, idx: number) => {
-    // Stop if already speaking
+  const speak = useCallback(async (text: string, id: string) => {
     if (speaking !== null) {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
       setSpeaking(null);
       return;
     }
@@ -232,53 +704,52 @@ export default function Home() {
     const clean = stripMarkdown(text);
     if (!clean) return;
 
-    setSpeaking(idx);
+    setSpeaking(id);
     try {
-      const res = await fetch("/api/tts", {
+      const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: clean.slice(0, 2000) }),
       });
-      if (!res.ok) throw new Error(`TTS ${res.status}`);
-      const { audioContent } = await res.json();
-      if (!audioContent) throw new Error("No audio");
-      const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
+      if (!response.ok) throw new Error(`TTS ${response.status}`);
+      const data = await response.json();
+      if (!data.audioContent) throw new Error("No audio");
+
+      const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
       audioRef.current = audio;
-      audio.onended = () => { setSpeaking(null); audioRef.current = null; };
-      audio.onerror = () => { setSpeaking(null); audioRef.current = null; };
-      audio.play();
-    } catch (err) {
-      console.error("TTS failed:", err);
+      audio.onended = () => {
+        setSpeaking(null);
+        audioRef.current = null;
+      };
+      audio.onerror = () => {
+        setSpeaking(null);
+        audioRef.current = null;
+      };
+      await audio.play();
+    } catch (error) {
+      console.error("TTS failed:", error);
       setSpeaking(null);
     }
-  }, [speaking, stripMarkdown]);
+  }, [speaking]);
 
-  const exportChat = () => {
-    const text = chat
-      .map((c) => `You: ${c.user}\nAI (${c.model ?? ""}): ${c.ai}`)
-      .join("\n\n---\n\n");
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "chat-export.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleFile = useCallback((nextFile: File) => {
+    if (filePreview?.startsWith("blob:")) URL.revokeObjectURL(filePreview);
+    setFile(nextFile);
+    if (nextFile.type.startsWith("image/")) {
+      setFilePreview(URL.createObjectURL(nextFile));
+    } else {
+      setFilePreview(null);
+    }
+    setMode("upload");
+  }, [filePreview]);
 
-  const clearChat = async () => {
-    setChat([]);
-    await fetch("/api/history", { method: "DELETE" }).catch(() => {});
-  };
-
-  const startVoice = async () => {
+  const startVoiceInput = useCallback(async () => {
     if (listening) {
-      // Stop recording and transcribe
       processorRef.current?.disconnect();
       processorRef.current = null;
       audioContextRef.current?.close();
       audioContextRef.current = null;
-      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
       setListening(false);
 
@@ -287,23 +758,23 @@ export default function Home() {
 
       setLoading(true);
       try {
-        const res = await fetch("/api/stt", {
+        const response = await fetch("/api/stt", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ chunks }),
         });
-        const data = await res.json();
-        if (data.transcript) setMessage((prev) => prev + (prev ? " " : "") + data.transcript);
-        else if (data.error) console.error("STT error:", data.error);
-      } catch (err) {
-        console.error("STT request failed:", err);
+        const data = await response.json();
+        if (data.transcript) {
+          setMessage((prev) => prev + (prev ? " " : "") + data.transcript);
+        }
+      } catch (error) {
+        console.error("STT request failed:", error);
       } finally {
         setLoading(false);
       }
       return;
     }
 
-    // Start recording
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -312,73 +783,161 @@ export default function Home() {
       const ctx = new AudioContext();
       audioContextRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
-      // eslint-disable-next-line @typescript-eslint/no-deprecated
       const processor = ctx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
 
       const sampleRatio = ctx.sampleRate / 16000;
-      processor.onaudioprocess = (e) => {
-        const input = e.inputBuffer.getChannelData(0);
+      processor.onaudioprocess = (event) => {
+        const input = event.inputBuffer.getChannelData(0);
         const outLen = Math.floor(input.length / sampleRatio);
         const out = new Int16Array(outLen);
         for (let i = 0; i < outLen; i++) {
-          const s = input[Math.floor(i * sampleRatio)];
-          out[i] = Math.max(-32768, Math.min(32767, Math.round(s * 32767)));
+          const sample = input[Math.floor(i * sampleRatio)];
+          out[i] = Math.max(-32768, Math.min(32767, Math.round(sample * 32767)));
         }
         const bytes = new Uint8Array(out.buffer);
         let bin = "";
-        for (let b = 0; b < bytes.length; b++) bin += String.fromCharCode(bytes[b]);
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
         pcmChunksRef.current.push(btoa(bin));
       };
 
       source.connect(processor);
       processor.connect(ctx.destination);
       setListening(true);
-    } catch (err: unknown) {
-      const name = err instanceof Error ? err.name : "";
-      const msg = err instanceof Error ? err.message : String(err);
-      if (name === "NotAllowedError") alert("Brak dostępu do mikrofonu. Kliknij kłódkę w pasku adresu i zezwól na mikrofon.");
-      else if (name === "NotFoundError") alert("Mikrofon niedostępny. Sprawdź czy jest podłączony.");
-      else alert(`Błąd mikrofonu: ${msg}`);
+    } catch (error: unknown) {
+      const name = error instanceof Error ? error.name : "";
+      const messageText = error instanceof Error ? error.message : String(error);
+      if (name === "NotAllowedError") alert("Microphone permission is blocked. Allow microphone access in the browser address bar.");
+      else if (name === "NotFoundError") alert("No microphone was found.");
+      else alert(`Microphone error: ${messageText}`);
     }
-  };
+  }, [listening]);
 
-  const saveToHistory = async (entry: ChatEntry) => {
-    await fetch("/api/history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: entry.user, ai: entry.ai, model: entry.model, imageUrl: entry.imageUrl }),
-    }).catch(() => {});
-  };
+  const consumeStream = useCallback(async (response: Response, workspaceId: string, chatId: string) => {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Missing streaming body");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let pendingTokens = "";
+    let pendingReasoning = "";
+    let tokenRaf: number | null = null;
+    let reasoningRaf: number | null = null;
+
+    const flushTokens = () => {
+      tokenRaf = null;
+      if (!pendingTokens) return;
+      const tokens = pendingTokens;
+      pendingTokens = "";
+      updateLastMessage(workspaceId, chatId, (message) => ({ ...message, ai: message.ai + tokens }));
+    };
+
+    const flushReasoning = () => {
+      reasoningRaf = null;
+      if (!pendingReasoning) return;
+      const reasoning = pendingReasoning;
+      pendingReasoning = "";
+      updateLastMessage(workspaceId, chatId, (message) => ({
+        ...message,
+        reasoning: (message.reasoning ?? "") + reasoning,
+      }));
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const raw = line.slice(6).trim();
+        if (raw === "[DONE]") break;
+        try {
+          const parsed = JSON.parse(raw) as { model?: string; token?: string; reasoning?: string };
+          if (parsed.model) {
+            updateLastMessage(workspaceId, chatId, (message) => ({ ...message, model: parsed.model ?? message.model }));
+          }
+          if (parsed.reasoning) {
+            pendingReasoning += parsed.reasoning;
+            if (reasoningRaf === null) reasoningRaf = requestAnimationFrame(flushReasoning);
+          }
+          if (parsed.token) {
+            pendingTokens += parsed.token;
+            if (tokenRaf === null) tokenRaf = requestAnimationFrame(flushTokens);
+          }
+        } catch {
+          // Ignore malformed SSE payloads.
+        }
+      }
+    }
+
+    if (tokenRaf !== null) cancelAnimationFrame(tokenRaf);
+    if (pendingTokens) {
+      updateLastMessage(workspaceId, chatId, (message) => ({ ...message, ai: message.ai + pendingTokens }));
+    }
+    if (reasoningRaf !== null) cancelAnimationFrame(reasoningRaf);
+    if (pendingReasoning) {
+      updateLastMessage(workspaceId, chatId, (message) => ({
+        ...message,
+        reasoning: (message.reasoning ?? "") + pendingReasoning,
+      }));
+    }
+  }, [updateLastMessage]);
+
+  const currentModelId = useMemo(() => {
+    switch (mode) {
+      case "chat":
+        return activeWorkspace.settings.chatModel;
+      case "code":
+        return activeWorkspace.settings.codeModel;
+      case "search":
+        return activeWorkspace.settings.searchModel;
+      default:
+        return null;
+    }
+  }, [activeWorkspace.settings, mode]);
 
   const sendMessage = useCallback(async () => {
     if ((!message && !file) || loading) return;
-    const userMsg = message;
+
+    const workspaceId = activeWorkspace.id;
+    const chatId = activeChat.id;
+    const userMsg = message.trim();
+    const activeSettings = activeWorkspace.settings;
+    const history = activeSettings.memoryEnabled
+      ? activeChat.messages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
+      : [];
+
     setMessage("");
     setLoading(true);
 
+    const title = activeChat.messages.length === 0 || activeChat.title === NEW_CHAT_TITLE
+      ? deriveTitle(userMsg || file?.name || NEW_CHAT_TITLE)
+      : activeChat.title;
+
     if (mode === "image") {
-      const entry: ChatEntry = { user: userMsg, ai: "Generating image...", model: "DALL-E 3" };
-      setChat((prev) => [...prev, entry]);
+      const pending = createMessage({ user: userMsg, ai: "Generating image...", model: "Pollinations.ai (Free)" });
+      updateChat(workspaceId, chatId, (chat) => ({
+        ...chat,
+        title,
+        messages: [...chat.messages, pending],
+      }));
+
       try {
-        const res = await fetch("/api/image", {
+        const response = await fetch("/api/image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: userMsg }),
         });
-        const data = await res.json();
-        const updated: ChatEntry = {
-          user: userMsg,
+        const data = await response.json();
+        updateLastMessage(workspaceId, chatId, (entry) => ({
+          ...entry,
           ai: data.error ?? "",
-          model: "DALL-E 3",
+          model: data.model ?? entry.model,
           imageUrl: data.url ?? undefined,
-        };
-        setChat((prev) => {
-          const arr = [...prev];
-          arr[arr.length - 1] = updated;
-          return arr;
-        });
-        await saveToHistory(updated);
+        }));
       } finally {
         setLoading(false);
       }
@@ -386,58 +945,29 @@ export default function Home() {
     }
 
     if (mode === "upload" && file) {
-      const preview = filePreview ?? undefined;
-      const entry: ChatEntry = { user: userMsg || "What is in this file?", ai: "", model: null, filePreview: preview };
-      setChat((prev) => [...prev, entry]);
-      setFile(null);
-      setFilePreview(null);
+      const pending = createMessage({
+        user: userMsg || `Analyze ${file.name}`,
+        ai: "",
+        model: null,
+        fileName: file.name,
+        filePreview: filePreview ?? undefined,
+      });
+      updateChat(workspaceId, chatId, (chat) => ({
+        ...chat,
+        title,
+        messages: [...chat.messages, pending],
+      }));
 
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("message", userMsg || "What is in this file?");
+      formData.append("message", userMsg || `What is in ${file.name}?`);
+
+      setFile(null);
+      setFilePreview(null);
 
       try {
-        const res = await fetch("/api/upload", { method: "POST", body: formData });
-        const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let pendingTokens = "";
-        let rafId: number | null = null;
-        const flushTokens = () => {
-          rafId = null;
-          if (!pendingTokens) return;
-          const tokens = pendingTokens;
-          pendingTokens = "";
-          setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + tokens }; return a; });
-        };
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const raw = line.slice(6).trim();
-            if (raw === "[DONE]") break;
-            try {
-              const parsed = JSON.parse(raw);
-              if (parsed.model) {
-                setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], model: parsed.model }; return a; });
-              }
-              if (parsed.token) {
-                pendingTokens += parsed.token;
-                if (rafId === null) rafId = requestAnimationFrame(flushTokens);
-              }
-            } catch { /* ignore */ }
-          }
-        }
-        if (rafId !== null) cancelAnimationFrame(rafId);
-        if (pendingTokens) {
-          setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + pendingTokens }; return a; });
-        }
-        const last = await new Promise<ChatEntry>((resolve) => setChat((prev) => { resolve(prev[prev.length - 1]); return prev; }));
-        await saveToHistory(last);
+        const response = await fetch("/api/upload", { method: "POST", body: formData });
+        await consumeStream(response, workspaceId, chatId);
       } finally {
         setLoading(false);
         setMode("auto");
@@ -445,222 +975,566 @@ export default function Home() {
       return;
     }
 
-    const entry: ChatEntry = { user: userMsg, ai: "", model: null };
-    setChat((prev) => [...prev, entry]);
+    const pending = createMessage({ user: userMsg, ai: "", model: currentModelId, fileName: file?.name ?? undefined });
+    updateChat(workspaceId, chatId, (chat) => ({
+      ...chat,
+      title,
+      messages: [...chat.messages, pending],
+    }));
 
     try {
-      const res = await fetch("/api/chat", {
+      const modelId = mode === "code"
+        ? activeSettings.codeModel
+        : mode === "chat"
+          ? activeSettings.chatModel
+          : mode === "search"
+            ? activeSettings.searchModel
+            : undefined;
+
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMsg,
           mode,
-          modelId: mode === "code" ? CODE_MODEL : mode === "chat" ? CHAT_MODEL : undefined,
-          history: chat.filter((c) => c.ai && !c.imageUrl).map((c) => ({ user: c.user, ai: c.ai })),
+          modelId,
+          allowedModels: mode === "auto" ? [activeSettings.chatModel, activeSettings.codeModel] : undefined,
+          history,
+          memoryNotes: activeSettings.memoryNotes,
         }),
       });
 
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let pendingTokens = "";
-      let rafId: number | null = null;
-      let pendingReasoning = "";
-      let rafReasoningId: number | null = null;
-      const flushTokens = () => {
-        rafId = null;
-        if (!pendingTokens) return;
-        const tokens = pendingTokens;
-        pendingTokens = "";
-        setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + tokens }; return a; });
-      };
-      const flushReasoning = () => {
-        rafReasoningId = null;
-        if (!pendingReasoning) return;
-        const r = pendingReasoning;
-        pendingReasoning = "";
-        setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], reasoning: (a[a.length - 1].reasoning ?? "") + r }; return a; });
-      };
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (raw === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(raw);
-            if (parsed.model) {
-              setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], model: parsed.model }; return a; });
-            }
-            if (parsed.reasoning) {
-              pendingReasoning += parsed.reasoning;
-              if (rafReasoningId === null) rafReasoningId = requestAnimationFrame(flushReasoning);
-            }
-            if (parsed.token) {
-              pendingTokens += parsed.token;
-              if (rafId === null) rafId = requestAnimationFrame(flushTokens);
-            }
-          } catch { /* ignore */ }
-        }
-      }
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      if (pendingTokens) {
-        setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], ai: a[a.length - 1].ai + pendingTokens }; return a; });
-      }
-      if (rafReasoningId !== null) cancelAnimationFrame(rafReasoningId);
-      if (pendingReasoning) {
-        setChat((prev) => { const a = [...prev]; a[a.length - 1] = { ...a[a.length - 1], reasoning: (a[a.length - 1].reasoning ?? "") + pendingReasoning }; return a; });
-      }
-      const final = await new Promise<ChatEntry>((resolve) => setChat((prev) => { resolve(prev[prev.length - 1]); return prev; }));
-      await saveToHistory(final);
+      await consumeStream(response, workspaceId, chatId);
     } finally {
       setLoading(false);
     }
-  }, [message, mode, loading, file, filePreview]);
+  }, [
+    activeChat.id,
+    activeChat.messages,
+    activeChat.title,
+    activeWorkspace.id,
+    activeWorkspace.settings,
+    consumeStream,
+    currentModelId,
+    file,
+    filePreview,
+    loading,
+    message,
+    mode,
+    updateChat,
+    updateLastMessage,
+  ]);
 
-  const bg = dark ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900";
-  const cardBg = dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
-  const inputBg = dark ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400";
-  const codeBg = dark ? "bg-gray-950" : "bg-gray-100";
+  const createWorkspaceAction = useCallback(() => {
+    const name = window.prompt("Workspace name", `Workspace ${state.workspaces.length + 1}`)?.trim();
+    if (!name) return;
+    const workspace = createWorkspace(name);
+    setState((prev) => ({
+      ...prev,
+      workspaces: [workspace, ...prev.workspaces],
+      activeWorkspaceId: workspace.id,
+    }));
+  }, [state.workspaces.length]);
+
+  const renameWorkspace = useCallback((workspaceId: string) => {
+    const current = state.workspaces.find((workspace) => workspace.id === workspaceId);
+    const name = window.prompt("Rename workspace", current?.name ?? "")?.trim();
+    if (!name) return;
+    updateWorkspace(workspaceId, (workspace) => ({ ...workspace, name }));
+  }, [state.workspaces, updateWorkspace]);
+
+  const deleteWorkspace = useCallback((workspaceId: string) => {
+    if (!window.confirm("Delete this workspace and all its chats?")) return;
+    setState((prev) => {
+      const workspaces = prev.workspaces.filter((workspace) => workspace.id !== workspaceId);
+      if (workspaces.length === 0) {
+        const fallback = createWorkspace();
+        return { ...prev, workspaces: [fallback], activeWorkspaceId: fallback.id };
+      }
+      const activeWorkspaceId = prev.activeWorkspaceId === workspaceId ? workspaces[0].id : prev.activeWorkspaceId;
+      return { ...prev, workspaces, activeWorkspaceId };
+    });
+  }, []);
+
+  const createChatAction = useCallback(() => {
+    const chat = createChat();
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      chats: [chat, ...workspace.chats],
+      activeChatId: chat.id,
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const renameChat = useCallback((chatId: string) => {
+    const current = activeWorkspace.chats.find((chat) => chat.id === chatId);
+    const title = window.prompt("Rename chat", current?.title ?? "")?.trim();
+    if (!title) return;
+    updateChat(activeWorkspace.id, chatId, (chat) => ({ ...chat, title }));
+  }, [activeWorkspace.chats, activeWorkspace.id, updateChat]);
+
+  const deleteChat = useCallback((chatId: string) => {
+    if (!window.confirm("Delete this chat?")) return;
+    setState((prev) => ({
+      ...prev,
+      workspaces: prev.workspaces.map((workspace) => {
+        if (workspace.id !== prev.activeWorkspaceId) return workspace;
+        const chats = workspace.chats.filter((chat) => chat.id !== chatId);
+        if (chats.length === 0) {
+          const fallbackChat = createChat();
+          return {
+            ...workspace,
+            chats: [fallbackChat],
+            activeChatId: fallbackChat.id,
+            updatedAt: Date.now(),
+          };
+        }
+        return {
+          ...workspace,
+          chats,
+          activeChatId: workspace.activeChatId === chatId ? chats[0].id : workspace.activeChatId,
+          updatedAt: Date.now(),
+        };
+      }),
+    }));
+  }, []);
+
+  const clearActiveChat = useCallback(() => {
+    if (!window.confirm("Clear all messages in the active chat?")) return;
+    updateChat(activeWorkspace.id, activeChat.id, (chat) => ({ ...chat, title: NEW_CHAT_TITLE, messages: [] }));
+  }, [activeChat.id, activeWorkspace.id, updateChat]);
+
+  const exportMarkdown = useCallback(() => {
+    const markdown = [`# ${activeChat.title}`];
+    for (const entry of activeChat.messages) {
+      markdown.push(`\n## You\n${entry.user}`);
+      if (entry.reasoning) markdown.push(`\n### Reasoning\n${entry.reasoning}`);
+      markdown.push(`\n## AI${entry.model ? ` (${entry.model})` : ""}\n${entry.ai}`);
+      if (entry.imageUrl) markdown.push(`\n![Generated image](${entry.imageUrl})`);
+    }
+    const blob = new Blob([markdown.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${activeChat.title || "chat"}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [activeChat]);
+
+  const exportJson = useCallback(() => {
+    const blob = new Blob([JSON.stringify(activeChat, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${activeChat.title || "chat"}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [activeChat]);
+
+  const copyShareLink = useCallback(async () => {
+    const payload: SharePayload = {
+      title: activeChat.title,
+      messages: activeChat.messages.map((entry) => ({
+        user: entry.user,
+        ai: entry.ai,
+        model: entry.model,
+        imageUrl: entry.imageUrl,
+        fileName: entry.fileName,
+        reasoning: entry.reasoning,
+      })),
+    };
+    const share = `${window.location.origin}${window.location.pathname}?share=${encodeURIComponent(toBase64(JSON.stringify(payload)))}`;
+    await navigator.clipboard.writeText(share);
+    setCopied("share-link");
+    setTimeout(() => setCopied(null), 2000);
+  }, [activeChat]);
+
+  const modeLabels: Record<Mode, string> = {
+    auto: "Auto",
+    code: "Code",
+    chat: "Chat",
+    search: "Search",
+    image: "Image",
+    upload: "File",
+  };
+
+  const modeColors: Record<Mode, string> = {
+    auto: "bg-blue-600",
+    code: "bg-violet-600",
+    chat: "bg-sky-600",
+    search: "bg-cyan-600",
+    image: "bg-emerald-600",
+    upload: "bg-orange-500",
+  };
 
   return (
     <>
-      <div className={`min-h-screen ${bg} transition-colors duration-200`}>
-      <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col h-screen">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Moje AI</h1>
-          <div className="flex gap-2">
-            {chat.length > 0 && (
-              <>
-                <button onClick={exportChat} className="px-3 py-1.5 text-sm rounded-lg border border-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Export chat">
-                  ⬇ Export
-                </button>
-                <button onClick={clearChat} className="px-3 py-1.5 text-sm rounded-lg border border-red-400 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Clear chat">
-                  🗑 Clear
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => {
-                if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
-                  alert("Voice mode doesn't work on Vercel (serverless).\n\nDeploy to Render or run locally with:\n  npm run dev");
-                  return;
-                }
-                setVoiceOpen(true);
-              }}
-              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${dark ? "border-purple-500 text-purple-400 hover:bg-purple-900/30" : "border-purple-400 text-purple-600 hover:bg-purple-50"}`}
-              title="Voice conversation (requires local server)"
-            >
-              🎙 Voice
-            </button>
-            <button onClick={() => setDark((d) => !d)} className={`px-3 py-1.5 text-sm rounded-lg border ${dark ? "border-yellow-400 text-yellow-400" : "border-gray-400"} hover:opacity-80 transition-colors`}>
-              {dark ? "☀ Light" : "🌙 Dark"}
-            </button>
-          </div>
-        </div>
+      <div className={`min-h-screen ${bg}`}>
+        <div className="mx-auto max-w-[1700px] px-4 py-4 h-screen grid gap-4 xl:grid-cols-[290px,minmax(0,1fr),360px] lg:grid-cols-[290px,minmax(0,1fr)] grid-cols-1">
+          <aside className={`rounded-3xl border p-4 flex flex-col gap-4 min-h-0 ${cardBg}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-xl font-bold">Moje AI</h1>
+                <p className="text-xs text-gray-500 mt-1">Personal workspaces stored in this browser.</p>
+              </div>
+              <button onClick={() => setState((prev) => ({ ...prev, dark: !prev.dark }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+                {state.dark ? "Light" : "Dark"}
+              </button>
+            </div>
 
-        {/* Mode buttons */}
-        <div className="flex gap-2 flex-wrap mb-4">
-          {(["auto", "code", "chat", "image"] as Mode[]).map((m) => {
-            const colors: Record<string, string> = { auto: "bg-blue-600", code: "bg-violet-600", chat: "bg-blue-500", image: "bg-emerald-600" };
-            const labels: Record<string, string> = { auto: "🔀 Auto", code: "💻 Code", chat: "💬 Chat", image: "🎨 Image" };
-            return (
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold">Workspaces</h2>
+                <button onClick={createWorkspaceAction} className="text-xs text-blue-500 hover:underline">New</button>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {state.workspaces.map((workspace) => (
+                  <button
+                    key={workspace.id}
+                    onClick={() => setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }))}
+                    className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                      workspace.id === activeWorkspace.id
+                        ? state.dark
+                          ? "border-blue-500 bg-blue-950/30"
+                          : "border-blue-400 bg-blue-50"
+                        : state.dark
+                          ? "border-gray-800 hover:bg-gray-800"
+                          : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{workspace.name}</div>
+                        <div className="text-xs text-gray-500 mt-1">{workspace.chats.length} chats</div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <span
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            renameWorkspace(workspace.id);
+                          }}
+                          className="text-xs text-gray-400 hover:text-blue-500"
+                        >
+                          Rename
+                        </span>
+                        <span
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteWorkspace(workspace.id);
+                          }}
+                          className="text-xs text-gray-400 hover:text-red-500"
+                        >
+                          Delete
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3 min-h-0 flex flex-col">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold">Chats</h2>
+                <button onClick={createChatAction} className="text-xs text-blue-500 hover:underline">New</button>
+              </div>
+              <div className="space-y-2 overflow-y-auto min-h-0">
+                {activeWorkspace.chats.map((chat) => (
+                  <button
+                    key={chat.id}
+                    onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }))}
+                    className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                      chat.id === activeChat.id
+                        ? state.dark
+                          ? "border-violet-500 bg-violet-950/30"
+                          : "border-violet-400 bg-violet-50"
+                        : state.dark
+                          ? "border-gray-800 hover:bg-gray-800"
+                          : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{chat.title}</div>
+                        <div className="text-xs text-gray-500 mt-1">{chat.messages.length} messages</div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <span
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            renameChat(chat.id);
+                          }}
+                          className="text-xs text-gray-400 hover:text-blue-500"
+                        >
+                          Rename
+                        </span>
+                        <span
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteChat(chat.id);
+                          }}
+                          className="text-xs text-gray-400 hover:text-red-500"
+                        >
+                          Delete
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3 overflow-y-auto">
+              <h2 className="text-sm font-semibold">Workspace memory and models</h2>
+
+              <label className="text-xs text-gray-500 block">Chat model</label>
+              <select
+                value={activeWorkspace.settings.chatModel}
+                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                  ...workspace,
+                  settings: { ...workspace.settings, chatModel: e.target.value },
+                }))}
+                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+              >
+                {CHAT_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+              </select>
+
+              <label className="text-xs text-gray-500 block">Code model</label>
+              <select
+                value={activeWorkspace.settings.codeModel}
+                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                  ...workspace,
+                  settings: { ...workspace.settings, codeModel: e.target.value },
+                }))}
+                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+              >
+                {CODE_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+              </select>
+
+              <label className="text-xs text-gray-500 block">Search model</label>
+              <select
+                value={activeWorkspace.settings.searchModel}
+                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                  ...workspace,
+                  settings: { ...workspace.settings, searchModel: e.target.value },
+                }))}
+                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+              >
+                {SEARCH_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+              </select>
+
+              <label className="text-xs text-gray-500 block">Default voice language</label>
+              <select
+                value={activeWorkspace.settings.voiceLanguage}
+                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                  ...workspace,
+                  settings: { ...workspace.settings, voiceLanguage: e.target.value },
+                }))}
+                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+              >
+                {VOICE_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+              </select>
+
+              <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
+                <span>Use conversation memory</span>
+                <input
+                  type="checkbox"
+                  checked={activeWorkspace.settings.memoryEnabled}
+                  onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                    ...workspace,
+                    settings: { ...workspace.settings, memoryEnabled: e.target.checked },
+                  }))}
+                />
+              </label>
+
+              <label className="text-xs text-gray-500 block">Pinned memory for this workspace</label>
+              <textarea
+                value={activeWorkspace.settings.memoryNotes}
+                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                  ...workspace,
+                  settings: { ...workspace.settings, memoryNotes: e.target.value },
+                }))}
+                placeholder="Facts to remember across chats in this workspace, e.g. preferred tone, project stack, user role..."
+                rows={4}
+                className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+              />
+
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, settings: { ...workspace.settings, memoryNotes: "" } }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+                  Clear pinned memory
+                </button>
+                <button onClick={clearActiveChat} className="text-xs rounded-xl border px-3 py-2 border-red-300 text-red-500 dark:border-red-900">
+                  Clear active chat
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          <main className={`rounded-3xl border flex flex-col min-h-0 ${cardBg}`}>
+            <div className="border-b border-gray-200 dark:border-gray-800 px-5 py-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.18em] text-gray-500">{activeWorkspace.name}</div>
+                <div className="text-2xl font-bold mt-1">{activeChat.title}</div>
+                <div className="text-sm text-gray-500 mt-2">Current mode: {modeLabels[mode]}{currentModelId ? ` • ${currentModelId}` : ""}</div>
+              </div>
+              <div className="flex gap-2 flex-wrap justify-end">
+                <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">{copied === "share-link" ? "Link copied" : "Share"}</button>
+                <button onClick={exportMarkdown} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export MD</button>
+                <button onClick={exportJson} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export JSON</button>
+                <button
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
+                      alert("Voice mode doesn't work on Vercel serverless. Use Northflank, Render, or local dev.");
+                      return;
+                    }
+                    setVoiceOpen(true);
+                  }}
+                  className="px-3 py-2 text-sm rounded-xl border border-purple-400 text-purple-600 dark:border-purple-700 dark:text-purple-300"
+                >
+                  Voice mode
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800">
+              {(["auto", "code", "chat", "search", "image"] as Mode[]).map((entryMode) => (
+                <button
+                  key={entryMode}
+                  onClick={() => setMode(entryMode)}
+                  className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                    mode === entryMode
+                      ? `${modeColors[entryMode]} text-white border-transparent`
+                      : `border-gray-300 ${state.dark ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-100"}`
+                  }`}
+                >
+                  {modeLabels[entryMode]}
+                </button>
+              ))}
               <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                  mode === m ? `${colors[m]} text-white border-transparent` : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
+                onClick={() => fileInputRef.current?.click()}
+                className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                  mode === "upload"
+                    ? `${modeColors.upload} text-white border-transparent`
+                    : `border-gray-300 ${state.dark ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-100"}`
                 }`}
               >
-                {labels[m]}
+                File
               </button>
-            );
-          })}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-              mode === "upload" ? "bg-orange-500 text-white border-transparent" : `border-gray-300 ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`
-            }`}
-          >
-            📎 File
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,.txt,.pdf"
-            className="hidden"
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          />
-        </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+              />
+            </div>
 
-        {/* File preview */}
-        {filePreview && file?.type.startsWith("image/") && (
-          <div className={`mb-3 p-2 rounded-xl border ${cardBg} flex items-center gap-3`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={filePreview} alt="preview" className="h-16 w-16 object-cover rounded-lg" />
-            <span className="text-sm text-gray-500">{file.name}</span>
-            <button onClick={() => { setFile(null); setFilePreview(null); setMode("auto"); }} className="ml-auto text-red-400 hover:text-red-600 text-lg">✕</button>
-          </div>
-        )}
+            {file && (
+              <div className="px-5 pt-4">
+                <div className={`rounded-2xl border ${cardBg} px-3 py-3 flex items-center gap-3`}>
+                  {filePreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={filePreview} alt="preview" className="h-14 w-14 object-cover rounded-xl" />
+                  ) : (
+                    <div className={`h-14 w-14 rounded-xl flex items-center justify-center text-xs ${state.dark ? "bg-gray-800" : "bg-gray-100"}`}>
+                      FILE
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{file.name}</div>
+                    <div className="text-xs text-gray-500 truncate">{file.type || "unknown file type"}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setFile(null);
+                      setFilePreview(null);
+                      setMode("auto");
+                    }}
+                    className="ml-auto text-red-500 text-sm"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
 
-        {/* Chat messages */}
-        <ChatList
-          chat={chat}
-          loading={loading}
-          dark={dark}
-          cardBg={cardBg}
-          codeBg={codeBg}
-          copied={copied}
-          speaking={speaking}
-          chatEndRef={chatEndRef}
-          onSpeak={speak}
-          onCopyCode={copyCode}
-          openReasoning={openReasoning}
-          onToggleReasoning={toggleReasoning}
-        />
+            <div className="flex-1 min-h-0 px-5 py-4">
+              <ChatList
+                chat={activeChat.messages}
+                loading={loading}
+                dark={state.dark}
+                cardBg={cardBg}
+                codeBg={codeBg}
+                copied={copied}
+                speaking={speaking}
+                chatEndRef={chatEndRef}
+                onSpeak={speak}
+                onCopyCode={copyCode}
+                openReasoning={openReasoning}
+                onToggleReasoning={toggleReasoning}
+              />
+            </div>
 
-        {/* Input area */}
-        <div className={`${cardBg} border rounded-2xl p-3 flex flex-col gap-2`}>
-          <div className="flex gap-2 items-end">
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder={mode === "image" ? "Describe the image to generate..." : mode === "upload" ? "Ask about the file... (optional)" : "Type a message... (Enter to send, Shift+Enter for newline)"}
-              disabled={loading}
-              rows={1}
-              className={`flex-1 resize-none rounded-xl px-3 py-2 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50`}
-              style={{ minHeight: 40, maxHeight: 160 }}
-            />
-            {/* Voice button */}
-            <button
-              onClick={startVoice}
-              disabled={loading}
-              className={`p-2 rounded-xl border transition-colors ${listening ? "bg-red-500 text-white border-red-500" : `${dark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}`}
-              title="Voice input"
-            >
-              🎤
-            </button>
-            {/* Send button */}
-            <button
-              onClick={sendMessage}
-              disabled={loading || (!message && !file)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${mode === "image" ? "bg-emerald-600" : mode === "upload" ? "bg-orange-500" : mode === "code" ? "bg-violet-600" : mode === "chat" ? "bg-blue-500" : "bg-blue-600"}`}
-            >
-              {loading ? (mode === "image" ? "⏳" : "...") : (mode === "image" ? "Generate" : "Send")}
-            </button>
-          </div>
+            <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-4">
+              <div className="flex gap-2 items-end">
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void sendMessage();
+                    }
+                  }}
+                  placeholder={
+                    mode === "image"
+                      ? "Describe the image to generate..."
+                      : mode === "upload"
+                        ? "Ask about the selected file..."
+                        : mode === "search"
+                          ? "Search the web for something current..."
+                          : "Type a message..."
+                  }
+                  disabled={loading}
+                  rows={1}
+                  className={`flex-1 resize-none rounded-2xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
+                  style={{ minHeight: 48, maxHeight: 180 }}
+                />
+                <button
+                  onClick={() => void startVoiceInput()}
+                  disabled={loading}
+                  className={`p-3 rounded-2xl border transition-colors ${listening ? "bg-red-500 text-white border-red-500" : `${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}`}
+                  title="Voice input"
+                >
+                  Mic
+                </button>
+                <button
+                  onClick={() => void sendMessage()}
+                  disabled={loading || (!message.trim() && !file)}
+                  className={`px-4 py-3 rounded-2xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${modeColors[mode]}`}
+                >
+                  {loading ? "Working..." : mode === "image" ? "Generate" : mode === "search" ? "Search" : "Send"}
+                </button>
+              </div>
+            </div>
+          </main>
+
+          <aside className="hidden xl:block min-h-0">
+            <ArtifactPanel artifacts={artifacts} dark={state.dark} copied={copied} onCopyCode={copyCode} />
+          </aside>
         </div>
       </div>
-    </div>
-    {voiceOpen && <VoiceModal onClose={() => setVoiceOpen(false)} dark={dark} />}
+
+      {voiceOpen && (
+        <VoiceModal
+          onClose={() => setVoiceOpen(false)}
+          dark={state.dark}
+          language={activeWorkspace.settings.voiceLanguage}
+          onLanguageChange={(language) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+            ...workspace,
+            settings: { ...workspace.settings, voiceLanguage: language },
+          }))}
+        />
+      )}
     </>
   );
 }

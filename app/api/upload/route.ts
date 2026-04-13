@@ -1,4 +1,35 @@
+import { PDFParse } from "pdf-parse";
+
+export const runtime = "nodejs";
 export const maxDuration = 60;
+
+const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "json", "ts", "tsx", "js", "jsx", "py", "html", "css", "sql", "xml", "yml", "yaml"]);
+
+function getExtension(name: string) {
+  const parts = name.toLowerCase().split(".");
+  return parts.length > 1 ? parts.pop() ?? "" : "";
+}
+
+async function extractDocumentText(file: File, bytes: ArrayBuffer) {
+  const extension = getExtension(file.name);
+  const mimeType = file.type;
+
+  if (mimeType === "application/pdf" || extension === "pdf") {
+    const parser = new PDFParse({ data: Buffer.from(bytes) });
+    try {
+      const parsed = await parser.getText();
+      return parsed.text.trim();
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  if (mimeType.startsWith("text/") || TEXT_EXTENSIONS.has(extension) || mimeType === "application/json") {
+    return Buffer.from(bytes).toString("utf8").trim();
+  }
+
+  return "";
+}
 
 export async function POST(req: Request) {
   const encoder = new TextEncoder();
@@ -15,11 +46,17 @@ export async function POST(req: Request) {
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
     const mimeType = file.type;
+    const isImage = mimeType.startsWith("image/");
+    const extractedText = isImage ? "" : await extractDocumentText(file, bytes);
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: "Gemini 2.5 Flash (Vision)" })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: isImage ? "Gemini 2.5 Flash (Vision)" : "Gemini 2.5 Flash (Document)" })}\n\n`));
+
+          if (!isImage && !extractedText) {
+            throw new Error("Unsupported file type. Upload an image, PDF, or text-like document.");
+          }
 
           const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
@@ -35,14 +72,18 @@ export async function POST(req: Request) {
               messages: [
                 {
                   role: "system",
-                  content: "You are a helpful assistant with vision capabilities. Detect the language of the user's message and always respond in that same language.",
+                  content: isImage
+                    ? "You are a helpful assistant with vision capabilities. Detect the language of the user's message and always respond in that same language."
+                    : "You are a helpful document assistant. Read the uploaded file carefully, answer in the same language as the user's message, quote important details when useful, and mention if the file appears incomplete.",
                 },
                 {
                   role: "user",
-                  content: [
-                    { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-                    { type: "text", text: message },
-                  ],
+                  content: isImage
+                    ? [
+                        { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+                        { type: "text", text: message },
+                      ]
+                    : `User question: ${message}\n\nFile name: ${file.name}\nFile type: ${mimeType || "unknown"}\n\nDocument content:\n${extractedText.slice(0, 30000)}`,
                 },
               ],
             }),

@@ -141,26 +141,32 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const { message, mode: rawMode, modelId, allowedModels, history } = await req.json();
+  const { message, mode: rawMode, modelId, allowedModels, history, memoryNotes } = await req.json();
   const encoder = new TextEncoder();
 
   const isCodeMode = rawMode === "code" || modelId === "deepseek/deepseek-v3.2";
+  const isSearchMode = rawMode === "search" || (typeof modelId === "string" && modelId.includes("perplexity"));
   const isDeepSeek = typeof modelId === "string" && modelId.includes("deepseek");
   const isGemini = typeof modelId === "string" && modelId.includes("gemini");
   const detected = detectLanguage(message);
   const langInstruction = detected
     ? `Always respond in ${detected.name}. Do not switch languages.`
     : "Respond in English.";
+  const memoryInstruction = typeof memoryNotes === "string" && memoryNotes.trim()
+    ? `Important remembered user context: ${memoryNotes.trim()}`
+    : "";
 
   let systemPrompt: string;
-  if (isDeepSeek) {
-    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations.`;
+  if (isSearchMode) {
+    systemPrompt = `You are a web research assistant. ${langInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${memoryInstruction}`.trim();
+  } else if (isDeepSeek) {
+    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${memoryInstruction}`.trim();
   } else if (isGemini) {
-    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read.`;
+    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${memoryInstruction}`.trim();
   } else if (isCodeMode) {
-    systemPrompt = `You are an expert programmer. ${langInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical.`;
+    systemPrompt = `You are an expert programmer. ${langInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${memoryInstruction}`.trim();
   } else {
-    systemPrompt = `You are a helpful assistant. ${langInstruction} Be friendly and conversational.`;
+    systemPrompt = `You are a helpful assistant. ${langInstruction} Be friendly and conversational. ${memoryInstruction}`.trim();
   }
 
   const selectedModel = modelId ?? "openrouter/auto";
