@@ -40,6 +40,11 @@ export const CHAT_MODELS: ModelOption[] = [
 
 export const CODE_MODELS: ModelOption[] = [
   {
+    id: "openai/gpt-5.4",
+    label: "GPT-5.4",
+    description: "Latest frontier coding model.",
+  },
+  {
     id: "deepseek/deepseek-v3.2",
     label: "DeepSeek V3.2",
     description: "Fast coding model.",
@@ -132,6 +137,6 @@ export const VOICE_LANGUAGE_OPTIONS: VoiceLanguageOption[] = [
 ];
 
 export const DEFAULT_CHAT_MODEL = CHAT_MODELS[0].id;
-export const DEFAULT_CODE_MODEL = CODE_MODELS[0].id;
+export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 export const DEFAULT_VOICE_LANGUAGE = VOICE_LANGUAGE_OPTIONS[0].code;
