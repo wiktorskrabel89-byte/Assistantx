@@ -9,7 +9,14 @@ import { createClient } from "@/lib/server";
  */
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
-  const publicOrigin = requestUrl.origin;
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = request.headers.get("host");
+  const publicOrigin = forwardedHost
+    ? `${forwardedProto ?? "https"}://${forwardedHost}`
+    : host
+      ? `${requestUrl.protocol}//${host}`
+      : requestUrl.origin;
   const appCallbackUrl = `${publicOrigin}/auth/callback`;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
