@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/client";
-import { getOAuthScopes, getProviderLabel, type OAuthProvider } from "@/lib/integrations";
+import { getOAuthQueryParams, getOAuthScopes, getProviderLabel, type OAuthProvider } from "@/lib/integrations";
 import {
   clearPendingOAuthProvider,
   clearOAuthErrorFromLocation,
@@ -98,6 +98,7 @@ export default function LoginPage() {
         provider,
         options: {
           redirectTo,
+          queryParams: getOAuthQueryParams(provider),
           scopes: getOAuthScopes(provider),
         },
       });

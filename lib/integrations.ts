@@ -139,6 +139,17 @@ export function getOAuthScopes(provider: OAuthProvider) {
   return PROVIDER_SCOPES[provider];
 }
 
+export function getOAuthQueryParams(provider: OAuthProvider) {
+  if (provider === "google") {
+    return {
+      access_type: "offline",
+      prompt: "consent",
+    };
+  }
+
+  return undefined;
+}
+
 export function getProviderTokenCookieName(provider: OAuthProvider) {
   return PROVIDER_COOKIE_NAMES[provider];
 }

@@ -16,6 +16,8 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const publicOrigin = getPublicRequestOrigin(request);
   const isSecureRequest = publicOrigin.startsWith("https://");
+  const callbackUrl = new URL("/auth/callback", publicOrigin).toString();
+  const supabaseProviderCallbackUrl = new URL("/auth/v1/callback", process.env.NEXT_PUBLIC_SUPABASE_URL).toString();
   const code = requestUrl.searchParams.get("code");
   const next = requestUrl.searchParams.get("next") ?? "/";
 
@@ -29,8 +31,21 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
+    console.error("[auth/callback] OAuth code exchange failed", {
+      callbackUrl,
+      errorCode: "code" in error ? error.code : undefined,
+      errorMessage: error.message,
+      forwardedHost: request.headers.get("x-forwarded-host"),
+      forwardedProto: request.headers.get("x-forwarded-proto"),
+      requestHost: request.headers.get("host"),
+      supabaseProviderCallbackUrl,
+    });
+
     const url = new URL("/auth/login", publicOrigin);
     url.searchParams.set("error", error.message);
+    url.searchParams.set("error_code", "code" in error && typeof error.code === "string" ? error.code : "oauth_exchange_failed");
+    url.searchParams.set("oauth_callback_url", callbackUrl);
+    url.searchParams.set("supabase_provider_callback_url", supabaseProviderCallbackUrl);
     return NextResponse.redirect(url);
   }
 
