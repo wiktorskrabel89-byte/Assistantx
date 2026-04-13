@@ -19,7 +19,6 @@ export async function GET(request: Request) {
 
   try {
     const supabase = await createClient();
-    const { data: adminData, error: adminError } = await supabase.auth.admin.listProviders?.();
 
     return NextResponse.json(
       {
