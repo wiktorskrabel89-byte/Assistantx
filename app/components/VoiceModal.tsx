@@ -1,21 +1,73 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
+import { VOICE_LANGUAGE_OPTIONS } from "@/lib/ai-config";
 
 type Status = "connecting" | "ready" | "user_speaking" | "agent_speaking" | "error";
 type TranscriptEntry = { role: "user" | "agent"; text: string };
 
-export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boolean }) {
+function buildInstructions(language: string) {
+  const selected = VOICE_LANGUAGE_OPTIONS.find((option) => option.code === language) ?? VOICE_LANGUAGE_OPTIONS[0];
+  const languageInstruction = selected.code === "auto"
+    ? "Detect the user's language after they speak and always answer only in that same language for the whole conversation."
+    : `${selected.instruction} Do not switch to any other language unless the user explicitly asks you to.`;
+
+  return `You are a helpful voice assistant. Wait for the user to speak first. Do not greet or say anything until the user speaks. ${languageInstruction} Be concise, natural, and friendly.`;
+}
+
+function buildSessionUpdate(language: string) {
+  return {
+    type: "session.update",
+    session: {
+      type: "realtime",
+      model: "google-ai-studio/gemini-2.5-flash",
+      instructions: buildInstructions(language),
+      output_modalities: ["audio", "text"],
+      audio: {
+        input: {
+          transcription: { model: "assemblyai/u3-rt-pro" },
+          turn_detection: {
+            type: "semantic_vad",
+            eagerness: "low",
+            create_response: true,
+            interrupt_response: true,
+          },
+        },
+        output: { model: "inworld-tts-1.5-max", voice: "Abby" },
+      },
+    },
+  };
+}
+
+export function VoiceModal({
+  onClose,
+  dark,
+  language,
+  onLanguageChange,
+}: {
+  onClose: () => void;
+  dark: boolean;
+  language: string;
+  onLanguageChange: (language: string) => void;
+}) {
   const [status, setStatus] = useState<Status>("connecting");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
   useEffect(() => {
-    // ── Local audio state (not React state — no re-renders) ─────────────
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(buildSessionUpdate(language)));
+    }
+  }, [language]);
+
+  useEffect(() => {
     let audioCtx: AudioContext | null = null;
     let micStream: MediaStream | null = null;
     let processor: ScriptProcessorNode | null = null;
@@ -32,7 +84,10 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
     };
 
     const playNextChunk = () => {
-      if (!audioCtx || playbackQueue.length === 0) { isPlaying = false; return; }
+      if (!audioCtx || playbackQueue.length === 0) {
+        isPlaying = false;
+        return;
+      }
       isPlaying = true;
       const samples = playbackQueue.shift()!;
       const buffer = audioCtx.createBuffer(1, samples.length, 24000);
@@ -56,7 +111,7 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
       if (!isPlaying) playNextChunk();
     };
 
-    const startMic = async () => {
+    const startMic = async (ws: WebSocket) => {
       try {
         micStream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true },
@@ -77,7 +132,7 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
           }
           const bytes = new Uint8Array(pcm16.buffer);
           let bin = "";
-          for (let b = 0; b < bytes.length; b++) bin += String.fromCharCode(bytes[b]);
+          for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
           ws.send(JSON.stringify({ type: "input_audio_buffer.append", audio: btoa(bin) }));
         };
 
@@ -90,42 +145,26 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
       }
     };
 
-    // ── WebSocket ────────────────────────────────────────────────────────
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${window.location.host}/api/realtime`);
+    wsRef.current = ws;
 
     ws.onmessage = (e) => {
       let msg: Record<string, unknown>;
-      try { msg = JSON.parse(e.data as string); } catch { return; }
+      try {
+        msg = JSON.parse(e.data as string);
+      } catch {
+        return;
+      }
 
       switch (msg.type) {
         case "session.created":
-          ws.send(JSON.stringify({
-            type: "session.update",
-            session: {
-              type: "realtime",
-              model: "google-ai-studio/gemini-2.5-flash",
-              instructions: "You are a helpful voice assistant. Wait for the user to speak first — do NOT greet or say anything until the user speaks. Once the user speaks, detect their language and always respond ONLY in that exact same language for the entire conversation. Be concise and friendly.",
-              output_modalities: ["audio", "text"],
-              audio: {
-                input: {
-                  transcription: { model: "assemblyai/u3-rt-pro" },
-                  turn_detection: {
-                    type: "semantic_vad",
-                    eagerness: "low",
-                    create_response: true,
-                    interrupt_response: true,
-                  },
-                },
-                output: { model: "inworld-tts-1.5-max", voice: "Abby" },
-              },
-            },
-          }));
+          ws.send(JSON.stringify(buildSessionUpdate(language)));
           break;
 
         case "session.updated":
           setStatus("ready");
-          startMic();
+          startMic(ws);
           break;
 
         case "input_audio_buffer.speech_started":
@@ -153,7 +192,9 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
           if (typeof msg.transcript === "string") {
             setTranscript((prev) => {
               const last = prev[prev.length - 1];
-              if (last?.role === "user") return [...prev.slice(0, -1), { role: "user", text: msg.transcript as string }];
+              if (last?.role === "user") {
+                return [...prev.slice(0, -1), { role: "user", text: msg.transcript as string }];
+              }
               return [...prev, { role: "user", text: msg.transcript as string }];
             });
           }
@@ -187,26 +228,30 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
           setStatus("error");
           break;
         }
+
+        default:
+          break;
       }
     };
 
     ws.onerror = () => {
       setErrorMsg(
         window.location.hostname.endsWith("vercel.app")
-          ? "Voice mode doesn't work on Vercel (serverless). Deploy to Render or run locally."
-          : "WebSocket connection failed. Make sure the server is running (npm run dev)."
+          ? "Voice mode doesn't work on Vercel (serverless). Deploy to Northflank/Render or run locally."
+          : "WebSocket connection failed. Make sure the server is running."
       );
       setStatus("error");
     };
 
     return () => {
       ws.close();
+      wsRef.current = null;
       processor?.disconnect();
       audioCtx?.close();
-      micStream?.getTracks().forEach((t) => t.stop());
+      micStream?.getTracks().forEach((track) => track.stop());
       stopPlayback();
     };
-  }, []); // run once on mount
+  }, [language]);
 
   const statusLabel: Record<Status, string> = {
     connecting: "Connecting…",
@@ -234,42 +279,56 @@ export function VoiceModal({ onClose, dark }: { onClose: () => void; dark: boole
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className={`relative w-full max-w-md mx-4 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl ${dark ? "bg-gray-900 border border-gray-700" : "bg-white border border-gray-200"}`}>
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">🎙 Voice Mode</h2>
+      <div className={`relative w-full max-w-xl mx-4 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl ${dark ? "bg-gray-900 border border-gray-700" : "bg-white border border-gray-200"}`}>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Voice Mode</h2>
+            <p className="text-xs text-gray-500 mt-1">Realtime speech with language-aware replies.</p>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-red-400 text-xl leading-none transition-colors">✕</button>
         </div>
 
-        {/* Status */}
+        <label className="flex flex-col gap-2 text-sm">
+          <span className="font-medium">Voice language</span>
+          <select
+            value={language}
+            onChange={(e) => onLanguageChange(e.target.value)}
+            className={`rounded-xl border px-3 py-2 text-sm ${dark ? "bg-gray-800 border-gray-700 text-gray-100" : "bg-white border-gray-300 text-gray-900"}`}
+          >
+            {VOICE_LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className={`flex items-center gap-2 text-sm font-medium ${textColor[status]}`}>
           <span className={`w-2.5 h-2.5 rounded-full inline-block flex-shrink-0 ${dotColor[status]}`} />
           <span className="truncate">{statusLabel[status]}</span>
         </div>
 
-        {/* Transcript */}
-        <div className={`min-h-[200px] max-h-72 overflow-y-auto rounded-xl p-3 flex flex-col gap-2 ${dark ? "bg-gray-800" : "bg-gray-50"}`}>
+        <div className={`min-h-[240px] max-h-80 overflow-y-auto rounded-xl p-3 flex flex-col gap-2 ${dark ? "bg-gray-800" : "bg-gray-50"}`}>
           {transcript.length === 0 && (
             <p className="text-center text-gray-400 text-sm mt-12">Conversation will appear here…</p>
           )}
-          {transcript.map((t, i) => (
+          {transcript.map((item, index) => (
             <div
-              key={i}
+              key={index}
               className={`text-sm px-3 py-2 rounded-xl max-w-[85%] ${
-                t.role === "user"
+                item.role === "user"
                   ? "bg-blue-500 text-white self-end rounded-tr-sm"
                   : `self-start rounded-tl-sm ${dark ? "bg-gray-700 text-gray-100" : "bg-white border text-gray-800"}`
               }`}
             >
-              {t.text}
+              {item.text}
             </div>
           ))}
           <div ref={transcriptEndRef} />
         </div>
 
-        {/* Hint */}
         <p className="text-xs text-gray-500 text-center">
-          Speak naturally — AI detects turn boundaries automatically.
+          Choose a fixed language or leave auto-detect on. The assistant will keep using that language for the whole voice conversation.
         </p>
       </div>
     </div>

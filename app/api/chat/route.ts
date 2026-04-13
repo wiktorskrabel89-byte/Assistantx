@@ -1,6 +1,8 @@
 export const maxDuration = 60;
+
 const CODE_MODEL = "deepseek/deepseek-v3.2";
 const CHAT_MODEL = "google/gemini-2.5-flash-lite";
+
 const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
   pl: "Polish",
@@ -22,7 +24,6 @@ function isCodeRequest(message: string): boolean {
   const text = message.trim();
   if (!text) return false;
 
-  // Strong code signals: fenced snippets, programming syntax, or explicit coding asks.
   if (/```/.test(text)) return true;
   if (/<\/?[a-z][^>]*>/i.test(text)) return true;
   if (/\b(function|class|interface|type|const|let|var|import|export|npm|yarn|pnpm|sql|regex|api|endpoint|typescript|javascript|python|java|c\+\+|c#|golang|rust|debug|bug|refactor|algorithm)\b/i.test(text)) return true;
@@ -35,13 +36,13 @@ function isCodeRequest(message: string): boolean {
 function isImageRequest(message: string): boolean {
   const text = message.trim().toLowerCase();
   if (!text) return false;
+
   return /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/.test(text)
     || /^\s*\/image\b/.test(text)
     || /\bimage of\b/.test(text)
     || /\bplease.*\b(image|picture|photo)\b/.test(text);
 }
 
-// ── Language detection ─────────────────────────────────────────────────────
 const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> = [
   {
     lang: "pl", name: "Polish",
@@ -79,26 +80,11 @@ const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> =
       /[ãõâêôàáéíóúç]/,
     ],
   },
-  {
-    lang: "ru", name: "Russian",
-    patterns: [/[\u0400-\u04FF]/],
-  },
-  {
-    lang: "zh", name: "Chinese",
-    patterns: [/[\u4E00-\u9FFF\u3400-\u4DBF]/],
-  },
-  {
-    lang: "ja", name: "Japanese",
-    patterns: [/[\u3040-\u309F\u30A0-\u30FF]/],
-  },
-  {
-    lang: "ko", name: "Korean",
-    patterns: [/[\uAC00-\uD7AF\u1100-\u11FF]/],
-  },
-  {
-    lang: "ar", name: "Arabic",
-    patterns: [/[\u0600-\u06FF]/],
-  },
+  { lang: "ru", name: "Russian", patterns: [/[\u0400-\u04FF]/] },
+  { lang: "zh", name: "Chinese", patterns: [/[\u4E00-\u9FFF\u3400-\u4DBF]/] },
+  { lang: "ja", name: "Japanese", patterns: [/[\u3040-\u309F\u30A0-\u30FF]/] },
+  { lang: "ko", name: "Korean", patterns: [/[\uAC00-\uD7AF\u1100-\u11FF]/] },
+  { lang: "ar", name: "Arabic", patterns: [/[\u0600-\u06FF]/] },
   {
     lang: "tr", name: "Turkish",
     patterns: [
@@ -115,33 +101,31 @@ const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> =
   },
   {
     lang: "nl", name: "Dutch",
-    patterns: [
-      /\b(hallo|hoi|dank|ja|nee|hoe|wat|waar|wanneer|waarom|wie|ik|jij|hij|zij|wij|jullie|zij|een|de|het|en|of|maar|met|voor|van)\b/i,
-    ],
+    patterns: [/\b(hallo|hoi|dank|ja|nee|hoe|wat|waar|wanneer|waarom|wie|ik|jij|hij|zij|wij|jullie|zij|een|de|het|en|of|maar|met|voor|van)\b/i],
   },
   {
     lang: "en", name: "English",
-    patterns: [
-      /\b(hello|hi|hey|thanks|thank you|yes|no|how|what|where|when|why|who|i|you|he|she|we|they|the|a|an|and|or|but|with|for|is|are|was|were|have|has|do|does|can|will|please|help)\b/i,
-    ],
+    patterns: [/\b(hello|hi|hey|thanks|thank you|yes|no|how|what|where|when|why|who|i|you|he|she|we|they|the|a|an|and|or|but|with|for|is|are|was|were|have|has|do|does|can|will|please|help)\b/i],
   },
 ];
 
 function detectLanguage(text: string): { lang: string; name: string } | null {
   const trimmed = text.trim();
   if (trimmed.length < 2) return null;
+
   const scores: Record<string, { name: string; score: number }> = {};
   for (const { lang, name, patterns } of LANG_PATTERNS) {
     let score = 0;
-    for (const p of patterns) {
-      const matches = trimmed.match(new RegExp(p.source, p.flags + (p.flags.includes("g") ? "" : "g")));
+    for (const pattern of patterns) {
+      const matches = trimmed.match(new RegExp(pattern.source, pattern.flags + (pattern.flags.includes("g") ? "" : "g")));
       if (matches) score += matches.length;
     }
     if (score > 0) scores[lang] = { name, score };
   }
+
   const ranked = Object.entries(scores).sort((a, b) => b[1].score - a[1].score);
   if (ranked.length === 0) return null;
-  // Need a clear winner — if top score is tied or too close, prefer English
+
   const [topLang, topData] = ranked[0];
   const secondScore = ranked[1]?.[1].score ?? 0;
   if (topData.score <= secondScore && topLang !== "en") return { lang: "en", name: "English" };
@@ -182,13 +166,25 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const { message, modelId, history, style = "concise", languageLock = "auto" } = await req.json();
+  const {
+    message,
+    mode: rawMode,
+    modelId,
+    allowedModels,
+    history,
+    memoryNotes,
+    style = "concise",
+    languageLock = "auto",
+  } = await req.json();
   const encoder = new TextEncoder();
 
-  const hasManualModel = typeof modelId === "string" && modelId.length > 0;
-  const inferredCodeRequest = isCodeRequest(message);
-  const inferredImageRequest = isImageRequest(message);
-  const selectedModel = modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL);
+  const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
+  const inferredImageRequest = rawMode === "image" || isImageRequest(message);
+  const usingAutoRouter = !modelId && rawMode === "auto" && Array.isArray(allowedModels) && allowedModels.length > 0;
+  const selectedModel = usingAutoRouter
+    ? "openrouter/auto"
+    : (modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL));
+  const isSearchMode = rawMode === "search" || (typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(message);
@@ -201,25 +197,32 @@ export async function POST(req: Request) {
     : style === "step-by-step"
       ? "Explain using concise numbered steps."
       : "Keep responses concise and practical.";
+  const memoryInstruction = typeof memoryNotes === "string" && memoryNotes.trim()
+    ? `Important remembered user context: ${memoryNotes.trim()}`
+    : "";
 
-  const routeReason = hasManualModel
-    ? `Manual model override: ${isDeepSeek ? "DeepSeek" : isGemini ? "Gemini" : "Custom model"}`
-    : inferredImageRequest
-      ? "Routed to Gemini chat image flow"
-    : inferredCodeRequest
-      ? "Routed to DeepSeek for a coding-focused request"
-      : "Routed to Gemini for a conversational request";
+  const routeReason = isSearchMode
+    ? "Search mode using a research-oriented model"
+    : usingAutoRouter
+      ? "Auto router choosing between your preferred chat and code models"
+      : modelId
+        ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}`
+        : inferredImageRequest
+          ? "Auto-detected an image generation request"
+          : inferredCodeRequest
+            ? "Auto-detected a coding-focused request"
+            : "Auto-detected a conversational request";
 
-  if (!hasManualModel && inferredImageRequest) {
+  if (!modelId && rawMode === "auto" && inferredImageRequest) {
     const normalizedPrompt = message.replace(/^\s*\/image\s*/i, "").trim() || "A cinematic digital artwork";
     const encoded = encodeURIComponent(normalizedPrompt);
     const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&enhance=true`;
 
-    const stream = new ReadableStream({
+    const imageStream = new ReadableStream({
       start(controller) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Analyzing image request..." })}\n\n`));
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Rendering image..." })}\n\n`));
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: "Gemini Image", routeReason })}\n\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: "Pollinations.ai (Free)", routeReason })}\n\n`));
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `Generated image:\n\n![Generated image](${imageUrl})\n\nIf you want changes, tell me style, colors, camera angle, or aspect ratio.` })}\n\n`));
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Done" })}\n\n`));
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -227,26 +230,28 @@ export async function POST(req: Request) {
       },
     });
 
-    return new Response(stream, {
+    return new Response(imageStream, {
       headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
     });
   }
 
   let systemPrompt: string;
-  if (isDeepSeek) {
-    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations.`;
+  if (isSearchMode) {
+    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${memoryInstruction}`.trim();
+  } else if (isDeepSeek) {
+    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${memoryInstruction}`.trim();
   } else if (isGemini) {
-    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read.`;
+    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${memoryInstruction}`.trim();
   } else if (inferredCodeRequest) {
-    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical.`;
+    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${memoryInstruction}`.trim();
   } else {
-    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational.`;
+    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${memoryInstruction}`.trim();
   }
 
   const historyMessages: Array<{ role: string; content: string }> = Array.isArray(history)
-    ? history.flatMap((h: { user: string; ai: string }) => [
-        { role: "user", content: h.user },
-        { role: "assistant", content: h.ai },
+    ? history.flatMap((entry: { user: string; ai: string }) => [
+        { role: "user", content: entry.user },
+        { role: "assistant", content: entry.ai },
       ])
     : [];
 
@@ -261,11 +266,15 @@ export async function POST(req: Request) {
     ],
   };
 
+  if (usingAutoRouter) {
+    requestBody.plugins = [{ id: "auto-router", allowed_models: allowedModels }];
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Analyzing prompt..." })}\n\n`));
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Selecting best model..." })}\n\n`));
+
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -285,10 +294,7 @@ export async function POST(req: Request) {
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();
         let modelSent = false;
-        let generationStarted = false;
         let buf = "";
-
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Connected. Waiting for first response..." })}\n\n`));
 
         while (true) {
           const { value, done } = await reader.read();
@@ -306,8 +312,8 @@ export async function POST(req: Request) {
                 const routed = parsed.model as string | undefined;
                 const label = routed
                   ? (MODEL_LABELS[routed] ?? routed.split("/").pop() ?? "Auto Router")
-                  : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: label, routeReason })}\n\n`));
+                  : (selectedModel === "openrouter/auto" ? "Auto Router" : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI"));
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: selectedModel === "openrouter/auto" ? `Auto • ${label}` : label, routeReason, status: "Writing response..." })}\n\n`));
                 modelSent = true;
               }
               const reasoning = parsed.choices?.[0]?.delta?.reasoning;
@@ -316,25 +322,24 @@ export async function POST(req: Request) {
               }
               const token = parsed.choices?.[0]?.delta?.content;
               if (token) {
-                if (!generationStarted) {
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Writing response in real time..." })}\n\n`));
-                  generationStarted = true;
-                }
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
               }
-            } catch { /* ignore malformed */ }
+            } catch {
+              // Ignore malformed provider chunks.
+            }
           }
         }
 
         if (!modelSent) {
-          const fallback = MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI";
+          const fallback = selectedModel === "openrouter/auto"
+            ? "Auto Router"
+            : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: fallback, routeReason })}\n\n`));
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Done" })}\n\n`));
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      } catch (e) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Error while generating response" })}\n\n`));
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `Error: ${(e as Error).message}` })}\n\n`));
+      } catch (error) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `Error: ${(error as Error).message}`, status: "Error" })}\n\n`));
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       }
       controller.close();
@@ -345,4 +350,3 @@ export async function POST(req: Request) {
     headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
   });
 }
-
