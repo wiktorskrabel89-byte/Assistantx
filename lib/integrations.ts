@@ -131,7 +131,14 @@ const PROVIDER_COOKIE_NAMES: Record<OAuthProvider, string> = {
 };
 
 const PROVIDER_SCOPES: Record<OAuthProvider, string> = {
-  google: "openid email profile https://www.googleapis.com/auth/drive.readonly",
+  google: [
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/calendar.readonly",
+  ].join(" "),
   github: "read:user repo",
 };
 
