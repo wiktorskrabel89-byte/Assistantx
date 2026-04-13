@@ -3,8 +3,31 @@ import { getProviderLabel, isOAuthProvider, type OAuthProvider } from "@/lib/int
 const OAUTH_PENDING_STORAGE_KEY = "moje-ai.oauth-pending-provider";
 
 type OAuthErrorLike = {
+  code?: string | null;
   message?: string | null;
 };
+
+function getBrowserOAuthCallbackUrl() {
+  if (typeof window === "undefined") return "/auth/callback";
+  return `${window.location.origin}/auth/callback`;
+}
+
+function getSupabaseProviderCallbackUrl() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) return "[your-supabase-project-url]/auth/v1/callback";
+  return new URL("/auth/v1/callback", supabaseUrl).toString();
+}
+
+function formatExternalCodeExchangeMessage(
+  provider?: OAuthProvider | null,
+  callbackUrl?: string | null,
+  supabaseProviderCallbackUrl?: string | null,
+) {
+  const label = provider ? getProviderLabel(provider) : "OAuth";
+  const resolvedCallbackUrl = callbackUrl || getBrowserOAuthCallbackUrl();
+  const resolvedSupabaseProviderCallbackUrl = supabaseProviderCallbackUrl || getSupabaseProviderCallbackUrl();
+  return `${label} sign-in could not be completed. Verify ${label} is enabled in Supabase, the ${label} client ID and secret are correct, Supabase Auth redirect URLs include ${resolvedCallbackUrl}, and the ${label} OAuth app allows ${resolvedSupabaseProviderCallbackUrl}.`;
+}
 
 export function rememberPendingOAuthProvider(provider: OAuthProvider) {
   if (typeof window === "undefined") return;
@@ -79,7 +102,19 @@ export function readOAuthErrorFromLocation(provider?: OAuthProvider | null) {
   }
 
   const searchParams = new URLSearchParams(window.location.search);
-  return decodeOAuthValue(searchParams.get("error"));
+  const searchError = decodeOAuthValue(searchParams.get("error"));
+  const searchErrorCode = decodeOAuthValue(searchParams.get("error_code")).toLowerCase();
+  const callbackUrl = decodeOAuthValue(searchParams.get("oauth_callback_url"));
+  const supabaseProviderCallbackUrl = decodeOAuthValue(searchParams.get("supabase_provider_callback_url"));
+
+  if (
+    searchError.toLowerCase().includes("unable to exchange external code") ||
+    searchErrorCode === "oauth_exchange_failed"
+  ) {
+    return formatExternalCodeExchangeMessage(provider, callbackUrl, supabaseProviderCallbackUrl);
+  }
+
+  return searchError;
 }
 
 export function formatOAuthErrorMessage(provider: OAuthProvider, error: unknown) {
@@ -101,7 +136,7 @@ export function formatOAuthErrorMessage(provider: OAuthProvider, error: unknown)
   }
 
   if (normalized.includes("unable to exchange external code")) {
-    return `${label} sign-in could not be completed. Check the provider configuration and allowed redirect URLs in Supabase, then try again.`;
+    return formatExternalCodeExchangeMessage(provider);
   }
 
   return message || fallback;
