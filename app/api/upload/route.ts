@@ -52,11 +52,14 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: isImage ? "Preparing image analysis..." : "Extracting document text..." })}\n\n`));
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: isImage ? "Gemini 2.5 Flash (Vision)" : "Gemini 2.5 Flash (Document)" })}\n\n`));
 
           if (!isImage && !extractedText) {
             throw new Error("Unsupported file type. Upload an image, PDF, or text-like document.");
           }
+
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: isImage ? "Analyzing image..." : "Reading document..." })}\n\n`));
 
           const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
@@ -112,14 +115,16 @@ export async function POST(req: Request) {
                 const parsed = JSON.parse(raw);
                 const token = parsed.choices?.[0]?.delta?.content;
                 if (token) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Writing response..." })}\n\n`));
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
                 }
               } catch { /* ignore */ }
             }
           }
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Done" })}\n\n`));
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (e) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `Error: ${(e as Error).message}` })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `Error: ${(e as Error).message}`, status: "Error" })}\n\n`));
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         }
         controller.close();

@@ -17,6 +17,8 @@ import {
 } from "@/lib/ai-config";
 
 type Mode = "auto" | "code" | "chat" | "search" | "image" | "upload";
+type StyleMode = "concise" | "detailed" | "step-by-step";
+type ResponseAction = "summarize" | "checklist" | "translate" | "commit";
 
 type ChatEntry = {
   id: string;
@@ -27,6 +29,8 @@ type ChatEntry = {
   filePreview?: string;
   fileName?: string;
   reasoning?: string;
+  routeReason?: string;
+  status?: string;
   createdAt: number;
 };
 
@@ -45,6 +49,8 @@ type WorkspaceSettings = {
   memoryEnabled: boolean;
   memoryNotes: string;
   voiceLanguage: string;
+  styleMode: StyleMode;
+  languageLock: string;
 };
 
 type Workspace = {
@@ -80,6 +86,7 @@ type SharePayload = {
     imageUrl?: string;
     fileName?: string;
     reasoning?: string;
+    routeReason?: string;
   }>;
 };
 
@@ -96,6 +103,8 @@ type ChatListProps = {
   onCopyCode: (code: string, id: string) => void;
   openReasoning: Set<string>;
   onToggleReasoning: (id: string) => void;
+  onEditUser: (text: string) => void;
+  onResponseAction: (action: ResponseAction, text: string) => void;
 };
 
 type ArtifactPanelProps = {
@@ -107,6 +116,17 @@ type ArtifactPanelProps = {
 
 const STORAGE_KEY = "moje-ai.workspace-state.v3";
 const NEW_CHAT_TITLE = "New chat";
+const TEXT_LANGUAGE_OPTIONS = [
+  { code: "auto", label: "Auto detect" },
+  ...VOICE_LANGUAGE_OPTIONS.filter((option) => option.code !== "auto"),
+];
+const QUICK_CHIPS: Array<{ label: string; text: string; mode?: Mode }> = [
+  { label: "Explain code", text: "Explain this code: ", mode: "code" },
+  { label: "Fix bug", text: "Help me fix this bug: ", mode: "code" },
+  { label: "Web search", text: "Search the web for the latest info about: ", mode: "search" },
+  { label: "Generate tests", text: "Generate tests for: ", mode: "code" },
+  { label: "Plan steps", text: "Break this into clear implementation steps: ", mode: "chat" },
+];
 
 function createId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -134,6 +154,8 @@ function createSettings(): WorkspaceSettings {
     memoryEnabled: true,
     memoryNotes: "",
     voiceLanguage: DEFAULT_VOICE_LANGUAGE,
+    styleMode: "concise",
+    languageLock: "auto",
   };
 }
 
@@ -174,7 +196,7 @@ function createDefaultState(): StoredState {
 function deriveTitle(text: string) {
   const cleaned = text.replace(/\s+/g, " ").trim();
   if (!cleaned) return NEW_CHAT_TITLE;
-  return cleaned.length > 36 ? `${cleaned.slice(0, 36)}…` : cleaned;
+  return cleaned.length > 36 ? `${cleaned.slice(0, 36)}...` : cleaned;
 }
 
 function stripMarkdown(text: string) {
@@ -304,6 +326,8 @@ const ChatList = memo(function ChatList({
   onCopyCode,
   openReasoning,
   onToggleReasoning,
+  onEditUser,
+  onResponseAction,
 }: ChatListProps) {
   let codeBlockIdx = 0;
 
@@ -330,6 +354,9 @@ const ChatList = memo(function ChatList({
               <div className="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm text-sm whitespace-pre-wrap break-words">
                 {entry.user}
               </div>
+              <button onClick={() => onEditUser(entry.user)} className={`mt-1 ml-auto block text-xs ${dark ? "text-blue-300" : "text-blue-600"}`}>
+                Edit and resend
+              </button>
             </div>
           </div>
 
@@ -340,8 +367,8 @@ const ChatList = memo(function ChatList({
                   <button onClick={() => onToggleReasoning(entry.id)} className="w-full text-left flex items-center gap-2 font-medium">
                     <span>Reasoning</span>
                     {loading && index === chat.length - 1
-                      ? <span className="animate-pulse ml-auto">●</span>
-                      : <span className="ml-auto">{openReasoning.has(entry.id) ? "▲" : "▼"}</span>}
+                      ? <span className="animate-pulse ml-auto">...</span>
+                      : <span className="ml-auto">{openReasoning.has(entry.id) ? "-" : "+"}</span>}
                   </button>
                   {(openReasoning.has(entry.id) || (loading && index === chat.length - 1)) && (
                     <div className="mt-2 whitespace-pre-wrap max-h-40 overflow-y-auto opacity-80 leading-relaxed">
@@ -357,14 +384,18 @@ const ChatList = memo(function ChatList({
               ) : (
                 <div className={`${cardBg} border px-4 py-3 rounded-2xl rounded-tl-sm text-sm`}>
                   {!entry.ai && index === chat.length - 1 && loading ? (
-                    <span className="flex items-center gap-1 text-gray-400 text-xs py-1">
-                      <span className="animate-bounce [animation-delay:0ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
-                      <span className="animate-bounce [animation-delay:150ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
-                      <span className="animate-bounce [animation-delay:300ms] inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
-                      <span className="ml-1">Thinking...</span>
-                    </span>
+                    <div className="space-y-2">
+                      <span className="flex items-center gap-2 text-gray-400 text-xs py-1">
+                        <span className="inline-block h-2 w-20 rounded-full bg-gradient-to-r from-cyan-400/40 via-blue-400/80 to-cyan-400/40 bg-[length:200%_100%] animate-[pulse_1.2s_ease-in-out_infinite]" />
+                        <span>{entry.status ?? "Thinking..."}</span>
+                      </span>
+                      {entry.routeReason && <div className="text-[11px] text-gray-400">{entry.routeReason}</div>}
+                    </div>
                   ) : index === chat.length - 1 && loading ? (
-                    <span className="whitespace-pre-wrap leading-relaxed break-words">{entry.ai}</span>
+                    <div>
+                      {entry.status && <div className="text-[11px] opacity-70 mb-1">{entry.status}</div>}
+                      <span className="whitespace-pre-wrap leading-relaxed break-words">{entry.ai}</span>
+                    </div>
                   ) : (
                     <ReactMarkdown
                       components={{
@@ -405,17 +436,35 @@ const ChatList = memo(function ChatList({
                 </div>
               )}
 
-              <div className="flex items-center gap-2 ml-1 text-xs text-gray-400">
+              <div className="flex flex-wrap items-center gap-2 ml-1 text-xs text-gray-400">
                 {entry.model && <span>{entry.model}</span>}
+                {entry.routeReason && <span>{entry.routeReason}</span>}
                 {entry.ai && !entry.imageUrl && (
-                  <button
-                    onClick={() => onSpeak(entry.ai, entry.id)}
-                    disabled={speaking !== null && speaking !== entry.id}
-                    className={`${speaking === entry.id ? "text-blue-400 animate-pulse" : "hover:text-blue-400"}`}
-                    title={speaking === entry.id ? "Stop" : "Read aloud"}
-                  >
-                    {speaking === entry.id ? "Stop audio" : "Listen"}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => onSpeak(entry.ai, entry.id)}
+                      disabled={speaking !== null && speaking !== entry.id}
+                      className={`${speaking === entry.id ? "text-blue-400 animate-pulse" : "hover:text-blue-400"}`}
+                      title={speaking === entry.id ? "Stop" : "Read aloud"}
+                    >
+                      {speaking === entry.id ? "Stop audio" : "Listen"}
+                    </button>
+                    <button onClick={() => navigator.clipboard.writeText(entry.ai)} className="hover:text-blue-400">
+                      Copy
+                    </button>
+                    <button onClick={() => onResponseAction("summarize", entry.ai)} className="hover:text-blue-400">
+                      Summarize
+                    </button>
+                    <button onClick={() => onResponseAction("checklist", entry.ai)} className="hover:text-blue-400">
+                      Checklist
+                    </button>
+                    <button onClick={() => onResponseAction("translate", entry.ai)} className="hover:text-blue-400">
+                      Translate
+                    </button>
+                    <button onClick={() => onResponseAction("commit", entry.ai)} className="hover:text-blue-400">
+                      Commit msg
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -512,6 +561,7 @@ export default function Home() {
   const [loaded, setLoaded] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -675,6 +725,11 @@ export default function Home() {
     });
   }, [updateChat]);
 
+  const setComposerText = useCallback((text: string) => {
+    setMessage(text);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
   const copyCode = useCallback((code: string, id: string) => {
     navigator.clipboard.writeText(code).then(() => {
       setCopied(id);
@@ -690,6 +745,22 @@ export default function Home() {
       return next;
     });
   }, []);
+
+  const applyResponseAction = useCallback((action: ResponseAction, text: string) => {
+    const clean = stripMarkdown(text).slice(0, 4000);
+    const prompts: Record<ResponseAction, string> = {
+      summarize: "Summarize this response into 5 clear bullet points:\n\n",
+      checklist: "Turn this response into an actionable checklist:\n\n",
+      translate: "Translate this response into another language while preserving its meaning:\n\n",
+      commit: "Turn this into a clear git commit message:\n\n",
+    };
+    setMode("chat");
+    setComposerText(prompts[action] + clean);
+  }, [setComposerText]);
+
+  const editUserMessage = useCallback((text: string) => {
+    setComposerText(text);
+  }, [setComposerText]);
 
   const speak = useCallback(async (text: string, id: string) => {
     if (speaking !== null) {
@@ -855,9 +926,14 @@ export default function Home() {
         const raw = line.slice(6).trim();
         if (raw === "[DONE]") break;
         try {
-          const parsed = JSON.parse(raw) as { model?: string; token?: string; reasoning?: string };
-          if (parsed.model) {
-            updateLastMessage(workspaceId, chatId, (message) => ({ ...message, model: parsed.model ?? message.model }));
+          const parsed = JSON.parse(raw) as { model?: string; token?: string; reasoning?: string; status?: string; routeReason?: string };
+          if (parsed.model || parsed.routeReason || parsed.status) {
+            updateLastMessage(workspaceId, chatId, (message) => ({
+              ...message,
+              model: parsed.model ?? message.model,
+              routeReason: parsed.routeReason ?? message.routeReason,
+              status: parsed.status === "Done" ? undefined : (parsed.status ?? message.status),
+            }));
           }
           if (parsed.reasoning) {
             pendingReasoning += parsed.reasoning;
@@ -918,7 +994,13 @@ export default function Home() {
       : activeChat.title;
 
     if (mode === "image") {
-      const pending = createMessage({ user: userMsg, ai: "Generating image...", model: "Pollinations.ai (Free)" });
+      const pending = createMessage({
+        user: userMsg,
+        ai: "",
+        model: "Pollinations.ai (Free)",
+        status: "Generating image...",
+        routeReason: "Manual image mode",
+      });
       updateChat(workspaceId, chatId, (chat) => ({
         ...chat,
         title,
@@ -937,6 +1019,7 @@ export default function Home() {
           ai: data.error ?? "",
           model: data.model ?? entry.model,
           imageUrl: data.url ?? undefined,
+          status: undefined,
         }));
       } finally {
         setLoading(false);
@@ -951,6 +1034,7 @@ export default function Home() {
         model: null,
         fileName: file.name,
         filePreview: filePreview ?? undefined,
+        status: "Uploading file...",
       });
       updateChat(workspaceId, chatId, (chat) => ({
         ...chat,
@@ -975,7 +1059,13 @@ export default function Home() {
       return;
     }
 
-    const pending = createMessage({ user: userMsg, ai: "", model: currentModelId, fileName: file?.name ?? undefined });
+    const pending = createMessage({
+      user: userMsg,
+      ai: "",
+      model: currentModelId,
+      fileName: file?.name ?? undefined,
+      status: "Analyzing prompt...",
+    });
     updateChat(workspaceId, chatId, (chat) => ({
       ...chat,
       title,
@@ -1001,6 +1091,8 @@ export default function Home() {
           allowedModels: mode === "auto" ? [activeSettings.chatModel, activeSettings.codeModel] : undefined,
           history,
           memoryNotes: activeSettings.memoryNotes,
+          style: activeSettings.styleMode,
+          languageLock: activeSettings.languageLock,
         }),
       });
 
@@ -1109,6 +1201,7 @@ export default function Home() {
       markdown.push(`\n## You\n${entry.user}`);
       if (entry.reasoning) markdown.push(`\n### Reasoning\n${entry.reasoning}`);
       markdown.push(`\n## AI${entry.model ? ` (${entry.model})` : ""}\n${entry.ai}`);
+      if (entry.routeReason) markdown.push(`\nRoute: ${entry.routeReason}`);
       if (entry.imageUrl) markdown.push(`\n![Generated image](${entry.imageUrl})`);
     }
     const blob = new Blob([markdown.join("\n")], { type: "text/markdown" });
@@ -1140,6 +1233,7 @@ export default function Home() {
         imageUrl: entry.imageUrl,
         fileName: entry.fileName,
         reasoning: entry.reasoning,
+        routeReason: entry.routeReason,
       })),
     };
     const share = `${window.location.origin}${window.location.pathname}?share=${encodeURIComponent(toBase64(JSON.stringify(payload)))}`;
@@ -1322,6 +1416,32 @@ export default function Home() {
                 {SEARCH_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
               </select>
 
+              <label className="text-xs text-gray-500 block">Response style</label>
+              <select
+                value={activeWorkspace.settings.styleMode}
+                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                  ...workspace,
+                  settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
+                }))}
+                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+              >
+                <option value="concise">Concise</option>
+                <option value="detailed">Detailed</option>
+                <option value="step-by-step">Step by step</option>
+              </select>
+
+              <label className="text-xs text-gray-500 block">Reply language</label>
+              <select
+                value={activeWorkspace.settings.languageLock}
+                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                  ...workspace,
+                  settings: { ...workspace.settings, languageLock: e.target.value },
+                }))}
+                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+              >
+                {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+              </select>
+
               <label className="text-xs text-gray-500 block">Default voice language</label>
               <select
                 value={activeWorkspace.settings.voiceLanguage}
@@ -1374,7 +1494,12 @@ export default function Home() {
               <div>
                 <div className="text-xs uppercase tracking-[0.18em] text-gray-500">{activeWorkspace.name}</div>
                 <div className="text-2xl font-bold mt-1">{activeChat.title}</div>
-                <div className="text-sm text-gray-500 mt-2">Current mode: {modeLabels[mode]}{currentModelId ? ` • ${currentModelId}` : ""}</div>
+                <div className="text-sm text-gray-500 mt-2">
+                  Current mode: {modeLabels[mode]}
+                  {currentModelId ? ` • ${currentModelId}` : ""}
+                  {` • ${activeWorkspace.settings.styleMode}`}
+                  {activeWorkspace.settings.languageLock !== "auto" ? ` • ${activeWorkspace.settings.languageLock}` : ""}
+                </div>
               </div>
               <div className="flex gap-2 flex-wrap justify-end">
                 <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">{copied === "share-link" ? "Link copied" : "Share"}</button>
@@ -1471,12 +1596,30 @@ export default function Home() {
                 onCopyCode={copyCode}
                 openReasoning={openReasoning}
                 onToggleReasoning={toggleReasoning}
+                onEditUser={editUserMessage}
+                onResponseAction={applyResponseAction}
               />
             </div>
 
             <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-4">
+              <div className="mb-3 flex flex-wrap gap-2">
+                {QUICK_CHIPS.map((chip) => (
+                  <button
+                    key={chip.label}
+                    onClick={() => {
+                      if (chip.mode) setMode(chip.mode);
+                      setComposerText(chip.text);
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-xs border ${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-100"}`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex gap-2 items-end">
                 <textarea
+                  ref={inputRef}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
