@@ -90,8 +90,7 @@ export function readOAuthErrorFromLocation(provider?: OAuthProvider | null) {
     const normalizedDescription = hashErrorDescription.toLowerCase();
 
     if (normalizedDescription.includes("unable to exchange external code")) {
-      const label = provider ? getProviderLabel(provider) : "OAuth";
-      return `${label} sign-in could not be completed. Check the provider configuration and allowed redirect URLs in Supabase, then try again.`;
+      return formatExternalCodeExchangeMessage(provider);
     }
 
     if (hashError === "access_denied" || hashErrorCode === "access_denied") {
