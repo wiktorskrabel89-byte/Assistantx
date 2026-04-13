@@ -5,7 +5,14 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { createClient as createSupabaseClient } from "@/lib/client";
-import { getLinkedProviders, getOAuthScopes, isOAuthProvider, type OAuthProvider } from "@/lib/integrations";
+import { getLinkedProviders, getOAuthScopes, getProviderLabel, isOAuthProvider, type OAuthProvider } from "@/lib/integrations";
+import {
+  clearPendingOAuthProvider,
+  formatOAuthErrorMessage,
+  getOAuthInterruptedMessage,
+  getPendingOAuthProvider,
+  rememberPendingOAuthProvider,
+} from "@/lib/oauth-client";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
 import { RoadmapPanel } from "./components/RoadmapPanel";
 import { VoiceModal } from "./components/VoiceModal";
@@ -674,6 +681,7 @@ export default function Home() {
 
     const applySession = (email: string | null, provider: OAuthProvider | null, identities: OAuthProvider[]) => {
       if (!active) return;
+      clearPendingOAuthProvider();
       setUserEmail(email);
       setAuthProvider(provider);
       setLinkedProviders(identities);
@@ -724,6 +732,46 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", state.dark);
   }, [state.dark]);
+
+  const recoverFromInterruptedOAuth = useCallback((provider: OAuthProvider) => {
+    clearPendingOAuthProvider();
+    setOauthLoading(null);
+
+    if (userEmail) {
+      setCloudSyncStatus(cloudSyncEnabled && cloudBootstrapped ? "synced" : "checking");
+      setCloudSyncMessage(`${getProviderLabel(provider)} sign-in was interrupted. Your current session is still active, so you can try again.`);
+      return;
+    }
+
+    setCloudSyncStatus("local");
+    setCloudSyncMessage(getOAuthInterruptedMessage(provider));
+  }, [cloudBootstrapped, cloudSyncEnabled, userEmail]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const restorePendingOAuth = () => {
+      const pendingProvider = getPendingOAuthProvider();
+      if (!pendingProvider) return;
+      recoverFromInterruptedOAuth(pendingProvider);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        restorePendingOAuth();
+      }
+    };
+
+    window.addEventListener("pageshow", restorePendingOAuth);
+    window.addEventListener("focus", restorePendingOAuth);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pageshow", restorePendingOAuth);
+      window.removeEventListener("focus", restorePendingOAuth);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [recoverFromInterruptedOAuth]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -947,6 +995,7 @@ export default function Home() {
 
   const signOut = useCallback(async () => {
     try {
+      clearPendingOAuthProvider();
       setCloudSyncStatus("checking");
       setCloudSyncMessage("Signing out...");
       await fetch("/api/integrations/provider-tokens", { method: "DELETE" }).catch(() => undefined);
@@ -968,20 +1017,29 @@ export default function Home() {
     setOauthLoading(provider);
     setCloudSyncStatus("checking");
     setCloudSyncMessage(`Redirecting to ${provider === "google" ? "Google" : "GitHub"}...`);
+    rememberPendingOAuthProvider(provider);
 
     const options = {
       redirectTo: `${window.location.origin}/auth/callback`,
       scopes: getOAuthScopes(provider),
     };
     const shouldLinkIdentity = Boolean(userEmail) && !linkedProviders.includes(provider) && authProvider !== provider;
-    const { error } = shouldLinkIdentity
-      ? await supabase.auth.linkIdentity({ provider, options })
-      : await supabase.auth.signInWithOAuth({ provider, options });
+    try {
+      const { error } = shouldLinkIdentity
+        ? await supabase.auth.linkIdentity({ provider, options })
+        : await supabase.auth.signInWithOAuth({ provider, options });
 
-    if (error) {
+      if (!error) return;
+
+      clearPendingOAuthProvider();
       setOauthLoading(null);
       setCloudSyncStatus("error");
-      setCloudSyncMessage(error.message);
+      setCloudSyncMessage(formatOAuthErrorMessage(provider, error));
+    } catch (error) {
+      clearPendingOAuthProvider();
+      setOauthLoading(null);
+      setCloudSyncStatus("error");
+      setCloudSyncMessage(formatOAuthErrorMessage(provider, error));
     }
   }, [authProvider, linkedProviders, userEmail]);
 
