@@ -8,14 +8,6 @@ import { createClient } from "@/lib/server";
  * WARNING: Remove this endpoint in production!
  */
 export async function GET(request: Request) {
-  // Only allow in development
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json(
-      { error: "This endpoint is not available in production" },
-      { status: 403 }
-    );
-  }
-
   const requestUrl = new URL(request.url);
   const publicOrigin = requestUrl.origin;
   const appCallbackUrl = `${publicOrigin}/auth/callback`;
