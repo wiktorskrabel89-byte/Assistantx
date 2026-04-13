@@ -22,11 +22,14 @@ function formatExternalCodeExchangeMessage(
   provider?: OAuthProvider | null,
   callbackUrl?: string | null,
   supabaseProviderCallbackUrl?: string | null,
+  rawErrorDetail?: string | null,
 ) {
   const label = provider ? getProviderLabel(provider) : "OAuth";
   const resolvedCallbackUrl = callbackUrl || getBrowserOAuthCallbackUrl();
   const resolvedSupabaseProviderCallbackUrl = supabaseProviderCallbackUrl || getSupabaseProviderCallbackUrl();
-  return `${label} sign-in could not be completed. Verify ${label} is enabled in Supabase, the ${label} client ID and secret are correct, Supabase Auth redirect URLs include ${resolvedCallbackUrl}, and the ${label} OAuth app allows ${resolvedSupabaseProviderCallbackUrl}.`;
+  const detail = rawErrorDetail?.trim();
+  const detailSuffix = detail ? ` Raw provider error: ${detail}` : "";
+  return `${label} sign-in could not be completed. Verify ${label} is enabled in Supabase, the ${label} client ID and secret are correct, Supabase Auth redirect URLs include ${resolvedCallbackUrl}, and the ${label} OAuth app allows ${resolvedSupabaseProviderCallbackUrl}.${detailSuffix}`;
 }
 
 export function rememberPendingOAuthProvider(provider: OAuthProvider) {
@@ -90,7 +93,7 @@ export function readOAuthErrorFromLocation(provider?: OAuthProvider | null) {
     const normalizedDescription = hashErrorDescription.toLowerCase();
 
     if (normalizedDescription.includes("unable to exchange external code")) {
-      return formatExternalCodeExchangeMessage(provider);
+      return formatExternalCodeExchangeMessage(provider, undefined, undefined, hashErrorDescription);
     }
 
     if (hashError === "access_denied" || hashErrorCode === "access_denied") {
@@ -110,7 +113,7 @@ export function readOAuthErrorFromLocation(provider?: OAuthProvider | null) {
     searchError.toLowerCase().includes("unable to exchange external code") ||
     searchErrorCode === "oauth_exchange_failed"
   ) {
-    return formatExternalCodeExchangeMessage(provider, callbackUrl, supabaseProviderCallbackUrl);
+    return formatExternalCodeExchangeMessage(provider, callbackUrl, supabaseProviderCallbackUrl, searchError);
   }
 
   return searchError;
@@ -135,7 +138,7 @@ export function formatOAuthErrorMessage(provider: OAuthProvider, error: unknown)
   }
 
   if (normalized.includes("unable to exchange external code")) {
-    return formatExternalCodeExchangeMessage(provider);
+    return formatExternalCodeExchangeMessage(provider, undefined, undefined, message);
   }
 
   return message || fallback;
