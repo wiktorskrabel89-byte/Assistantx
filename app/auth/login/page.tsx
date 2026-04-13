@@ -5,9 +5,11 @@ import { createClient } from "@/lib/client";
 import { getOAuthScopes, getProviderLabel, type OAuthProvider } from "@/lib/integrations";
 import {
   clearPendingOAuthProvider,
+  clearOAuthErrorFromLocation,
   formatOAuthErrorMessage,
   getOAuthInterruptedMessage,
   getPendingOAuthProvider,
+  readOAuthErrorFromLocation,
   rememberPendingOAuthProvider,
 } from "@/lib/oauth-client";
 
@@ -15,15 +17,15 @@ type SubmitState = "idle" | "submitting" | "success" | "error";
 
 export default function LoginPage() {
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
-  const [email, setEmail] = useState("");
-  const [submitState, setSubmitState] = useState<SubmitState>("idle");
-  const [feedback, setFeedback] = useState("");
-  const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
-  const [authError, setAuthError] = useState(() => {
+  const [initialLocationError] = useState(() => {
     if (typeof window === "undefined") return "";
-    const params = new URLSearchParams(window.location.search);
-    return params.get("error") ?? "";
+    return readOAuthErrorFromLocation(getPendingOAuthProvider());
   });
+  const [email, setEmail] = useState("");
+  const [submitState, setSubmitState] = useState<SubmitState>(initialLocationError ? "error" : "idle");
+  const [feedback, setFeedback] = useState(initialLocationError);
+  const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
+  const [authError, setAuthError] = useState(initialLocationError);
 
   function getSupabase() {
     if (supabaseRef.current) return supabaseRef.current;
@@ -38,6 +40,12 @@ export default function LoginPage() {
     setAuthError("");
     setFeedback(getOAuthInterruptedMessage(provider));
   }, []);
+
+  useEffect(() => {
+    if (!initialLocationError) return;
+    clearPendingOAuthProvider();
+    clearOAuthErrorFromLocation();
+  }, [initialLocationError]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
