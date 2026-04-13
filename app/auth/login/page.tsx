@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { createClient } from "@/lib/client";
 import { getOAuthScopes } from "@/lib/integrations";
 
@@ -8,7 +8,7 @@ type SubmitState = "idle" | "submitting" | "success" | "error";
 type OAuthProvider = "google" | "github";
 
 export default function LoginPage() {
-  const supabase = useMemo(() => createClient(), []);
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const [email, setEmail] = useState("");
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [feedback, setFeedback] = useState("");
@@ -19,9 +19,25 @@ export default function LoginPage() {
     return params.get("error") ?? "";
   });
 
+  function getSupabase() {
+    if (supabaseRef.current) return supabaseRef.current;
+    supabaseRef.current = createClient();
+    return supabaseRef.current;
+  }
+
   async function handleOAuth(provider: OAuthProvider) {
     setOauthLoading(provider);
     setFeedback("");
+
+    let supabase;
+    try {
+      supabase = getSupabase();
+    } catch (error) {
+      setOauthLoading(null);
+      setSubmitState("error");
+      setFeedback(error instanceof Error ? error.message : "Supabase client is not configured.");
+      return;
+    }
 
     const redirectTo = `${window.location.origin}/auth/callback`;
     const { error } = await supabase.auth.signInWithOAuth({
@@ -51,6 +67,15 @@ export default function LoginPage() {
 
     setSubmitState("submitting");
     setFeedback("");
+
+    let supabase;
+    try {
+      supabase = getSupabase();
+    } catch (error) {
+      setSubmitState("error");
+      setFeedback(error instanceof Error ? error.message : "Supabase client is not configured.");
+      return;
+    }
 
     const redirectTo = `${window.location.origin}/auth/callback`;
     const { error } = await supabase.auth.signInWithOtp({
