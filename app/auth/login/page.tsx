@@ -1,11 +1,17 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/client";
-import { getOAuthScopes } from "@/lib/integrations";
+import { getOAuthScopes, getProviderLabel, type OAuthProvider } from "@/lib/integrations";
+import {
+  clearPendingOAuthProvider,
+  formatOAuthErrorMessage,
+  getOAuthInterruptedMessage,
+  getPendingOAuthProvider,
+  rememberPendingOAuthProvider,
+} from "@/lib/oauth-client";
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
-type OAuthProvider = "google" | "github";
 
 export default function LoginPage() {
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
@@ -13,7 +19,7 @@ export default function LoginPage() {
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [feedback, setFeedback] = useState("");
   const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
-  const [authError] = useState(() => {
+  const [authError, setAuthError] = useState(() => {
     if (typeof window === "undefined") return "";
     const params = new URLSearchParams(window.location.search);
     return params.get("error") ?? "";
@@ -25,14 +31,51 @@ export default function LoginPage() {
     return supabaseRef.current;
   }
 
+  const recoverFromInterruptedOAuth = useCallback((provider: OAuthProvider) => {
+    clearPendingOAuthProvider();
+    setOauthLoading(null);
+    setSubmitState("idle");
+    setAuthError("");
+    setFeedback(getOAuthInterruptedMessage(provider));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const restorePendingOAuth = () => {
+      const pendingProvider = getPendingOAuthProvider();
+      if (!pendingProvider) return;
+      recoverFromInterruptedOAuth(pendingProvider);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        restorePendingOAuth();
+      }
+    };
+
+    window.addEventListener("pageshow", restorePendingOAuth);
+    window.addEventListener("focus", restorePendingOAuth);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pageshow", restorePendingOAuth);
+      window.removeEventListener("focus", restorePendingOAuth);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [recoverFromInterruptedOAuth]);
+
   async function handleOAuth(provider: OAuthProvider) {
     setOauthLoading(provider);
+    setSubmitState("idle");
+    setAuthError("");
     setFeedback("");
 
     let supabase;
     try {
       supabase = getSupabase();
     } catch (error) {
+      clearPendingOAuthProvider();
       setOauthLoading(null);
       setSubmitState("error");
       setFeedback(error instanceof Error ? error.message : "Supabase client is not configured.");
@@ -40,18 +83,28 @@ export default function LoginPage() {
     }
 
     const redirectTo = `${window.location.origin}/auth/callback`;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo,
-        scopes: getOAuthScopes(provider),
-      },
-    });
+    rememberPendingOAuthProvider(provider);
 
-    if (error) {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          scopes: getOAuthScopes(provider),
+        },
+      });
+
+      if (!error) return;
+
+      clearPendingOAuthProvider();
       setOauthLoading(null);
       setSubmitState("error");
-      setFeedback(error.message);
+      setFeedback(formatOAuthErrorMessage(provider, error));
+    } catch (error) {
+      clearPendingOAuthProvider();
+      setOauthLoading(null);
+      setSubmitState("error");
+      setFeedback(formatOAuthErrorMessage(provider, error));
     }
   }
 
@@ -65,7 +118,10 @@ export default function LoginPage() {
       return;
     }
 
+    clearPendingOAuthProvider();
+    setOauthLoading(null);
     setSubmitState("submitting");
+    setAuthError("");
     setFeedback("");
 
     let supabase;
@@ -143,6 +199,21 @@ export default function LoginPage() {
               {oauthLoading === "github" ? "Redirecting to GitHub..." : "Continue with GitHub"}
             </button>
           </div>
+
+          {oauthLoading && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-xs leading-5 text-slate-300">
+              <div>
+                Back from {getProviderLabel(oauthLoading)} without finishing sign-in? Reset this attempt and use email or the other provider.
+              </div>
+              <button
+                type="button"
+                onClick={() => recoverFromInterruptedOAuth(oauthLoading)}
+                className="mt-3 rounded-xl border border-white/10 px-3 py-2 font-medium text-white transition hover:bg-white/10"
+              >
+                Use another sign-in method
+              </button>
+            </div>
+          )}
 
           <div className="mt-4 flex items-center gap-3 text-xs uppercase tracking-[0.22em] text-slate-400">
             <span className="h-px flex-1 bg-white/10" />
