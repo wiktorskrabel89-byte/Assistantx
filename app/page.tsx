@@ -1611,27 +1611,21 @@ export default function Home() {
     chat: "The router stays focused on general conversation, writing, and planning.",
     search: "The router stays focused on research-oriented answers with current web context.",
     image: "Image mode skips chat routing and sends your prompt straight to image generation.",
-    upload: "Upload mode analyzes the file you staged in the side rail.",
+    upload: "Upload mode analyzes the file you staged in the tools tab.",
   };
 
-  const activityLabel = mode === "image"
-    ? "Direct image generation"
-    : mode === "upload"
-      ? "File analysis"
-      : "Automatic routing";
-
-  const sidebarTabs: Array<{ id: SidebarTab; label: string }> = [
-    { id: "chat", label: "Chats" },
-    { id: "workspace", label: "Workspace" },
-    { id: "integrations", label: "Integrations" },
-    { id: "artifacts", label: "Artifacts" },
-    { id: "account", label: "Account" },
+  const sidebarTabs: Array<{ id: SidebarTab; label: string; short: string }> = [
+    { id: "chat", label: "Chats", short: "Chat" },
+    { id: "workspace", label: "Tools", short: "Tools" },
+    { id: "integrations", label: "Apps", short: "Apps" },
+    { id: "artifacts", label: "Artifacts", short: "Code" },
+    { id: "account", label: "Account", short: "You" },
   ];
 
   return (
     <>
       <div className={`min-h-screen ${bg}`}>
-        <div className="mx-auto relative grid min-h-screen max-w-[1760px] grid-cols-1 gap-4 px-4 py-4 xl:h-screen xl:grid-cols-[272px,minmax(0,1fr)]">
+        <div className="mx-auto relative grid min-h-screen max-w-[1880px] grid-cols-1 gap-4 px-4 py-4 xl:h-screen xl:grid-cols-[minmax(360px,430px),minmax(0,1fr)]">
           <button
             type="button"
             aria-label="Close sidebar"
@@ -1639,398 +1633,411 @@ export default function Home() {
             className={`fixed inset-0 z-30 bg-black/50 transition-opacity xl:hidden ${sidebarOpen ? "opacity-100 pointer-events-auto" : "pointer-events-none opacity-0"}`}
           />
 
-          <aside className={`fixed inset-y-4 left-4 z-40 flex w-[min(21rem,calc(100vw-2rem))] min-h-0 flex-col gap-4 overflow-hidden rounded-3xl border p-4 transition-transform duration-200 xl:static xl:w-auto xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold">Moje AI</h1>
-                <p className="mt-1 truncate text-xs text-gray-500">{userEmail ? `Signed in as ${userEmail}` : "Checking session..."}</p>
+          <aside className={`fixed inset-y-4 left-4 z-40 w-[min(28rem,calc(100vw-2rem))] min-h-0 overflow-hidden rounded-3xl border transition-transform duration-200 xl:static xl:w-auto xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-800">
+                <div className="min-w-0">
+                  <h1 className="text-xl font-bold">Moje AI</h1>
+                  <p className="mt-1 truncate text-xs text-gray-500">{userEmail ? `Signed in as ${userEmail}` : "Checking session..."}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setState((prev) => ({ ...prev, dark: !prev.dark }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+                    {state.dark ? "Light" : "Dark"}
+                  </button>
+                  <button onClick={() => setSidebarOpen(false)} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700 xl:hidden">
+                    Close
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setState((prev) => ({ ...prev, dark: !prev.dark }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-                  {state.dark ? "Light" : "Dark"}
-                </button>
-                <button onClick={() => setSidebarOpen(false)} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700 xl:hidden">
-                  Close
-                </button>
-              </div>
-            </div>
 
-            <div className="flex flex-col gap-1 rounded-2xl border border-gray-200 p-1 dark:border-gray-800">
-              {sidebarTabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setSidebarTab(tab.id)}
-                  className={`rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors ${
-                    sidebarTab === tab.id
-                      ? state.dark
-                        ? "bg-blue-950/40 text-blue-200"
-                        : "bg-blue-50 text-blue-700"
-                      : state.dark
-                        ? "text-gray-300 hover:bg-gray-800"
-                        : "text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 min-h-0">
-              {sidebarTab === "chat" && (
-                <div className="h-full min-h-0 flex flex-col gap-4">
-                  <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-sm font-semibold">Workspaces</h2>
-                      <button onClick={createWorkspaceAction} className="text-xs text-blue-500 hover:underline">New</button>
-                    </div>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {state.workspaces.map((workspace) => (
-                        <button
-                          key={workspace.id}
-                          onClick={() => {
-                            setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }));
-                            setSidebarOpen(false);
-                          }}
-                          className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
-                            workspace.id === activeWorkspace.id
-                              ? state.dark
-                                ? "border-blue-500 bg-blue-950/30"
-                                : "border-blue-400 bg-blue-50"
-                              : state.dark
-                                ? "border-gray-800 hover:bg-gray-800"
-                                : "border-gray-200 hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="font-medium truncate">{workspace.name}</div>
-                              <div className="text-xs text-gray-500 mt-1">{workspace.chats.length} chats</div>
-                            </div>
-                            <div className="flex gap-2 shrink-0">
-                              <span
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  renameWorkspace(workspace.id);
-                                }}
-                                className="text-xs text-gray-400 hover:text-blue-500"
-                              >
-                                Rename
-                              </span>
-                              <span
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  deleteWorkspace(workspace.id);
-                                }}
-                                className="text-xs text-gray-400 hover:text-red-500"
-                              >
-                                Delete
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3 min-h-0 flex flex-col">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-sm font-semibold">Chats</h2>
-                      <button onClick={createChatAction} className="text-xs text-blue-500 hover:underline">New</button>
-                    </div>
-                    <div className="space-y-2 overflow-y-auto min-h-0">
-                      {activeWorkspace.chats.map((chat) => (
-                        <button
-                          key={chat.id}
-                          onClick={() => {
-                            updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }));
-                            setSidebarOpen(false);
-                          }}
-                          className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
-                            chat.id === activeChat.id
-                              ? state.dark
-                                ? "border-violet-500 bg-violet-950/30"
-                                : "border-violet-400 bg-violet-50"
-                              : state.dark
-                                ? "border-gray-800 hover:bg-gray-800"
-                                : "border-gray-200 hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="font-medium truncate">{chat.title}</div>
-                              <div className="text-xs text-gray-500 mt-1">{chat.messages.length} messages</div>
-                            </div>
-                            <div className="flex gap-2 shrink-0">
-                              <span
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  renameChat(chat.id);
-                                }}
-                                className="text-xs text-gray-400 hover:text-blue-500"
-                              >
-                                Rename
-                              </span>
-                              <span
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  deleteChat(chat.id);
-                                }}
-                                className="text-xs text-gray-400 hover:text-red-500"
-                              >
-                                Delete
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {sidebarTab === "workspace" && (
-                <div className="h-full min-h-0 overflow-y-auto pr-1">
-                  <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                    <h2 className="text-sm font-semibold">Workspace memory and preferences</h2>
-
-                    <div className={`rounded-2xl border px-3 py-3 text-sm ${state.dark ? "border-gray-800 bg-gray-950 text-gray-300" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
-                      <div className="font-medium text-gray-900 dark:text-gray-100">Model routing</div>
-                      <p className="mt-1 text-xs leading-5 opacity-80">Manual model picking is off. The app now routes requests automatically based on the mode you choose in the chat rail.</p>
-                    </div>
-
-                    <label className="text-xs text-gray-500 block">Response style</label>
-                    <select
-                      value={activeWorkspace.settings.styleMode}
-                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                        ...workspace,
-                        settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
-                      }))}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                    >
-                      <option value="concise">Concise</option>
-                      <option value="detailed">Detailed</option>
-                      <option value="step-by-step">Step by step</option>
-                    </select>
-
-                    <label className="text-xs text-gray-500 block">Reply language</label>
-                    <select
-                      value={activeWorkspace.settings.languageLock}
-                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                        ...workspace,
-                        settings: { ...workspace.settings, languageLock: e.target.value },
-                      }))}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                    >
-                      {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                    </select>
-
-                    <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
-                      <span>Use conversation memory</span>
-                      <input
-                        type="checkbox"
-                        checked={activeWorkspace.settings.memoryEnabled}
-                        onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                          ...workspace,
-                          settings: { ...workspace.settings, memoryEnabled: e.target.checked },
-                        }))}
-                      />
-                    </label>
-
-                    <label className="text-xs text-gray-500 block">Pinned memory for this workspace</label>
-                    <textarea
-                      value={activeWorkspace.settings.memoryNotes}
-                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                        ...workspace,
-                        settings: { ...workspace.settings, memoryNotes: e.target.value },
-                      }))}
-                      placeholder="Facts to remember across chats in this workspace, e.g. preferred tone, project stack, user role..."
-                      rows={4}
-                      className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                    />
-
-                    <div className="flex gap-2 flex-wrap">
-                      <button onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, settings: { ...workspace.settings, memoryNotes: "" } }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-                        Clear pinned memory
-                      </button>
-                      <button onClick={clearActiveChat} className="text-xs rounded-xl border px-3 py-2 border-red-300 text-red-500 dark:border-red-900">
-                        Clear active chat
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {sidebarTab === "integrations" && (
-                <div className="h-full min-h-0 overflow-y-auto pr-1">
-                  <IntegrationsPanel
-                    dark={state.dark}
-                    linkedProviders={linkedProviders}
-                    authProvider={authProvider}
-                    oauthLoading={oauthLoading}
-                    copied={copied}
-                    hasArtifacts={artifacts.length > 0}
-                    onConnectProvider={(provider) => void signInWithProvider(provider)}
-                    onImportFile={stageImportedFile}
-                    onCopyVsCodePrompt={() => void copyVsCodePrompt()}
-                    onDownloadVsCodeBundle={downloadVsCodeBundle}
-                  />
-                </div>
-              )}
-
-              {sidebarTab === "artifacts" && (
-                <div className="h-full min-h-0">
-                  <ArtifactPanel artifacts={artifacts} dark={state.dark} copied={copied} onCopyCode={copyCode} />
-                </div>
-              )}
-
-              {sidebarTab === "account" && (
-                <div className="h-full min-h-0 overflow-y-auto pr-1">
-                  <RoadmapPanel
-                    dark={state.dark}
-                    userEmail={userEmail}
-                    cloudSyncStatus={cloudSyncStatus}
-                    cloudSyncMessage={cloudSyncMessage}
-                  />
-                </div>
-              )}
-            </div>
-
-            <button onClick={() => void signOut()} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-              Sign out
-            </button>
-          </aside>
-
-          <main className={`min-h-0 rounded-3xl border ${cardBg}`}>
-            <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[248px,minmax(0,1fr)]">
-              <aside className="flex min-h-0 flex-col gap-4 border-b border-gray-200 px-4 py-4 dark:border-gray-800 lg:border-b-0 lg:border-r">
-                <section className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-gray-500">Chat rail</div>
-                    <button
-                      onClick={() => setSidebarOpen(true)}
-                      className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-medium dark:border-gray-700 xl:hidden"
-                    >
-                      Panels
-                    </button>
-                  </div>
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Modes, shortcuts, and uploads live here so the middle stays focused on the conversation.</p>
-                </section>
-
-                <section className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Modes</div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                    {MODE_PANEL_OPTIONS.map((option) => (
+              <div className="grid min-h-0 flex-1 grid-cols-[92px,minmax(0,1fr)]">
+                <div className="border-r border-gray-200 p-2 dark:border-gray-800">
+                  <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
+                    {sidebarTabs.map((tab) => (
                       <button
-                        key={option.id}
-                        onClick={() => setMode(option.id)}
-                        className={`rounded-2xl border px-3 py-3 text-left transition-colors ${
-                          mode === option.id
-                            ? `${modeColors[option.id]} text-white border-transparent`
+                        key={tab.id}
+                        onClick={() => setSidebarTab(tab.id)}
+                        className={`rounded-2xl px-2 py-3 text-center transition-colors ${
+                          sidebarTab === tab.id
+                            ? state.dark
+                              ? "bg-blue-950/40 text-blue-200"
+                              : "bg-blue-50 text-blue-700"
                             : state.dark
-                              ? "border-gray-800 bg-gray-950/60 text-gray-100 hover:bg-gray-800"
-                              : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
+                              ? "text-gray-300 hover:bg-gray-800"
+                              : "text-gray-600 hover:bg-gray-100"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium">{option.label}</span>
-                          {mode === option.id && <span className="text-[11px] uppercase tracking-[0.16em] opacity-80">Live</span>}
-                        </div>
-                        <p className={`mt-1 text-xs leading-5 ${mode === option.id ? "text-white/80" : "text-gray-500"}`}>{option.description}</p>
+                        <span className="block text-[10px] uppercase tracking-[0.18em] opacity-70">{tab.short}</span>
+                        <span className="mt-1 block text-sm font-semibold leading-4">{tab.label}</span>
                       </button>
                     ))}
                   </div>
-                </section>
+                </div>
 
-                <section className="min-h-0 flex-1 overflow-y-auto pr-1">
-                  <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-sm font-semibold">Quick starts</h2>
-                        <p className="mt-1 text-xs text-gray-500">Drop a starter into the composer.</p>
-                      </div>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${state.dark ? "bg-gray-800 text-gray-300" : "border border-gray-200 bg-white text-gray-600"}`}>
-                        {modeLabels[mode]}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {QUICK_CHIPS.map((chip) => (
-                        <button
-                          key={chip.label}
-                          onClick={() => {
-                            if (chip.mode) setMode(chip.mode);
-                            setComposerText(chip.text);
-                          }}
-                          className={`px-3 py-1.5 rounded-full text-xs border ${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-100"}`}
-                        >
-                          {chip.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-
-                <section className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-sm font-semibold">Files</h2>
-                      <p className="mt-1 text-xs text-gray-500">Attach a file below when you want file analysis.</p>
-                    </div>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`rounded-xl px-3 py-2 text-xs font-medium border transition-colors ${
-                        mode === "upload"
-                          ? `${modeColors.upload} text-white border-transparent`
-                          : state.dark
-                            ? "border-gray-700 text-gray-300 hover:bg-gray-800"
-                            : "border-gray-300 text-gray-700 hover:bg-gray-100"
-                      }`}
-                    >
-                      {file ? "Replace" : "Add file"}
-                    </button>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-                  />
-
-                  {file ? (
-                    <div className={`mt-3 rounded-2xl border px-3 py-3 flex items-center gap-3 ${state.dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
-                      {filePreview ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={filePreview} alt="preview" className="h-14 w-14 object-cover rounded-xl" />
-                      ) : (
-                        <div className={`h-14 w-14 rounded-xl flex items-center justify-center text-xs ${state.dark ? "bg-gray-800" : "bg-gray-100"}`}>
-                          FILE
+                <div className="min-h-0 overflow-y-auto p-4">
+                  {sidebarTab === "chat" && (
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h2 className="text-sm font-semibold">Workspaces</h2>
+                          <button onClick={createWorkspaceAction} className="text-xs text-blue-500 hover:underline">New</button>
                         </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{file.name}</div>
-                        <div className="text-xs text-gray-500 truncate">{file.type || "unknown file type"}</div>
+                        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                          {state.workspaces.map((workspace) => (
+                            <button
+                              key={workspace.id}
+                              onClick={() => {
+                                setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }));
+                                setSidebarOpen(false);
+                              }}
+                              className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                                workspace.id === activeWorkspace.id
+                                  ? state.dark
+                                    ? "border-blue-500 bg-blue-950/30"
+                                    : "border-blue-400 bg-blue-50"
+                                  : state.dark
+                                    ? "border-gray-800 hover:bg-gray-800"
+                                    : "border-gray-200 hover:bg-gray-50"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-medium truncate">{workspace.name}</div>
+                                  <div className="text-xs text-gray-500 mt-1">{workspace.chats.length} chats</div>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                  <span
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      renameWorkspace(workspace.id);
+                                    }}
+                                    className="text-xs text-gray-400 hover:text-blue-500"
+                                  >
+                                    Rename
+                                  </span>
+                                  <span
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      deleteWorkspace(workspace.id);
+                                    }}
+                                    className="text-xs text-gray-400 hover:text-red-500"
+                                  >
+                                    Delete
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <button
-                        onClick={() => {
-                          setFile(null);
-                          setFilePreview(null);
-                          setMode("auto");
-                        }}
-                        className="ml-auto text-red-500 text-sm"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <div className={`mt-3 rounded-2xl border border-dashed px-3 py-4 text-xs ${state.dark ? "border-gray-700 text-gray-400" : "border-gray-300 text-gray-500"}`}>
-                      No file selected.
+
+                      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h2 className="text-sm font-semibold">Chats</h2>
+                          <button onClick={createChatAction} className="text-xs text-blue-500 hover:underline">New</button>
+                        </div>
+                        <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                          {activeWorkspace.chats.map((chat) => (
+                            <button
+                              key={chat.id}
+                              onClick={() => {
+                                updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }));
+                                setSidebarOpen(false);
+                              }}
+                              className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                                chat.id === activeChat.id
+                                  ? state.dark
+                                    ? "border-violet-500 bg-violet-950/30"
+                                    : "border-violet-400 bg-violet-50"
+                                  : state.dark
+                                    ? "border-gray-800 hover:bg-gray-800"
+                                    : "border-gray-200 hover:bg-gray-50"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-medium truncate">{chat.title}</div>
+                                  <div className="text-xs text-gray-500 mt-1">{chat.messages.length} messages</div>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                  <span
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      renameChat(chat.id);
+                                    }}
+                                    className="text-xs text-gray-400 hover:text-blue-500"
+                                  >
+                                    Rename
+                                  </span>
+                                  <span
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      deleteChat(chat.id);
+                                    }}
+                                    className="text-xs text-gray-400 hover:text-red-500"
+                                  >
+                                    Delete
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
-                </section>
-              </aside>
 
-              <section className="flex min-h-0 min-w-0 flex-col">
-                <div className="border-b border-gray-200 dark:border-gray-800 px-5 py-4 flex flex-wrap items-start justify-between gap-4">
+                  {sidebarTab === "workspace" && (
+                    <div className="space-y-4">
+                      <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950 text-gray-300" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Tools</h2>
+                            <p className="mt-1 text-xs leading-5 opacity-80">Everything that changes the chat behavior lives here, so the main panel stays focused on the conversation.</p>
+                          </div>
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium text-white ${modeColors[mode]}`}>{modeLabels[mode]}</span>
+                        </div>
+                        <div className={`mt-3 rounded-2xl border px-3 py-3 text-xs leading-5 ${state.dark ? "border-gray-800 bg-gray-900 text-gray-400" : "border-gray-200 bg-white text-gray-500"}`}>
+                          {modeDescriptions[mode]}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Modes</div>
+                        <div className="space-y-2">
+                          {MODE_PANEL_OPTIONS.map((option) => (
+                            <button
+                              key={option.id}
+                              onClick={() => setMode(option.id)}
+                              className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                                mode === option.id
+                                  ? `${modeColors[option.id]} text-white border-transparent`
+                                  : state.dark
+                                    ? "border-gray-800 bg-gray-950/60 text-gray-100 hover:bg-gray-800"
+                                    : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="font-medium">{option.label}</span>
+                                {mode === option.id && <span className="text-[11px] uppercase tracking-[0.16em] opacity-80">Live</span>}
+                              </div>
+                              <p className={`mt-1 text-xs leading-5 ${mode === option.id ? "text-white/80" : "text-gray-500"}`}>{option.description}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <h2 className="text-sm font-semibold">Quick starts</h2>
+                            <p className="mt-1 text-xs text-gray-500">Drop a starter into the composer.</p>
+                          </div>
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${state.dark ? "bg-gray-800 text-gray-300" : "border border-gray-200 bg-white text-gray-600"}`}>
+                            {modeLabels[mode]}
+                          </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {QUICK_CHIPS.map((chip) => (
+                            <button
+                              key={chip.label}
+                              onClick={() => {
+                                if (chip.mode) setMode(chip.mode);
+                                setComposerText(chip.text);
+                              }}
+                              className={`px-3 py-1.5 rounded-full text-xs border ${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-100"}`}
+                            >
+                              {chip.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h2 className="text-sm font-semibold">Files</h2>
+                            <p className="mt-1 text-xs text-gray-500">Attach a file when you want file analysis in the chat.</p>
+                          </div>
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`rounded-xl px-3 py-2 text-xs font-medium border transition-colors ${
+                              mode === "upload"
+                                ? `${modeColors.upload} text-white border-transparent`
+                                : state.dark
+                                  ? "border-gray-700 text-gray-300 hover:bg-gray-800"
+                                  : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                            }`}
+                          >
+                            {file ? "Replace" : "Add file"}
+                          </button>
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
+                          className="hidden"
+                          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                        />
+
+                        {file ? (
+                          <div className={`mt-3 rounded-2xl border px-3 py-3 flex items-center gap-3 ${state.dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
+                            {filePreview ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={filePreview} alt="preview" className="h-14 w-14 object-cover rounded-xl" />
+                            ) : (
+                              <div className={`h-14 w-14 rounded-xl flex items-center justify-center text-xs ${state.dark ? "bg-gray-800" : "bg-gray-100"}`}>
+                                FILE
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{file.name}</div>
+                              <div className="text-xs text-gray-500 truncate">{file.type || "unknown file type"}</div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setFile(null);
+                                setFilePreview(null);
+                                setMode("auto");
+                              }}
+                              className="ml-auto text-red-500 text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <div className={`mt-3 rounded-2xl border border-dashed px-3 py-4 text-xs ${state.dark ? "border-gray-700 text-gray-400" : "border-gray-300 text-gray-500"}`}>
+                            No file selected.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                        <h2 className="text-sm font-semibold">Workspace settings</h2>
+
+                        <div className={`rounded-2xl border px-3 py-3 text-sm ${state.dark ? "border-gray-800 bg-gray-950 text-gray-300" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+                          <div className="font-medium text-gray-900 dark:text-gray-100">Model routing</div>
+                          <p className="mt-1 text-xs leading-5 opacity-80">Manual model picking is off. The app routes requests automatically based on the selected mode.</p>
+                        </div>
+
+                        <label className="text-xs text-gray-500 block">Response style</label>
+                        <select
+                          value={activeWorkspace.settings.styleMode}
+                          onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                            ...workspace,
+                            settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
+                          }))}
+                          className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                        >
+                          <option value="concise">Concise</option>
+                          <option value="detailed">Detailed</option>
+                          <option value="step-by-step">Step by step</option>
+                        </select>
+
+                        <label className="text-xs text-gray-500 block">Reply language</label>
+                        <select
+                          value={activeWorkspace.settings.languageLock}
+                          onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                            ...workspace,
+                            settings: { ...workspace.settings, languageLock: e.target.value },
+                          }))}
+                          className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                        >
+                          {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+                        </select>
+
+                        <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
+                          <span>Use conversation memory</span>
+                          <input
+                            type="checkbox"
+                            checked={activeWorkspace.settings.memoryEnabled}
+                            onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                              ...workspace,
+                              settings: { ...workspace.settings, memoryEnabled: e.target.checked },
+                            }))}
+                          />
+                        </label>
+
+                        <label className="text-xs text-gray-500 block">Pinned memory for this workspace</label>
+                        <textarea
+                          value={activeWorkspace.settings.memoryNotes}
+                          onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                            ...workspace,
+                            settings: { ...workspace.settings, memoryNotes: e.target.value },
+                          }))}
+                          placeholder="Facts to remember across chats in this workspace, e.g. preferred tone, project stack, user role..."
+                          rows={4}
+                          className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                        />
+
+                        <div className="flex gap-2 flex-wrap">
+                          <button onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, settings: { ...workspace.settings, memoryNotes: "" } }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+                            Clear pinned memory
+                          </button>
+                          <button onClick={clearActiveChat} className="text-xs rounded-xl border px-3 py-2 border-red-300 text-red-500 dark:border-red-900">
+                            Clear active chat
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {sidebarTab === "integrations" && (
+                    <IntegrationsPanel
+                      dark={state.dark}
+                      linkedProviders={linkedProviders}
+                      authProvider={authProvider}
+                      oauthLoading={oauthLoading}
+                      copied={copied}
+                      hasArtifacts={artifacts.length > 0}
+                      onConnectProvider={(provider) => void signInWithProvider(provider)}
+                      onImportFile={stageImportedFile}
+                      onCopyVsCodePrompt={() => void copyVsCodePrompt()}
+                      onDownloadVsCodeBundle={downloadVsCodeBundle}
+                    />
+                  )}
+
+                  {sidebarTab === "artifacts" && (
+                    <ArtifactPanel artifacts={artifacts} dark={state.dark} copied={copied} onCopyCode={copyCode} />
+                  )}
+
+                  {sidebarTab === "account" && (
+                    <div className="space-y-4">
+                      <section className={`rounded-3xl border p-4 ${state.dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
+                        <div>
+                          <h2 className="text-sm font-semibold">Chat actions</h2>
+                          <p className="mt-1 text-xs text-gray-500">Share or export the active chat without cluttering the main view.</p>
+                        </div>
+                        <div className="mt-4 grid gap-2">
+                          <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 text-left">{copied === "share-link" ? "Link copied" : "Share chat link"}</button>
+                          <button onClick={exportMarkdown} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 text-left">Export Markdown</button>
+                          <button onClick={exportJson} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 text-left">Export JSON</button>
+                        </div>
+                      </section>
+
+                      <RoadmapPanel
+                        dark={state.dark}
+                        userEmail={userEmail}
+                        cloudSyncStatus={cloudSyncStatus}
+                        cloudSyncMessage={cloudSyncMessage}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 px-4 py-4 dark:border-gray-800">
+                <button onClick={() => void signOut()} className="w-full text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          <main className={`min-h-0 rounded-3xl border ${cardBg}`}>
+            <section className="flex h-full min-h-0 min-w-0 flex-col">
+              <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start gap-3">
                       <button
@@ -2044,82 +2051,102 @@ export default function Home() {
                         <div className="mt-1 truncate text-2xl font-bold">{activeChat.title}</div>
                       </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500">
-                      <span>{modeLabels[mode]} mode</span>
-                      <span>{activityLabel}</span>
-                      <span>{activeWorkspace.settings.styleMode}</span>
-                      {activeWorkspace.settings.languageLock !== "auto" ? <span>{activeWorkspace.settings.languageLock}</span> : null}
-                      <span>{`Cloud ${cloudSyncStatus}`}</span>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className={`rounded-full px-3 py-1.5 text-[11px] font-medium text-white ${modeColors[mode]}`}>{modeLabels[mode]}</span>
+                      <span className={`rounded-full px-3 py-1.5 text-[11px] font-medium ${state.dark ? "bg-gray-800 text-gray-200" : "bg-gray-100 text-gray-700"}`}>{`Cloud ${cloudSyncStatus}`}</span>
+                      {file ? (
+                        <span className={`max-w-full truncate rounded-full px-3 py-1.5 text-[11px] font-medium ${state.dark ? "bg-gray-800 text-gray-200" : "bg-gray-100 text-gray-700"}`}>
+                          {file.name}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-2 text-xs text-gray-500">{cloudSyncMessage}</div>
                   </div>
-                  <div className="flex gap-2 flex-wrap justify-end">
-                    <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">{copied === "share-link" ? "Link copied" : "Share"}</button>
-                    <button onClick={exportMarkdown} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export MD</button>
-                    <button onClick={exportJson} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export JSON</button>
-                  </div>
                 </div>
+              </div>
 
-                <div className="flex-1 min-h-0 px-5 py-4">
-                  <ChatList
-                    chat={activeChat.messages}
-                    loading={loading}
-                    dark={state.dark}
-                    cardBg={cardBg}
-                    codeBg={codeBg}
-                    copied={copied}
-                    speaking={speaking}
-                    chatEndRef={chatEndRef}
-                    onSpeak={speak}
-                    onCopyCode={copyCode}
-                    openReasoning={openReasoning}
-                    onToggleReasoning={toggleReasoning}
-                    onEditUser={editUserMessage}
-                    onResponseAction={applyResponseAction}
-                  />
-                </div>
+              <div className="flex-1 min-h-0 px-5 py-4">
+                <ChatList
+                  chat={activeChat.messages}
+                  loading={loading}
+                  dark={state.dark}
+                  cardBg={cardBg}
+                  codeBg={codeBg}
+                  copied={copied}
+                  speaking={speaking}
+                  chatEndRef={chatEndRef}
+                  onSpeak={speak}
+                  onCopyCode={copyCode}
+                  openReasoning={openReasoning}
+                  onToggleReasoning={toggleReasoning}
+                  onEditUser={editUserMessage}
+                  onResponseAction={applyResponseAction}
+                />
+              </div>
 
-                <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-4">
-                  <div className={`rounded-2xl border px-3 py-2 text-xs ${state.dark ? "border-gray-800 bg-gray-950 text-gray-400" : "border-gray-200 bg-gray-50 text-gray-500"}`}>
-                    {modeDescriptions[mode]}
-                  </div>
-
-                  <div className="mt-3 flex gap-2 items-end">
-                    <textarea
-                      ref={inputRef}
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          void sendMessage();
-                        }
-                      }}
-                      placeholder={
-                        mode === "image"
-                          ? "Describe the image to generate..."
-                          : mode === "upload"
-                            ? "Ask about the selected file..."
-                            : mode === "search"
-                              ? "Search the web for something current..."
-                              : "Type a message..."
-                      }
-                      disabled={loading}
-                      rows={1}
-                      className={`flex-1 resize-none rounded-2xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
-                      style={{ minHeight: 48, maxHeight: 180 }}
-                    />
+              <div className="border-t border-gray-200 px-5 py-4 dark:border-gray-800">
+                {file ? (
+                  <div className={`mb-3 rounded-2xl border px-3 py-3 flex items-center gap-3 ${state.dark ? "border-gray-800 bg-gray-950" : "border-gray-200 bg-gray-50"}`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{file.name}</div>
+                      <div className="text-xs text-gray-500 truncate">{mode === "upload" ? "Ready for file analysis" : modeDescriptions[mode]}</div>
+                    </div>
                     <button
-                      onClick={() => void sendMessage()}
-                      disabled={loading || (!message.trim() && !file)}
-                      className={`px-4 py-3 rounded-2xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${modeColors[mode]}`}
+                      onClick={() => {
+                        setSidebarTab("workspace");
+                        setSidebarOpen(true);
+                      }}
+                      className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700 xl:hidden"
                     >
-                      {loading ? "Working..." : mode === "image" ? "Generate" : mode === "search" ? "Search" : "Send"}
+                      Edit
                     </button>
                   </div>
+                ) : null}
+
+                <div className="flex gap-2 items-end">
+                  <textarea
+                    ref={inputRef}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void sendMessage();
+                      }
+                    }}
+                    placeholder={
+                      mode === "image"
+                        ? "Describe the image to generate..."
+                        : mode === "upload"
+                          ? "Ask about the selected file..."
+                          : mode === "search"
+                            ? "Search the web for something current..."
+                            : "Type a message..."
+                    }
+                    disabled={loading}
+                    rows={1}
+                    className={`flex-1 resize-none rounded-2xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
+                    style={{ minHeight: 48, maxHeight: 180 }}
+                  />
+                  <button
+                    onClick={() => {
+                      setSidebarTab("workspace");
+                      setSidebarOpen(true);
+                    }}
+                    className="rounded-2xl border border-gray-300 px-3 py-3 text-xs font-medium dark:border-gray-700 xl:hidden"
+                  >
+                    Tools
+                  </button>
+                  <button
+                    onClick={() => void sendMessage()}
+                    disabled={loading || (!message.trim() && !file)}
+                    className={`px-4 py-3 rounded-2xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${modeColors[mode]}`}
+                  >
+                    {loading ? "Working..." : mode === "image" ? "Generate" : mode === "search" ? "Search" : "Send"}
+                  </button>
                 </div>
-              </section>
-            </div>
+              </div>
+            </section>
           </main>
         </div>
       </div>
