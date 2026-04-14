@@ -183,6 +183,11 @@ export async function POST(req: Request) {
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
   const usingAutoRouter = !modelId && Array.isArray(allowedModels) && allowedModels.length > 0 && !inferredImageRequest;
+  const fallbackModel = rawMode === "search"
+    ? SEARCH_MODEL
+    : inferredCodeRequest
+      ? CODE_MODEL
+      : CHAT_MODEL;
   const selectedModel = usingAutoRouter
     ? "openrouter/auto"
     : (modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL));
@@ -343,10 +348,10 @@ export async function POST(req: Request) {
             try {
               const parsed = JSON.parse(raw);
               if (!modelSent) {
-                const label = selectedModel === "openrouter/auto"
+                const label = effectiveModel === "openrouter/auto"
                   ? "Auto router"
-                  : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: label, routeReason, status: "Writing response..." })}\n\n`));
+                  : (MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI");
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: label, routeReason: effectiveRouteReason, status: "Writing response..." })}\n\n`));
                 modelSent = true;
               }
               const reasoning = parsed.choices?.[0]?.delta?.reasoning;

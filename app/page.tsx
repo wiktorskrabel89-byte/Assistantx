@@ -18,7 +18,6 @@ import { RoadmapPanel } from "./components/RoadmapPanel";
 import {
   CHAT_MODELS,
   CODE_MODELS,
-  DEFAULT_VOICE_LANGUAGE,
   SEARCH_MODELS,
   VOICE_LANGUAGE_OPTIONS,
 } from "@/lib/ai-config";
@@ -612,7 +611,6 @@ export default function Home() {
   const [state, setState] = useState<StoredState>(createDefaultState());
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState<Mode>("auto");
-  const [voiceOpen, setVoiceOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -2059,18 +2057,6 @@ export default function Home() {
                     <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">{copied === "share-link" ? "Link copied" : "Share"}</button>
                     <button onClick={exportMarkdown} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export MD</button>
                     <button onClick={exportJson} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export JSON</button>
-                    <button
-                      onClick={() => {
-                        if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
-                          alert("Voice mode doesn't work on Vercel serverless. Use Northflank, Render, or local dev.");
-                          return;
-                        }
-                        setVoiceOpen(true);
-                      }}
-                      className="px-3 py-2 text-sm rounded-xl border border-purple-400 text-purple-600 dark:border-purple-700 dark:text-purple-300"
-                    >
-                      Voice mode
-                    </button>
                   </div>
                 </div>
 
@@ -2123,14 +2109,6 @@ export default function Home() {
                       className={`flex-1 resize-none rounded-2xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
                       style={{ minHeight: 48, maxHeight: 180 }}
                     />
-                    <button
-                      onClick={() => void startVoiceInput()}
-                      disabled={loading}
-                      className={`p-3 rounded-2xl border transition-colors ${listening ? "bg-red-500 text-white border-red-500" : `${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}`}
-                      title="Voice input"
-                    >
-                      Mic
-                    </button>
                     <button
                       onClick={() => void sendMessage()}
                       disabled={loading || (!message.trim() && !file)}
