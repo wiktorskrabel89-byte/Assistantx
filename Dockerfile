@@ -1,8 +1,8 @@
-FROM node:22-alpine
+FROM node:22-bookworm-slim
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=optional
 
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY

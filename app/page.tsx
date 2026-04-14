@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { createClient as createSupabaseClient } from "@/lib/client";
-import { getLinkedProviders, getOAuthScopes, getProviderLabel, isOAuthProvider, type OAuthProvider } from "@/lib/integrations";
+import { getLinkedProviders, getOAuthQueryParams, getOAuthScopes, getProviderLabel, isOAuthProvider, type OAuthProvider } from "@/lib/integrations";
 import {
   clearPendingOAuthProvider,
   formatOAuthErrorMessage,
@@ -15,7 +15,6 @@ import {
 } from "@/lib/oauth-client";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
 import { RoadmapPanel } from "./components/RoadmapPanel";
-import { VoiceModal } from "./components/VoiceModal";
 import {
   CHAT_MODELS,
   CODE_MODELS,
@@ -55,7 +54,6 @@ type ChatThread = {
 type WorkspaceSettings = {
   memoryEnabled: boolean;
   memoryNotes: string;
-  voiceLanguage: string;
   styleMode: StyleMode;
   languageLock: string;
 };
@@ -185,7 +183,6 @@ function createSettings(): WorkspaceSettings {
   return {
     memoryEnabled: true,
     memoryNotes: "",
-    voiceLanguage: DEFAULT_VOICE_LANGUAGE,
     styleMode: "concise",
     languageLock: "auto",
   };
@@ -586,7 +583,6 @@ export default function Home() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [listening, setListening] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -607,10 +603,6 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const pcmChunksRef = useRef<string[]>([]);
   const importedShareRef = useRef(false);
   const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null);
   const stateRef = useRef(state);
@@ -1075,6 +1067,7 @@ export default function Home() {
 
     const options = {
       redirectTo: `${window.location.origin}/auth/callback`,
+      queryParams: getOAuthQueryParams(provider),
       scopes: getOAuthScopes(provider),
     };
     const shouldLinkIdentity = Boolean(userEmail) && !linkedProviders.includes(provider) && authProvider !== provider;
@@ -1155,76 +1148,6 @@ export default function Home() {
     setMessage(prompt);
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [handleFile]);
-
-  const startVoiceInput = useCallback(async () => {
-    if (listening) {
-      processorRef.current?.disconnect();
-      processorRef.current = null;
-      audioContextRef.current?.close();
-      audioContextRef.current = null;
-      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-      setListening(false);
-
-      const chunks = pcmChunksRef.current.splice(0);
-      if (chunks.length === 0) return;
-
-      setLoading(true);
-      try {
-        const response = await fetch("/api/stt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chunks }),
-        });
-        const data = await response.json();
-        if (data.transcript) {
-          setMessage((prev) => prev + (prev ? " " : "") + data.transcript);
-        }
-      } catch (error) {
-        console.error("STT request failed:", error);
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      pcmChunksRef.current = [];
-
-      const ctx = new AudioContext();
-      audioContextRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const processor = ctx.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      const sampleRatio = ctx.sampleRate / 16000;
-      processor.onaudioprocess = (event) => {
-        const input = event.inputBuffer.getChannelData(0);
-        const outLen = Math.floor(input.length / sampleRatio);
-        const out = new Int16Array(outLen);
-        for (let i = 0; i < outLen; i++) {
-          const sample = input[Math.floor(i * sampleRatio)];
-          out[i] = Math.max(-32768, Math.min(32767, Math.round(sample * 32767)));
-        }
-        const bytes = new Uint8Array(out.buffer);
-        let bin = "";
-        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-        pcmChunksRef.current.push(btoa(bin));
-      };
-
-      source.connect(processor);
-      processor.connect(ctx.destination);
-      setListening(true);
-    } catch (error: unknown) {
-      const name = error instanceof Error ? error.name : "";
-      const messageText = error instanceof Error ? error.message : String(error);
-      if (name === "NotAllowedError") alert("Microphone permission is blocked. Allow microphone access in the browser address bar.");
-      else if (name === "NotFoundError") alert("No microphone was found.");
-      else alert(`Microphone error: ${messageText}`);
-    }
-  }, [listening]);
 
   const consumeStream = useCallback(async (response: Response, workspaceId: string, chatId: string) => {
     const reader = response.body?.getReader();
@@ -1856,18 +1779,6 @@ export default function Home() {
                       {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
                     </select>
 
-                    <label className="text-xs text-gray-500 block">Default voice language</label>
-                    <select
-                      value={activeWorkspace.settings.voiceLanguage}
-                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                        ...workspace,
-                        settings: { ...workspace.settings, voiceLanguage: e.target.value },
-                      }))}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                    >
-                      {VOICE_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                    </select>
-
                     <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
                       <span>Use conversation memory</span>
                       <input
@@ -2187,18 +2098,6 @@ export default function Home() {
           </main>
         </div>
       </div>
-
-      {voiceOpen && (
-        <VoiceModal
-          onClose={() => setVoiceOpen(false)}
-          dark={state.dark}
-          language={activeWorkspace.settings.voiceLanguage}
-          onLanguageChange={(language) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-            ...workspace,
-            settings: { ...workspace.settings, voiceLanguage: language },
-          }))}
-        />
-      )}
     </>
   );
 }

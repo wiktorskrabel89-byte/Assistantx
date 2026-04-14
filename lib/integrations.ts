@@ -131,12 +131,30 @@ const PROVIDER_COOKIE_NAMES: Record<OAuthProvider, string> = {
 };
 
 const PROVIDER_SCOPES: Record<OAuthProvider, string> = {
-  google: "openid email profile https://www.googleapis.com/auth/drive.readonly",
+  google: [
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/calendar.readonly",
+  ].join(" "),
   github: "read:user repo",
 };
 
 export function getOAuthScopes(provider: OAuthProvider) {
   return PROVIDER_SCOPES[provider];
+}
+
+export function getOAuthQueryParams(provider: OAuthProvider) {
+  if (provider === "google") {
+    return {
+      access_type: "offline",
+      prompt: "consent",
+    };
+  }
+
+  return undefined;
 }
 
 export function getProviderTokenCookieName(provider: OAuthProvider) {
