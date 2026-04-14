@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/client";
 import { getOAuthQueryParams, getOAuthScopes, getProviderLabel, type OAuthProvider } from "@/lib/integrations";
@@ -256,9 +257,30 @@ export default function LoginPage() {
             {feedback || authError}
           </div>
 
+          <p className="mt-6 text-xs leading-6 text-slate-400">
+            By continuing, you agree to the{" "}
+            <Link href="/terms" className="text-cyan-200 underline decoration-cyan-400/50 underline-offset-4 hover:text-cyan-100">
+              Terms of Service
+            </Link>
+            {" "}and acknowledge the{" "}
+            <Link href="/privacy" className="text-cyan-200 underline decoration-cyan-400/50 underline-offset-4 hover:text-cyan-100">
+              Privacy Policy
+            </Link>
+            .
+          </p>
+
           <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-4 text-xs leading-6 text-slate-300">
             Supabase setup needed:
             add your app URL and <span className="font-mono text-slate-100">/auth/callback</span> as allowed redirect URLs, enable Google and GitHub providers, turn on manual account linking in Supabase Auth if you want to attach those providers to an existing email account, then run the SQL migration in <span className="font-mono text-slate-100">supabase/migrations/20260413_auth_workspace_sync.sql</span>.
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-400">
+            <Link href="/privacy" className="hover:text-cyan-200">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-cyan-200">
+              Terms of Service
+            </Link>
           </div>
         </section>
       </div>

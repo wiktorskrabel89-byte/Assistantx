@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type CloudSyncStatus = "checking" | "syncing" | "synced" | "error" | "local";
 
 const STATUS_STYLES: Record<CloudSyncStatus, string> = {
@@ -43,6 +45,18 @@ export function RoadmapPanel({
         <div className="font-medium text-gray-900 dark:text-gray-100">Account</div>
         <div className="mt-1 truncate">{userEmail ?? "Session loading..."}</div>
         <div className="mt-2 text-[11px] opacity-80">{cloudSyncMessage}</div>
+      </div>
+
+      <div className={`mt-4 rounded-2xl border px-3 py-3 text-xs leading-6 ${dark ? "border-gray-800 bg-gray-950 text-gray-300" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+        <div className="font-medium text-gray-900 dark:text-gray-100">Legal</div>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+          <Link href="/privacy" className="hover:text-blue-500">
+            Privacy Policy
+          </Link>
+          <Link href="/terms" className="hover:text-blue-500">
+            Terms of Service
+          </Link>
+        </div>
       </div>
     </section>
   );
