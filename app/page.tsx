@@ -95,6 +95,12 @@ type SharePayload = {
   }>;
 };
 
+type CloudSyncErrorPayload = {
+  code?: string;
+  error?: string;
+  hint?: string;
+};
+
 type ChatListProps = {
   chat: ChatEntry[];
   loading: boolean;
@@ -219,6 +225,32 @@ function createDefaultState(): StoredState {
     workspaces: [workspace],
     activeWorkspaceId: workspace.id,
     dark: false,
+  };
+}
+
+function readCloudSyncError(data: unknown): CloudSyncErrorPayload {
+  if (!data || typeof data !== "object") return {};
+  const candidate = data as Record<string, unknown>;
+  return {
+    code: typeof candidate.code === "string" ? candidate.code : undefined,
+    error: typeof candidate.error === "string" ? candidate.error : undefined,
+    hint: typeof candidate.hint === "string" ? candidate.hint : undefined,
+  };
+}
+
+function formatCloudSyncError(status: number, data: unknown, fallbackMessage: string) {
+  const payload = readCloudSyncError(data);
+
+  if (status === 401 || payload.code === "unauthorized") {
+    return {
+      status: "local" as const,
+      message: "No active session. Workspace changes stay local.",
+    };
+  }
+
+  return {
+    status: "error" as const,
+    message: payload.hint ? `${payload.error ?? fallbackMessage} ${payload.hint}` : (payload.error ?? fallbackMessage),
   };
 }
 
@@ -882,7 +914,15 @@ export default function Home() {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          throw new Error(typeof data.error === "string" ? data.error : "Failed to load cloud workspace state.");
+          const failure = formatCloudSyncError(response.status, data, "Failed to load cloud workspace state.");
+          if (failure.status === "local") {
+            setCloudSyncEnabled(false);
+            setCloudBootstrapped(true);
+            setCloudSyncStatus("local");
+            setCloudSyncMessage(failure.message);
+            return;
+          }
+          throw new Error(failure.message);
         }
 
         const remoteState = upgradeState((data as { state?: StoredState | null }).state ?? null);
@@ -908,7 +948,7 @@ export default function Home() {
         const seedData = await seedResponse.json().catch(() => ({}));
 
         if (!seedResponse.ok) {
-          throw new Error(typeof seedData.error === "string" ? seedData.error : "Failed to initialize cloud workspace state.");
+          throw new Error(formatCloudSyncError(seedResponse.status, seedData, "Failed to initialize cloud workspace state.").message);
         }
 
         if (cancelled) return;
@@ -951,7 +991,14 @@ export default function Home() {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          throw new Error(typeof data.error === "string" ? data.error : "Failed to save workspace changes.");
+          const failure = formatCloudSyncError(response.status, data, "Failed to save workspace changes.");
+          if (failure.status === "local") {
+            setCloudSyncEnabled(false);
+            setCloudSyncStatus("local");
+            setCloudSyncMessage(failure.message);
+            return;
+          }
+          throw new Error(failure.message);
         }
 
         lastSyncedPayloadRef.current = payload;
