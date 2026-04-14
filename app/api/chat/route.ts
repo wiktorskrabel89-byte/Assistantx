@@ -2,6 +2,7 @@ export const maxDuration = 60;
 
 const CODE_MODEL = "openai/gpt-5.4";
 const CHAT_MODEL = "google/gemini-2.5-flash-lite";
+const SEARCH_MODEL = "perplexity/sonar";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
@@ -182,6 +183,11 @@ export async function POST(req: Request) {
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
   const usingAutoRouter = !modelId && Array.isArray(allowedModels) && allowedModels.length > 0 && !inferredImageRequest;
+  const fallbackModel = rawMode === "search"
+    ? SEARCH_MODEL
+    : inferredCodeRequest
+      ? CODE_MODEL
+      : CHAT_MODEL;
   const selectedModel = usingAutoRouter
     ? "openrouter/auto"
     : (modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL));
@@ -275,25 +281,53 @@ export async function POST(req: Request) {
     requestBody.plugins = [{ id: "auto-router", allowed_models: allowedModels }];
   }
 
+  const sendOpenRouterRequest = async (body: Record<string, unknown>) => {
+    return fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://moje-ai.vercel.app",
+        "X-Title": "Moje AI",
+      },
+      body: JSON.stringify(body),
+    });
+  };
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Analyzing prompt..." })}\n\n`));
-
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://moje-ai.vercel.app",
-            "X-Title": "Moje AI",
-          },
-          body: JSON.stringify(requestBody),
-        });
+        let response = await sendOpenRouterRequest(requestBody);
+        let effectiveModel = selectedModel;
+        let effectiveRouteReason = routeReason;
 
         if (!response.ok) {
           const err = await response.text();
-          throw new Error(`OpenRouter error ${response.status}: ${err}`);
+          const shouldFallback = usingAutoRouter
+            && response.status === 404
+            && /No models match your request and model restrictions/i.test(err);
+
+          if (!shouldFallback) {
+            throw new Error(`OpenRouter error ${response.status}: ${err}`);
+          }
+
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Retrying with fallback model..." })}\n\n`));
+
+          const fallbackRequestBody: Record<string, unknown> = {
+            ...requestBody,
+            model: fallbackModel,
+          };
+          delete fallbackRequestBody.plugins;
+
+          response = await sendOpenRouterRequest(fallbackRequestBody);
+          effectiveModel = fallbackModel;
+          effectiveRouteReason = `${routeReason}. Auto-router found no eligible models, so a direct fallback model was used.`;
+
+          if (!response.ok) {
+            const fallbackErr = await response.text();
+            throw new Error(`OpenRouter error ${response.status}: ${fallbackErr}`);
+          }
         }
 
         const reader = response.body!.getReader();
@@ -314,10 +348,10 @@ export async function POST(req: Request) {
             try {
               const parsed = JSON.parse(raw);
               if (!modelSent) {
-                const label = selectedModel === "openrouter/auto"
+                const label = effectiveModel === "openrouter/auto"
                   ? "Auto router"
-                  : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: label, routeReason, status: "Writing response..." })}\n\n`));
+                  : (MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI");
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: label, routeReason: effectiveRouteReason, status: "Writing response..." })}\n\n`));
                 modelSent = true;
               }
               const reasoning = parsed.choices?.[0]?.delta?.reasoning;
@@ -335,10 +369,10 @@ export async function POST(req: Request) {
         }
 
         if (!modelSent) {
-          const fallback = selectedModel === "openrouter/auto"
+          const fallback = effectiveModel === "openrouter/auto"
             ? "Auto Router"
-            : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: fallback, routeReason })}\n\n`));
+            : (MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI");
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: fallback, routeReason: effectiveRouteReason })}\n\n`));
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Done" })}\n\n`));
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
