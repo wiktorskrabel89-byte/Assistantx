@@ -181,11 +181,11 @@ export async function POST(req: Request) {
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
-  const usingAutoRouter = !modelId && rawMode === "auto" && Array.isArray(allowedModels) && allowedModels.length > 0;
+  const usingAutoRouter = !modelId && Array.isArray(allowedModels) && allowedModels.length > 0 && !inferredImageRequest;
   const selectedModel = usingAutoRouter
     ? "openrouter/auto"
     : (modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL));
-  const isSearchMode = rawMode === "search" || (typeof selectedModel === "string" && selectedModel.includes("perplexity"));
+  const isSearchMode = rawMode === "search" || (!usingAutoRouter && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(message);
@@ -203,9 +203,13 @@ export async function POST(req: Request) {
     : "";
 
   const routeReason = isSearchMode
-    ? "Search mode using a research-oriented model"
+    ? (usingAutoRouter ? "Search mode with automatic model routing" : "Search mode using a research-oriented model")
     : usingAutoRouter
-      ? "Auto router choosing between your preferred chat and code models"
+      ? rawMode === "code"
+        ? "Auto router choosing the best coding model"
+        : rawMode === "chat"
+          ? "Auto router choosing the best chat model"
+          : "Auto router choosing the best model for this request"
       : modelId
         ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}`
         : inferredImageRequest
@@ -310,11 +314,10 @@ export async function POST(req: Request) {
             try {
               const parsed = JSON.parse(raw);
               if (!modelSent) {
-                const routed = parsed.model as string | undefined;
-                const label = routed
-                  ? (MODEL_LABELS[routed] ?? routed.split("/").pop() ?? "Auto Router")
-                  : (selectedModel === "openrouter/auto" ? "Auto Router" : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI"));
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: selectedModel === "openrouter/auto" ? `Auto • ${label}` : label, routeReason, status: "Writing response..." })}\n\n`));
+                const label = selectedModel === "openrouter/auto"
+                  ? "Auto router"
+                  : (MODEL_LABELS[selectedModel] ?? selectedModel.split("/").pop() ?? "AI");
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: label, routeReason, status: "Writing response..." })}\n\n`));
                 modelSent = true;
               }
               const reasoning = parsed.choices?.[0]?.delta?.reasoning;
