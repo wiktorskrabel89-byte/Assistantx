@@ -31,6 +31,7 @@ type Mode = "auto" | "code" | "chat" | "search" | "image" | "upload";
 type StyleMode = "concise" | "detailed" | "step-by-step";
 type ResponseAction = "summarize" | "checklist" | "translate" | "commit";
 type CloudSyncStatus = "checking" | "syncing" | "synced" | "error" | "local";
+type SidebarTab = "chat" | "workspace" | "integrations" | "account";
 
 type ChatEntry = {
   id: string;
@@ -587,6 +588,7 @@ export default function Home() {
   const [cloudSyncMessage, setCloudSyncMessage] = useState("Checking session...");
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
   const [cloudBootstrapped, setCloudBootstrapped] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1605,11 +1607,18 @@ export default function Home() {
     upload: "bg-orange-500",
   };
 
+  const sidebarTabs: Array<{ id: SidebarTab; label: string }> = [
+    { id: "chat", label: "Chat" },
+    { id: "workspace", label: "Workspace" },
+    { id: "integrations", label: "Integrations" },
+    { id: "account", label: "Account" },
+  ];
+
   return (
     <>
       <div className={`min-h-screen ${bg}`}>
         <div className="mx-auto max-w-[1700px] px-4 py-4 h-screen grid gap-4 xl:grid-cols-[290px,minmax(0,1fr),360px] lg:grid-cols-[290px,minmax(0,1fr)] grid-cols-1">
-          <aside className={`rounded-3xl border p-4 flex flex-col gap-4 min-h-0 overflow-y-auto ${cardBg}`}>
+          <aside className={`rounded-3xl border p-4 flex flex-col gap-4 min-h-0 overflow-hidden ${cardBg}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-xl font-bold">Moje AI</h1>
@@ -1624,239 +1633,276 @@ export default function Home() {
                 </button>
               </div>
             </div>
-
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold">Workspaces</h2>
-                <button onClick={createWorkspaceAction} className="text-xs text-blue-500 hover:underline">New</button>
-              </div>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {state.workspaces.map((workspace) => (
-                  <button
-                    key={workspace.id}
-                    onClick={() => setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }))}
-                    className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
-                      workspace.id === activeWorkspace.id
-                        ? state.dark
-                          ? "border-blue-500 bg-blue-950/30"
-                          : "border-blue-400 bg-blue-50"
-                        : state.dark
-                          ? "border-gray-800 hover:bg-gray-800"
-                          : "border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{workspace.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">{workspace.chats.length} chats</div>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <span
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            renameWorkspace(workspace.id);
-                          }}
-                          className="text-xs text-gray-400 hover:text-blue-500"
-                        >
-                          Rename
-                        </span>
-                        <span
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            deleteWorkspace(workspace.id);
-                          }}
-                          className="text-xs text-gray-400 hover:text-red-500"
-                        >
-                          Delete
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3 min-h-0 flex flex-col">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold">Chats</h2>
-                <button onClick={createChatAction} className="text-xs text-blue-500 hover:underline">New</button>
-              </div>
-              <div className="space-y-2 overflow-y-auto min-h-0">
-                {activeWorkspace.chats.map((chat) => (
-                  <button
-                    key={chat.id}
-                    onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }))}
-                    className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
-                      chat.id === activeChat.id
-                        ? state.dark
-                          ? "border-violet-500 bg-violet-950/30"
-                          : "border-violet-400 bg-violet-50"
-                        : state.dark
-                          ? "border-gray-800 hover:bg-gray-800"
-                          : "border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{chat.title}</div>
-                        <div className="text-xs text-gray-500 mt-1">{chat.messages.length} messages</div>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <span
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            renameChat(chat.id);
-                          }}
-                          className="text-xs text-gray-400 hover:text-blue-500"
-                        >
-                          Rename
-                        </span>
-                        <span
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            deleteChat(chat.id);
-                          }}
-                          className="text-xs text-gray-400 hover:text-red-500"
-                        >
-                          Delete
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3 overflow-y-auto">
-              <h2 className="text-sm font-semibold">Workspace memory and models</h2>
-
-              <label className="text-xs text-gray-500 block">Chat model</label>
-              <select
-                value={activeWorkspace.settings.chatModel}
-                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                  ...workspace,
-                  settings: { ...workspace.settings, chatModel: e.target.value },
-                }))}
-                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-              >
-                {CHAT_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-              </select>
-
-              <label className="text-xs text-gray-500 block">Code model</label>
-              <select
-                value={activeWorkspace.settings.codeModel}
-                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                  ...workspace,
-                  settings: { ...workspace.settings, codeModel: e.target.value },
-                }))}
-                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-              >
-                {CODE_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-              </select>
-
-              <label className="text-xs text-gray-500 block">Search model</label>
-              <select
-                value={activeWorkspace.settings.searchModel}
-                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                  ...workspace,
-                  settings: { ...workspace.settings, searchModel: e.target.value },
-                }))}
-                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-              >
-                {SEARCH_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-              </select>
-
-              <label className="text-xs text-gray-500 block">Response style</label>
-              <select
-                value={activeWorkspace.settings.styleMode}
-                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                  ...workspace,
-                  settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
-                }))}
-                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-              >
-                <option value="concise">Concise</option>
-                <option value="detailed">Detailed</option>
-                <option value="step-by-step">Step by step</option>
-              </select>
-
-              <label className="text-xs text-gray-500 block">Reply language</label>
-              <select
-                value={activeWorkspace.settings.languageLock}
-                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                  ...workspace,
-                  settings: { ...workspace.settings, languageLock: e.target.value },
-                }))}
-                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-              >
-                {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-              </select>
-
-              <label className="text-xs text-gray-500 block">Default voice language</label>
-              <select
-                value={activeWorkspace.settings.voiceLanguage}
-                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                  ...workspace,
-                  settings: { ...workspace.settings, voiceLanguage: e.target.value },
-                }))}
-                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-              >
-                {VOICE_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-              </select>
-
-              <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
-                <span>Use conversation memory</span>
-                <input
-                  type="checkbox"
-                  checked={activeWorkspace.settings.memoryEnabled}
-                  onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                    ...workspace,
-                    settings: { ...workspace.settings, memoryEnabled: e.target.checked },
-                  }))}
-                />
-              </label>
-
-              <label className="text-xs text-gray-500 block">Pinned memory for this workspace</label>
-              <textarea
-                value={activeWorkspace.settings.memoryNotes}
-                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                  ...workspace,
-                  settings: { ...workspace.settings, memoryNotes: e.target.value },
-                }))}
-                placeholder="Facts to remember across chats in this workspace, e.g. preferred tone, project stack, user role..."
-                rows={4}
-                className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-              />
-
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, settings: { ...workspace.settings, memoryNotes: "" } }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-                  Clear pinned memory
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 p-1 dark:border-gray-800">
+              {sidebarTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSidebarTab(tab.id)}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                    sidebarTab === tab.id
+                      ? state.dark
+                        ? "bg-blue-950/40 text-blue-200"
+                        : "bg-blue-50 text-blue-700"
+                      : state.dark
+                        ? "text-gray-300 hover:bg-gray-800"
+                        : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {tab.label}
                 </button>
-                <button onClick={clearActiveChat} className="text-xs rounded-xl border px-3 py-2 border-red-300 text-red-500 dark:border-red-900">
-                  Clear active chat
-                </button>
-              </div>
+              ))}
             </div>
 
-            <RoadmapPanel
-              dark={state.dark}
-              userEmail={userEmail}
-              cloudSyncStatus={cloudSyncStatus}
-              cloudSyncMessage={cloudSyncMessage}
-            />
+            <div className="flex-1 min-h-0">
+              {sidebarTab === "chat" && (
+                <div className="h-full min-h-0 flex flex-col gap-4">
+                  <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-semibold">Workspaces</h2>
+                      <button onClick={createWorkspaceAction} className="text-xs text-blue-500 hover:underline">New</button>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {state.workspaces.map((workspace) => (
+                        <button
+                          key={workspace.id}
+                          onClick={() => setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }))}
+                          className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                            workspace.id === activeWorkspace.id
+                              ? state.dark
+                                ? "border-blue-500 bg-blue-950/30"
+                                : "border-blue-400 bg-blue-50"
+                              : state.dark
+                                ? "border-gray-800 hover:bg-gray-800"
+                                : "border-gray-200 hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{workspace.name}</div>
+                              <div className="text-xs text-gray-500 mt-1">{workspace.chats.length} chats</div>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              <span
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  renameWorkspace(workspace.id);
+                                }}
+                                className="text-xs text-gray-400 hover:text-blue-500"
+                              >
+                                Rename
+                              </span>
+                              <span
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  deleteWorkspace(workspace.id);
+                                }}
+                                className="text-xs text-gray-400 hover:text-red-500"
+                              >
+                                Delete
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-            <IntegrationsPanel
-              dark={state.dark}
-              linkedProviders={linkedProviders}
-              authProvider={authProvider}
-              oauthLoading={oauthLoading}
-              copied={copied}
-              hasArtifacts={artifacts.length > 0}
-              onConnectProvider={(provider) => void signInWithProvider(provider)}
-              onImportFile={stageImportedFile}
-              onCopyVsCodePrompt={() => void copyVsCodePrompt()}
-              onDownloadVsCodeBundle={downloadVsCodeBundle}
-            />
+                  <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3 min-h-0 flex flex-col">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-semibold">Chats</h2>
+                      <button onClick={createChatAction} className="text-xs text-blue-500 hover:underline">New</button>
+                    </div>
+                    <div className="space-y-2 overflow-y-auto min-h-0">
+                      {activeWorkspace.chats.map((chat) => (
+                        <button
+                          key={chat.id}
+                          onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }))}
+                          className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                            chat.id === activeChat.id
+                              ? state.dark
+                                ? "border-violet-500 bg-violet-950/30"
+                                : "border-violet-400 bg-violet-50"
+                              : state.dark
+                                ? "border-gray-800 hover:bg-gray-800"
+                                : "border-gray-200 hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{chat.title}</div>
+                              <div className="text-xs text-gray-500 mt-1">{chat.messages.length} messages</div>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              <span
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  renameChat(chat.id);
+                                }}
+                                className="text-xs text-gray-400 hover:text-blue-500"
+                              >
+                                Rename
+                              </span>
+                              <span
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  deleteChat(chat.id);
+                                }}
+                                className="text-xs text-gray-400 hover:text-red-500"
+                              >
+                                Delete
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {sidebarTab === "workspace" && (
+                <div className="h-full min-h-0 overflow-y-auto pr-1">
+                  <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                    <h2 className="text-sm font-semibold">Workspace memory and models</h2>
+
+                    <label className="text-xs text-gray-500 block">Chat model</label>
+                    <select
+                      value={activeWorkspace.settings.chatModel}
+                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                        ...workspace,
+                        settings: { ...workspace.settings, chatModel: e.target.value },
+                      }))}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                    >
+                      {CHAT_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+                    </select>
+
+                    <label className="text-xs text-gray-500 block">Code model</label>
+                    <select
+                      value={activeWorkspace.settings.codeModel}
+                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                        ...workspace,
+                        settings: { ...workspace.settings, codeModel: e.target.value },
+                      }))}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                    >
+                      {CODE_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+                    </select>
+
+                    <label className="text-xs text-gray-500 block">Search model</label>
+                    <select
+                      value={activeWorkspace.settings.searchModel}
+                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                        ...workspace,
+                        settings: { ...workspace.settings, searchModel: e.target.value },
+                      }))}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                    >
+                      {SEARCH_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+                    </select>
+
+                    <label className="text-xs text-gray-500 block">Response style</label>
+                    <select
+                      value={activeWorkspace.settings.styleMode}
+                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                        ...workspace,
+                        settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
+                      }))}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                    >
+                      <option value="concise">Concise</option>
+                      <option value="detailed">Detailed</option>
+                      <option value="step-by-step">Step by step</option>
+                    </select>
+
+                    <label className="text-xs text-gray-500 block">Reply language</label>
+                    <select
+                      value={activeWorkspace.settings.languageLock}
+                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                        ...workspace,
+                        settings: { ...workspace.settings, languageLock: e.target.value },
+                      }))}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                    >
+                      {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+                    </select>
+
+                    <label className="text-xs text-gray-500 block">Default voice language</label>
+                    <select
+                      value={activeWorkspace.settings.voiceLanguage}
+                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                        ...workspace,
+                        settings: { ...workspace.settings, voiceLanguage: e.target.value },
+                      }))}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                    >
+                      {VOICE_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+                    </select>
+
+                    <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
+                      <span>Use conversation memory</span>
+                      <input
+                        type="checkbox"
+                        checked={activeWorkspace.settings.memoryEnabled}
+                        onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                          ...workspace,
+                          settings: { ...workspace.settings, memoryEnabled: e.target.checked },
+                        }))}
+                      />
+                    </label>
+
+                    <label className="text-xs text-gray-500 block">Pinned memory for this workspace</label>
+                    <textarea
+                      value={activeWorkspace.settings.memoryNotes}
+                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                        ...workspace,
+                        settings: { ...workspace.settings, memoryNotes: e.target.value },
+                      }))}
+                      placeholder="Facts to remember across chats in this workspace, e.g. preferred tone, project stack, user role..."
+                      rows={4}
+                      className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                    />
+
+                    <div className="flex gap-2 flex-wrap">
+                      <button onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, settings: { ...workspace.settings, memoryNotes: "" } }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+                        Clear pinned memory
+                      </button>
+                      <button onClick={clearActiveChat} className="text-xs rounded-xl border px-3 py-2 border-red-300 text-red-500 dark:border-red-900">
+                        Clear active chat
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {sidebarTab === "integrations" && (
+                <div className="h-full min-h-0 overflow-y-auto pr-1">
+                  <IntegrationsPanel
+                    dark={state.dark}
+                    linkedProviders={linkedProviders}
+                    authProvider={authProvider}
+                    oauthLoading={oauthLoading}
+                    copied={copied}
+                    hasArtifacts={artifacts.length > 0}
+                    onConnectProvider={(provider) => void signInWithProvider(provider)}
+                    onImportFile={stageImportedFile}
+                    onCopyVsCodePrompt={() => void copyVsCodePrompt()}
+                    onDownloadVsCodeBundle={downloadVsCodeBundle}
+                  />
+                </div>
+              )}
+
+              {sidebarTab === "account" && (
+                <div className="h-full min-h-0 overflow-y-auto pr-1">
+                  <RoadmapPanel
+                    dark={state.dark}
+                    userEmail={userEmail}
+                    cloudSyncStatus={cloudSyncStatus}
+                    cloudSyncMessage={cloudSyncMessage}
+                  />
+                </div>
+              )}
+            </div>
           </aside>
 
           <main className={`rounded-3xl border flex flex-col min-h-0 ${cardBg}`}>
