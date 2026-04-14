@@ -1,5 +1,6 @@
 "use client";
 
+import { Braces, MessageSquareText, PlugZap, SlidersHorizontal, UserRound, type LucideIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -1614,18 +1615,18 @@ export default function Home() {
     upload: "Upload mode analyzes the file you staged in the tools tab.",
   };
 
-  const sidebarTabs: Array<{ id: SidebarTab; label: string; short: string }> = [
-    { id: "chat", label: "Chats", short: "Chat" },
-    { id: "workspace", label: "Tools", short: "Tools" },
-    { id: "integrations", label: "Apps", short: "Apps" },
-    { id: "artifacts", label: "Artifacts", short: "Code" },
-    { id: "account", label: "Account", short: "You" },
+  const sidebarTabs: Array<{ id: SidebarTab; label: string; icon: LucideIcon }> = [
+    { id: "chat", label: "Chats", icon: MessageSquareText },
+    { id: "workspace", label: "Tools", icon: SlidersHorizontal },
+    { id: "integrations", label: "Apps", icon: PlugZap },
+    { id: "artifacts", label: "Artifacts", icon: Braces },
+    { id: "account", label: "Account", icon: UserRound },
   ];
 
   return (
     <>
       <div className={`min-h-screen ${bg}`}>
-        <div className="mx-auto relative grid min-h-screen max-w-[1880px] grid-cols-1 gap-4 px-4 py-4 xl:h-screen xl:grid-cols-[minmax(360px,430px),minmax(0,1fr)]">
+        <div className="mx-auto relative grid min-h-screen max-w-[1880px] grid-cols-1 gap-4 px-4 py-4 xl:h-screen xl:grid-cols-[minmax(320px,370px),minmax(0,1fr)]">
           <button
             type="button"
             aria-label="Close sidebar"
@@ -1633,7 +1634,7 @@ export default function Home() {
             className={`fixed inset-0 z-30 bg-black/50 transition-opacity xl:hidden ${sidebarOpen ? "opacity-100 pointer-events-auto" : "pointer-events-none opacity-0"}`}
           />
 
-          <aside className={`fixed inset-y-4 left-4 z-40 w-[min(28rem,calc(100vw-2rem))] min-h-0 overflow-hidden rounded-3xl border transition-transform duration-200 xl:static xl:w-auto xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
+          <aside className={`fixed inset-y-4 left-4 z-40 w-[min(24rem,calc(100vw-2rem))] min-h-0 overflow-hidden rounded-3xl border transition-transform duration-200 xl:static xl:w-auto xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
             <div className="flex h-full min-h-0 flex-col">
               <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-800">
                 <div className="min-w-0">
@@ -1650,14 +1651,18 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="grid min-h-0 flex-1 grid-cols-[92px,minmax(0,1fr)]">
+              <div className="grid min-h-0 flex-1 grid-cols-[72px,minmax(0,1fr)]">
                 <div className="border-r border-gray-200 p-2 dark:border-gray-800">
                   <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
-                    {sidebarTabs.map((tab) => (
+                    {sidebarTabs.map((tab) => {
+                      const Icon = tab.icon;
+                      return (
                       <button
                         key={tab.id}
                         onClick={() => setSidebarTab(tab.id)}
-                        className={`rounded-2xl px-2 py-3 text-center transition-colors ${
+                        title={tab.label}
+                        aria-label={tab.label}
+                        className={`relative flex h-14 items-center justify-center rounded-2xl transition-colors ${
                           sidebarTab === tab.id
                             ? state.dark
                               ? "bg-blue-950/40 text-blue-200"
@@ -1667,10 +1672,12 @@ export default function Home() {
                               : "text-gray-600 hover:bg-gray-100"
                         }`}
                       >
-                        <span className="block text-[10px] uppercase tracking-[0.18em] opacity-70">{tab.short}</span>
-                        <span className="mt-1 block text-sm font-semibold leading-4">{tab.label}</span>
+                        <Icon className="h-5 w-5" strokeWidth={2.1} />
+                        {sidebarTab === tab.id ? <span className="absolute right-2 h-2 w-2 rounded-full bg-current opacity-75" /> : null}
+                        <span className="sr-only">{tab.label}</span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1788,28 +1795,22 @@ export default function Home() {
                   )}
 
                   {sidebarTab === "workspace" && (
-                    <div className="space-y-4">
-                      <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950 text-gray-300" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+                    <div className="space-y-3">
+                      <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/70" : "border-gray-200 bg-gray-50"}`}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Tools</h2>
-                            <p className="mt-1 text-xs leading-5 opacity-80">Everything that changes the chat behavior lives here, so the main panel stays focused on the conversation.</p>
+                            <p className="mt-1 text-xs text-gray-500">Pick a mode, drop a shortcut, or stage a file.</p>
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium text-white ${modeColors[mode]}`}>{modeLabels[mode]}</span>
                         </div>
-                        <div className={`mt-3 rounded-2xl border px-3 py-3 text-xs leading-5 ${state.dark ? "border-gray-800 bg-gray-900 text-gray-400" : "border-gray-200 bg-white text-gray-500"}`}>
-                          {modeDescriptions[mode]}
-                        </div>
-                      </div>
 
-                      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Modes</div>
-                        <div className="space-y-2">
+                        <div className="mt-3 grid grid-cols-2 gap-2">
                           {MODE_PANEL_OPTIONS.map((option) => (
                             <button
                               key={option.id}
                               onClick={() => setMode(option.id)}
-                              className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                              className={`w-full rounded-2xl border px-3 py-2.5 text-left transition-colors ${
                                 mode === option.id
                                   ? `${modeColors[option.id]} text-white border-transparent`
                                   : state.dark
@@ -1819,24 +1820,16 @@ export default function Home() {
                             >
                               <div className="flex items-center justify-between gap-3">
                                 <span className="font-medium">{option.label}</span>
-                                {mode === option.id && <span className="text-[11px] uppercase tracking-[0.16em] opacity-80">Live</span>}
+                                {mode === option.id && <span className="text-[10px] uppercase tracking-[0.16em] opacity-80">On</span>}
                               </div>
-                              <p className={`mt-1 text-xs leading-5 ${mode === option.id ? "text-white/80" : "text-gray-500"}`}>{option.description}</p>
                             </button>
                           ))}
                         </div>
-                      </div>
 
-                      <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <h2 className="text-sm font-semibold">Quick starts</h2>
-                            <p className="mt-1 text-xs text-gray-500">Drop a starter into the composer.</p>
-                          </div>
-                          <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${state.dark ? "bg-gray-800 text-gray-300" : "border border-gray-200 bg-white text-gray-600"}`}>
-                            {modeLabels[mode]}
-                          </span>
+                        <div className={`mt-3 rounded-2xl border px-3 py-2 text-xs leading-5 ${state.dark ? "border-gray-800 bg-gray-900 text-gray-400" : "border-gray-200 bg-white text-gray-500"}`}>
+                          {modeDescriptions[mode]}
                         </div>
+
                         <div className="mt-3 flex flex-wrap gap-2">
                           {QUICK_CHIPS.map((chip) => (
                             <button
@@ -1856,8 +1849,8 @@ export default function Home() {
                       <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <h2 className="text-sm font-semibold">Files</h2>
-                            <p className="mt-1 text-xs text-gray-500">Attach a file when you want file analysis in the chat.</p>
+                            <h2 className="text-sm font-semibold">File</h2>
+                            <p className="mt-1 text-xs text-gray-500">Attach one file for analysis.</p>
                           </div>
                           <button
                             onClick={() => fileInputRef.current?.click()}
@@ -1913,38 +1906,39 @@ export default function Home() {
                       </div>
 
                       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                        <h2 className="text-sm font-semibold">Workspace settings</h2>
+                        <h2 className="text-sm font-semibold">Preferences</h2>
 
-                        <div className={`rounded-2xl border px-3 py-3 text-sm ${state.dark ? "border-gray-800 bg-gray-950 text-gray-300" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
-                          <div className="font-medium text-gray-900 dark:text-gray-100">Model routing</div>
-                          <p className="mt-1 text-xs leading-5 opacity-80">Manual model picking is off. The app routes requests automatically based on the selected mode.</p>
+                        <div className="grid grid-cols-1 gap-3">
+                          <div>
+                            <label className="mb-1 block text-xs text-gray-500">Response style</label>
+                            <select
+                              value={activeWorkspace.settings.styleMode}
+                              onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                                ...workspace,
+                                settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
+                              }))}
+                              className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                            >
+                              <option value="concise">Concise</option>
+                              <option value="detailed">Detailed</option>
+                              <option value="step-by-step">Step by step</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-xs text-gray-500">Reply language</label>
+                            <select
+                              value={activeWorkspace.settings.languageLock}
+                              onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                                ...workspace,
+                                settings: { ...workspace.settings, languageLock: e.target.value },
+                              }))}
+                              className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                            >
+                              {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+                            </select>
+                          </div>
                         </div>
-
-                        <label className="text-xs text-gray-500 block">Response style</label>
-                        <select
-                          value={activeWorkspace.settings.styleMode}
-                          onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                            ...workspace,
-                            settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
-                          }))}
-                          className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                        >
-                          <option value="concise">Concise</option>
-                          <option value="detailed">Detailed</option>
-                          <option value="step-by-step">Step by step</option>
-                        </select>
-
-                        <label className="text-xs text-gray-500 block">Reply language</label>
-                        <select
-                          value={activeWorkspace.settings.languageLock}
-                          onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                            ...workspace,
-                            settings: { ...workspace.settings, languageLock: e.target.value },
-                          }))}
-                          className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                        >
-                          {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                        </select>
 
                         <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
                           <span>Use conversation memory</span>
@@ -1958,15 +1952,14 @@ export default function Home() {
                           />
                         </label>
 
-                        <label className="text-xs text-gray-500 block">Pinned memory for this workspace</label>
                         <textarea
                           value={activeWorkspace.settings.memoryNotes}
                           onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
                             ...workspace,
                             settings: { ...workspace.settings, memoryNotes: e.target.value },
                           }))}
-                          placeholder="Facts to remember across chats in this workspace, e.g. preferred tone, project stack, user role..."
-                          rows={4}
+                          placeholder="Pinned memory for this workspace"
+                          rows={3}
                           className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
                         />
 
