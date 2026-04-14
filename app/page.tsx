@@ -19,9 +19,6 @@ import { VoiceModal } from "./components/VoiceModal";
 import {
   CHAT_MODELS,
   CODE_MODELS,
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_CODE_MODEL,
-  DEFAULT_SEARCH_MODEL,
   DEFAULT_VOICE_LANGUAGE,
   SEARCH_MODELS,
   VOICE_LANGUAGE_OPTIONS,
@@ -31,7 +28,7 @@ type Mode = "auto" | "code" | "chat" | "search" | "image" | "upload";
 type StyleMode = "concise" | "detailed" | "step-by-step";
 type ResponseAction = "summarize" | "checklist" | "translate" | "commit";
 type CloudSyncStatus = "checking" | "syncing" | "synced" | "error" | "local";
-type SidebarTab = "chat" | "workspace" | "integrations" | "account";
+type SidebarTab = "chat" | "workspace" | "integrations" | "artifacts" | "account";
 
 type ChatEntry = {
   id: string;
@@ -56,9 +53,6 @@ type ChatThread = {
 };
 
 type WorkspaceSettings = {
-  chatModel: string;
-  codeModel: string;
-  searchModel: string;
   memoryEnabled: boolean;
   memoryNotes: string;
   voiceLanguage: string;
@@ -129,7 +123,6 @@ type ArtifactPanelProps = {
 
 const STORAGE_KEY = "moje-ai.workspace-state.v3";
 const NEW_CHAT_TITLE = "New chat";
-const LEGACY_DEFAULT_CODE_MODEL = "deepseek/deepseek-v3.2";
 const TEXT_LANGUAGE_OPTIONS = [
   { code: "auto", label: "Auto detect" },
   ...VOICE_LANGUAGE_OPTIONS.filter((option) => option.code !== "auto"),
@@ -141,6 +134,34 @@ const QUICK_CHIPS: Array<{ label: string; text: string; mode?: Mode }> = [
   { label: "Generate tests", text: "Generate tests for: ", mode: "code" },
   { label: "Plan steps", text: "Break this into clear implementation steps: ", mode: "chat" },
 ];
+type AutoRoutedMode = Exclude<Mode, "image" | "upload">;
+
+const MODE_PANEL_OPTIONS: Array<{ id: Mode; label: string; description: string }> = [
+  { id: "auto", label: "Auto", description: "Let the router pick the best lane for the prompt." },
+  { id: "chat", label: "Chat", description: "Bias toward general conversation and writing." },
+  { id: "code", label: "Code", description: "Bias toward coding, debugging, and reviews." },
+  { id: "search", label: "Search", description: "Bias toward web-aware research answers." },
+  { id: "image", label: "Image", description: "Generate an image from a prompt." },
+];
+
+const AUTO_ROUTER_ALLOWED_MODELS: Record<AutoRoutedMode, string[]> = {
+  auto: Array.from(new Set([...CHAT_MODELS, ...CODE_MODELS].map((model) => model.id))),
+  chat: CHAT_MODELS.map((model) => model.id),
+  code: CODE_MODELS.map((model) => model.id),
+  search: SEARCH_MODELS.map((model) => model.id),
+};
+
+function getAllowedModels(mode: Mode) {
+  switch (mode) {
+    case "auto":
+    case "chat":
+    case "code":
+    case "search":
+      return AUTO_ROUTER_ALLOWED_MODELS[mode];
+    default:
+      return undefined;
+  }
+}
 
 function createId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -162,9 +183,6 @@ function createMessage(overrides: Partial<ChatEntry>): ChatEntry {
 
 function createSettings(): WorkspaceSettings {
   return {
-    chatModel: DEFAULT_CHAT_MODEL,
-    codeModel: DEFAULT_CODE_MODEL,
-    searchModel: DEFAULT_SEARCH_MODEL,
     memoryEnabled: true,
     memoryNotes: "",
     voiceLanguage: DEFAULT_VOICE_LANGUAGE,
@@ -308,10 +326,6 @@ function upgradeState(value: StoredState | null): StoredState | null {
       ...workspace.settings,
     };
 
-    if (settings.codeModel === LEGACY_DEFAULT_CODE_MODEL) {
-      settings.codeModel = DEFAULT_CODE_MODEL;
-    }
-
     return {
       ...workspace,
       chats,
@@ -355,7 +369,7 @@ const ChatList = memo(function ChatList({
     <div className="flex-1 overflow-y-auto space-y-4 pr-1">
       {chat.length === 0 && (
         <div className="text-center text-gray-400 mt-16 text-lg">
-          Start a chat, switch models, search the web, or upload a file.
+          Start a chat, use auto routing, search the web, or upload a file.
         </div>
       )}
       {chat.map((entry, index) => (
@@ -457,7 +471,6 @@ const ChatList = memo(function ChatList({
               )}
 
               <div className="flex flex-wrap items-center gap-2 ml-1 text-xs text-gray-400">
-                {entry.model && <span>{entry.model}</span>}
                 {entry.routeReason && <span>{entry.routeReason}</span>}
                 {entry.ai && !entry.imageUrl && (
                   <>
@@ -571,6 +584,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState<Mode>("auto");
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -734,6 +748,44 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", state.dark);
   }, [state.dark]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (event.matches) {
+        setSidebarOpen(false);
+      }
+    };
+
+    handleChange(mediaQuery);
+    const listener = (event: MediaQueryListEvent) => handleChange(event);
+    mediaQuery.addEventListener("change", listener);
+
+    return () => {
+      mediaQuery.removeEventListener("change", listener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !sidebarOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSidebarOpen(false);
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [sidebarOpen]);
 
   const recoverFromInterruptedOAuth = useCallback((provider: OAuthProvider) => {
     clearPendingOAuthProvider();
@@ -1095,6 +1147,7 @@ export default function Home() {
       setFilePreview(null);
     }
     setMode("upload");
+    setSidebarOpen(false);
   }, [filePreview]);
 
   const stageImportedFile = useCallback((nextFile: File, prompt: string) => {
@@ -1251,19 +1304,6 @@ export default function Home() {
     }
   }, [updateLastMessage]);
 
-  const currentModelId = useMemo(() => {
-    switch (mode) {
-      case "chat":
-        return activeWorkspace.settings.chatModel;
-      case "code":
-        return activeWorkspace.settings.codeModel;
-      case "search":
-        return activeWorkspace.settings.searchModel;
-      default:
-        return null;
-    }
-  }, [activeWorkspace.settings, mode]);
-
   const sendMessage = useCallback(async () => {
     if ((!message && !file) || loading) return;
 
@@ -1271,6 +1311,7 @@ export default function Home() {
     const chatId = activeChat.id;
     const userMsg = message.trim();
     const activeSettings = activeWorkspace.settings;
+    const allowedModels = getAllowedModels(mode);
     const history = activeSettings.memoryEnabled
       ? activeChat.messages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
       : [];
@@ -1286,7 +1327,7 @@ export default function Home() {
       const pending = createMessage({
         user: userMsg,
         ai: "",
-        model: "Pollinations.ai (Free)",
+        model: null,
         status: "Generating image...",
         routeReason: "Manual image mode",
       });
@@ -1351,7 +1392,7 @@ export default function Home() {
     const pending = createMessage({
       user: userMsg,
       ai: "",
-      model: currentModelId,
+      model: null,
       fileName: file?.name ?? undefined,
       status: "Analyzing prompt...",
     });
@@ -1362,22 +1403,13 @@ export default function Home() {
     }));
 
     try {
-      const modelId = mode === "code"
-        ? activeSettings.codeModel
-        : mode === "chat"
-          ? activeSettings.chatModel
-          : mode === "search"
-            ? activeSettings.searchModel
-            : undefined;
-
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMsg,
           mode,
-          modelId,
-          allowedModels: mode === "auto" ? [activeSettings.chatModel, activeSettings.codeModel] : undefined,
+          allowedModels,
           history,
           memoryNotes: activeSettings.memoryNotes,
           style: activeSettings.styleMode,
@@ -1396,7 +1428,6 @@ export default function Home() {
     activeWorkspace.id,
     activeWorkspace.settings,
     consumeStream,
-    currentModelId,
     file,
     filePreview,
     loading,
@@ -1415,6 +1446,7 @@ export default function Home() {
       workspaces: [workspace, ...prev.workspaces],
       activeWorkspaceId: workspace.id,
     }));
+    setSidebarOpen(false);
   }, [state.workspaces.length]);
 
   const renameWorkspace = useCallback((workspaceId: string) => {
@@ -1444,6 +1476,7 @@ export default function Home() {
       chats: [chat, ...workspace.chats],
       activeChatId: chat.id,
     }));
+    setSidebarOpen(false);
   }, [activeWorkspace.id, updateWorkspace]);
 
   const renameChat = useCallback((chatId: string) => {
@@ -1489,7 +1522,7 @@ export default function Home() {
     for (const entry of activeChat.messages) {
       markdown.push(`\n## You\n${entry.user}`);
       if (entry.reasoning) markdown.push(`\n### Reasoning\n${entry.reasoning}`);
-      markdown.push(`\n## AI${entry.model ? ` (${entry.model})` : ""}\n${entry.ai}`);
+      markdown.push(`\n## AI\n${entry.ai}`);
       if (entry.routeReason) markdown.push(`\nRoute: ${entry.routeReason}`);
       if (entry.imageUrl) markdown.push(`\n![Generated image](${entry.imageUrl})`);
     }
@@ -1520,9 +1553,7 @@ export default function Home() {
       `## Workspace`,
       `- Workspace: ${activeWorkspace.name}`,
       `- Chat: ${activeChat.title}`,
-      `- Chat model: ${activeWorkspace.settings.chatModel}`,
-      `- Code model: ${activeWorkspace.settings.codeModel}`,
-      `- Search model: ${activeWorkspace.settings.searchModel}`,
+      `- Routing: Automatic model routing`,
       `- Style: ${activeWorkspace.settings.styleMode}`,
       `- Language lock: ${activeWorkspace.settings.languageLock}`,
     ];
@@ -1606,38 +1637,62 @@ export default function Home() {
     upload: "bg-orange-500",
   };
 
+  const modeDescriptions: Record<Mode, string> = {
+    auto: "The router decides between chat and code models based on your prompt.",
+    code: "The router stays focused on coding-heavy tasks, fixes, and implementation work.",
+    chat: "The router stays focused on general conversation, writing, and planning.",
+    search: "The router stays focused on research-oriented answers with current web context.",
+    image: "Image mode skips chat routing and sends your prompt straight to image generation.",
+    upload: "Upload mode analyzes the file you staged in the side rail.",
+  };
+
+  const activityLabel = mode === "image"
+    ? "Direct image generation"
+    : mode === "upload"
+      ? "File analysis"
+      : "Automatic routing";
+
   const sidebarTabs: Array<{ id: SidebarTab; label: string }> = [
-    { id: "chat", label: "Chat" },
+    { id: "chat", label: "Chats" },
     { id: "workspace", label: "Workspace" },
     { id: "integrations", label: "Integrations" },
+    { id: "artifacts", label: "Artifacts" },
     { id: "account", label: "Account" },
   ];
 
   return (
     <>
       <div className={`min-h-screen ${bg}`}>
-        <div className="mx-auto max-w-[1700px] px-4 py-4 h-screen grid gap-4 xl:grid-cols-[290px,minmax(0,1fr),360px] lg:grid-cols-[290px,minmax(0,1fr)] grid-cols-1">
-          <aside className={`rounded-3xl border p-4 flex flex-col gap-4 min-h-0 overflow-hidden ${cardBg}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
+        <div className="mx-auto relative grid min-h-screen max-w-[1760px] grid-cols-1 gap-4 px-4 py-4 xl:h-screen xl:grid-cols-[272px,minmax(0,1fr)]">
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            onClick={() => setSidebarOpen(false)}
+            className={`fixed inset-0 z-30 bg-black/50 transition-opacity xl:hidden ${sidebarOpen ? "opacity-100 pointer-events-auto" : "pointer-events-none opacity-0"}`}
+          />
+
+          <aside className={`fixed inset-y-4 left-4 z-40 flex w-[min(21rem,calc(100vw-2rem))] min-h-0 flex-col gap-4 overflow-hidden rounded-3xl border p-4 transition-transform duration-200 xl:static xl:w-auto xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
                 <h1 className="text-xl font-bold">Moje AI</h1>
-                <p className="text-xs text-gray-500 mt-1">{userEmail ? `Signed in as ${userEmail}` : "Checking session..."}</p>
+                <p className="mt-1 truncate text-xs text-gray-500">{userEmail ? `Signed in as ${userEmail}` : "Checking session..."}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setState((prev) => ({ ...prev, dark: !prev.dark }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
                   {state.dark ? "Light" : "Dark"}
                 </button>
-                <button onClick={() => void signOut()} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-                  Sign out
+                <button onClick={() => setSidebarOpen(false)} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700 xl:hidden">
+                  Close
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 p-1 dark:border-gray-800">
+
+            <div className="flex flex-col gap-1 rounded-2xl border border-gray-200 p-1 dark:border-gray-800">
               {sidebarTabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setSidebarTab(tab.id)}
-                  className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors ${
                     sidebarTab === tab.id
                       ? state.dark
                         ? "bg-blue-950/40 text-blue-200"
@@ -1664,7 +1719,10 @@ export default function Home() {
                       {state.workspaces.map((workspace) => (
                         <button
                           key={workspace.id}
-                          onClick={() => setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }))}
+                          onClick={() => {
+                            setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }));
+                            setSidebarOpen(false);
+                          }}
                           className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
                             workspace.id === activeWorkspace.id
                               ? state.dark
@@ -1715,7 +1773,10 @@ export default function Home() {
                       {activeWorkspace.chats.map((chat) => (
                         <button
                           key={chat.id}
-                          onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }))}
+                          onClick={() => {
+                            updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }));
+                            setSidebarOpen(false);
+                          }}
                           className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
                             chat.id === activeChat.id
                               ? state.dark
@@ -1762,43 +1823,12 @@ export default function Home() {
               {sidebarTab === "workspace" && (
                 <div className="h-full min-h-0 overflow-y-auto pr-1">
                   <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                    <h2 className="text-sm font-semibold">Workspace memory and models</h2>
+                    <h2 className="text-sm font-semibold">Workspace memory and preferences</h2>
 
-                    <label className="text-xs text-gray-500 block">Chat model</label>
-                    <select
-                      value={activeWorkspace.settings.chatModel}
-                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                        ...workspace,
-                        settings: { ...workspace.settings, chatModel: e.target.value },
-                      }))}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                    >
-                      {CHAT_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-                    </select>
-
-                    <label className="text-xs text-gray-500 block">Code model</label>
-                    <select
-                      value={activeWorkspace.settings.codeModel}
-                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                        ...workspace,
-                        settings: { ...workspace.settings, codeModel: e.target.value },
-                      }))}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                    >
-                      {CODE_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-                    </select>
-
-                    <label className="text-xs text-gray-500 block">Search model</label>
-                    <select
-                      value={activeWorkspace.settings.searchModel}
-                      onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                        ...workspace,
-                        settings: { ...workspace.settings, searchModel: e.target.value },
-                      }))}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                    >
-                      {SEARCH_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-                    </select>
+                    <div className={`rounded-2xl border px-3 py-3 text-sm ${state.dark ? "border-gray-800 bg-gray-950 text-gray-300" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">Model routing</div>
+                      <p className="mt-1 text-xs leading-5 opacity-80">Manual model picking is off. The app now routes requests automatically based on the mode you choose in the chat rail.</p>
+                    </div>
 
                     <label className="text-xs text-gray-500 block">Response style</label>
                     <select
@@ -1891,6 +1921,12 @@ export default function Home() {
                 </div>
               )}
 
+              {sidebarTab === "artifacts" && (
+                <div className="h-full min-h-0">
+                  <ArtifactPanel artifacts={artifacts} dark={state.dark} copied={copied} onCopyCode={copyCode} />
+                </div>
+              )}
+
               {sidebarTab === "account" && (
                 <div className="h-full min-h-0 overflow-y-auto pr-1">
                   <RoadmapPanel
@@ -1902,185 +1938,253 @@ export default function Home() {
                 </div>
               )}
             </div>
+
+            <button onClick={() => void signOut()} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
+              Sign out
+            </button>
           </aside>
 
-          <main className={`rounded-3xl border flex flex-col min-h-0 ${cardBg}`}>
-            <div className="border-b border-gray-200 dark:border-gray-800 px-5 py-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-gray-500">{activeWorkspace.name}</div>
-                <div className="text-2xl font-bold mt-1">{activeChat.title}</div>
-                <div className="text-sm text-gray-500 mt-2">
-                  Current mode: {modeLabels[mode]}
-                  {currentModelId ? ` • ${currentModelId}` : ""}
-                  {` • ${activeWorkspace.settings.styleMode}`}
-                  {activeWorkspace.settings.languageLock !== "auto" ? ` • ${activeWorkspace.settings.languageLock}` : ""}
-                  {` • Cloud ${cloudSyncStatus}`}
-                </div>
-                <div className="text-xs text-gray-500 mt-2">{cloudSyncMessage}</div>
-              </div>
-              <div className="flex gap-2 flex-wrap justify-end">
-                <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">{copied === "share-link" ? "Link copied" : "Share"}</button>
-                <button onClick={exportMarkdown} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export MD</button>
-                <button onClick={exportJson} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export JSON</button>
-                <button
-                  onClick={() => {
-                    if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
-                      alert("Voice mode doesn't work on Vercel serverless. Use Northflank, Render, or local dev.");
-                      return;
-                    }
-                    setVoiceOpen(true);
-                  }}
-                  className="px-3 py-2 text-sm rounded-xl border border-purple-400 text-purple-600 dark:border-purple-700 dark:text-purple-300"
-                >
-                  Voice mode
-                </button>
-              </div>
-            </div>
+          <main className={`min-h-0 rounded-3xl border ${cardBg}`}>
+            <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[248px,minmax(0,1fr)]">
+              <aside className="flex min-h-0 flex-col gap-4 border-b border-gray-200 px-4 py-4 dark:border-gray-800 lg:border-b-0 lg:border-r">
+                <section className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-gray-500">Chat rail</div>
+                    <button
+                      onClick={() => setSidebarOpen(true)}
+                      className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-medium dark:border-gray-700 xl:hidden"
+                    >
+                      Panels
+                    </button>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Modes, shortcuts, and uploads live here so the middle stays focused on the conversation.</p>
+                </section>
 
-            <div className="px-5 py-4 flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800">
-              {(["auto", "code", "chat", "search", "image"] as Mode[]).map((entryMode) => (
-                <button
-                  key={entryMode}
-                  onClick={() => setMode(entryMode)}
-                  className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                    mode === entryMode
-                      ? `${modeColors[entryMode]} text-white border-transparent`
-                      : `border-gray-300 ${state.dark ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-100"}`
-                  }`}
-                >
-                  {modeLabels[entryMode]}
-                </button>
-              ))}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                  mode === "upload"
-                    ? `${modeColors.upload} text-white border-transparent`
-                    : `border-gray-300 ${state.dark ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-100"}`
-                }`}
-              >
-                File
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-              />
-            </div>
+                <section className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Modes</div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                    {MODE_PANEL_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        onClick={() => setMode(option.id)}
+                        className={`rounded-2xl border px-3 py-3 text-left transition-colors ${
+                          mode === option.id
+                            ? `${modeColors[option.id]} text-white border-transparent`
+                            : state.dark
+                              ? "border-gray-800 bg-gray-950/60 text-gray-100 hover:bg-gray-800"
+                              : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium">{option.label}</span>
+                          {mode === option.id && <span className="text-[11px] uppercase tracking-[0.16em] opacity-80">Live</span>}
+                        </div>
+                        <p className={`mt-1 text-xs leading-5 ${mode === option.id ? "text-white/80" : "text-gray-500"}`}>{option.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                </section>
 
-            {file && (
-              <div className="px-5 pt-4">
-                <div className={`rounded-2xl border ${cardBg} px-3 py-3 flex items-center gap-3`}>
-                  {filePreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={filePreview} alt="preview" className="h-14 w-14 object-cover rounded-xl" />
+                <section className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-sm font-semibold">Quick starts</h2>
+                        <p className="mt-1 text-xs text-gray-500">Drop a starter into the composer.</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${state.dark ? "bg-gray-800 text-gray-300" : "border border-gray-200 bg-white text-gray-600"}`}>
+                        {modeLabels[mode]}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {QUICK_CHIPS.map((chip) => (
+                        <button
+                          key={chip.label}
+                          onClick={() => {
+                            if (chip.mode) setMode(chip.mode);
+                            setComposerText(chip.text);
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-xs border ${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-100"}`}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-semibold">Files</h2>
+                      <p className="mt-1 text-xs text-gray-500">Attach a file below when you want file analysis.</p>
+                    </div>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`rounded-xl px-3 py-2 text-xs font-medium border transition-colors ${
+                        mode === "upload"
+                          ? `${modeColors.upload} text-white border-transparent`
+                          : state.dark
+                            ? "border-gray-700 text-gray-300 hover:bg-gray-800"
+                            : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      {file ? "Replace" : "Add file"}
+                    </button>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                  />
+
+                  {file ? (
+                    <div className={`mt-3 rounded-2xl border px-3 py-3 flex items-center gap-3 ${state.dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
+                      {filePreview ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={filePreview} alt="preview" className="h-14 w-14 object-cover rounded-xl" />
+                      ) : (
+                        <div className={`h-14 w-14 rounded-xl flex items-center justify-center text-xs ${state.dark ? "bg-gray-800" : "bg-gray-100"}`}>
+                          FILE
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{file.name}</div>
+                        <div className="text-xs text-gray-500 truncate">{file.type || "unknown file type"}</div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setFile(null);
+                          setFilePreview(null);
+                          setMode("auto");
+                        }}
+                        className="ml-auto text-red-500 text-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   ) : (
-                    <div className={`h-14 w-14 rounded-xl flex items-center justify-center text-xs ${state.dark ? "bg-gray-800" : "bg-gray-100"}`}>
-                      FILE
+                    <div className={`mt-3 rounded-2xl border border-dashed px-3 py-4 text-xs ${state.dark ? "border-gray-700 text-gray-400" : "border-gray-300 text-gray-500"}`}>
+                      No file selected.
                     </div>
                   )}
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{file.name}</div>
-                    <div className="text-xs text-gray-500 truncate">{file.type || "unknown file type"}</div>
+                </section>
+              </aside>
+
+              <section className="flex min-h-0 min-w-0 flex-col">
+                <div className="border-b border-gray-200 dark:border-gray-800 px-5 py-4 flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => setSidebarOpen(true)}
+                        className="mt-0.5 rounded-xl border border-gray-300 px-3 py-2 text-xs font-medium dark:border-gray-700 xl:hidden"
+                      >
+                        Menu
+                      </button>
+                      <div className="min-w-0">
+                        <div className="text-xs uppercase tracking-[0.18em] text-gray-500">{activeWorkspace.name}</div>
+                        <div className="mt-1 truncate text-2xl font-bold">{activeChat.title}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500">
+                      <span>{modeLabels[mode]} mode</span>
+                      <span>{activityLabel}</span>
+                      <span>{activeWorkspace.settings.styleMode}</span>
+                      {activeWorkspace.settings.languageLock !== "auto" ? <span>{activeWorkspace.settings.languageLock}</span> : null}
+                      <span>{`Cloud ${cloudSyncStatus}`}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-500">{cloudSyncMessage}</div>
                   </div>
-                  <button
-                    onClick={() => {
-                      setFile(null);
-                      setFilePreview(null);
-                      setMode("auto");
-                    }}
-                    className="ml-auto text-red-500 text-sm"
-                  >
-                    Remove
-                  </button>
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">{copied === "share-link" ? "Link copied" : "Share"}</button>
+                    <button onClick={exportMarkdown} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export MD</button>
+                    <button onClick={exportJson} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700">Export JSON</button>
+                    <button
+                      onClick={() => {
+                        if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
+                          alert("Voice mode doesn't work on Vercel serverless. Use Northflank, Render, or local dev.");
+                          return;
+                        }
+                        setVoiceOpen(true);
+                      }}
+                      className="px-3 py-2 text-sm rounded-xl border border-purple-400 text-purple-600 dark:border-purple-700 dark:text-purple-300"
+                    >
+                      Voice mode
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
 
-            <div className="flex-1 min-h-0 px-5 py-4">
-              <ChatList
-                chat={activeChat.messages}
-                loading={loading}
-                dark={state.dark}
-                cardBg={cardBg}
-                codeBg={codeBg}
-                copied={copied}
-                speaking={speaking}
-                chatEndRef={chatEndRef}
-                onSpeak={speak}
-                onCopyCode={copyCode}
-                openReasoning={openReasoning}
-                onToggleReasoning={toggleReasoning}
-                onEditUser={editUserMessage}
-                onResponseAction={applyResponseAction}
-              />
-            </div>
+                <div className="flex-1 min-h-0 px-5 py-4">
+                  <ChatList
+                    chat={activeChat.messages}
+                    loading={loading}
+                    dark={state.dark}
+                    cardBg={cardBg}
+                    codeBg={codeBg}
+                    copied={copied}
+                    speaking={speaking}
+                    chatEndRef={chatEndRef}
+                    onSpeak={speak}
+                    onCopyCode={copyCode}
+                    openReasoning={openReasoning}
+                    onToggleReasoning={toggleReasoning}
+                    onEditUser={editUserMessage}
+                    onResponseAction={applyResponseAction}
+                  />
+                </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-4">
-              <div className="mb-3 flex flex-wrap gap-2">
-                {QUICK_CHIPS.map((chip) => (
-                  <button
-                    key={chip.label}
-                    onClick={() => {
-                      if (chip.mode) setMode(chip.mode);
-                      setComposerText(chip.text);
-                    }}
-                    className={`px-3 py-1.5 rounded-full text-xs border ${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-100"}`}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </div>
+                <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-4">
+                  <div className={`rounded-2xl border px-3 py-2 text-xs ${state.dark ? "border-gray-800 bg-gray-950 text-gray-400" : "border-gray-200 bg-gray-50 text-gray-500"}`}>
+                    {modeDescriptions[mode]}
+                  </div>
 
-              <div className="flex gap-2 items-end">
-                <textarea
-                  ref={inputRef}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void sendMessage();
-                    }
-                  }}
-                  placeholder={
-                    mode === "image"
-                      ? "Describe the image to generate..."
-                      : mode === "upload"
-                        ? "Ask about the selected file..."
-                        : mode === "search"
-                          ? "Search the web for something current..."
-                          : "Type a message..."
-                  }
-                  disabled={loading}
-                  rows={1}
-                  className={`flex-1 resize-none rounded-2xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
-                  style={{ minHeight: 48, maxHeight: 180 }}
-                />
-                <button
-                  onClick={() => void startVoiceInput()}
-                  disabled={loading}
-                  className={`p-3 rounded-2xl border transition-colors ${listening ? "bg-red-500 text-white border-red-500" : `${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}`}
-                  title="Voice input"
-                >
-                  Mic
-                </button>
-                <button
-                  onClick={() => void sendMessage()}
-                  disabled={loading || (!message.trim() && !file)}
-                  className={`px-4 py-3 rounded-2xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${modeColors[mode]}`}
-                >
-                  {loading ? "Working..." : mode === "image" ? "Generate" : mode === "search" ? "Search" : "Send"}
-                </button>
-              </div>
+                  <div className="mt-3 flex gap-2 items-end">
+                    <textarea
+                      ref={inputRef}
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void sendMessage();
+                        }
+                      }}
+                      placeholder={
+                        mode === "image"
+                          ? "Describe the image to generate..."
+                          : mode === "upload"
+                            ? "Ask about the selected file..."
+                            : mode === "search"
+                              ? "Search the web for something current..."
+                              : "Type a message..."
+                      }
+                      disabled={loading}
+                      rows={1}
+                      className={`flex-1 resize-none rounded-2xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
+                      style={{ minHeight: 48, maxHeight: 180 }}
+                    />
+                    <button
+                      onClick={() => void startVoiceInput()}
+                      disabled={loading}
+                      className={`p-3 rounded-2xl border transition-colors ${listening ? "bg-red-500 text-white border-red-500" : `${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}`}
+                      title="Voice input"
+                    >
+                      Mic
+                    </button>
+                    <button
+                      onClick={() => void sendMessage()}
+                      disabled={loading || (!message.trim() && !file)}
+                      className={`px-4 py-3 rounded-2xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${modeColors[mode]}`}
+                    >
+                      {loading ? "Working..." : mode === "image" ? "Generate" : mode === "search" ? "Search" : "Send"}
+                    </button>
+                  </div>
+                </div>
+              </section>
             </div>
           </main>
-
-          <aside className="hidden xl:block min-h-0">
-            <ArtifactPanel artifacts={artifacts} dark={state.dark} copied={copied} onCopyCode={copyCode} />
-          </aside>
         </div>
       </div>
 
