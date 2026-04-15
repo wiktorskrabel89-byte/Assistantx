@@ -9,6 +9,7 @@ type ChatComposerProps = {
   dark: boolean;
   message: string;
   file: File | null;
+  filePreview: string | null;
   queuedMessages: QueuedMessage[];
   loading: boolean;
   composerPreview: boolean;
@@ -27,6 +28,7 @@ export function ChatComposer({
   dark,
   message,
   file,
+  filePreview,
   queuedMessages,
   loading,
   composerPreview,
@@ -46,6 +48,10 @@ export function ChatComposer({
         {file ? (
           <div className="flex flex-wrap gap-2">
             <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+              {filePreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={filePreview} alt={file.name} className="h-8 w-8 rounded-lg object-cover" />
+              ) : null}
               <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
               <span className="max-w-[240px] truncate">{file.name}</span>
               <button

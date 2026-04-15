@@ -30,6 +30,7 @@ type ToolSettings = {
 export function AIToolsPanel({
   open,
   dark,
+  showModes = true,
   mode,
   modeOptions,
   quickChips,
@@ -47,6 +48,7 @@ export function AIToolsPanel({
 }: {
   open: boolean;
   dark: boolean;
+  showModes?: boolean;
   mode: string;
   modeOptions: ModeOption[];
   quickChips: QuickChip[];
@@ -103,26 +105,28 @@ export function AIToolsPanel({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <section className={`rounded-3xl border p-4 ${dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-slate-50"}`}>
-              <div className="flex items-center gap-2">
-                <Wand2 className="h-4 w-4 text-blue-500" />
-                <h2 className="text-sm font-semibold">Modes</h2>
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {modeOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => onModeChange(option.id)}
-                    className={`rounded-2xl border px-3 py-3 text-left transition-colors ${mode === option.id ? (dark ? "border-blue-700 bg-blue-950/30 text-blue-100" : "border-blue-200 bg-blue-50 text-blue-800") : (dark ? "border-slate-800 bg-slate-950 hover:bg-slate-800" : "border-slate-200 bg-white hover:bg-slate-100")}`}
-                  >
-                    <div className="font-medium">{option.label}</div>
-                    <div className="mt-1 text-xs text-slate-500">{option.description}</div>
-                  </button>
-                ))}
-              </div>
-            </section>
+            {showModes ? (
+              <section className={`rounded-3xl border p-4 ${dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-slate-50"}`}>
+                <div className="flex items-center gap-2">
+                  <Wand2 className="h-4 w-4 text-blue-500" />
+                  <h2 className="text-sm font-semibold">Modes</h2>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {modeOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => onModeChange(option.id)}
+                      className={`rounded-2xl border px-3 py-3 text-left transition-colors ${mode === option.id ? (dark ? "border-blue-700 bg-blue-950/30 text-blue-100" : "border-blue-200 bg-blue-50 text-blue-800") : (dark ? "border-slate-800 bg-slate-950 hover:bg-slate-800" : "border-slate-200 bg-white hover:bg-slate-100")}`}
+                    >
+                      <div className="font-medium">{option.label}</div>
+                      <div className="mt-1 text-xs text-slate-500">{option.description}</div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
-            <section className={`mt-4 rounded-3xl border p-4 ${dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-slate-50"}`}>
+            <section className={`${showModes ? "mt-4 " : ""}rounded-3xl border p-4 ${dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-slate-50"}`}>
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-violet-500" />
                 <h2 className="text-sm font-semibold">Prompt shortcuts</h2>

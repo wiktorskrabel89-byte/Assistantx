@@ -1,15 +1,22 @@
 "use client";
 
-import { CalendarDays, ClipboardCheck, Code2, ImageIcon, Mail, Plus, Search, type LucideIcon } from "lucide-react";
+import { CalendarDays, ClipboardCheck, Code2, ImageIcon, Mail, type LucideIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { AIMessage } from "./components/AIMessage";
+import { AIToolsPanel } from "./components/AIToolsPanel";
 import { ChatComposer } from "./components/ChatComposer";
 import { ChatHeader } from "./components/ChatHeader";
+import { ChatSessionsPanel } from "./components/ChatSessionsPanel";
+import { CodeHistoryPanel } from "./components/CodeHistoryPanel";
+import { ConversationToolbar } from "./components/ConversationToolbar";
+import { ConversationsSidebar } from "./components/ConversationsSidebar";
 import { CustomAgentManager } from "./components/CustomAgentManager";
+import { GitHubPanel } from "./components/GitHubPanel";
+import { GoogleIntegrationBanner } from "./components/GoogleIntegrationBanner";
 import { PromptManager } from "./components/PromptManager";
+import { PullToRefresh } from "./components/PullToRefresh";
 import { ShareConversationDialog } from "./components/ShareConversationDialog";
+import { ThinkingIndicator } from "./components/ThinkingIndicator";
 import { useChatTransport } from "./hooks/useChatTransport";
 import { useWorkspaceState } from "./hooks/useWorkspaceState";
 import { useWorkspaceSync } from "./hooks/useWorkspaceSync";
@@ -17,7 +24,9 @@ import {
   BUILT_IN_AGENTS,
   fromBase64,
   MODE_PANEL_OPTIONS,
+  QUICK_CHIPS,
   stripMarkdown,
+  TEXT_LANGUAGE_OPTIONS,
   toBase64,
 } from "./lib/chat-state";
 import type {
@@ -25,6 +34,7 @@ import type {
   Mode,
   ResponseAction,
   SharePayload,
+  StyleMode,
 } from "./lib/chat-types";
 
 type ChatListProps = {
@@ -34,9 +44,10 @@ type ChatListProps = {
   cardBg: string;
   codeBg: string;
   copied: string | null;
+  scrollRef: RefObject<HTMLDivElement | null>;
   chatEndRef: RefObject<HTMLDivElement | null>;
   openReasoning: Set<string>;
-  onCopyCode: (code: string, id: string) => void;
+  onCopyText: (text: string, id: string) => void;
   onToggleReasoning: (id: string) => void;
   onEditUser: (text: string) => void;
   onResponseAction: (action: ResponseAction, text: string) => void;
@@ -53,9 +64,10 @@ const ChatList = memo(function ChatList({
   cardBg,
   codeBg,
   copied,
+  scrollRef,
   chatEndRef,
   openReasoning,
-  onCopyCode,
+  onCopyText,
   onToggleReasoning,
   onEditUser,
   onResponseAction,
@@ -64,7 +76,6 @@ const ChatList = memo(function ChatList({
   assistantDescription,
   assistantIcon: AssistantIcon,
 }: ChatListProps) {
-  let codeBlockIdx = 0;
   const quickStarters: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
     { label: "Generuj Kod", hint: "Kompletne rozwiazania", prompt: "Napisz mi kompletny przyklad kodu dla: ", mode: "code", icon: Code2 },
     { label: "Zadanie", hint: "Daj AI zadanie", prompt: "Pomoz mi z zadaniem kodowania: ", mode: "chat", icon: ClipboardCheck },
@@ -74,7 +85,7 @@ const ChatList = memo(function ChatList({
   ];
 
   return (
-    <div className="mx-auto flex-1 w-full max-w-4xl overflow-y-auto space-y-4 pr-1">
+    <div ref={scrollRef} className="mx-auto flex-1 w-full max-w-4xl overflow-y-auto space-y-4 pr-1">
       {chat.length === 0 ? (
         <div className="mt-8 text-center sm:mt-12">
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-500 shadow-lg shadow-blue-500/20">
@@ -137,107 +148,18 @@ const ChatList = memo(function ChatList({
             </div>
           </div>
 
-          <div className="flex justify-start">
-            <div className="max-w-[88%] space-y-1">
-              {entry.reasoning ? (
-                <div className={`mb-1 rounded-xl border px-3 py-2 text-xs ${dark ? "border-purple-800/30 bg-purple-950/30 text-purple-300" : "border-purple-200 bg-purple-50 text-purple-700"}`}>
-                  <button onClick={() => onToggleReasoning(entry.id)} className="flex w-full items-center gap-2 text-left font-medium">
-                    <span>Reasoning</span>
-                    {loading && index === chat.length - 1
-                      ? <span className="ml-auto animate-pulse">...</span>
-                      : <span className="ml-auto">{openReasoning.has(entry.id) ? "-" : "+"}</span>}
-                  </button>
-                  {(openReasoning.has(entry.id) || (loading && index === chat.length - 1)) ? (
-                    <div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap opacity-80 leading-relaxed">
-                      {entry.reasoning}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {entry.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={entry.imageUrl} alt={entry.user} className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700" />
-              ) : (
-                <div className={`${cardBg} rounded-2xl rounded-tl-sm border px-4 py-3 text-sm`}>
-                  {!entry.ai && index === chat.length - 1 && loading ? (
-                    <div className="space-y-2">
-                      <span className="flex items-center gap-2 py-1 text-xs text-gray-400">
-                        <span className="inline-block h-2 w-20 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-400/40 via-blue-400/80 to-cyan-400/40 bg-[length:200%_100%]" />
-                        <span>{entry.status ?? "Thinking..."}</span>
-                      </span>
-                      {entry.routeReason ? <div className="text-[11px] text-gray-400">{entry.routeReason}</div> : null}
-                    </div>
-                  ) : index === chat.length - 1 && loading ? (
-                    <div>
-                      {entry.status ? <div className="mb-1 text-[11px] opacity-70">{entry.status}</div> : null}
-                      <span className="whitespace-pre-wrap break-words leading-relaxed">{entry.ai}</span>
-                    </div>
-                  ) : (
-                    <ReactMarkdown
-                      components={{
-                        code({ className, children, ...props }) {
-                          const match = /language-(\w+)/.exec(className ?? "");
-                          const codeStr = String(children).replace(/\n$/, "");
-                          const isBlock = Boolean(match) || codeStr.includes("\n");
-                          if (isBlock) {
-                            const blockId = `${entry.id}-inline-${codeBlockIdx++}`;
-                            return (
-                              <div className="relative my-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-                                <div className={`flex items-center justify-between px-3 py-1 text-xs text-gray-400 ${dark ? "bg-gray-900" : "bg-gray-200"}`}>
-                                  <span>{match?.[1] ?? "code"}</span>
-                                  <button onClick={() => onCopyCode(codeStr, blockId)} className="transition-colors hover:text-white">
-                                    {copied === blockId ? "Copied" : "Copy"}
-                                  </button>
-                                </div>
-                                <SyntaxHighlighter style={dark ? oneDark : oneLight} language={match?.[1] ?? "text"} PreTag="div">
-                                  {codeStr}
-                                </SyntaxHighlighter>
-                              </div>
-                            );
-                          }
-                          return <code className={`${codeBg} rounded px-1 text-xs`} {...props}>{children}</code>;
-                        },
-                        p({ children }) { return <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{children}</p>; },
-                        ul({ children }) { return <ul className="mb-2 ml-4 list-disc space-y-1">{children}</ul>; },
-                        ol({ children }) { return <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>; },
-                        blockquote({ children }) { return <blockquote className={`my-2 border-l-4 border-gray-400 pl-3 italic ${dark ? "text-gray-400" : "text-gray-600"}`}>{children}</blockquote>; },
-                        h1({ children }) { return <h1 className="mb-2 text-xl font-bold">{children}</h1>; },
-                        h2({ children }) { return <h2 className="mb-2 text-lg font-bold">{children}</h2>; },
-                        h3({ children }) { return <h3 className="mb-1 text-base font-bold">{children}</h3>; },
-                      }}
-                    >
-                      {entry.ai}
-                    </ReactMarkdown>
-                  )}
-                </div>
-              )}
-
-              <div className="ml-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                {entry.routeReason ? <span>{entry.routeReason}</span> : null}
-                {entry.stopped ? <span className="text-amber-400">Stopped</span> : null}
-                {entry.ai && !entry.imageUrl ? (
-                  <>
-                    <button onClick={() => navigator.clipboard.writeText(entry.ai)} className="hover:text-blue-400">
-                      Copy
-                    </button>
-                    <button onClick={() => onResponseAction("summarize", entry.ai)} className="hover:text-blue-400">
-                      Summarize
-                    </button>
-                    <button onClick={() => onResponseAction("checklist", entry.ai)} className="hover:text-blue-400">
-                      Checklist
-                    </button>
-                    <button onClick={() => onResponseAction("translate", entry.ai)} className="hover:text-blue-400">
-                      Translate
-                    </button>
-                    <button onClick={() => onResponseAction("commit", entry.ai)} className="hover:text-blue-400">
-                      Commit msg
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          </div>
+          <AIMessage
+            entry={entry}
+            dark={dark}
+            cardBg={cardBg}
+            codeBg={codeBg}
+            copied={copied}
+            isStreaming={loading && index === chat.length - 1}
+            reasoningOpen={openReasoning.has(entry.id)}
+            onCopyText={onCopyText}
+            onToggleReasoning={onToggleReasoning}
+            onResponseAction={onResponseAction}
+          />
         </div>
       ))}
 
@@ -250,6 +172,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<"sessions" | "history" | "tools" | "apps" | null>(null);
   const [promptManagerOpen, setPromptManagerOpen] = useState(false);
   const [customAgentManagerOpen, setCustomAgentManagerOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -257,6 +180,7 @@ export default function Home() {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -271,6 +195,7 @@ export default function Home() {
     activeChat,
     artifacts,
     filteredChats,
+    sessionItems,
     mode,
     chatSearch,
     setChatSearch,
@@ -281,6 +206,12 @@ export default function Home() {
     createChatAction,
     renameChat,
     deleteChat,
+    clearActiveChat,
+    setStyleMode,
+    setLanguageLock,
+    setMemoryEnabled,
+    setMemoryNotes,
+    clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,
     deletePromptTemplate,
@@ -294,7 +225,14 @@ export default function Home() {
     activeAgentId,
     assistantIcon,
   } = useWorkspaceState();
-  const { cloudBootstrapped } = useWorkspaceSync({ loaded, state, setState, stateRef });
+  const {
+    authReady,
+    authProvider,
+    linkedProviders,
+    oauthLoading,
+    cloudBootstrapped,
+    signInWithProvider,
+  } = useWorkspaceSync({ loaded, state, setState, stateRef });
   const {
     loading,
     queuedMessages,
@@ -321,6 +259,8 @@ export default function Home() {
   const cardBg = state.dark ? "bg-slate-900 border-slate-800" : "bg-white/95 border-slate-200 shadow-sm shadow-slate-200/70";
   const inputBg = state.dark ? "bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400";
   const codeBg = state.dark ? "bg-slate-950" : "bg-slate-100";
+  const googleLinked = linkedProviders.includes("google") || authProvider === "google";
+  const latestEntry = activeChat.messages[activeChat.messages.length - 1];
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -393,8 +333,8 @@ export default function Home() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
-  const copyCode = useCallback((code: string, id: string) => {
-    navigator.clipboard.writeText(code).then(() => {
+  const copyCode = useCallback((text: string, id: string) => {
+    navigator.clipboard.writeText(text).then(() => {
       setCopied(id);
       setTimeout(() => setCopied(null), 2000);
     }).catch(() => {});
@@ -436,6 +376,24 @@ export default function Home() {
     setWorkspaceMode("upload");
     setSidebarOpen(false);
   }, [filePreview, setWorkspaceMode]);
+
+  const handleImportedFile = useCallback((nextFile: File, prompt: string) => {
+    handleFile(nextFile);
+    if (prompt) {
+      setComposerText(prompt);
+    }
+    setActivePanel(null);
+  }, [handleFile, setComposerText]);
+
+  const togglePanel = useCallback((panel: "sessions" | "history" | "tools" | "apps") => {
+    setActivePanel((current) => current === panel ? null : panel);
+  }, []);
+
+  const refreshConversation = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  }, []);
 
   const applyPromptTemplate = useCallback((templateId: string) => {
     const template = activeWorkspace.settings.promptTemplates.find((item) => item.id === templateId);
@@ -551,100 +509,22 @@ export default function Home() {
     <>
       <div className={`min-h-screen ${bg}`}>
         <div className="mx-auto flex min-h-screen max-w-[1680px] gap-3 px-3 py-3">
-          <button
-            type="button"
-            aria-label="Close sidebar"
-            onClick={() => setSidebarOpen(false)}
-            className={`fixed inset-0 z-30 bg-black/50 transition-opacity xl:hidden ${sidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}
+          <ConversationsSidebar
+            open={sidebarOpen}
+            dark={state.dark}
+            cardBg={cardBg}
+            inputBg={inputBg}
+            workspaceName={activeWorkspace.name}
+            chatSearch={chatSearch}
+            chats={filteredChats}
+            activeChatId={activeChat.id}
+            onClose={() => setSidebarOpen(false)}
+            onSearchChange={setChatSearch}
+            onCreateChat={createChatAction}
+            onSelectChat={(chatId) => setActiveChatId(activeWorkspace.id, chatId)}
+            onRenameChat={renameChat}
+            onDeleteChat={deleteChat}
           />
-
-          <aside className={`fixed inset-y-3 left-3 z-40 w-[min(16rem,calc(100vw-1.5rem))] min-h-0 overflow-hidden rounded-[26px] border transition-transform duration-200 xl:static xl:w-[250px] xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
-            <div className="flex h-full min-h-0 flex-col">
-              <div className="border-b border-slate-200 px-3 py-3 dark:border-slate-800">
-                <button
-                  onClick={() => {
-                    createChatAction();
-                    setSidebarOpen(false);
-                  }}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
-                >
-                  <Plus className="h-4 w-4" />
-                  New Chat
-                </button>
-                <div className="relative mt-3">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={chatSearch}
-                    onChange={(event) => setChatSearch(event.target.value)}
-                    placeholder="Szukaj rozmow lub tagow..."
-                    className={`w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm ${inputBg}`}
-                  />
-                </div>
-              </div>
-
-              <div className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                {activeWorkspace.name}
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-2">
-                {filteredChats.length === 0 ? (
-                  <div className="px-2 py-6 text-center text-sm text-slate-400">Brak rozmow do pokazania.</div>
-                ) : (
-                  <div className="space-y-1">
-                    {filteredChats.map((chat) => {
-                      const latest = chat.messages[chat.messages.length - 1];
-                      return (
-                        <button
-                          key={chat.id}
-                          onClick={() => {
-                            setActiveChatId(activeWorkspace.id, chat.id);
-                            setSidebarOpen(false);
-                          }}
-                          className={`group w-full rounded-2xl px-3 py-3 text-left transition-colors ${
-                            chat.id === activeChat.id
-                              ? state.dark
-                                ? "bg-slate-800 text-white"
-                                : "bg-blue-50 text-slate-900"
-                              : state.dark
-                                ? "text-slate-300 hover:bg-slate-800/80"
-                                : "text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-semibold">{chat.title}</div>
-                              <div className="mt-1 text-xs text-slate-400">{chat.messages.length} wiad.</div>
-                              {latest?.user ? <div className="mt-2 truncate text-xs text-slate-400">{stripMarkdown(latest.user)}</div> : null}
-                            </div>
-                            <div className="hidden gap-2 opacity-0 transition-opacity group-hover:flex group-hover:opacity-100">
-                              <span
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  renameChat(chat.id);
-                                }}
-                                className="text-[11px] text-slate-400 hover:text-blue-500"
-                              >
-                                Rename
-                              </span>
-                              <span
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  deleteChat(chat.id);
-                                }}
-                                className="text-[11px] text-slate-400 hover:text-red-500"
-                              >
-                                Delete
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </aside>
 
           <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border ${cardBg}`}>
             <section className="flex h-full min-h-0 min-w-0 flex-col">
@@ -667,7 +547,31 @@ export default function Home() {
 
               <div className={`min-h-0 flex-1 px-3 py-4 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
                 <div className="mx-auto flex h-full max-w-5xl flex-col">
-                  <div className="min-h-0 flex-1">
+                  <ConversationToolbar
+                    dark={state.dark}
+                    sessionCount={activeWorkspace.chats.length}
+                    artifactCount={artifacts.length}
+                    onOpenSessions={() => togglePanel("sessions")}
+                    onOpenCodeHistory={() => togglePanel("history")}
+                    onOpenAiTools={() => togglePanel("tools")}
+                    onOpenApps={() => togglePanel("apps")}
+                  />
+
+                  <GoogleIntegrationBanner
+                    dark={state.dark}
+                    visible={authReady && !googleLinked}
+                    connecting={oauthLoading === "google"}
+                    onConnectGoogle={() => void signInWithProvider("google")}
+                    onOpenApps={() => setActivePanel("apps")}
+                  />
+
+                  <div className="min-h-0 flex flex-1 flex-col">
+                    <PullToRefresh
+                      dark={state.dark}
+                      disabled={loading}
+                      scrollContainerRef={chatScrollRef}
+                      onRefresh={refreshConversation}
+                    />
                     <ChatList
                       chat={activeChat.messages}
                       loading={loading}
@@ -675,9 +579,10 @@ export default function Home() {
                       cardBg={cardBg}
                       codeBg={codeBg}
                       copied={copied}
+                      scrollRef={chatScrollRef}
                       chatEndRef={chatEndRef}
                       openReasoning={openReasoning}
-                      onCopyCode={copyCode}
+                      onCopyText={copyCode}
                       onToggleReasoning={toggleReasoning}
                       onEditUser={editUserMessage}
                       onResponseAction={applyResponseAction}
@@ -690,6 +595,13 @@ export default function Home() {
                       assistantIcon={assistantIcon}
                     />
                   </div>
+
+                  <ThinkingIndicator
+                    dark={state.dark}
+                    visible={loading}
+                    status={latestEntry?.status}
+                    routeReason={latestEntry?.routeReason}
+                  />
                 </div>
               </div>
 
@@ -697,6 +609,7 @@ export default function Home() {
                 dark={state.dark}
                 message={message}
                 file={file}
+                filePreview={filePreview}
                 queuedMessages={queuedMessages}
                 loading={loading}
                 composerPreview={composerPreview}
@@ -753,6 +666,79 @@ export default function Home() {
         onCopyShareLink={() => void copyShareLink()}
         onExportMarkdown={exportMarkdown}
         onExportJson={exportJson}
+        onCopyVsCodePrompt={() => void copyVsCodePrompt()}
+        onDownloadVsCodeBundle={downloadVsCodeBundle}
+      />
+
+      <ChatSessionsPanel
+        open={activePanel === "sessions"}
+        dark={state.dark}
+        workspaceName={activeWorkspace.name}
+        searchValue={chatSearch}
+        sessions={sessionItems}
+        onSearchChange={setChatSearch}
+        onCreateSession={createChatAction}
+        onSelectSession={(chatId) => {
+          setActiveChatId(activeWorkspace.id, chatId);
+          setActivePanel(null);
+        }}
+        onRenameSession={renameChat}
+        onDeleteSession={deleteChat}
+        onClose={() => setActivePanel(null)}
+      />
+
+      <AIToolsPanel
+        open={activePanel === "tools"}
+        dark={state.dark}
+        showModes={false}
+        mode={mode}
+        modeOptions={MODE_PANEL_OPTIONS}
+        quickChips={QUICK_CHIPS}
+        settings={{
+          styleMode: activeWorkspace.settings.styleMode,
+          languageLock: activeWorkspace.settings.languageLock,
+          memoryEnabled: activeWorkspace.settings.memoryEnabled,
+          memoryNotes: activeWorkspace.settings.memoryNotes,
+        }}
+        languageOptions={TEXT_LANGUAGE_OPTIONS}
+        onClose={() => setActivePanel(null)}
+        onModeChange={(modeId) => setWorkspaceMode(modeId as Mode)}
+        onQuickChip={(chip) => {
+          if (chip.mode) setWorkspaceMode(chip.mode as Mode);
+          setComposerText(chip.text);
+          setActivePanel(null);
+        }}
+        onStyleChange={(value) => setStyleMode(value as StyleMode)}
+        onLanguageChange={setLanguageLock}
+        onMemoryToggle={setMemoryEnabled}
+        onMemoryNotesChange={setMemoryNotes}
+        onClearMemory={clearMemoryNotes}
+        onClearChat={() => {
+          clearActiveChat();
+          setActivePanel(null);
+        }}
+      />
+
+      <CodeHistoryPanel
+        open={activePanel === "history"}
+        dark={state.dark}
+        artifacts={artifacts}
+        copied={copied}
+        onCopyCode={copyCode}
+        onClose={() => setActivePanel(null)}
+      />
+
+      <GitHubPanel
+        open={activePanel === "apps"}
+        dark={state.dark}
+        linkedProviders={linkedProviders}
+        authProvider={authProvider}
+        oauthLoading={oauthLoading}
+        copied={copied}
+        hasArtifacts={artifacts.length > 0}
+        onClose={() => setActivePanel(null)}
+        onConnectProvider={(provider) => void signInWithProvider(provider)}
+        onImportFile={handleImportedFile}
         onCopyVsCodePrompt={() => void copyVsCodePrompt()}
         onDownloadVsCodeBundle={downloadVsCodeBundle}
       />
