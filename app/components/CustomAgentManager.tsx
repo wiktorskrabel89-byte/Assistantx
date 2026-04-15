@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Plus, Trash2, X } from "lucide-react";
+import { Bot, LoaderCircle, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type CustomAgent = {
@@ -42,6 +42,8 @@ export function CustomAgentManager({
   const [draftDescription, setDraftDescription] = useState(() => initialAgent?.description ?? "");
   const [draftInstructions, setDraftInstructions] = useState(() => initialAgent?.instructions ?? "");
   const [draftPreferredMode, setDraftPreferredMode] = useState(() => initialAgent?.preferredMode ?? modeOptions[0]?.id ?? "chat");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState("");
 
   const selectedAgent = useMemo(
     () => isCreating ? null : (agents.find((agent) => agent.id === selectedId) ?? null),
@@ -64,6 +66,45 @@ export function CustomAgentManager({
   if (!open) return null;
 
   const canSave = draftName.trim() && draftDescription.trim() && draftInstructions.trim();
+  const canGenerate = draftName.trim().length > 0;
+
+  async function generateAgentDocumentation() {
+    if (!canGenerate) {
+      setGenerationError("Enter an agent name first.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationError("");
+
+    try {
+      const response = await fetch("/api/agents/documentation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: draftName.trim(),
+          descriptionHint: draftDescription.trim(),
+          preferredMode: draftPreferredMode,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Failed to generate agent documentation.");
+      }
+
+      if (typeof data.description === "string" && data.description.trim()) {
+        setDraftDescription(data.description.trim());
+      }
+      if (typeof data.instructions === "string" && data.instructions.trim()) {
+        setDraftInstructions(data.instructions.trim());
+      }
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : "Failed to generate agent documentation.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
@@ -166,6 +207,20 @@ export function CustomAgentManager({
                   className={`w-full resize-none rounded-2xl border px-3 py-3 text-sm ${dark ? "border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder-slate-400"}`}
                 />
               </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => void generateAgentDocumentation()}
+                  disabled={!canGenerate || isGenerating}
+                  className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${dark ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-slate-50 text-slate-700"}`}
+                >
+                  {isGenerating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-blue-500" />}
+                  <span>{isGenerating ? "Generating..." : "Generate docs"}</span>
+                </button>
+                <div className="text-xs text-slate-500">Use AI to draft the description and instructions from the agent name.</div>
+              </div>
+
+              {generationError ? <div className="text-sm text-rose-500">{generationError}</div> : null}
             </div>
           </div>
 
