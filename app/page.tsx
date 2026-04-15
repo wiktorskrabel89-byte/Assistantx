@@ -1,6 +1,6 @@
 "use client";
 
-import { Braces, CalendarDays, ClipboardCheck, Code2, Eye, ImageIcon, Mail, Menu, MessageSquareText, Paperclip, PlugZap, Plus, Search, Send, SlidersHorizontal, Sparkles, UserRound, type LucideIcon } from "lucide-react";
+import { Braces, CalendarDays, ClipboardCheck, Code2, Eye, ImageIcon, Mail, Menu, MessageSquareText, Paperclip, PlugZap, Plus, Search, Send, SlidersHorizontal, UserRound, X, type LucideIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -80,6 +80,17 @@ type Artifact = {
   code: string;
   label: string;
   sourceTitle: string;
+};
+
+type QueuedMessage = {
+  id: string;
+  workspaceId: string;
+  chatId: string;
+  text: string;
+  mode: Mode;
+  file: File | null;
+  filePreview: string | null;
+  createdAt: number;
 };
 
 type SharePayload = {
@@ -663,6 +674,7 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("auto");
   const [chatSearch, setChatSearch] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -686,6 +698,9 @@ export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const importedShareRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const processingQueueRef = useRef(false);
+  const queuedMessagesRef = useRef<QueuedMessage[]>([]);
   const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null);
   const stateRef = useRef(state);
   const lastSyncedPayloadRef = useRef<string | null>(null);
@@ -729,6 +744,10 @@ export default function Home() {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    queuedMessagesRef.current = queuedMessages;
+  }, [queuedMessages]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -933,6 +952,19 @@ export default function Home() {
       if (filePreview?.startsWith("blob:")) URL.revokeObjectURL(filePreview);
     };
   }, [filePreview]);
+
+  const revokeQueuedPreview = useCallback((preview: string | null) => {
+    if (preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(preview);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      queuedMessagesRef.current.forEach((queuedMessage) => revokeQueuedPreview(queuedMessage.filePreview));
+    };
+  }, [revokeQueuedPreview]);
 
   useEffect(() => {
     if (!loaded || !cloudBootstrapped || importedShareRef.current || typeof window === "undefined") return;
@@ -1265,6 +1297,37 @@ export default function Home() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [handleFile]);
 
+  const queueComposerMessage = useCallback(() => {
+    const text = message.trim();
+    if (!text && !file) return;
+
+    const queuedMessage: QueuedMessage = {
+      id: createId(),
+      workspaceId: activeWorkspace.id,
+      chatId: activeChat.id,
+      text,
+      mode,
+      file,
+      filePreview: file?.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+      createdAt: Date.now(),
+    };
+
+    setQueuedMessages((prev) => [...prev, queuedMessage]);
+    setMessage("");
+    setFile(null);
+    setFilePreview(null);
+    setComposerPreview(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [activeChat.id, activeWorkspace.id, file, message, mode]);
+
+  const removeQueuedMessage = useCallback((queueId: string) => {
+    setQueuedMessages((prev) => {
+      const queuedMessage = prev.find((item) => item.id === queueId);
+      if (queuedMessage) revokeQueuedPreview(queuedMessage.filePreview);
+      return prev.filter((item) => item.id !== queueId);
+    });
+  }, [revokeQueuedPreview]);
+
   const consumeStream = useCallback(async (response: Response, workspaceId: string, chatId: string) => {
     const reader = response.body?.getReader();
     if (!reader) throw new Error("Missing streaming body");
@@ -1343,26 +1406,25 @@ export default function Home() {
     }
   }, [updateLastMessage]);
 
-  const sendMessage = useCallback(async () => {
-    if ((!message && !file) || loading) return;
+  const processQueuedMessage = useCallback(async (queuedMessage: QueuedMessage) => {
+    const snapshot = stateRef.current;
+    const workspace = snapshot.workspaces.find((candidate) => candidate.id === queuedMessage.workspaceId) ?? snapshot.workspaces[0];
+    const chat = workspace.chats.find((candidate) => candidate.id === queuedMessage.chatId) ?? workspace.chats[0];
 
-    const workspaceId = activeWorkspace.id;
-    const chatId = activeChat.id;
-    const userMsg = message.trim();
-    const activeSettings = activeWorkspace.settings;
-    const allowedModels = getAllowedModels(mode);
+    const workspaceId = workspace.id;
+    const chatId = chat.id;
+    const userMsg = queuedMessage.text;
+    const activeSettings = workspace.settings;
+    const allowedModels = getAllowedModels(queuedMessage.mode);
     const history = activeSettings.memoryEnabled
-      ? activeChat.messages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
+      ? chat.messages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
       : [];
 
-    setMessage("");
-    setLoading(true);
+    const title = chat.messages.length === 0 || chat.title === NEW_CHAT_TITLE
+      ? deriveTitle(userMsg || queuedMessage.file?.name || NEW_CHAT_TITLE)
+      : chat.title;
 
-    const title = activeChat.messages.length === 0 || activeChat.title === NEW_CHAT_TITLE
-      ? deriveTitle(userMsg || file?.name || NEW_CHAT_TITLE)
-      : activeChat.title;
-
-    if (mode === "image") {
+    if (queuedMessage.mode === "image") {
       const pending = createMessage({
         user: userMsg,
         ai: "",
@@ -1390,19 +1452,23 @@ export default function Home() {
           imageUrl: data.url ?? undefined,
           status: undefined,
         }));
-      } finally {
-        setLoading(false);
+      } catch (error) {
+        updateLastMessage(workspaceId, chatId, (entry) => ({
+          ...entry,
+          ai: error instanceof Error ? error.message : "Image generation failed.",
+          status: undefined,
+        }));
       }
       return;
     }
 
-    if (mode === "upload" && file) {
+    if (queuedMessage.mode === "upload" && queuedMessage.file) {
       const pending = createMessage({
-        user: userMsg || `Analyze ${file.name}`,
+        user: userMsg || `Analyze ${queuedMessage.file.name}`,
         ai: "",
         model: null,
-        fileName: file.name,
-        filePreview: filePreview ?? undefined,
+        fileName: queuedMessage.file.name,
+        filePreview: queuedMessage.filePreview ?? undefined,
         status: "Uploading file...",
       });
       updateChat(workspaceId, chatId, (chat) => ({
@@ -1412,18 +1478,18 @@ export default function Home() {
       }));
 
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("message", userMsg || `What is in ${file.name}?`);
-
-      setFile(null);
-      setFilePreview(null);
+      formData.append("file", queuedMessage.file);
+      formData.append("message", userMsg || `What is in ${queuedMessage.file.name}?`);
 
       try {
         const response = await fetch("/api/upload", { method: "POST", body: formData });
         await consumeStream(response, workspaceId, chatId);
-      } finally {
-        setLoading(false);
-        setMode("auto");
+      } catch (error) {
+        updateLastMessage(workspaceId, chatId, (entry) => ({
+          ...entry,
+          ai: error instanceof Error ? error.message : "File analysis failed.",
+          status: undefined,
+        }));
       }
       return;
     }
@@ -1432,7 +1498,7 @@ export default function Home() {
       user: userMsg,
       ai: "",
       model: null,
-      fileName: file?.name ?? undefined,
+      fileName: queuedMessage.file?.name ?? undefined,
       status: "Analyzing prompt...",
     });
     updateChat(workspaceId, chatId, (chat) => ({
@@ -1447,7 +1513,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMsg,
-          mode,
+          mode: queuedMessage.mode,
           allowedModels,
           history,
           memoryNotes: activeSettings.memoryNotes,
@@ -1457,24 +1523,34 @@ export default function Home() {
       });
 
       await consumeStream(response, workspaceId, chatId);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      updateLastMessage(workspaceId, chatId, (entry) => ({
+        ...entry,
+        ai: error instanceof Error ? error.message : "Message failed.",
+        status: undefined,
+      }));
     }
   }, [
-    activeChat.id,
-    activeChat.messages,
-    activeChat.title,
-    activeWorkspace.id,
-    activeWorkspace.settings,
     consumeStream,
-    file,
-    filePreview,
-    loading,
-    message,
-    mode,
     updateChat,
     updateLastMessage,
   ]);
+
+  useEffect(() => {
+    if (processingQueueRef.current || queuedMessages.length === 0) return;
+
+    const queuedMessage = queuedMessages[0];
+    processingQueueRef.current = true;
+    setLoading(true);
+
+    void processQueuedMessage(queuedMessage).finally(() => {
+      revokeQueuedPreview(queuedMessage.filePreview);
+      processingQueueRef.current = false;
+      if (!isMountedRef.current) return;
+      setQueuedMessages((prev) => prev.filter((item) => item.id !== queuedMessage.id));
+      setLoading(false);
+    });
+  }, [processQueuedMessage, queuedMessages, revokeQueuedPreview]);
 
   const createWorkspaceAction = useCallback(() => {
     const name = window.prompt("Workspace name", `Workspace ${state.workspaces.length + 1}`)?.trim();
@@ -2185,6 +2261,45 @@ export default function Home() {
                       </div>
                     ) : null}
 
+                    {queuedMessages.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {queuedMessages.map((queuedMessage, index) => {
+                          const isActive = loading && index === 0;
+                          const queueNumber = loading ? index : index + 1;
+                          const queuedLabel = queuedMessage.text || queuedMessage.file?.name || "Queued message";
+                          return (
+                            <div
+                              key={queuedMessage.id}
+                              className={`flex max-w-full items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
+                                isActive
+                                  ? state.dark
+                                    ? "border-blue-800 bg-blue-950/30 text-blue-100"
+                                    : "border-blue-200 bg-blue-50 text-blue-800"
+                                  : state.dark
+                                    ? "border-slate-700 bg-slate-900 text-slate-200"
+                                    : "border-slate-200 bg-white text-slate-700"
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium">{isActive ? "Sending now" : `Queued ${queueNumber}`}</div>
+                                <div className="truncate opacity-80">{queuedLabel}</div>
+                              </div>
+                              {!isActive ? (
+                                <button
+                                  onClick={() => removeQueuedMessage(queuedMessage.id)}
+                                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100"
+                                  title="Remove queued message"
+                                  aria-label="Remove queued message"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
                     {composerPreview && message.trim() ? (
                       <div className={`rounded-2xl border px-4 py-3 text-sm ${state.dark ? "border-slate-800 bg-slate-950 text-slate-200" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
                         <ReactMarkdown>{message}</ReactMarkdown>
@@ -2235,13 +2350,12 @@ export default function Home() {
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
-                            void sendMessage();
+                            queueComposerMessage();
                           }
                         }}
                         placeholder="Wiadomosc... (Enter to send)"
-                        disabled={loading}
                         rows={1}
-                        className={`flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm focus:outline-none disabled:opacity-50 ${state.dark ? "text-slate-100 placeholder-slate-500" : "text-slate-900 placeholder-slate-400"}`}
+                        className={`flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm focus:outline-none ${state.dark ? "text-slate-100 placeholder-slate-500" : "text-slate-900 placeholder-slate-400"}`}
                         style={{ minHeight: 44, maxHeight: 180 }}
                       />
 
@@ -2255,13 +2369,13 @@ export default function Home() {
                       </button>
 
                       <button
-                        onClick={() => void sendMessage()}
-                        disabled={loading || (!message.trim() && !file)}
+                        onClick={queueComposerMessage}
+                        disabled={!message.trim() && !file}
                         className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={loading ? "Working" : "Send message"}
-                        aria-label={loading ? "Working" : "Send message"}
+                        title={loading ? "Add to queue" : "Send message"}
+                        aria-label={loading ? "Add to queue" : "Send message"}
                       >
-                        {loading ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
+                        {loading ? <Plus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                       </button>
                     </div>
                   </div>
