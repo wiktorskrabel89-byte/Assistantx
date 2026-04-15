@@ -4,6 +4,7 @@ import { CalendarDays, ClipboardCheck, Code2, ImageIcon, Mail, type LucideIcon }
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { AIMessage } from "./components/AIMessage";
 import { AIToolsPanel } from "./components/AIToolsPanel";
+import { AppNavigationColumn } from "./components/AppNavigationColumn";
 import { ChatComposer } from "./components/ChatComposer";
 import { ChatHeader } from "./components/ChatHeader";
 import { ChatSessionsPanel } from "./components/ChatSessionsPanel";
@@ -684,6 +685,8 @@ export default function Home() {
     <>
       <div className={`min-h-screen ${bg}`}>
         <div className="mx-auto flex min-h-screen max-w-[1680px] gap-3 px-3 py-3">
+          <AppNavigationColumn dark={state.dark} />
+
           <ConversationsSidebar
             open={sidebarOpen}
             dark={state.dark}
