@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { QueryProvider } from "./components/QueryProvider";
@@ -20,6 +20,12 @@ export const metadata: Metadata = {
     template: "%s | Moje AI",
   },
   description: "Moje AI is an AI workspace for chat, uploads, integrations, and cloud-synced projects.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
