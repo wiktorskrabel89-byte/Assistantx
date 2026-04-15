@@ -1,0 +1,10 @@
+export { AILearningTab } from "./AILearningTab";
+export { CodebaseTab } from "./CodebaseTab";
+export { KnowledgeExportTab } from "./KnowledgeExportTab";
+export { LearningTab } from "./LearningTab";
+export { NotificationsTab } from "./NotificationsTab";
+export { ProjectsTab } from "./ProjectsTab";
+export { PromptLibraryTab } from "./PromptLibraryTab";
+export { SandboxTab } from "./SandboxTab";
+export { ScriptsTab } from "./ScriptsTab";
+export { SettingsTab } from "./SettingsTab";
