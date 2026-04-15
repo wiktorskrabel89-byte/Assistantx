@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     default: "Moje AI",
     template: "%s | Moje AI",
   },
-  description: "Moje AI is an AI workspace for chat, uploads, integrations, voice, and cloud-synced projects.",
+  description: "Moje AI is an AI workspace for chat, uploads, integrations, and cloud-synced projects.",
 };
 
 export default function RootLayout({

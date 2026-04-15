@@ -4,10 +4,9 @@ export type ModelOption = {
   description: string;
 };
 
-export type VoiceLanguageOption = {
+export type LanguageOption = {
   code: string;
   label: string;
-  instruction: string;
 };
 
 export const CHAT_MODELS: ModelOption[] = [
@@ -89,54 +88,53 @@ export const SEARCH_MODELS: ModelOption[] = [
   },
 ];
 
-export const VOICE_LANGUAGE_OPTIONS: VoiceLanguageOption[] = [
-  { code: "auto", label: "Auto detect", instruction: "Detect the user's language and always answer in that same language." },
-  { code: "ar", label: "Arabic", instruction: "Always answer only in Arabic." },
-  { code: "bn", label: "Bengali", instruction: "Always answer only in Bengali." },
-  { code: "bg", label: "Bulgarian", instruction: "Always answer only in Bulgarian." },
-  { code: "ca", label: "Catalan", instruction: "Always answer only in Catalan." },
-  { code: "zh", label: "Chinese", instruction: "Always answer only in Chinese." },
-  { code: "hr", label: "Croatian", instruction: "Always answer only in Croatian." },
-  { code: "cs", label: "Czech", instruction: "Always answer only in Czech." },
-  { code: "da", label: "Danish", instruction: "Always answer only in Danish." },
-  { code: "nl", label: "Dutch", instruction: "Always answer only in Dutch." },
-  { code: "en", label: "English", instruction: "Always answer only in English." },
-  { code: "et", label: "Estonian", instruction: "Always answer only in Estonian." },
-  { code: "fi", label: "Finnish", instruction: "Always answer only in Finnish." },
-  { code: "fr", label: "French", instruction: "Always answer only in French." },
-  { code: "de", label: "German", instruction: "Always answer only in German." },
-  { code: "el", label: "Greek", instruction: "Always answer only in Greek." },
-  { code: "he", label: "Hebrew", instruction: "Always answer only in Hebrew." },
-  { code: "hi", label: "Hindi", instruction: "Always answer only in Hindi." },
-  { code: "hu", label: "Hungarian", instruction: "Always answer only in Hungarian." },
-  { code: "id", label: "Indonesian", instruction: "Always answer only in Indonesian." },
-  { code: "it", label: "Italian", instruction: "Always answer only in Italian." },
-  { code: "ja", label: "Japanese", instruction: "Always answer only in Japanese." },
-  { code: "ko", label: "Korean", instruction: "Always answer only in Korean." },
-  { code: "lv", label: "Latvian", instruction: "Always answer only in Latvian." },
-  { code: "lt", label: "Lithuanian", instruction: "Always answer only in Lithuanian." },
-  { code: "ms", label: "Malay", instruction: "Always answer only in Malay." },
-  { code: "no", label: "Norwegian", instruction: "Always answer only in Norwegian." },
-  { code: "fa", label: "Persian", instruction: "Always answer only in Persian." },
-  { code: "pl", label: "Polish", instruction: "Always answer only in Polish." },
-  { code: "pt", label: "Portuguese", instruction: "Always answer only in Portuguese." },
-  { code: "ro", label: "Romanian", instruction: "Always answer only in Romanian." },
-  { code: "ru", label: "Russian", instruction: "Always answer only in Russian." },
-  { code: "sr", label: "Serbian", instruction: "Always answer only in Serbian." },
-  { code: "sk", label: "Slovak", instruction: "Always answer only in Slovak." },
-  { code: "sl", label: "Slovenian", instruction: "Always answer only in Slovenian." },
-  { code: "es", label: "Spanish", instruction: "Always answer only in Spanish." },
-  { code: "sv", label: "Swedish", instruction: "Always answer only in Swedish." },
-  { code: "ta", label: "Tamil", instruction: "Always answer only in Tamil." },
-  { code: "te", label: "Telugu", instruction: "Always answer only in Telugu." },
-  { code: "th", label: "Thai", instruction: "Always answer only in Thai." },
-  { code: "tr", label: "Turkish", instruction: "Always answer only in Turkish." },
-  { code: "uk", label: "Ukrainian", instruction: "Always answer only in Ukrainian." },
-  { code: "ur", label: "Urdu", instruction: "Always answer only in Urdu." },
-  { code: "vi", label: "Vietnamese", instruction: "Always answer only in Vietnamese." },
+export const LANGUAGE_OPTIONS: LanguageOption[] = [
+  { code: "auto", label: "Auto detect" },
+  { code: "ar", label: "Arabic" },
+  { code: "bn", label: "Bengali" },
+  { code: "bg", label: "Bulgarian" },
+  { code: "ca", label: "Catalan" },
+  { code: "zh", label: "Chinese" },
+  { code: "hr", label: "Croatian" },
+  { code: "cs", label: "Czech" },
+  { code: "da", label: "Danish" },
+  { code: "nl", label: "Dutch" },
+  { code: "en", label: "English" },
+  { code: "et", label: "Estonian" },
+  { code: "fi", label: "Finnish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "el", label: "Greek" },
+  { code: "he", label: "Hebrew" },
+  { code: "hi", label: "Hindi" },
+  { code: "hu", label: "Hungarian" },
+  { code: "id", label: "Indonesian" },
+  { code: "it", label: "Italian" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "lv", label: "Latvian" },
+  { code: "lt", label: "Lithuanian" },
+  { code: "ms", label: "Malay" },
+  { code: "no", label: "Norwegian" },
+  { code: "fa", label: "Persian" },
+  { code: "pl", label: "Polish" },
+  { code: "pt", label: "Portuguese" },
+  { code: "ro", label: "Romanian" },
+  { code: "ru", label: "Russian" },
+  { code: "sr", label: "Serbian" },
+  { code: "sk", label: "Slovak" },
+  { code: "sl", label: "Slovenian" },
+  { code: "es", label: "Spanish" },
+  { code: "sv", label: "Swedish" },
+  { code: "ta", label: "Tamil" },
+  { code: "te", label: "Telugu" },
+  { code: "th", label: "Thai" },
+  { code: "tr", label: "Turkish" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "ur", label: "Urdu" },
+  { code: "vi", label: "Vietnamese" },
 ];
 
 export const DEFAULT_CHAT_MODEL = CHAT_MODELS[0].id;
 export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
-export const DEFAULT_VOICE_LANGUAGE = VOICE_LANGUAGE_OPTIONS[0].code;

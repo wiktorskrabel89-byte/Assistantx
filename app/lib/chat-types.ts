@@ -137,39 +137,3 @@ export type ToolbarTab = {
   label: string;
   icon: LucideIcon;
 };
-
-export type SpeechRecognitionAlternativeLike = {
-  transcript: string;
-};
-
-export type SpeechRecognitionResultLike = {
-  isFinal: boolean;
-  0: SpeechRecognitionAlternativeLike;
-};
-
-export type SpeechRecognitionEventLike = Event & {
-  results: ArrayLike<SpeechRecognitionResultLike>;
-};
-
-export type SpeechRecognitionErrorEventLike = Event & {
-  error?: string;
-};
-
-export type SpeechRecognitionLike = EventTarget & {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-};
-
-export type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-export type BrowserWindow = Window & typeof globalThis & {
-  SpeechRecognition?: SpeechRecognitionConstructor;
-  webkitSpeechRecognition?: SpeechRecognitionConstructor;
-};

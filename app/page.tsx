@@ -8,6 +8,7 @@ import { ChatComposer } from "./components/ChatComposer";
 import { ChatHeader } from "./components/ChatHeader";
 import { ChatSessionsPanel } from "./components/ChatSessionsPanel";
 import { CodeHistoryPanel } from "./components/CodeHistoryPanel";
+import { ConversationToolbar } from "./components/ConversationToolbar";
 import { ConversationsSidebar } from "./components/ConversationsSidebar";
 import { CustomAgentManager } from "./components/CustomAgentManager";
 import { GitHubPanel } from "./components/GitHubPanel";
@@ -732,6 +733,18 @@ export default function Home() {
                     onConnectGoogle={() => void signInWithProvider("google")}
                     onOpenApps={() => setAppsOpen(true)}
                   />
+
+                  <div className="lg:hidden">
+                    <ConversationToolbar
+                      dark={state.dark}
+                      sessionCount={conversations.length}
+                      artifactCount={artifacts.length}
+                      onOpenSessions={() => togglePanel("sessions")}
+                      onOpenCodeHistory={() => togglePanel("history")}
+                      onOpenAiTools={() => togglePanel("tools")}
+                      onOpenApps={() => togglePanel("apps")}
+                    />
+                  </div>
 
                   <div className="min-h-0 flex flex-1 flex-col">
                     <PullToRefresh

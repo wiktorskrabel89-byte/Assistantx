@@ -10,7 +10,7 @@ export default function TermsPage() {
   return (
     <LegalDocument
       title="Terms of Service"
-      description="These Terms of Service govern your access to and use of Moje AI, including chat, uploads, integrations, voice features, exports, and related services. By using the site, you agree to these terms."
+      description="These Terms of Service govern your access to and use of Moje AI, including chat, uploads, integrations, exports, and related services. By using the site, you agree to these terms."
       lastUpdated="April 14, 2026"
     >
       <section>
@@ -63,7 +63,7 @@ export default function TermsPage() {
       <section>
         <h2>7. Integrations And Third-Party Services</h2>
         <p>
-          Some features depend on third-party services such as authentication providers, cloud storage, code hosting, AI APIs, or voice providers. Your use of those services may also be governed by their own terms and policies. We are not responsible for third-party services, content, availability, or security practices.
+          Some features depend on third-party services such as authentication providers, cloud storage, code hosting, or AI APIs. Your use of those services may also be governed by their own terms and policies. We are not responsible for third-party services, content, availability, or security practices.
         </p>
       </section>
 
