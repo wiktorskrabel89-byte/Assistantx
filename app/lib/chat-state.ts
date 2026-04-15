@@ -2,8 +2,8 @@ import { Braces, Code2, MessageSquareText, PlugZap, SlidersHorizontal, UserRound
 import {
   CHAT_MODELS,
   CODE_MODELS,
+  LANGUAGE_OPTIONS,
   SEARCH_MODELS,
-  VOICE_LANGUAGE_OPTIONS,
 } from "@/lib/ai-config";
 import type {
   Artifact,
@@ -24,27 +24,7 @@ type AutoRoutedMode = Exclude<Mode, "image" | "upload">;
 
 export const STORAGE_KEY = "moje-ai.workspace-state.v3";
 export const NEW_CHAT_TITLE = "New chat";
-export const TEXT_LANGUAGE_OPTIONS = [
-  { code: "auto", label: "Auto detect" },
-  ...VOICE_LANGUAGE_OPTIONS.filter((option) => option.code !== "auto"),
-];
-export const SPEECH_RECOGNITION_LOCALES: Record<string, string> = {
-  auto: "en-US",
-  en: "en-US",
-  pl: "pl-PL",
-  de: "de-DE",
-  fr: "fr-FR",
-  es: "es-ES",
-  pt: "pt-PT",
-  it: "it-IT",
-  nl: "nl-NL",
-  tr: "tr-TR",
-  ru: "ru-RU",
-  zh: "zh-CN",
-  ja: "ja-JP",
-  ko: "ko-KR",
-  ar: "ar-SA",
-};
+export const TEXT_LANGUAGE_OPTIONS = LANGUAGE_OPTIONS;
 export const QUICK_CHIPS: Array<{ label: string; text: string; mode?: Mode }> = [
   { label: "Explain code", text: "Explain this code: ", mode: "code" },
   { label: "Fix bug", text: "Help me fix this bug: ", mode: "code" },
