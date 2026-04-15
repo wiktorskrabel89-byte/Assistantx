@@ -181,11 +181,15 @@ export async function POST(req: Request) {
     modelId,
     allowedModels,
     assistantName,
+    assistantPurpose,
     assistantInstructions,
     history,
     memoryNotes,
     style = "concise",
     languageLock = "auto",
+    preferredProgrammingLanguage,
+    interactionProfile,
+    addInternetContext = false,
   } = await req.json();
   const encoder = new TextEncoder();
 
@@ -216,8 +220,20 @@ export async function POST(req: Request) {
   const assistantInstruction = typeof assistantInstructions === "string" && assistantInstructions.trim()
     ? `Additional agent instructions for ${typeof assistantName === "string" && assistantName.trim() ? assistantName.trim() : "this assistant"}: ${assistantInstructions.trim()}`
     : "";
+  const assistantPurposeInstruction = typeof assistantPurpose === "string" && assistantPurpose.trim()
+    ? `The active agent's purpose is: ${assistantPurpose.trim()}`
+    : "";
   const memoryInstruction = typeof memoryNotes === "string" && memoryNotes.trim()
     ? `Important remembered user context: ${memoryNotes.trim()}`
+    : "";
+  const programmingLanguageInstruction = typeof preferredProgrammingLanguage === "string" && preferredProgrammingLanguage.trim()
+    ? `When code is requested and the user does not specify otherwise, prefer ${preferredProgrammingLanguage.trim()}.`
+    : "";
+  const interactionProfileInstruction = typeof interactionProfile === "string" && interactionProfile.trim()
+    ? `Tailor the response using this local interaction profile: ${interactionProfile.trim()}`
+    : "";
+  const internetContextInstruction = addInternetContext
+    ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
 
   const routeReason = isSearchMode
@@ -260,15 +276,15 @@ export async function POST(req: Request) {
 
   let systemPrompt: string;
   if (isSearchMode) {
-    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${assistantInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
   } else if (isDeepSeek) {
-    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${assistantInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
   } else if (isGemini) {
-    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${assistantInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
   } else if (inferredCodeRequest) {
-    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${assistantInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
   } else {
-    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${assistantInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
   }
 
   const historyMessages: Array<{ role: string; content: string }> = Array.isArray(history)

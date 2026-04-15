@@ -1,9 +1,83 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
-import { createId, createMessage, deriveTitle, getAllowedModels, NEW_CHAT_TITLE } from "../lib/chat-state";
+import { BUILT_IN_AGENTS, createId, createMessage, deriveTitle, getAllowedModels, NEW_CHAT_TITLE } from "../lib/chat-state";
 import { type ActiveRequestTarget, type ChatStreamChunk, isAbortLikeError } from "../lib/chat-transport";
 import type { ChatEntry, ChatThread, Mode, QueuedMessage, StoredState } from "../lib/chat-types";
+
+const PROGRAMMING_LANGUAGE_HINTS: Array<{ name: string; patterns: RegExp[]; extensions: string[] }> = [
+  { name: "TypeScript", patterns: [/\btypescript\b/i, /\btsx?\b/i, /react|next\.js/i], extensions: ["ts", "tsx"] },
+  { name: "JavaScript", patterns: [/\bjavascript\b/i, /\bjsx?\b/i, /node\.?js/i], extensions: ["js", "jsx", "mjs", "cjs"] },
+  { name: "Python", patterns: [/\bpython\b/i, /\bpy\b/i, /django|flask|fastapi/i], extensions: ["py"] },
+  { name: "SQL", patterns: [/\bsql\b/i, /postgres|mysql|sqlite/i], extensions: ["sql"] },
+  { name: "HTML/CSS", patterns: [/\bhtml\b/i, /\bcss\b/i, /tailwind|stylesheet/i], extensions: ["html", "css"] },
+  { name: "Java", patterns: [/\bjava\b/i, /spring boot/i], extensions: ["java"] },
+  { name: "C#", patterns: [/\bc#\b/i, /dotnet|\.net/i], extensions: ["cs"] },
+  { name: "Go", patterns: [/\bgolang\b/i, /\bgo\b/i], extensions: ["go"] },
+  { name: "Rust", patterns: [/\brust\b/i, /cargo/i], extensions: ["rs"] },
+];
+
+function isImageRequest(message: string) {
+  const text = message.trim().toLowerCase();
+  if (!text) return false;
+
+  return /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/.test(text)
+    || /^\s*\/image\b/.test(text)
+    || /\bimage of\b/.test(text)
+    || /\bplease.*\b(image|picture|photo)\b/.test(text);
+}
+
+function getFileExtension(name?: string | null) {
+  if (!name) return "";
+  const parts = name.toLowerCase().split(".");
+  return parts.length > 1 ? parts.pop() ?? "" : "";
+}
+
+function inferPreferredProgrammingLanguage(message: string, fileName: string | undefined, recentMessages: ChatEntry[]) {
+  const samples = [
+    message,
+    ...recentMessages.flatMap((entry) => [entry.user, entry.ai]).filter(Boolean),
+  ].join("\n");
+  const extension = getFileExtension(fileName);
+
+  const ranked = PROGRAMMING_LANGUAGE_HINTS.map((candidate) => {
+    const patternScore = candidate.patterns.reduce((score, pattern) => score + (pattern.test(samples) ? 1 : 0), 0);
+    const extensionScore = candidate.extensions.includes(extension) ? 2 : 0;
+    return { name: candidate.name, score: patternScore + extensionScore };
+  }).sort((left, right) => right.score - left.score);
+
+  return ranked[0]?.score > 0 ? ranked[0].name : null;
+}
+
+function buildInteractionProfile({
+  recentMessages,
+  mode,
+  styleMode,
+  languageLock,
+  preferredProgrammingLanguage,
+}: {
+  recentMessages: ChatEntry[];
+  mode: Mode;
+  styleMode: string;
+  languageLock: string;
+  preferredProgrammingLanguage: string | null;
+}) {
+  const recentUserMessages = recentMessages.map((entry) => entry.user).filter(Boolean);
+  const codeCount = recentUserMessages.filter((entry) => /\b(code|bug|component|function|query|test|refactor|api|script)\b/i.test(entry)).length;
+  const researchCount = recentUserMessages.filter((entry) => /\b(search|latest|current|docs|documentation|compare|research)\b/i.test(entry)).length;
+  const ratings = recentMessages.map((entry) => entry.feedback).filter(Boolean);
+  const profile: string[] = [];
+
+  profile.push(`Current interaction lane: ${mode}.`);
+  if (codeCount > 0) profile.push(`Recent history is coding-heavy (${codeCount} of the last ${recentUserMessages.length || 1} user turns).`);
+  if (researchCount > 0) profile.push(`The user sometimes asks for web-backed or documentation-backed answers (${researchCount} recent turns).`);
+  profile.push(`Preferred answer style is ${styleMode}.`);
+  if (languageLock !== "auto") profile.push(`The user explicitly locked the response language to ${languageLock}.`);
+  if (preferredProgrammingLanguage) profile.push(`When code is appropriate, the user's current likely programming language is ${preferredProgrammingLanguage}.`);
+  if (ratings.length > 0) profile.push(`Stored response feedback exists for ${ratings.length} recent assistant replies; keep responses practical and easy to iterate on.`);
+
+  return profile.join(" ");
+}
 
 type UseChatTransportArgs = {
   activeWorkspaceId: string;
@@ -196,10 +270,24 @@ export function useChatTransport({
     const userMsg = queuedMessage.text;
     const activeSettings = workspace.settings;
     const activeCustomAgent = activeSettings.customAgents.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
+    const activeBuiltInAgent = BUILT_IN_AGENTS.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
     const allowedModels = getAllowedModels(queuedMessage.mode);
+    const recentMessages = chat.messages.slice(-8);
     const history = activeSettings.memoryEnabled
-      ? chat.messages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
+      ? recentMessages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
       : [];
+    const preferredProgrammingLanguage = inferPreferredProgrammingLanguage(userMsg, queuedMessage.file?.name, recentMessages);
+    const interactionProfile = buildInteractionProfile({
+      recentMessages,
+      mode: queuedMessage.mode,
+      styleMode: activeSettings.styleMode,
+      languageLock: activeSettings.languageLock,
+      preferredProgrammingLanguage,
+    });
+    const assistantPurpose = activeCustomAgent?.description ?? activeBuiltInAgent?.description ?? "";
+    const shouldAutoGenerateImage = activeSettings.activeAgentId === "builtin-chat"
+      && queuedMessage.mode !== "upload"
+      && isImageRequest(userMsg);
 
     const title = chat.messages.length === 0 || chat.title === NEW_CHAT_TITLE
       ? deriveTitle(userMsg || queuedMessage.file?.name || NEW_CHAT_TITLE)
@@ -209,13 +297,13 @@ export function useChatTransport({
     activeRequestTargetRef.current = { workspaceId, chatId, queueId: queuedMessage.id };
 
     try {
-      if (queuedMessage.mode === "image") {
+      if (queuedMessage.mode === "image" || shouldAutoGenerateImage) {
         const pending = createMessage({
           user: userMsg,
           ai: "",
           model: null,
           status: "Generating image...",
-          routeReason: "Manual image mode",
+          routeReason: shouldAutoGenerateImage ? "AI Chat auto-detected an image request" : "Manual image mode",
         });
         updateChat(workspaceId, chatId, (chat) => ({
           ...chat,
@@ -291,10 +379,14 @@ export function useChatTransport({
           allowedModels,
           history,
           assistantName: activeCustomAgent?.name,
+          assistantPurpose,
           assistantInstructions: activeCustomAgent?.instructions,
           memoryNotes: activeSettings.memoryNotes,
           style: activeSettings.styleMode,
           languageLock: activeSettings.languageLock,
+          preferredProgrammingLanguage,
+          interactionProfile,
+          addInternetContext: queuedMessage.mode === "search",
         }),
       });
 
