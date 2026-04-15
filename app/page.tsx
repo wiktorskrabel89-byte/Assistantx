@@ -4,7 +4,7 @@ import { CalendarDays, ClipboardCheck, Code2, ImageIcon, Mail, type LucideIcon }
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { AIMessage } from "./components/AIMessage";
 import { AIToolsPanel } from "./components/AIToolsPanel";
-import { AppNavigationColumn } from "./components/AppNavigationColumn";
+import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatComposer } from "./components/ChatComposer";
 import { ChatHeader } from "./components/ChatHeader";
 import { ChatSessionsPanel } from "./components/ChatSessionsPanel";
@@ -218,6 +218,7 @@ const ChatList = memo(function ChatList({
 });
 
 export default function Home() {
+  const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -304,6 +305,7 @@ export default function Home() {
     updateLastMessage,
   });
   const currentConversationId = activeChat.id;
+  const isChatTab = activeAppTab === "chat";
   const workspaceQueries = useWorkspaceQueries({
     activeWorkspace,
     activeChat,
@@ -417,6 +419,18 @@ export default function Home() {
   const setComposerText = useCallback((text: string) => {
     setMessage(text);
     requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
+  const handleSelectAppTab = useCallback((tab: AppNavigationTab) => {
+    setActiveAppTab(tab);
+    setSidebarOpen(false);
+    setSessionsOpen(false);
+    setCodeHistoryOpen(false);
+    setAiToolsOpen(false);
+    setAppsOpen(false);
+    setPromptManagerOpen(false);
+    setCustomAgentManagerOpen(false);
+    setShareDialogOpen(false);
   }, []);
 
   const copyCode = useCallback((text: string, id: string) => {
@@ -685,255 +699,265 @@ export default function Home() {
     <>
       <div className={`min-h-screen ${bg}`}>
         <div className="mx-auto flex min-h-screen max-w-[1680px] gap-3 px-3 py-3">
-          <AppNavigationColumn dark={state.dark} />
+          <AppNavigationColumn dark={state.dark} activeTab={activeAppTab} onSelectTab={handleSelectAppTab} />
 
-          <ConversationsSidebar
-            open={sidebarOpen}
-            dark={state.dark}
-            cardBg={cardBg}
-            inputBg={inputBg}
-            workspaceName={activeWorkspace.name}
-            chatSearch={chatSearch}
-            chats={filteredConversations}
-            activeChatId={currentConversationId}
-            onClose={() => setSidebarOpen(false)}
-            onSearchChange={setChatSearch}
-            onCreateChat={createChatAction}
-            onSelectChat={(chatId) => setActiveChatId(activeWorkspace.id, chatId)}
-            onRenameChat={renameChat}
-            onDeleteChat={deleteChat}
-          />
+          {isChatTab ? (
+            <ConversationsSidebar
+              open={sidebarOpen}
+              dark={state.dark}
+              cardBg={cardBg}
+              inputBg={inputBg}
+              workspaceName={activeWorkspace.name}
+              chatSearch={chatSearch}
+              chats={filteredConversations}
+              activeChatId={currentConversationId}
+              onClose={() => setSidebarOpen(false)}
+              onSearchChange={setChatSearch}
+              onCreateChat={createChatAction}
+              onSelectChat={(chatId) => setActiveChatId(activeWorkspace.id, chatId)}
+              onRenameChat={renameChat}
+              onDeleteChat={deleteChat}
+            />
+          ) : null}
 
           <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border ${cardBg}`}>
-            <section className="flex h-full min-h-0 min-w-0 flex-col">
-              <ChatHeader
-                dark={state.dark}
-                inputBg={inputBg}
-                assistantIcon={assistantIcon}
-                assistantName={assistantName}
-                activeChatTitle={activeChat.title}
-                activeAgentId={selectedAgent}
-                builtInAgents={BUILT_IN_AGENTS}
-                customAgents={customAgents}
-                onOpenSidebar={() => setSidebarOpen(true)}
-                onSelectAgent={selectActiveAgent}
-                onOpenAgentManager={() => setCustomAgentManagerOpen(true)}
-                onOpenSessions={() => togglePanel("sessions")}
-                onOpenCodeHistory={() => togglePanel("history")}
-                onOpenAiTools={() => togglePanel("tools")}
-                onOpenApps={() => togglePanel("apps")}
-                onOpenShare={() => setShareDialogOpen(true)}
-                onOpenPrompts={() => setPromptManagerOpen(true)}
-                onCreateChat={createChatAction}
-              />
+            {isChatTab ? (
+              <section className="flex h-full min-h-0 min-w-0 flex-col">
+                <ChatHeader
+                  dark={state.dark}
+                  inputBg={inputBg}
+                  assistantIcon={assistantIcon}
+                  assistantName={assistantName}
+                  activeChatTitle={activeChat.title}
+                  activeAgentId={selectedAgent}
+                  builtInAgents={BUILT_IN_AGENTS}
+                  customAgents={customAgents}
+                  onOpenSidebar={() => setSidebarOpen(true)}
+                  onSelectAgent={selectActiveAgent}
+                  onOpenAgentManager={() => setCustomAgentManagerOpen(true)}
+                  onOpenSessions={() => togglePanel("sessions")}
+                  onOpenCodeHistory={() => togglePanel("history")}
+                  onOpenAiTools={() => togglePanel("tools")}
+                  onOpenApps={() => togglePanel("apps")}
+                  onOpenShare={() => setShareDialogOpen(true)}
+                  onOpenPrompts={() => setPromptManagerOpen(true)}
+                  onCreateChat={createChatAction}
+                />
 
-              <div className={`min-h-0 flex-1 px-3 py-4 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
-                <div className="mx-auto flex h-full max-w-5xl flex-col">
-                  <GoogleIntegrationBanner
-                    dark={state.dark}
-                    visible={authReady && !googleLinked}
-                    connecting={oauthLoading === "google"}
-                    onConnectGoogle={() => void signInWithProvider("google")}
-                    onOpenApps={() => setAppsOpen(true)}
-                  />
-
-                  <div className="lg:hidden">
-                    <ConversationToolbar
+                <div className={`min-h-0 flex-1 px-3 py-4 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
+                  <div className="mx-auto flex h-full max-w-5xl flex-col">
+                    <GoogleIntegrationBanner
                       dark={state.dark}
-                      sessionCount={conversations.length}
-                      artifactCount={artifacts.length}
-                      onOpenSessions={() => togglePanel("sessions")}
-                      onOpenCodeHistory={() => togglePanel("history")}
-                      onOpenAiTools={() => togglePanel("tools")}
-                      onOpenApps={() => togglePanel("apps")}
+                      visible={authReady && !googleLinked}
+                      connecting={oauthLoading === "google"}
+                      onConnectGoogle={() => void signInWithProvider("google")}
+                      onOpenApps={() => setAppsOpen(true)}
+                    />
+
+                    <div className="lg:hidden">
+                      <ConversationToolbar
+                        dark={state.dark}
+                        sessionCount={conversations.length}
+                        artifactCount={artifacts.length}
+                        onOpenSessions={() => togglePanel("sessions")}
+                        onOpenCodeHistory={() => togglePanel("history")}
+                        onOpenAiTools={() => togglePanel("tools")}
+                        onOpenApps={() => togglePanel("apps")}
+                      />
+                    </div>
+
+                    <div className="min-h-0 flex flex-1 flex-col">
+                      <PullToRefresh
+                        dark={state.dark}
+                        disabled={loading}
+                        scrollContainerRef={chatScrollRef}
+                        onRefresh={refreshConversation}
+                      />
+                      <ChatList
+                        chat={activeChat.messages}
+                        loading={loading}
+                        dark={state.dark}
+                        cardBg={cardBg}
+                        codeBg={codeBg}
+                        copied={copied}
+                        scrollRef={chatScrollRef}
+                        chatEndRef={chatEndRef}
+                        openReasoning={openReasoning}
+                        onCopyText={copyCode}
+                        onToggleReasoning={toggleReasoning}
+                        onEditUser={editUserMessage}
+                        editingMessageId={editingMessageId}
+                        editedMessageContent={editedMessageContent}
+                        onStartEditingMessage={startEditingMessage}
+                        onEditedMessageChange={setEditedMessageContent}
+                        onCancelEditingMessage={cancelEditingMessage}
+                        onSaveEditedMessage={saveEditedMessage}
+                        onResponseAction={applyResponseAction}
+                        onCreateFollowUp={createFollowUp}
+                        onSetFeedback={setMessageFeedback}
+                        onQuickStart={(text, nextMode) => {
+                          if (nextMode) setWorkspaceMode(nextMode);
+                          setComposerText(text);
+                        }}
+                        assistantName={assistantName}
+                        assistantDescription={assistantDescription}
+                        assistantIcon={assistantIcon}
+                      />
+                    </div>
+
+                    <ThinkingIndicator
+                      dark={state.dark}
+                      visible={loading || stopRequested}
+                      status={stopRequested ? "Stopping response..." : latestEntry?.status}
+                      routeReason={latestEntry?.routeReason}
                     />
                   </div>
-
-                  <div className="min-h-0 flex flex-1 flex-col">
-                    <PullToRefresh
-                      dark={state.dark}
-                      disabled={loading}
-                      scrollContainerRef={chatScrollRef}
-                      onRefresh={refreshConversation}
-                    />
-                    <ChatList
-                      chat={activeChat.messages}
-                      loading={loading}
-                      dark={state.dark}
-                      cardBg={cardBg}
-                      codeBg={codeBg}
-                      copied={copied}
-                      scrollRef={chatScrollRef}
-                      chatEndRef={chatEndRef}
-                      openReasoning={openReasoning}
-                      onCopyText={copyCode}
-                      onToggleReasoning={toggleReasoning}
-                      onEditUser={editUserMessage}
-                      editingMessageId={editingMessageId}
-                      editedMessageContent={editedMessageContent}
-                      onStartEditingMessage={startEditingMessage}
-                      onEditedMessageChange={setEditedMessageContent}
-                      onCancelEditingMessage={cancelEditingMessage}
-                      onSaveEditedMessage={saveEditedMessage}
-                      onResponseAction={applyResponseAction}
-                      onCreateFollowUp={createFollowUp}
-                      onSetFeedback={setMessageFeedback}
-                      onQuickStart={(text, nextMode) => {
-                        if (nextMode) setWorkspaceMode(nextMode);
-                        setComposerText(text);
-                      }}
-                      assistantName={assistantName}
-                      assistantDescription={assistantDescription}
-                      assistantIcon={assistantIcon}
-                    />
-                  </div>
-
-                  <ThinkingIndicator
-                    dark={state.dark}
-                    visible={loading || stopRequested}
-                    status={stopRequested ? "Stopping response..." : latestEntry?.status}
-                    routeReason={latestEntry?.routeReason}
-                  />
                 </div>
-              </div>
 
-              <ChatComposer
-                dark={state.dark}
-                message={message}
-                file={file}
-                filePreview={filePreview}
-                queuedMessages={queuedMessages}
-                loading={loading}
-                composerPreview={composerPreview}
-                fileInputRef={fileInputRef}
-                inputRef={inputRef}
-                onMessageChange={setMessage}
-                onSelectFile={handleFile}
-                onRemoveFile={() => {
-                  setFile(null);
-                  setFilePreview(null);
-                  setWorkspaceMode("auto");
-                }}
-                onTogglePreview={() => setComposerPreview((prev) => !prev)}
-                onStopGeneration={stopCurrentGeneration}
-                onQueueMessage={queueComposerMessage}
-                onRemoveQueuedMessage={removeQueuedMessage}
-              />
-            </section>
+                <ChatComposer
+                  dark={state.dark}
+                  message={message}
+                  file={file}
+                  filePreview={filePreview}
+                  queuedMessages={queuedMessages}
+                  loading={loading}
+                  composerPreview={composerPreview}
+                  fileInputRef={fileInputRef}
+                  inputRef={inputRef}
+                  onMessageChange={setMessage}
+                  onSelectFile={handleFile}
+                  onRemoveFile={() => {
+                    setFile(null);
+                    setFilePreview(null);
+                    setWorkspaceMode("auto");
+                  }}
+                  onTogglePreview={() => setComposerPreview((prev) => !prev)}
+                  onStopGeneration={stopCurrentGeneration}
+                  onQueueMessage={queueComposerMessage}
+                  onRemoveQueuedMessage={removeQueuedMessage}
+                />
+              </section>
+            ) : (
+              <section className={`h-full min-h-0 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`} />
+            )}
           </main>
         </div>
       </div>
 
-      <PromptManager
-        key={`${activeWorkspace.id}-${promptManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.promptTemplates.length}`}
-        open={promptManagerOpen}
-        dark={state.dark}
-        templates={activeWorkspace.settings.promptTemplates}
-        modeOptions={MODE_PANEL_OPTIONS.map((option) => ({ id: option.id, label: option.label }))}
-        onClose={() => setPromptManagerOpen(false)}
-        onApply={applyPromptTemplate}
-        onCreate={createPromptTemplate}
-        onUpdate={updatePromptTemplate}
-        onDelete={deletePromptTemplate}
-      />
+      {isChatTab ? (
+        <>
+          <PromptManager
+            key={`${activeWorkspace.id}-${promptManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.promptTemplates.length}`}
+            open={promptManagerOpen}
+            dark={state.dark}
+            templates={activeWorkspace.settings.promptTemplates}
+            modeOptions={MODE_PANEL_OPTIONS.map((option) => ({ id: option.id, label: option.label }))}
+            onClose={() => setPromptManagerOpen(false)}
+            onApply={applyPromptTemplate}
+            onCreate={createPromptTemplate}
+            onUpdate={updatePromptTemplate}
+            onDelete={deletePromptTemplate}
+          />
 
-      <CustomAgentManager
-        key={`${activeWorkspace.id}-${customAgentManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.customAgents.length}`}
-        open={customAgentManagerOpen}
-        dark={state.dark}
-        agents={customAgents}
-        modeOptions={MODE_PANEL_OPTIONS.filter((option) => option.id === "chat" || option.id === "code").map((option) => ({ id: option.id, label: option.label }))}
-        onClose={() => setCustomAgentManagerOpen(false)}
-        onCreate={(agent) => workspaceQueries.createCustomAgentMutation.mutate(agent)}
-        onUpdate={(agentId, agent) => workspaceQueries.updateCustomAgentMutation.mutate({ agentId, agent })}
-        onDelete={deleteCustomAgent}
-      />
+          <CustomAgentManager
+            key={`${activeWorkspace.id}-${customAgentManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.customAgents.length}`}
+            open={customAgentManagerOpen}
+            dark={state.dark}
+            agents={customAgents}
+            modeOptions={MODE_PANEL_OPTIONS.filter((option) => option.id === "chat" || option.id === "code").map((option) => ({ id: option.id, label: option.label }))}
+            onClose={() => setCustomAgentManagerOpen(false)}
+            onCreate={(agent) => workspaceQueries.createCustomAgentMutation.mutate(agent)}
+            onUpdate={(agentId, agent) => workspaceQueries.updateCustomAgentMutation.mutate({ agentId, agent })}
+            onDelete={deleteCustomAgent}
+          />
 
-      <ShareConversationDialog
-        open={shareDialogOpen}
-        dark={state.dark}
-        title={activeChat.title}
-        copied={copied}
-        onClose={() => setShareDialogOpen(false)}
-        onCopyShareLink={() => void copyShareLink()}
-        onExportMarkdown={exportMarkdown}
-        onExportJson={exportJson}
-        onCopyVsCodePrompt={() => void copyVsCodePrompt()}
-        onDownloadVsCodeBundle={downloadVsCodeBundle}
-      />
+          <ShareConversationDialog
+            open={shareDialogOpen}
+            dark={state.dark}
+            title={activeChat.title}
+            copied={copied}
+            onClose={() => setShareDialogOpen(false)}
+            onCopyShareLink={() => void copyShareLink()}
+            onExportMarkdown={exportMarkdown}
+            onExportJson={exportJson}
+            onCopyVsCodePrompt={() => void copyVsCodePrompt()}
+            onDownloadVsCodeBundle={downloadVsCodeBundle}
+          />
 
-      <ChatSessionsPanel
-        open={sessionsOpen}
-        dark={state.dark}
-        workspaceName={activeWorkspace.name}
-        searchValue={chatSearch}
-        sessions={sessionItems}
-        onSearchChange={setChatSearch}
-        onCreateSession={createChatAction}
-        onSelectSession={(chatId) => {
-          setActiveChatId(activeWorkspace.id, chatId);
-          closePanels();
-        }}
-        onRenameSession={renameChat}
-        onDeleteSession={deleteChat}
-        onClose={closePanels}
-      />
+          <ChatSessionsPanel
+            open={sessionsOpen}
+            dark={state.dark}
+            workspaceName={activeWorkspace.name}
+            searchValue={chatSearch}
+            sessions={sessionItems}
+            onSearchChange={setChatSearch}
+            onCreateSession={createChatAction}
+            onSelectSession={(chatId) => {
+              setActiveChatId(activeWorkspace.id, chatId);
+              closePanels();
+            }}
+            onRenameSession={renameChat}
+            onDeleteSession={deleteChat}
+            onClose={closePanels}
+          />
 
-      <AIToolsPanel
-        open={aiToolsOpen}
-        dark={state.dark}
-        showModes={false}
-        mode={mode}
-        modeOptions={MODE_PANEL_OPTIONS}
-        quickChips={QUICK_CHIPS}
-        settings={{
-          styleMode: userPreferences.styleMode,
-          languageLock: userPreferences.languageLock,
-          memoryEnabled: userPreferences.memoryEnabled,
-          memoryNotes: userPreferences.memoryNotes,
-        }}
-        languageOptions={TEXT_LANGUAGE_OPTIONS}
-        onClose={closePanels}
-        onModeChange={(modeId) => setWorkspaceMode(modeId as Mode)}
-        onQuickChip={(chip) => {
-          if (chip.mode) setWorkspaceMode(chip.mode as Mode);
-          setComposerText(chip.text);
-          closePanels();
-        }}
-        onStyleChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ styleMode: value as StyleMode })}
-        onLanguageChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ languageLock: value })}
-        onMemoryToggle={(enabled) => workspaceQueries.updatePreferencesMutation.mutate({ memoryEnabled: enabled })}
-        onMemoryNotesChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: value })}
-        onClearMemory={() => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: "" })}
-        onClearChat={() => {
-          clearActiveChat();
-          closePanels();
-        }}
-      />
+          <AIToolsPanel
+            open={aiToolsOpen}
+            dark={state.dark}
+            showModes={false}
+            mode={mode}
+            modeOptions={MODE_PANEL_OPTIONS}
+            quickChips={QUICK_CHIPS}
+            settings={{
+              styleMode: userPreferences.styleMode,
+              languageLock: userPreferences.languageLock,
+              memoryEnabled: userPreferences.memoryEnabled,
+              memoryNotes: userPreferences.memoryNotes,
+            }}
+            languageOptions={TEXT_LANGUAGE_OPTIONS}
+            onClose={closePanels}
+            onModeChange={(modeId) => setWorkspaceMode(modeId as Mode)}
+            onQuickChip={(chip) => {
+              if (chip.mode) setWorkspaceMode(chip.mode as Mode);
+              setComposerText(chip.text);
+              closePanels();
+            }}
+            onStyleChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ styleMode: value as StyleMode })}
+            onLanguageChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ languageLock: value })}
+            onMemoryToggle={(enabled) => workspaceQueries.updatePreferencesMutation.mutate({ memoryEnabled: enabled })}
+            onMemoryNotesChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: value })}
+            onClearMemory={() => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: "" })}
+            onClearChat={() => {
+              clearActiveChat();
+              closePanels();
+            }}
+          />
 
-      <CodeHistoryPanel
-        open={codeHistoryOpen}
-        dark={state.dark}
-        artifacts={artifacts}
-        copied={copied}
-        onCopyCode={copyCode}
-        onClose={closePanels}
-      />
+          <CodeHistoryPanel
+            open={codeHistoryOpen}
+            dark={state.dark}
+            artifacts={artifacts}
+            copied={copied}
+            onCopyCode={copyCode}
+            onClose={closePanels}
+          />
 
-      <GitHubPanel
-        open={appsOpen}
-        dark={state.dark}
-        linkedProviders={linkedProviders}
-        authProvider={authProvider}
-        oauthLoading={oauthLoading}
-        copied={copied}
-        hasArtifacts={artifacts.length > 0}
-        onClose={closePanels}
-        onConnectProvider={(provider) => void signInWithProvider(provider)}
-        onImportFile={handleImportedFile}
-        onCopyVsCodePrompt={() => void copyVsCodePrompt()}
-        onDownloadVsCodeBundle={downloadVsCodeBundle}
-      />
+          <GitHubPanel
+            open={appsOpen}
+            dark={state.dark}
+            linkedProviders={linkedProviders}
+            authProvider={authProvider}
+            oauthLoading={oauthLoading}
+            copied={copied}
+            hasArtifacts={artifacts.length > 0}
+            onClose={closePanels}
+            onConnectProvider={(provider) => void signInWithProvider(provider)}
+            onImportFile={handleImportedFile}
+            onCopyVsCodePrompt={() => void copyVsCodePrompt()}
+            onDownloadVsCodeBundle={downloadVsCodeBundle}
+          />
+        </>
+      ) : null}
     </>
   );
 }
