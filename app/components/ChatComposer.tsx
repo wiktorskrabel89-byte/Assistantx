@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
-import type { RefObject } from "react";
+import { useCallback, useLayoutEffect, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
 
@@ -42,6 +42,20 @@ export function ChatComposer({
   onQueueMessage,
   onRemoveQueuedMessage,
 }: ChatComposerProps) {
+  const resizeComposer = useCallback(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    const nextHeight = Math.min(Math.max(textarea.scrollHeight, 44), 180);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 180 ? "auto" : "hidden";
+  }, [inputRef]);
+
+  useLayoutEffect(() => {
+    resizeComposer();
+  }, [message, resizeComposer]);
+
   return (
     <div className="border-t border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/90">
       <div className="mx-auto max-w-5xl space-y-2">
@@ -134,7 +148,10 @@ export function ChatComposer({
           <textarea
             ref={inputRef}
             value={message}
-            onChange={(event) => onMessageChange(event.target.value)}
+            onChange={(event) => {
+              onMessageChange(event.target.value);
+              resizeComposer();
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
