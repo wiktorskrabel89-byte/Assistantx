@@ -142,19 +142,6 @@ export function PromptManager({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs text-slate-500">Mode</label>
-                <select
-                  value={draftMode}
-                  onChange={(event) => setDraftMode(event.target.value)}
-                  className={`w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`}
-                >
-                  {modeOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
                 <label className="mb-1 block text-xs text-slate-500">Prompt</label>
                 <textarea
                   value={draftText}

@@ -157,19 +157,6 @@ export function CustomAgentManager({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs text-slate-500">Preferred mode</label>
-                <select
-                  value={draftPreferredMode}
-                  onChange={(event) => setDraftPreferredMode(event.target.value)}
-                  className={`w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`}
-                >
-                  {modeOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
                 <label className="mb-1 block text-xs text-slate-500">Instructions</label>
                 <textarea
                   value={draftInstructions}

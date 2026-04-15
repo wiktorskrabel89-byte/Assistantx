@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     : "[MISSING NEXT_PUBLIC_SUPABASE_URL]";
 
   try {
-    const supabase = await createClient();
+    await createClient();
 
     return NextResponse.json(
       {
