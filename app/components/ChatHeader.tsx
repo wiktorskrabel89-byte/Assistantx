@@ -1,25 +1,20 @@
 "use client";
 
 import { Menu, Plus, type LucideIcon } from "lucide-react";
-import type { BuiltInAgent, CustomAgent, SidebarTab, ToolbarTab } from "../lib/chat-types";
+import type { BuiltInAgent, CustomAgent } from "../lib/chat-types";
 
 type ChatHeaderProps = {
   dark: boolean;
   inputBg: string;
-  sidebarTab: SidebarTab;
   assistantIcon: LucideIcon;
   assistantName: string;
   activeChatTitle: string;
   activeAgentId: string;
   builtInAgents: BuiltInAgent[];
   customAgents: CustomAgent[];
-  toolbarTabs: ToolbarTab[];
   onOpenSidebar: () => void;
   onSelectAgent: (agentId: string) => void;
   onOpenAgentManager: () => void;
-  onSelectTab: (tabId: SidebarTab) => void;
-  onOpenSessions: () => void;
-  onOpenAiTools: () => void;
   onOpenShare: () => void;
   onOpenPrompts: () => void;
   onCreateChat: () => void;
@@ -28,20 +23,15 @@ type ChatHeaderProps = {
 export function ChatHeader({
   dark,
   inputBg,
-  sidebarTab,
   assistantIcon: AssistantIcon,
   assistantName,
   activeChatTitle,
   activeAgentId,
   builtInAgents,
   customAgents,
-  toolbarTabs,
   onOpenSidebar,
   onSelectAgent,
   onOpenAgentManager,
-  onSelectTab,
-  onOpenSessions,
-  onOpenAiTools,
   onOpenShare,
   onOpenPrompts,
   onCreateChat,
@@ -84,43 +74,6 @@ export function ChatHeader({
             className={`hidden rounded-xl border px-3 py-2 text-sm font-medium md:block ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
           >
             Agents
-          </button>
-
-          {toolbarTabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onSelectTab(tab.id)}
-                title={tab.label}
-                aria-label={tab.label}
-                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors ${
-                  sidebarTab === tab.id
-                    ? dark
-                      ? "border-blue-800 bg-blue-950/40 text-blue-200"
-                      : "border-blue-200 bg-blue-50 text-blue-700"
-                    : dark
-                      ? "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            );
-          })}
-
-          <button
-            onClick={onOpenSessions}
-            className={`hidden rounded-xl border px-3 py-2 text-sm font-medium sm:block ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
-          >
-            Sessions
-          </button>
-
-          <button
-            onClick={onOpenAiTools}
-            className={`hidden rounded-xl border px-3 py-2 text-sm font-medium sm:block ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
-          >
-            AI Tools
           </button>
 
           <button

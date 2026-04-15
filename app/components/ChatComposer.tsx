@@ -1,27 +1,22 @@
 "use client";
 
-import { Code2, Eye, MessageSquareText, Mic, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
+import { Eye, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
 import type { RefObject } from "react";
 import ReactMarkdown from "react-markdown";
-import type { Mode, QueuedMessage } from "../lib/chat-types";
+import type { QueuedMessage } from "../lib/chat-types";
 
 type ChatComposerProps = {
   dark: boolean;
   message: string;
   file: File | null;
-  listening: boolean;
-  speechError: string | null;
   queuedMessages: QueuedMessage[];
   loading: boolean;
   composerPreview: boolean;
-  mode: Mode;
-  auxiliaryMode: Mode | "auto";
   fileInputRef: RefObject<HTMLInputElement | null>;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   onMessageChange: (value: string) => void;
+  onSelectFile: (file: File) => void;
   onRemoveFile: () => void;
-  onToggleSpeechInput: () => void;
-  onSelectMode: (mode: Mode) => void;
   onTogglePreview: () => void;
   onStopGeneration: () => void;
   onQueueMessage: () => void;
@@ -32,19 +27,14 @@ export function ChatComposer({
   dark,
   message,
   file,
-  listening,
-  speechError,
   queuedMessages,
   loading,
   composerPreview,
-  mode,
-  auxiliaryMode,
   fileInputRef,
   inputRef,
   onMessageChange,
+  onSelectFile,
   onRemoveFile,
-  onToggleSpeechInput,
-  onSelectMode,
   onTogglePreview,
   onStopGeneration,
   onQueueMessage,
@@ -53,19 +43,6 @@ export function ChatComposer({
   return (
     <div className="border-t border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/90">
       <div className="mx-auto max-w-5xl space-y-2">
-        {speechError ? (
-          <div className={`rounded-xl border px-3 py-2 text-xs ${dark ? "border-amber-900 bg-amber-950/30 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
-            {speechError}
-          </div>
-        ) : null}
-
-        {listening ? (
-          <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${dark ? "border-emerald-900 bg-emerald-950/30 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
-            <Mic className="h-3.5 w-3.5 animate-pulse" />
-            <span>Listening...</span>
-          </div>
-        ) : null}
-
         {file ? (
           <div className="flex flex-wrap gap-2">
             <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
@@ -126,6 +103,18 @@ export function ChatComposer({
           </div>
         ) : null}
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
+          className="hidden"
+          onChange={(event) => {
+            const nextFile = event.target.files?.[0];
+            if (nextFile) onSelectFile(nextFile);
+            event.target.value = "";
+          }}
+        />
+
         <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${dark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"}`}>
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -135,42 +124,6 @@ export function ChatComposer({
           >
             <Paperclip className="h-4 w-4" />
           </button>
-
-          <button
-            onClick={onToggleSpeechInput}
-            className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${listening ? (dark ? "border-emerald-800 bg-emerald-950/40 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700") : (dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600")}`}
-            title={listening ? "Stop speech input" : "Start speech input"}
-            aria-label={listening ? "Stop speech input" : "Start speech input"}
-          >
-            <Mic className={`h-4 w-4 ${listening ? "animate-pulse" : ""}`} />
-          </button>
-
-          <div className={`hidden items-center gap-1 rounded-xl p-1 sm:flex ${dark ? "border border-slate-800 bg-slate-900" : "border border-slate-200 bg-slate-100"}`}>
-            <button
-              onClick={() => onSelectMode("code")}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${mode === "code" ? "bg-white text-blue-700 shadow-sm dark:bg-slate-800 dark:text-blue-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}
-            >
-              <Code2 className="h-3.5 w-3.5" />
-              <span>Kod</span>
-            </button>
-            <button
-              onClick={() => onSelectMode("chat")}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${mode === "chat" ? "bg-white text-purple-700 shadow-sm dark:bg-slate-800 dark:text-purple-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}
-            >
-              <MessageSquareText className="h-3.5 w-3.5" />
-              <span>Chat</span>
-            </button>
-            <select
-              value={auxiliaryMode}
-              onChange={(event) => onSelectMode(event.target.value as Mode)}
-              className={`rounded-lg border-0 bg-transparent px-2 py-2 text-xs font-medium ${dark ? "text-slate-200" : "text-slate-700"}`}
-            >
-              <option value="auto">Auto</option>
-              <option value="search">Search</option>
-              <option value="image">Image</option>
-              <option value="upload">File</option>
-            </select>
-          </div>
 
           <textarea
             ref={inputRef}

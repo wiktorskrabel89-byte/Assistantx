@@ -5,39 +5,26 @@ import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { AIToolsPanel } from "./components/AIToolsPanel";
 import { ChatComposer } from "./components/ChatComposer";
 import { ChatHeader } from "./components/ChatHeader";
-import { ChatSessionsPanel } from "./components/ChatSessionsPanel";
 import { CustomAgentManager } from "./components/CustomAgentManager";
-import { IntegrationsPanel } from "./components/IntegrationsPanel";
 import { PromptManager } from "./components/PromptManager";
-import { RoadmapPanel } from "./components/RoadmapPanel";
 import { ShareConversationDialog } from "./components/ShareConversationDialog";
 import { useChatTransport } from "./hooks/useChatTransport";
-import { useSpeechInput } from "./hooks/useSpeechInput";
 import { useWorkspaceState } from "./hooks/useWorkspaceState";
 import { useWorkspaceSync } from "./hooks/useWorkspaceSync";
 import {
   BUILT_IN_AGENTS,
   fromBase64,
-  MODE_COLORS,
-  MODE_LABELS,
   MODE_PANEL_OPTIONS,
-  QUICK_CHIPS,
   stripMarkdown,
-  TEXT_LANGUAGE_OPTIONS,
-  TOOLBAR_TABS,
   toBase64,
 } from "./lib/chat-state";
 import type {
-  Artifact,
   ChatEntry,
   Mode,
   ResponseAction,
   SharePayload,
-  SidebarTab,
-  StyleMode,
 } from "./lib/chat-types";
 
 type ChatListProps = {
@@ -47,11 +34,9 @@ type ChatListProps = {
   cardBg: string;
   codeBg: string;
   copied: string | null;
-  speaking: string | null;
   chatEndRef: RefObject<HTMLDivElement | null>;
-  onSpeak: (text: string, id: string) => void;
-  onCopyCode: (code: string, id: string) => void;
   openReasoning: Set<string>;
+  onCopyCode: (code: string, id: string) => void;
   onToggleReasoning: (id: string) => void;
   onEditUser: (text: string) => void;
   onResponseAction: (action: ResponseAction, text: string) => void;
@@ -61,13 +46,6 @@ type ChatListProps = {
   assistantIcon: LucideIcon;
 };
 
-type ArtifactPanelProps = {
-  artifacts: Artifact[];
-  dark: boolean;
-  copied: string | null;
-  onCopyCode: (code: string, id: string) => void;
-};
-
 const ChatList = memo(function ChatList({
   chat,
   loading,
@@ -75,11 +53,9 @@ const ChatList = memo(function ChatList({
   cardBg,
   codeBg,
   copied,
-  speaking,
   chatEndRef,
-  onSpeak,
-  onCopyCode,
   openReasoning,
+  onCopyCode,
   onToggleReasoning,
   onEditUser,
   onResponseAction,
@@ -89,7 +65,7 @@ const ChatList = memo(function ChatList({
   assistantIcon: AssistantIcon,
 }: ChatListProps) {
   let codeBlockIdx = 0;
-  const emptyStateCards: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
+  const quickStarters: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
     { label: "Generuj Kod", hint: "Kompletne rozwiazania", prompt: "Napisz mi kompletny przyklad kodu dla: ", mode: "code", icon: Code2 },
     { label: "Zadanie", hint: "Daj AI zadanie", prompt: "Pomoz mi z zadaniem kodowania: ", mode: "chat", icon: ClipboardCheck },
     { label: "Kalendarz", hint: "AI tworzy wydarzenia", prompt: "Stworz wydarzenie w kalendarzu dla: ", mode: "chat", icon: CalendarDays },
@@ -99,7 +75,7 @@ const ChatList = memo(function ChatList({
 
   return (
     <div className="mx-auto flex-1 w-full max-w-4xl overflow-y-auto space-y-4 pr-1">
-      {chat.length === 0 && (
+      {chat.length === 0 ? (
         <div className="mt-8 text-center sm:mt-12">
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-500 shadow-lg shadow-blue-500/20">
             <AssistantIcon className="h-6 w-6 text-white" />
@@ -111,7 +87,7 @@ const ChatList = memo(function ChatList({
               : assistantDescription}
           </p>
           <div className="mx-auto mt-6 grid max-w-[38rem] grid-cols-1 gap-3 sm:grid-cols-2">
-            {emptyStateCards.map((card) => {
+            {quickStarters.map((card) => {
               const Icon = card.icon;
               return (
                 <button
@@ -137,20 +113,21 @@ const ChatList = memo(function ChatList({
             })}
           </div>
         </div>
-      )}
+      ) : null}
+
       {chat.map((entry, index) => (
         <div key={entry.id} className="space-y-2">
           <div className="flex justify-end">
             <div className="max-w-[82%]">
-              {entry.filePreview && (
+              {entry.filePreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={entry.filePreview} alt="file" className="mb-1 ml-auto block h-24 rounded-xl" />
-              )}
-              {entry.fileName && !entry.filePreview && (
+              ) : null}
+              {entry.fileName && !entry.filePreview ? (
                 <div className={`mb-1 ml-auto inline-flex rounded-full border px-2 py-1 text-xs ${dark ? "border-gray-600 text-gray-300" : "border-gray-300 text-gray-600"}`}>
                   {entry.fileName}
                 </div>
-              )}
+              ) : null}
               <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-2 text-sm text-white">
                 {entry.user}
               </div>
@@ -162,7 +139,7 @@ const ChatList = memo(function ChatList({
 
           <div className="flex justify-start">
             <div className="max-w-[88%] space-y-1">
-              {entry.reasoning && (
+              {entry.reasoning ? (
                 <div className={`mb-1 rounded-xl border px-3 py-2 text-xs ${dark ? "border-purple-800/30 bg-purple-950/30 text-purple-300" : "border-purple-200 bg-purple-50 text-purple-700"}`}>
                   <button onClick={() => onToggleReasoning(entry.id)} className="flex w-full items-center gap-2 text-left font-medium">
                     <span>Reasoning</span>
@@ -170,13 +147,13 @@ const ChatList = memo(function ChatList({
                       ? <span className="ml-auto animate-pulse">...</span>
                       : <span className="ml-auto">{openReasoning.has(entry.id) ? "-" : "+"}</span>}
                   </button>
-                  {(openReasoning.has(entry.id) || (loading && index === chat.length - 1)) && (
+                  {(openReasoning.has(entry.id) || (loading && index === chat.length - 1)) ? (
                     <div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap opacity-80 leading-relaxed">
                       {entry.reasoning}
                     </div>
-                  )}
+                  ) : null}
                 </div>
-              )}
+              ) : null}
 
               {entry.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -189,11 +166,11 @@ const ChatList = memo(function ChatList({
                         <span className="inline-block h-2 w-20 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-400/40 via-blue-400/80 to-cyan-400/40 bg-[length:200%_100%]" />
                         <span>{entry.status ?? "Thinking..."}</span>
                       </span>
-                      {entry.routeReason && <div className="text-[11px] text-gray-400">{entry.routeReason}</div>}
+                      {entry.routeReason ? <div className="text-[11px] text-gray-400">{entry.routeReason}</div> : null}
                     </div>
                   ) : index === chat.length - 1 && loading ? (
                     <div>
-                      {entry.status && <div className="mb-1 text-[11px] opacity-70">{entry.status}</div>}
+                      {entry.status ? <div className="mb-1 text-[11px] opacity-70">{entry.status}</div> : null}
                       <span className="whitespace-pre-wrap break-words leading-relaxed">{entry.ai}</span>
                     </div>
                   ) : (
@@ -237,18 +214,10 @@ const ChatList = memo(function ChatList({
               )}
 
               <div className="ml-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                {entry.routeReason && <span>{entry.routeReason}</span>}
+                {entry.routeReason ? <span>{entry.routeReason}</span> : null}
                 {entry.stopped ? <span className="text-amber-400">Stopped</span> : null}
-                {entry.ai && !entry.imageUrl && (
+                {entry.ai && !entry.imageUrl ? (
                   <>
-                    <button
-                      onClick={() => onSpeak(entry.ai, entry.id)}
-                      disabled={speaking !== null && speaking !== entry.id}
-                      className={`${speaking === entry.id ? "animate-pulse text-blue-400" : "hover:text-blue-400"}`}
-                      title={speaking === entry.id ? "Stop" : "Read aloud"}
-                    >
-                      {speaking === entry.id ? "Stop audio" : "Listen"}
-                    </button>
                     <button onClick={() => navigator.clipboard.writeText(entry.ai)} className="hover:text-blue-400">
                       Copy
                     </button>
@@ -265,83 +234,14 @@ const ChatList = memo(function ChatList({
                       Commit msg
                     </button>
                   </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
         </div>
       ))}
+
       <div ref={chatEndRef} />
-    </div>
-  );
-});
-
-const ArtifactPanel = memo(function ArtifactPanel({ artifacts, dark, copied, onCopyCode }: ArtifactPanelProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(artifacts[0]?.id ?? null);
-  const activeSelectedId = artifacts.some((artifact) => artifact.id === selectedId) ? selectedId : artifacts[0]?.id ?? null;
-  const selected = artifacts.find((artifact) => artifact.id === activeSelectedId) ?? artifacts[0] ?? null;
-  const showPreview = selected && ["html", "svg"].includes(selected.language.toLowerCase());
-
-  return (
-    <div className={`flex h-full flex-col overflow-hidden rounded-3xl border ${dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
-      <div className="border-b border-gray-200 px-4 py-4 dark:border-gray-800">
-        <h2 className="text-sm font-semibold">Artifacts</h2>
-        <p className="mt-1 text-xs text-gray-500">Code blocks from the active chat appear here.</p>
-      </div>
-
-      {artifacts.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-gray-400">
-          No code artifacts yet. Ask for HTML, React, SQL, Python, or any other code block.
-        </div>
-      ) : (
-        <>
-          <div className="max-h-48 space-y-2 overflow-y-auto border-b border-gray-200 p-3 dark:border-gray-800">
-            {artifacts.map((artifact) => (
-              <button
-                key={artifact.id}
-                onClick={() => setSelectedId(artifact.id)}
-                className={`w-full rounded-2xl border px-3 py-2 text-left transition-colors ${
-                  selected?.id === artifact.id
-                    ? dark
-                      ? "border-blue-500 bg-blue-950/30"
-                      : "border-blue-400 bg-blue-50"
-                    : dark
-                      ? "border-gray-800 hover:bg-gray-800"
-                      : "border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                <div className="text-sm font-medium">{artifact.label}</div>
-                <div className="mt-1 truncate text-xs text-gray-500">{artifact.sourceTitle}</div>
-              </button>
-            ))}
-          </div>
-
-          {selected && (
-            <div className="flex-1 overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                <div>
-                  <div className="text-sm font-medium">{selected.label}</div>
-                  <div className="text-xs text-gray-500">{selected.language}</div>
-                </div>
-                <button onClick={() => onCopyCode(selected.code, `artifact-${selected.id}`)} className="text-xs text-blue-500 hover:underline">
-                  {copied === `artifact-${selected.id}` ? "Copied" : "Copy"}
-                </button>
-              </div>
-
-              {showPreview && (
-                <div className="border-b border-gray-200 p-4 dark:border-gray-800">
-                  <div className="mb-2 text-xs font-medium text-gray-500">Preview</div>
-                  <iframe title="Artifact preview" srcDoc={selected.code} className="h-48 w-full rounded-xl border border-gray-200 bg-white dark:border-gray-700" />
-                </div>
-              )}
-
-              <SyntaxHighlighter style={dark ? oneDark : oneLight} language={selected.language || "text"} PreTag="div">
-                {selected.code}
-              </SyntaxHighlighter>
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 });
@@ -350,21 +250,16 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
-  const [aiToolsOpen, setAiToolsOpen] = useState(false);
   const [promptManagerOpen, setPromptManagerOpen] = useState(false);
   const [customAgentManagerOpen, setCustomAgentManagerOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [speaking, setSpeaking] = useState<string | null>(null);
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const importedShareRef = useRef(false);
 
   const {
@@ -376,27 +271,16 @@ export default function Home() {
     activeChat,
     artifacts,
     filteredChats,
-    sessionItems,
     mode,
     chatSearch,
     setChatSearch,
     updateChat,
     updateLastMessage,
-    setActiveWorkspaceId,
     setActiveChatId,
     setWorkspaceMode,
-    createWorkspaceAction,
-    renameWorkspace,
-    deleteWorkspace,
     createChatAction,
     renameChat,
     deleteChat,
-    clearActiveChat,
-    setStyleMode,
-    setLanguageLock,
-    setMemoryEnabled,
-    setMemoryNotes,
-    clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,
     deletePromptTemplate,
@@ -409,30 +293,8 @@ export default function Home() {
     assistantDescription,
     activeAgentId,
     assistantIcon,
-    auxiliaryMode,
   } = useWorkspaceState();
-  const {
-    authReady,
-    userEmail,
-    authProvider,
-    linkedProviders,
-    oauthLoading,
-    cloudSyncStatus,
-    cloudSyncMessage,
-    cloudBootstrapped,
-    signOut,
-    signInWithProvider,
-  } = useWorkspaceSync({ loaded, state, setState, stateRef });
-  const {
-    listening,
-    speechError,
-    toggleSpeechInput,
-  } = useSpeechInput({
-    languageLock: activeWorkspace.settings.languageLock,
-    message,
-    onMessageChange: setMessage,
-    inputRef,
-  });
+  const { cloudBootstrapped } = useWorkspaceSync({ loaded, state, setState, stateRef });
   const {
     loading,
     queuedMessages,
@@ -455,7 +317,6 @@ export default function Home() {
     updateLastMessage,
   });
 
-  const googleLinked = linkedProviders.includes("google");
   const bg = state.dark ? "bg-slate-950 text-slate-100" : "bg-gradient-to-br from-blue-50 via-white to-purple-50 text-slate-900";
   const cardBg = state.dark ? "bg-slate-900 border-slate-800" : "bg-white/95 border-slate-200 shadow-sm shadow-slate-200/70";
   const inputBg = state.dark ? "bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400";
@@ -502,10 +363,6 @@ export default function Home() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeChat.messages]);
-
-  useEffect(() => {
-    setOpenReasoning(new Set());
-  }, [activeChat.id]);
 
   useEffect(() => {
     return () => {
@@ -568,47 +425,6 @@ export default function Home() {
     setComposerText(text);
   }, [setComposerText]);
 
-  const speak = useCallback(async (text: string, id: string) => {
-    if (speaking !== null) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      setSpeaking(null);
-      return;
-    }
-
-    const clean = stripMarkdown(text);
-    if (!clean) return;
-
-    setSpeaking(id);
-    try {
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: clean.slice(0, 2000) }),
-      });
-      if (!response.ok) throw new Error(`TTS ${response.status}`);
-      const data = await response.json();
-      if (!data.audioContent) throw new Error("No audio");
-
-      const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
-      audioRef.current = audio;
-      audio.onended = () => {
-        setSpeaking(null);
-        audioRef.current = null;
-      };
-      audio.onerror = () => {
-        setSpeaking(null);
-        audioRef.current = null;
-      };
-      await audio.play();
-    } catch (error) {
-      console.error("TTS failed:", error);
-      setSpeaking(null);
-    }
-  }, [speaking]);
-
   const handleFile = useCallback((nextFile: File) => {
     if (filePreview?.startsWith("blob:")) URL.revokeObjectURL(filePreview);
     setFile(nextFile);
@@ -621,17 +437,10 @@ export default function Home() {
     setSidebarOpen(false);
   }, [filePreview, setWorkspaceMode]);
 
-  const stageImportedFile = useCallback((nextFile: File, prompt: string) => {
-    handleFile(nextFile);
-    setMessage(prompt);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }, [handleFile]);
-
   const applyPromptTemplate = useCallback((templateId: string) => {
     const template = activeWorkspace.settings.promptTemplates.find((item) => item.id === templateId);
     if (!template) return;
     setWorkspaceMode(template.mode);
-    setSidebarTab("chat");
     setComposerText(template.text);
     setPromptManagerOpen(false);
   }, [activeWorkspace.settings.promptTemplates, setComposerText, setWorkspaceMode]);
@@ -789,7 +598,6 @@ export default function Home() {
                           key={chat.id}
                           onClick={() => {
                             setActiveChatId(activeWorkspace.id, chat.id);
-                            setSidebarTab("chat");
                             setSidebarOpen(false);
                           }}
                           className={`group w-full rounded-2xl px-3 py-3 text-left transition-colors ${
@@ -843,397 +651,73 @@ export default function Home() {
               <ChatHeader
                 dark={state.dark}
                 inputBg={inputBg}
-                sidebarTab={sidebarTab}
                 assistantIcon={assistantIcon}
                 assistantName={assistantName}
                 activeChatTitle={activeChat.title}
                 activeAgentId={activeAgentId}
                 builtInAgents={BUILT_IN_AGENTS}
                 customAgents={activeWorkspace.settings.customAgents}
-                toolbarTabs={TOOLBAR_TABS}
                 onOpenSidebar={() => setSidebarOpen(true)}
                 onSelectAgent={selectActiveAgent}
                 onOpenAgentManager={() => setCustomAgentManagerOpen(true)}
-                onSelectTab={setSidebarTab}
-                onOpenSessions={() => setSessionsOpen(true)}
-                onOpenAiTools={() => setAiToolsOpen(true)}
                 onOpenShare={() => setShareDialogOpen(true)}
                 onOpenPrompts={() => setPromptManagerOpen(true)}
                 onCreateChat={createChatAction}
               />
 
               <div className={`min-h-0 flex-1 px-3 py-4 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
-                {sidebarTab === "chat" ? (
-                  <div className="mx-auto flex h-full max-w-5xl flex-col">
-                    {!googleLinked && authReady ? (
-                      <div className={`mb-4 rounded-2xl border px-4 py-4 ${state.dark ? "border-blue-900 bg-blue-950/20" : "border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50"}`}>
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Enhanced Google Integration Available</h2>
-                            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-                              Enable backend functions to unlock full Google integration: AI can create calendar events, send emails via Gmail, and sync tasks automatically with Google Calendar and Tasks.
-                            </p>
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-emerald-600 dark:text-emerald-300">
-                              <span className={`rounded-full px-2 py-1 ${state.dark ? "bg-emerald-950/40" : "bg-emerald-50"}`}>Calendar sync</span>
-                              <span className={`rounded-full px-2 py-1 ${state.dark ? "bg-emerald-950/40" : "bg-emerald-50"}`}>Gmail compose</span>
-                              <span className={`rounded-full px-2 py-1 ${state.dark ? "bg-emerald-950/40" : "bg-emerald-50"}`}>Tasks integration</span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => void signInWithProvider("google")}
-                            disabled={oauthLoading === "google"}
-                            className={`rounded-xl border px-4 py-2 text-sm font-medium ${state.dark ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-700"}`}
-                          >
-                            {oauthLoading === "google" ? "Connecting..." : "Enable"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div className="min-h-0 flex-1">
-                      <ChatList
-                        chat={activeChat.messages}
-                        loading={loading}
-                        dark={state.dark}
-                        cardBg={cardBg}
-                        codeBg={codeBg}
-                        copied={copied}
-                        speaking={speaking}
-                        chatEndRef={chatEndRef}
-                        onSpeak={speak}
-                        onCopyCode={copyCode}
-                        openReasoning={openReasoning}
-                        onToggleReasoning={toggleReasoning}
-                        onEditUser={editUserMessage}
-                        onResponseAction={applyResponseAction}
-                        onQuickStart={(text, nextMode) => {
-                          if (nextMode) setWorkspaceMode(nextMode);
-                          setComposerText(text);
-                        }}
-                        assistantName={assistantName}
-                        assistantDescription={assistantDescription}
-                        assistantIcon={assistantIcon}
-                      />
-                    </div>
-                  </div>
-                ) : sidebarTab === "workspace" ? (
-                  <div className="mx-auto h-full max-w-5xl overflow-y-auto pr-1">
-                    <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr),minmax(0,1.1fr)]">
-                      <div className="space-y-4">
-                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h2 className="text-sm font-semibold">Workspaces</h2>
-                              <p className="mt-1 text-xs text-slate-500">Switch the active workspace or create a new one.</p>
-                            </div>
-                            <button onClick={createWorkspaceAction} className="text-xs text-blue-500 hover:underline">New</button>
-                          </div>
-                          <div className="mt-3 space-y-2">
-                            {state.workspaces.map((workspace) => (
-                              <button
-                                key={workspace.id}
-                                onClick={() => setActiveWorkspaceId(workspace.id)}
-                                className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
-                                  workspace.id === activeWorkspace.id
-                                    ? state.dark
-                                      ? "border-blue-800 bg-blue-950/30"
-                                      : "border-blue-200 bg-blue-50"
-                                    : state.dark
-                                      ? "border-slate-800 hover:bg-slate-800"
-                                      : "border-slate-200 bg-white hover:bg-slate-50"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <div className="truncate font-medium">{workspace.name}</div>
-                                    <div className="mt-1 text-xs text-slate-500">{workspace.chats.length} chats</div>
-                                  </div>
-                                  <div className="flex gap-2 text-[11px] text-slate-400">
-                                    <span onClick={(event) => { event.stopPropagation(); renameWorkspace(workspace.id); }} className="hover:text-blue-500">Rename</span>
-                                    <span onClick={(event) => { event.stopPropagation(); deleteWorkspace(workspace.id); }} className="hover:text-red-500">Delete</span>
-                                  </div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        </section>
-
-                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <h2 className="text-sm font-semibold">Quick prompts</h2>
-                              <p className="mt-1 text-xs text-slate-500">Drop a shortcut into the composer.</p>
-                            </div>
-                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium text-white ${MODE_COLORS[mode]}`}>{MODE_LABELS[mode]}</span>
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {QUICK_CHIPS.map((chip) => (
-                              <button
-                                key={chip.label}
-                                onClick={() => {
-                                  if (chip.mode) setWorkspaceMode(chip.mode);
-                                  setSidebarTab("chat");
-                                  setComposerText(chip.text);
-                                }}
-                                className={`rounded-full border px-3 py-1.5 text-xs ${state.dark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-                              >
-                                {chip.label}
-                              </button>
-                            ))}
-                          </div>
-                        </section>
-                      </div>
-
-                      <div className="space-y-4">
-                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
-                          <h2 className="text-sm font-semibold">Modes</h2>
-                          <p className="mt-1 text-xs text-slate-500">Pick the response lane for the next message.</p>
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            {MODE_PANEL_OPTIONS.map((option) => (
-                              <button
-                                key={option.id}
-                                onClick={() => setWorkspaceMode(option.id)}
-                                className={`rounded-2xl border px-3 py-2.5 text-left transition-colors ${
-                                  mode === option.id
-                                    ? `${MODE_COLORS[option.id]} border-transparent text-white`
-                                    : state.dark
-                                      ? "border-slate-800 bg-slate-950/60 text-slate-100 hover:bg-slate-800"
-                                      : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
-                                }`}
-                              >
-                                <div className="font-medium">{option.label}</div>
-                                <div className={`mt-1 text-xs ${mode === option.id ? "text-white/80" : "text-slate-500"}`}>{option.description}</div>
-                              </button>
-                            ))}
-                          </div>
-                        </section>
-
-                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h2 className="text-sm font-semibold">File</h2>
-                              <p className="mt-1 text-xs text-slate-500">Attach one file for analysis.</p>
-                            </div>
-                            <button
-                              onClick={() => fileInputRef.current?.click()}
-                              className={`rounded-xl border px-3 py-2 text-xs font-medium ${state.dark ? "border-slate-700 text-slate-100 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-                            >
-                              {file ? "Replace" : "Add file"}
-                            </button>
-                          </div>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
-                            className="hidden"
-                            onChange={(event) => event.target.files?.[0] && handleFile(event.target.files[0])}
-                          />
-                          {file ? (
-                            <div className={`mt-3 flex items-center gap-3 rounded-2xl border px-3 py-3 ${state.dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
-                              {filePreview ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={filePreview} alt="preview" className="h-14 w-14 rounded-xl object-cover" />
-                              ) : (
-                                <div className={`flex h-14 w-14 items-center justify-center rounded-xl text-xs ${state.dark ? "bg-slate-800" : "bg-slate-100"}`}>FILE</div>
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate font-medium">{file.name}</div>
-                                <div className="truncate text-xs text-slate-500">{file.type || "unknown file type"}</div>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  setFile(null);
-                                  setFilePreview(null);
-                                  setWorkspaceMode("auto");
-                                }}
-                                className="text-sm text-red-500"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          ) : (
-                            <div className={`mt-3 rounded-2xl border border-dashed px-3 py-4 text-xs ${state.dark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
-                              No file selected.
-                            </div>
-                          )}
-                        </section>
-
-                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
-                          <h2 className="text-sm font-semibold">Preferences</h2>
-                          <div className="mt-3 grid gap-3">
-                            <div>
-                              <label className="mb-1 block text-xs text-slate-500">Response style</label>
-                              <select
-                                value={activeWorkspace.settings.styleMode}
-                                onChange={(event) => setStyleMode(event.target.value as StyleMode)}
-                                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                              >
-                                <option value="concise">Concise</option>
-                                <option value="detailed">Detailed</option>
-                                <option value="step-by-step">Step by step</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs text-slate-500">Reply language</label>
-                              <select
-                                value={activeWorkspace.settings.languageLock}
-                                onChange={(event) => setLanguageLock(event.target.value)}
-                                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                              >
-                                {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                              </select>
-                            </div>
-                            <label className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
-                              <span>Use conversation memory</span>
-                              <input
-                                type="checkbox"
-                                checked={activeWorkspace.settings.memoryEnabled}
-                                onChange={(event) => setMemoryEnabled(event.target.checked)}
-                              />
-                            </label>
-                            <textarea
-                              value={activeWorkspace.settings.memoryNotes}
-                              onChange={(event) => setMemoryNotes(event.target.value)}
-                              placeholder="Pinned memory for this workspace"
-                              rows={3}
-                              className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                            />
-                            <div className="flex flex-wrap gap-2">
-                              <button onClick={clearMemoryNotes} className="rounded-xl border border-slate-200 px-3 py-2 text-xs dark:border-slate-700">
-                                Clear pinned memory
-                              </button>
-                              <button onClick={clearActiveChat} className="rounded-xl border border-red-300 px-3 py-2 text-xs text-red-500 dark:border-red-900">
-                                Clear active chat
-                              </button>
-                            </div>
-                          </div>
-                        </section>
-                      </div>
-                    </div>
-                  </div>
-                ) : sidebarTab === "integrations" ? (
-                  <div className="mx-auto h-full max-w-5xl overflow-y-auto pr-1">
-                    <IntegrationsPanel
+                <div className="mx-auto flex h-full max-w-5xl flex-col">
+                  <div className="min-h-0 flex-1">
+                    <ChatList
+                      chat={activeChat.messages}
+                      loading={loading}
                       dark={state.dark}
-                      linkedProviders={linkedProviders}
-                      authProvider={authProvider}
-                      oauthLoading={oauthLoading}
+                      cardBg={cardBg}
+                      codeBg={codeBg}
                       copied={copied}
-                      hasArtifacts={artifacts.length > 0}
-                      onConnectProvider={(provider) => void signInWithProvider(provider)}
-                      onImportFile={stageImportedFile}
-                      onCopyVsCodePrompt={() => void copyVsCodePrompt()}
-                      onDownloadVsCodeBundle={downloadVsCodeBundle}
+                      chatEndRef={chatEndRef}
+                      openReasoning={openReasoning}
+                      onCopyCode={copyCode}
+                      onToggleReasoning={toggleReasoning}
+                      onEditUser={editUserMessage}
+                      onResponseAction={applyResponseAction}
+                      onQuickStart={(text, nextMode) => {
+                        if (nextMode) setWorkspaceMode(nextMode);
+                        setComposerText(text);
+                      }}
+                      assistantName={assistantName}
+                      assistantDescription={assistantDescription}
+                      assistantIcon={assistantIcon}
                     />
                   </div>
-                ) : sidebarTab === "artifacts" ? (
-                  <div className="mx-auto h-full max-w-5xl overflow-y-auto">
-                    <ArtifactPanel artifacts={artifacts} dark={state.dark} copied={copied} onCopyCode={copyCode} />
-                  </div>
-                ) : (
-                  <div className="mx-auto h-full max-w-4xl overflow-y-auto pr-1">
-                    <div className="space-y-4">
-                      <section className={`rounded-3xl border p-4 ${cardBg}`}>
-                        <div>
-                          <h2 className="text-sm font-semibold">Chat actions</h2>
-                          <p className="mt-1 text-xs text-slate-500">Share or export the active chat without cluttering the main view.</p>
-                        </div>
-                        <div className="mt-4 grid gap-2">
-                          <button onClick={copyShareLink} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700">{copied === "share-link" ? "Link copied" : "Share chat link"}</button>
-                          <button onClick={exportMarkdown} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700">Export Markdown</button>
-                          <button onClick={exportJson} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700">Export JSON</button>
-                          <button onClick={() => void signOut()} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700">Sign out</button>
-                        </div>
-                      </section>
-
-                      <RoadmapPanel
-                        dark={state.dark}
-                        userEmail={userEmail}
-                        cloudSyncStatus={cloudSyncStatus}
-                        cloudSyncMessage={cloudSyncMessage}
-                      />
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
-              {sidebarTab === "chat" ? (
-                <ChatComposer
-                  dark={state.dark}
-                  message={message}
-                  file={file}
-                  listening={listening}
-                  speechError={speechError}
-                  queuedMessages={queuedMessages}
-                  loading={loading}
-                  composerPreview={composerPreview}
-                  mode={mode}
-                  auxiliaryMode={auxiliaryMode as Mode | "auto"}
-                  fileInputRef={fileInputRef}
-                  inputRef={inputRef}
-                  onMessageChange={setMessage}
-                  onRemoveFile={() => {
-                    setFile(null);
-                    setFilePreview(null);
-                    setWorkspaceMode("auto");
-                  }}
-                  onToggleSpeechInput={toggleSpeechInput}
-                  onSelectMode={setWorkspaceMode}
-                  onTogglePreview={() => setComposerPreview((prev) => !prev)}
-                  onStopGeneration={stopCurrentGeneration}
-                  onQueueMessage={queueComposerMessage}
-                  onRemoveQueuedMessage={removeQueuedMessage}
-                />
-              ) : null}
+              <ChatComposer
+                dark={state.dark}
+                message={message}
+                file={file}
+                queuedMessages={queuedMessages}
+                loading={loading}
+                composerPreview={composerPreview}
+                fileInputRef={fileInputRef}
+                inputRef={inputRef}
+                onMessageChange={setMessage}
+                onSelectFile={handleFile}
+                onRemoveFile={() => {
+                  setFile(null);
+                  setFilePreview(null);
+                  setWorkspaceMode("auto");
+                }}
+                onTogglePreview={() => setComposerPreview((prev) => !prev)}
+                onStopGeneration={stopCurrentGeneration}
+                onQueueMessage={queueComposerMessage}
+                onRemoveQueuedMessage={removeQueuedMessage}
+              />
             </section>
           </main>
         </div>
       </div>
-
-      <ChatSessionsPanel
-        open={sessionsOpen}
-        dark={state.dark}
-        workspaceName={activeWorkspace.name}
-        searchValue={chatSearch}
-        sessions={sessionItems}
-        onSearchChange={setChatSearch}
-        onCreateSession={() => {
-          createChatAction();
-          setSessionsOpen(false);
-        }}
-        onSelectSession={(chatId) => {
-          setActiveChatId(activeWorkspace.id, chatId);
-          setSidebarTab("chat");
-          setSessionsOpen(false);
-        }}
-        onRenameSession={renameChat}
-        onDeleteSession={deleteChat}
-        onClose={() => setSessionsOpen(false)}
-      />
-
-      <AIToolsPanel
-        open={aiToolsOpen}
-        dark={state.dark}
-        mode={mode}
-        modeOptions={MODE_PANEL_OPTIONS}
-        quickChips={QUICK_CHIPS}
-        settings={activeWorkspace.settings}
-        languageOptions={TEXT_LANGUAGE_OPTIONS}
-        onClose={() => setAiToolsOpen(false)}
-        onModeChange={(nextMode) => setWorkspaceMode(nextMode as Mode)}
-        onQuickChip={(chip) => {
-          if (chip.mode) setWorkspaceMode(chip.mode as Mode);
-          setSidebarTab("chat");
-          setComposerText(chip.text);
-          setAiToolsOpen(false);
-        }}
-        onStyleChange={(value) => setStyleMode(value as StyleMode)}
-        onLanguageChange={setLanguageLock}
-        onMemoryToggle={setMemoryEnabled}
-        onMemoryNotesChange={setMemoryNotes}
-        onClearMemory={clearMemoryNotes}
-        onClearChat={clearActiveChat}
-      />
 
       <PromptManager
         key={`${activeWorkspace.id}-${promptManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.promptTemplates.length}`}
