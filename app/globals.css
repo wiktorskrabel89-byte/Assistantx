@@ -126,5 +126,51 @@
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
   }
+}
+
+/* Smooth scrollbar for chat and content areas */
+.overflow-y-auto,
+.overflow-auto {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.6 0 0 / 30%) transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track,
+.overflow-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb,
+.overflow-auto::-webkit-scrollbar-thumb {
+  background: oklch(0.6 0 0 / 30%);
+  border-radius: 9999px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover,
+.overflow-auto::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0 0 / 50%);
+}
+
+/* Subtle entrance animation for tab content */
+@keyframes tab-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-tab-enter {
+  animation: tab-enter 0.25s ease-out both;
 }
