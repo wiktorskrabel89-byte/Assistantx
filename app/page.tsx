@@ -1,6 +1,6 @@
 "use client";
 
-import { Braces, Code2, ImageIcon, Menu, MessageSquareText, Paperclip, PlugZap, Search, Send, SlidersHorizontal, Sparkles, UserRound, type LucideIcon } from "lucide-react";
+import { Braces, CalendarDays, ClipboardCheck, Code2, Eye, ImageIcon, Mail, Menu, MessageSquareText, Paperclip, PlugZap, Plus, Search, Send, SlidersHorizontal, UserRound, X, type LucideIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -82,6 +82,17 @@ type Artifact = {
   sourceTitle: string;
 };
 
+type QueuedMessage = {
+  id: string;
+  workspaceId: string;
+  chatId: string;
+  text: string;
+  mode: Mode;
+  file: File | null;
+  filePreview: string | null;
+  createdAt: number;
+};
+
 type SharePayload = {
   title: string;
   messages: Array<{
@@ -117,6 +128,9 @@ type ChatListProps = {
   onEditUser: (text: string) => void;
   onResponseAction: (action: ResponseAction, text: string) => void;
   onQuickStart: (text: string, mode?: Mode) => void;
+  assistantName: string;
+  assistantDescription: string;
+  assistantIcon: LucideIcon;
 };
 
 type ArtifactPanelProps = {
@@ -393,46 +407,52 @@ const ChatList = memo(function ChatList({
   onEditUser,
   onResponseAction,
   onQuickStart,
+  assistantName,
+  assistantDescription,
+  assistantIcon: AssistantIcon,
 }: ChatListProps) {
   let codeBlockIdx = 0;
   const emptyStateCards: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
-    { label: "Generate code", hint: "Production-ready implementation", prompt: "Write a complete implementation for: ", mode: "code", icon: Code2 },
-    { label: "Search the web", hint: "Current facts and research", prompt: "Search the web for the latest info about: ", mode: "search", icon: Search },
-    { label: "Plan something", hint: "Steps, structure, next actions", prompt: "Break this into clear implementation steps: ", mode: "chat", icon: MessageSquareText },
-    { label: "Create an image", hint: "Describe a visual concept", prompt: "Generate an image of: ", mode: "image", icon: ImageIcon },
+    { label: "Generuj Kod", hint: "Kompletne rozwiazania", prompt: "Napisz mi kompletny przyklad kodu dla: ", mode: "code", icon: Code2 },
+    { label: "Zadanie", hint: "Daj AI zadanie", prompt: "Pomoz mi z zadaniem kodowania: ", mode: "chat", icon: ClipboardCheck },
+    { label: "Kalendarz", hint: "AI tworzy wydarzenia", prompt: "Stworz wydarzenie w kalendarzu dla: ", mode: "chat", icon: CalendarDays },
+    { label: "Email", hint: "AI pisze maile", prompt: "Napisz profesjonalnego maila dotyczacego: ", mode: "chat", icon: Mail },
+    { label: "Generuj Obraz", hint: "AI tworzy obrazy", prompt: "Wygeneruj obraz przedstawiajacy: ", mode: "image", icon: ImageIcon },
   ];
 
   return (
     <div className="mx-auto flex-1 w-full max-w-4xl overflow-y-auto space-y-4 pr-1">
       {chat.length === 0 && (
         <div className="mt-8 text-center sm:mt-12">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg shadow-blue-500/20">
-            <Sparkles className="h-6 w-6 text-white" />
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-500 shadow-lg shadow-blue-500/20">
+            <AssistantIcon className="h-6 w-6 text-white" />
           </div>
-          <h2 className={`mt-4 text-xl font-bold ${dark ? "text-white" : "text-slate-900"}`}>How can I help?</h2>
-          <p className={`mx-auto mt-2 max-w-xl text-sm ${dark ? "text-slate-400" : "text-slate-600"}`}>
-            Chat, code, search, or generate visuals. The app logic stays the same, but the page now opens with a cleaner Base44-style shell.
+          <h2 className={`mt-5 text-[2rem] font-bold tracking-tight ${dark ? "text-white" : "text-slate-900"}`}>Jak moge Ci pomoc?</h2>
+          <p className={`mx-auto mt-2 max-w-2xl text-sm ${dark ? "text-slate-400" : "text-slate-600"}`}>
+            {assistantName === "Code Assistant"
+              ? "Expert in AutoHotkey, Python, JavaScript, and all programming languages. Provides complete code solutions with best practices."
+              : assistantDescription}
           </p>
-          <div className="mx-auto mt-6 grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="mx-auto mt-6 grid max-w-[38rem] grid-cols-1 gap-3 sm:grid-cols-2">
             {emptyStateCards.map((card) => {
               const Icon = card.icon;
               return (
                 <button
                   key={card.label}
                   onClick={() => onQuickStart(card.prompt, card.mode)}
-                  className={`rounded-2xl border p-4 text-left transition-all ${
+                  className={`rounded-xl border px-4 py-3 text-left transition-all ${
                     dark
                       ? "border-slate-800 bg-slate-900/80 hover:border-blue-800 hover:bg-slate-900"
-                      : "border-slate-200 bg-white shadow-sm shadow-slate-200/70 hover:border-blue-300 hover:shadow-md"
+                      : "border-slate-200 bg-white shadow-sm hover:border-blue-300 hover:shadow-md"
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                      <Icon className="h-4 w-4" />
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${dark ? "bg-slate-800 text-blue-300" : "bg-blue-50 text-blue-600"}`}>
+                      <Icon className="h-4 w-4" strokeWidth={2.2} />
                     </div>
                     <div>
-                      <div className={`font-medium ${dark ? "text-white" : "text-slate-900"}`}>{card.label}</div>
-                      <div className="mt-1 text-xs text-slate-500">{card.hint}</div>
+                      <div className={`text-sm font-semibold ${dark ? "text-white" : "text-slate-900"}`}>{card.label}</div>
+                      <div className="mt-0.5 text-xs text-slate-500">{card.hint}</div>
                     </div>
                   </div>
                 </button>
@@ -652,6 +672,9 @@ export default function Home() {
   const [state, setState] = useState<StoredState>(createDefaultState());
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState<Mode>("auto");
+  const [chatSearch, setChatSearch] = useState("");
+  const [composerPreview, setComposerPreview] = useState(false);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -675,6 +698,9 @@ export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const importedShareRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const processingQueueRef = useRef(false);
+  const queuedMessagesRef = useRef<QueuedMessage[]>([]);
   const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null);
   const stateRef = useRef(state);
   const lastSyncedPayloadRef = useRef<string | null>(null);
@@ -690,6 +716,25 @@ export default function Home() {
   );
 
   const artifacts = useMemo(() => extractArtifacts(activeChat.messages), [activeChat.messages]);
+  const filteredChats = useMemo(() => {
+    const query = chatSearch.trim().toLowerCase();
+    if (!query) return activeWorkspace.chats;
+
+    return activeWorkspace.chats.filter((chat) => {
+      const latest = chat.messages[chat.messages.length - 1];
+      const haystack = `${chat.title} ${latest?.user ?? ""} ${latest?.ai ?? ""}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [activeWorkspace.chats, chatSearch]);
+
+  const assistantMode = mode === "chat" ? "chat" : "code";
+  const assistantName = assistantMode === "chat" ? "AI Chat" : "Code Assistant";
+  const assistantDescription = assistantMode === "chat"
+    ? "Friendly AI assistant for general conversation, questions, advice, creative writing, and anything else you want to talk about."
+    : "Expert in AutoHotkey, Python, JavaScript, and all programming languages. Provides complete code solutions with best practices.";
+  const assistantIcon = assistantMode === "chat" ? MessageSquareText : Code2;
+  const auxiliaryMode = mode === "search" || mode === "image" || mode === "upload" ? mode : "auto";
+  const googleLinked = linkedProviders.includes("google");
 
   const bg = state.dark ? "bg-slate-950 text-slate-100" : "bg-gradient-to-br from-blue-50 via-white to-purple-50 text-slate-900";
   const cardBg = state.dark ? "bg-slate-900 border-slate-800" : "bg-white/95 border-slate-200 shadow-sm shadow-slate-200/70";
@@ -699,6 +744,10 @@ export default function Home() {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    queuedMessagesRef.current = queuedMessages;
+  }, [queuedMessages]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -903,6 +952,19 @@ export default function Home() {
       if (filePreview?.startsWith("blob:")) URL.revokeObjectURL(filePreview);
     };
   }, [filePreview]);
+
+  const revokeQueuedPreview = useCallback((preview: string | null) => {
+    if (preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(preview);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      queuedMessagesRef.current.forEach((queuedMessage) => revokeQueuedPreview(queuedMessage.filePreview));
+    };
+  }, [revokeQueuedPreview]);
 
   useEffect(() => {
     if (!loaded || !cloudBootstrapped || importedShareRef.current || typeof window === "undefined") return;
@@ -1235,6 +1297,37 @@ export default function Home() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [handleFile]);
 
+  const queueComposerMessage = useCallback(() => {
+    const text = message.trim();
+    if (!text && !file) return;
+
+    const queuedMessage: QueuedMessage = {
+      id: createId(),
+      workspaceId: activeWorkspace.id,
+      chatId: activeChat.id,
+      text,
+      mode,
+      file,
+      filePreview: file?.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+      createdAt: Date.now(),
+    };
+
+    setQueuedMessages((prev) => [...prev, queuedMessage]);
+    setMessage("");
+    setFile(null);
+    setFilePreview(null);
+    setComposerPreview(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [activeChat.id, activeWorkspace.id, file, message, mode]);
+
+  const removeQueuedMessage = useCallback((queueId: string) => {
+    setQueuedMessages((prev) => {
+      const queuedMessage = prev.find((item) => item.id === queueId);
+      if (queuedMessage) revokeQueuedPreview(queuedMessage.filePreview);
+      return prev.filter((item) => item.id !== queueId);
+    });
+  }, [revokeQueuedPreview]);
+
   const consumeStream = useCallback(async (response: Response, workspaceId: string, chatId: string) => {
     const reader = response.body?.getReader();
     if (!reader) throw new Error("Missing streaming body");
@@ -1313,26 +1406,25 @@ export default function Home() {
     }
   }, [updateLastMessage]);
 
-  const sendMessage = useCallback(async () => {
-    if ((!message && !file) || loading) return;
+  const processQueuedMessage = useCallback(async (queuedMessage: QueuedMessage) => {
+    const snapshot = stateRef.current;
+    const workspace = snapshot.workspaces.find((candidate) => candidate.id === queuedMessage.workspaceId) ?? snapshot.workspaces[0];
+    const chat = workspace.chats.find((candidate) => candidate.id === queuedMessage.chatId) ?? workspace.chats[0];
 
-    const workspaceId = activeWorkspace.id;
-    const chatId = activeChat.id;
-    const userMsg = message.trim();
-    const activeSettings = activeWorkspace.settings;
-    const allowedModels = getAllowedModels(mode);
+    const workspaceId = workspace.id;
+    const chatId = chat.id;
+    const userMsg = queuedMessage.text;
+    const activeSettings = workspace.settings;
+    const allowedModels = getAllowedModels(queuedMessage.mode);
     const history = activeSettings.memoryEnabled
-      ? activeChat.messages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
+      ? chat.messages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
       : [];
 
-    setMessage("");
-    setLoading(true);
+    const title = chat.messages.length === 0 || chat.title === NEW_CHAT_TITLE
+      ? deriveTitle(userMsg || queuedMessage.file?.name || NEW_CHAT_TITLE)
+      : chat.title;
 
-    const title = activeChat.messages.length === 0 || activeChat.title === NEW_CHAT_TITLE
-      ? deriveTitle(userMsg || file?.name || NEW_CHAT_TITLE)
-      : activeChat.title;
-
-    if (mode === "image") {
+    if (queuedMessage.mode === "image") {
       const pending = createMessage({
         user: userMsg,
         ai: "",
@@ -1360,19 +1452,23 @@ export default function Home() {
           imageUrl: data.url ?? undefined,
           status: undefined,
         }));
-      } finally {
-        setLoading(false);
+      } catch (error) {
+        updateLastMessage(workspaceId, chatId, (entry) => ({
+          ...entry,
+          ai: error instanceof Error ? error.message : "Image generation failed.",
+          status: undefined,
+        }));
       }
       return;
     }
 
-    if (mode === "upload" && file) {
+    if (queuedMessage.mode === "upload" && queuedMessage.file) {
       const pending = createMessage({
-        user: userMsg || `Analyze ${file.name}`,
+        user: userMsg || `Analyze ${queuedMessage.file.name}`,
         ai: "",
         model: null,
-        fileName: file.name,
-        filePreview: filePreview ?? undefined,
+        fileName: queuedMessage.file.name,
+        filePreview: queuedMessage.filePreview ?? undefined,
         status: "Uploading file...",
       });
       updateChat(workspaceId, chatId, (chat) => ({
@@ -1382,18 +1478,18 @@ export default function Home() {
       }));
 
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("message", userMsg || `What is in ${file.name}?`);
-
-      setFile(null);
-      setFilePreview(null);
+      formData.append("file", queuedMessage.file);
+      formData.append("message", userMsg || `What is in ${queuedMessage.file.name}?`);
 
       try {
         const response = await fetch("/api/upload", { method: "POST", body: formData });
         await consumeStream(response, workspaceId, chatId);
-      } finally {
-        setLoading(false);
-        setMode("auto");
+      } catch (error) {
+        updateLastMessage(workspaceId, chatId, (entry) => ({
+          ...entry,
+          ai: error instanceof Error ? error.message : "File analysis failed.",
+          status: undefined,
+        }));
       }
       return;
     }
@@ -1402,7 +1498,7 @@ export default function Home() {
       user: userMsg,
       ai: "",
       model: null,
-      fileName: file?.name ?? undefined,
+      fileName: queuedMessage.file?.name ?? undefined,
       status: "Analyzing prompt...",
     });
     updateChat(workspaceId, chatId, (chat) => ({
@@ -1417,7 +1513,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMsg,
-          mode,
+          mode: queuedMessage.mode,
           allowedModels,
           history,
           memoryNotes: activeSettings.memoryNotes,
@@ -1427,24 +1523,34 @@ export default function Home() {
       });
 
       await consumeStream(response, workspaceId, chatId);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      updateLastMessage(workspaceId, chatId, (entry) => ({
+        ...entry,
+        ai: error instanceof Error ? error.message : "Message failed.",
+        status: undefined,
+      }));
     }
   }, [
-    activeChat.id,
-    activeChat.messages,
-    activeChat.title,
-    activeWorkspace.id,
-    activeWorkspace.settings,
     consumeStream,
-    file,
-    filePreview,
-    loading,
-    message,
-    mode,
     updateChat,
     updateLastMessage,
   ]);
+
+  useEffect(() => {
+    if (processingQueueRef.current || queuedMessages.length === 0) return;
+
+    const queuedMessage = queuedMessages[0];
+    processingQueueRef.current = true;
+    setLoading(true);
+
+    void processQueuedMessage(queuedMessage).finally(() => {
+      revokeQueuedPreview(queuedMessage.filePreview);
+      processingQueueRef.current = false;
+      if (!isMountedRef.current) return;
+      setQueuedMessages((prev) => prev.filter((item) => item.id !== queuedMessage.id));
+      setLoading(false);
+    });
+  }, [processQueuedMessage, queuedMessages, revokeQueuedPreview]);
 
   const createWorkspaceAction = useCallback(() => {
     const name = window.prompt("Workspace name", `Workspace ${state.workspaces.length + 1}`)?.trim();
@@ -1646,27 +1752,18 @@ export default function Home() {
     upload: "bg-orange-500",
   };
 
-  const modeDescriptions: Record<Mode, string> = {
-    auto: "The router decides between chat and code models based on your prompt.",
-    code: "The router stays focused on coding-heavy tasks, fixes, and implementation work.",
-    chat: "The router stays focused on general conversation, writing, and planning.",
-    search: "The router stays focused on research-oriented answers with current web context.",
-    image: "Image mode skips chat routing and sends your prompt straight to image generation.",
-    upload: "Upload mode analyzes the file you staged in the tools tab.",
-  };
-
-  const sidebarTabs: Array<{ id: SidebarTab; label: string; icon: LucideIcon }> = [
-    { id: "chat", label: "Chats", icon: MessageSquareText },
+  const toolbarTabs: Array<{ id: SidebarTab; label: string; icon: LucideIcon }> = [
+    { id: "chat", label: "Chat", icon: MessageSquareText },
     { id: "workspace", label: "Tools", icon: SlidersHorizontal },
-    { id: "integrations", label: "Apps", icon: PlugZap },
     { id: "artifacts", label: "Artifacts", icon: Braces },
+    { id: "integrations", label: "Apps", icon: PlugZap },
     { id: "account", label: "Account", icon: UserRound },
   ];
 
   return (
     <>
       <div className={`min-h-screen ${bg}`}>
-        <div className="mx-auto relative grid min-h-screen max-w-[1880px] grid-cols-1 gap-4 px-4 py-4 xl:h-screen xl:grid-cols-[minmax(320px,370px),minmax(0,1fr)]">
+        <div className="mx-auto flex min-h-screen max-w-[1680px] gap-3 px-3 py-3">
           <button
             type="button"
             aria-label="Close sidebar"
@@ -1674,353 +1771,430 @@ export default function Home() {
             className={`fixed inset-0 z-30 bg-black/50 transition-opacity xl:hidden ${sidebarOpen ? "opacity-100 pointer-events-auto" : "pointer-events-none opacity-0"}`}
           />
 
-          <aside className={`fixed inset-y-4 left-4 z-40 w-[min(24rem,calc(100vw-2rem))] min-h-0 overflow-hidden rounded-3xl border transition-transform duration-200 xl:static xl:w-auto xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
+          <aside className={`fixed inset-y-3 left-3 z-40 w-[min(16rem,calc(100vw-1.5rem))] min-h-0 overflow-hidden rounded-[26px] border transition-transform duration-200 xl:static xl:w-[250px] xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
             <div className="flex h-full min-h-0 flex-col">
-              <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-800">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg shadow-blue-500/20">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <h1 className="text-xl font-bold">Moje AI</h1>
-                    <p className="mt-1 truncate text-xs text-gray-500">{userEmail ? `Signed in as ${userEmail}` : "Checking session..."}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setState((prev) => ({ ...prev, dark: !prev.dark }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-                    {state.dark ? "Light" : "Dark"}
-                  </button>
-                  <button onClick={() => setSidebarOpen(false)} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700 xl:hidden">
-                    Close
-                  </button>
+              <div className="border-b border-slate-200 px-3 py-3 dark:border-slate-800">
+                <button
+                  onClick={createChatAction}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  New Chat
+                </button>
+                <div className="relative mt-3">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={chatSearch}
+                    onChange={(e) => setChatSearch(e.target.value)}
+                    placeholder="Szukaj rozmow lub tagow..."
+                    className={`w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm ${inputBg}`}
+                  />
                 </div>
               </div>
 
-              <div className="grid min-h-0 flex-1 grid-cols-[72px,minmax(0,1fr)]">
-                <div className="border-r border-gray-200 p-2 dark:border-gray-800">
-                  <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
-                    {sidebarTabs.map((tab) => {
-                      const Icon = tab.icon;
+              <div className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {activeWorkspace.name}
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-2">
+                {filteredChats.length === 0 ? (
+                  <div className="px-2 py-6 text-center text-sm text-slate-400">Brak rozmow do pokazania.</div>
+                ) : (
+                  <div className="space-y-1">
+                    {filteredChats.map((chat) => {
+                      const latest = chat.messages[chat.messages.length - 1];
                       return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setSidebarTab(tab.id)}
-                        title={tab.label}
-                        aria-label={tab.label}
-                        className={`relative flex h-14 items-center justify-center rounded-2xl transition-colors ${
-                          sidebarTab === tab.id
-                            ? state.dark
-                              ? "bg-blue-950/40 text-blue-200"
-                              : "bg-blue-50 text-blue-700"
-                            : state.dark
-                              ? "text-gray-300 hover:bg-gray-800"
-                              : "text-gray-600 hover:bg-gray-100"
-                        }`}
-                      >
-                        <Icon className="h-5 w-5" strokeWidth={2.1} />
-                        {sidebarTab === tab.id ? <span className="absolute right-2 h-2 w-2 rounded-full bg-current opacity-75" /> : null}
-                        <span className="sr-only">{tab.label}</span>
-                      </button>
+                        <button
+                          key={chat.id}
+                          onClick={() => {
+                            updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }));
+                            setSidebarTab("chat");
+                            setSidebarOpen(false);
+                          }}
+                          className={`group w-full rounded-2xl px-3 py-3 text-left transition-colors ${
+                            chat.id === activeChat.id
+                              ? state.dark
+                                ? "bg-slate-800 text-white"
+                                : "bg-blue-50 text-slate-900"
+                              : state.dark
+                                ? "text-slate-300 hover:bg-slate-800/80"
+                                : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-semibold">{chat.title}</div>
+                              <div className="mt-1 text-xs text-slate-400">{chat.messages.length} wiad.</div>
+                              {latest?.user ? <div className="mt-2 truncate text-xs text-slate-400">{stripMarkdown(latest.user)}</div> : null}
+                            </div>
+                            <div className="hidden gap-2 opacity-0 transition-opacity group-hover:flex group-hover:opacity-100">
+                              <span
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  renameChat(chat.id);
+                                }}
+                                className="text-[11px] text-slate-400 hover:text-blue-500"
+                              >
+                                Rename
+                              </span>
+                              <span
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  deleteChat(chat.id);
+                                }}
+                                className="text-[11px] text-slate-400 hover:text-red-500"
+                              >
+                                Delete
+                              </span>
+                            </div>
+                          </div>
+                        </button>
                       );
                     })}
                   </div>
-                </div>
+                )}
+              </div>
+            </div>
+          </aside>
 
-                <div className="min-h-0 overflow-y-auto p-4">
-                  {sidebarTab === "chat" && (
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h2 className="text-sm font-semibold">Workspaces</h2>
-                          <button onClick={createWorkspaceAction} className="text-xs text-blue-500 hover:underline">New</button>
-                        </div>
-                        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                          {state.workspaces.map((workspace) => (
-                            <button
-                              key={workspace.id}
-                              onClick={() => {
-                                setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }));
-                                setSidebarOpen(false);
-                              }}
-                              className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
-                                workspace.id === activeWorkspace.id
-                                  ? state.dark
-                                    ? "border-blue-500 bg-blue-950/30"
-                                    : "border-blue-400 bg-blue-50"
-                                  : state.dark
-                                    ? "border-gray-800 hover:bg-gray-800"
-                                    : "border-gray-200 hover:bg-gray-50"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="font-medium truncate">{workspace.name}</div>
-                                  <div className="text-xs text-gray-500 mt-1">{workspace.chats.length} chats</div>
-                                </div>
-                                <div className="flex gap-2 shrink-0">
-                                  <span
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      renameWorkspace(workspace.id);
-                                    }}
-                                    className="text-xs text-gray-400 hover:text-blue-500"
-                                  >
-                                    Rename
-                                  </span>
-                                  <span
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      deleteWorkspace(workspace.id);
-                                    }}
-                                    className="text-xs text-gray-400 hover:text-red-500"
-                                  >
-                                    Delete
-                                  </span>
-                                </div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h2 className="text-sm font-semibold">Chats</h2>
-                          <button onClick={createChatAction} className="text-xs text-blue-500 hover:underline">New</button>
-                        </div>
-                        <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                          {activeWorkspace.chats.map((chat) => (
-                            <button
-                              key={chat.id}
-                              onClick={() => {
-                                updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, activeChatId: chat.id }));
-                                setSidebarOpen(false);
-                              }}
-                              className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
-                                chat.id === activeChat.id
-                                  ? state.dark
-                                    ? "border-violet-500 bg-violet-950/30"
-                                    : "border-violet-400 bg-violet-50"
-                                  : state.dark
-                                    ? "border-gray-800 hover:bg-gray-800"
-                                    : "border-gray-200 hover:bg-gray-50"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="font-medium truncate">{chat.title}</div>
-                                  <div className="text-xs text-gray-500 mt-1">{chat.messages.length} messages</div>
-                                </div>
-                                <div className="flex gap-2 shrink-0">
-                                  <span
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      renameChat(chat.id);
-                                    }}
-                                    className="text-xs text-gray-400 hover:text-blue-500"
-                                  >
-                                    Rename
-                                  </span>
-                                  <span
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      deleteChat(chat.id);
-                                    }}
-                                    className="text-xs text-gray-400 hover:text-red-500"
-                                  >
-                                    Delete
-                                  </span>
-                                </div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+          <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border ${cardBg}`}>
+            <section className="flex h-full min-h-0 min-w-0 flex-col">
+              <div className="border-b border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/90">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <button
+                      onClick={() => setSidebarOpen(true)}
+                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300 xl:hidden"
+                    >
+                      <Menu className="h-4 w-4" />
+                    </button>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-500 text-white shadow-sm">
+                      {assistantMode === "chat" ? <MessageSquareText className="h-5 w-5" /> : <Code2 className="h-5 w-5" />}
                     </div>
-                  )}
+                    <div className="min-w-0">
+                      <div className="truncate text-base font-semibold text-slate-900 dark:text-white">{assistantName}</div>
+                      <div className="truncate text-xs text-slate-500">{activeChat.title}</div>
+                    </div>
+                  </div>
 
-                  {sidebarTab === "workspace" && (
-                    <div className="space-y-3">
-                      <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/70" : "border-gray-200 bg-gray-50"}`}>
-                        <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={assistantMode}
+                      onChange={(e) => setMode(e.target.value === "chat" ? "chat" : "code")}
+                      className={`hidden rounded-xl border px-3 py-2 text-sm md:block ${inputBg}`}
+                    >
+                      <option value="code">Code Assistant</option>
+                      <option value="chat">AI Chat</option>
+                    </select>
+
+                    {toolbarTabs.map((tab) => {
+                      const Icon = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setSidebarTab(tab.id)}
+                          title={tab.label}
+                          aria-label={tab.label}
+                          className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors ${
+                            sidebarTab === tab.id
+                              ? state.dark
+                                ? "border-blue-800 bg-blue-950/40 text-blue-200"
+                                : "border-blue-200 bg-blue-50 text-blue-700"
+                              : state.dark
+                                ? "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      onClick={() => {
+                        setSidebarTab("workspace");
+                        setComposerText(QUICK_CHIPS[0]?.text ?? "");
+                      }}
+                      className={`hidden rounded-xl border px-3 py-2 text-sm font-medium sm:block ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
+                    >
+                      Prompts
+                    </button>
+
+                    <button
+                      onClick={createChatAction}
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl border ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
+                      title="New chat"
+                      aria-label="New chat"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`flex-1 min-h-0 px-3 py-4 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
+                {sidebarTab === "chat" ? (
+                  <div className="mx-auto flex h-full max-w-5xl flex-col">
+                    {!googleLinked && authReady ? (
+                      <div className={`mb-4 rounded-2xl border px-4 py-4 ${state.dark ? "border-blue-900 bg-blue-950/20" : "border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50"}`}>
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                           <div>
-                            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Tools</h2>
-                            <p className="mt-1 text-xs text-gray-500">Pick a mode, drop a shortcut, or stage a file.</p>
-                          </div>
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium text-white ${modeColors[mode]}`}>{modeLabels[mode]}</span>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          {MODE_PANEL_OPTIONS.map((option) => (
-                            <button
-                              key={option.id}
-                              onClick={() => setMode(option.id)}
-                              className={`w-full rounded-2xl border px-3 py-2.5 text-left transition-colors ${
-                                mode === option.id
-                                  ? `${modeColors[option.id]} text-white border-transparent`
-                                  : state.dark
-                                    ? "border-gray-800 bg-gray-950/60 text-gray-100 hover:bg-gray-800"
-                                    : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="font-medium">{option.label}</span>
-                                {mode === option.id && <span className="text-[10px] uppercase tracking-[0.16em] opacity-80">On</span>}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-
-                        <div className={`mt-3 rounded-2xl border px-3 py-2 text-xs leading-5 ${state.dark ? "border-gray-800 bg-gray-900 text-gray-400" : "border-gray-200 bg-white text-gray-500"}`}>
-                          {modeDescriptions[mode]}
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {QUICK_CHIPS.map((chip) => (
-                            <button
-                              key={chip.label}
-                              onClick={() => {
-                                if (chip.mode) setMode(chip.mode);
-                                setComposerText(chip.text);
-                              }}
-                              className={`px-3 py-1.5 rounded-full text-xs border ${state.dark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-100"}`}
-                            >
-                              {chip.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className={`rounded-2xl border p-3 ${state.dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h2 className="text-sm font-semibold">File</h2>
-                            <p className="mt-1 text-xs text-gray-500">Attach one file for analysis.</p>
+                            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Enhanced Google Integration Available</h2>
+                            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
+                              Enable backend functions to unlock full Google integration: AI can create calendar events, send emails via Gmail, and sync tasks automatically with Google Calendar and Tasks.
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-emerald-600 dark:text-emerald-300">
+                              <span className={`rounded-full px-2 py-1 ${state.dark ? "bg-emerald-950/40" : "bg-emerald-50"}`}>Calendar sync</span>
+                              <span className={`rounded-full px-2 py-1 ${state.dark ? "bg-emerald-950/40" : "bg-emerald-50"}`}>Gmail compose</span>
+                              <span className={`rounded-full px-2 py-1 ${state.dark ? "bg-emerald-950/40" : "bg-emerald-50"}`}>Tasks integration</span>
+                            </div>
                           </div>
                           <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className={`rounded-xl px-3 py-2 text-xs font-medium border transition-colors ${
-                              mode === "upload"
-                                ? `${modeColors.upload} text-white border-transparent`
-                                : state.dark
-                                  ? "border-gray-700 text-gray-300 hover:bg-gray-800"
-                                  : "border-gray-300 text-gray-700 hover:bg-gray-100"
-                            }`}
+                            onClick={() => void signInWithProvider("google")}
+                            disabled={oauthLoading === "google"}
+                            className={`rounded-xl border px-4 py-2 text-sm font-medium ${state.dark ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-700"}`}
                           >
-                            {file ? "Replace" : "Add file"}
+                            {oauthLoading === "google" ? "Connecting..." : "Enable"}
                           </button>
                         </div>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
-                          className="hidden"
-                          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-                        />
+                      </div>
+                    ) : null}
 
-                        {file ? (
-                          <div className={`mt-3 rounded-2xl border px-3 py-3 flex items-center gap-3 ${state.dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
-                            {filePreview ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={filePreview} alt="preview" className="h-14 w-14 object-cover rounded-xl" />
-                            ) : (
-                              <div className={`h-14 w-14 rounded-xl flex items-center justify-center text-xs ${state.dark ? "bg-gray-800" : "bg-gray-100"}`}>
-                                FILE
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <div className="font-medium truncate">{file.name}</div>
-                              <div className="text-xs text-gray-500 truncate">{file.type || "unknown file type"}</div>
+                    <div className="min-h-0 flex-1">
+                      <ChatList
+                        chat={activeChat.messages}
+                        loading={loading}
+                        dark={state.dark}
+                        cardBg={cardBg}
+                        codeBg={codeBg}
+                        copied={copied}
+                        speaking={speaking}
+                        chatEndRef={chatEndRef}
+                        onSpeak={speak}
+                        onCopyCode={copyCode}
+                        openReasoning={openReasoning}
+                        onToggleReasoning={toggleReasoning}
+                        onEditUser={editUserMessage}
+                        onResponseAction={applyResponseAction}
+                        onQuickStart={(text, nextMode) => {
+                          if (nextMode) setMode(nextMode);
+                          setComposerText(text);
+                        }}
+                        assistantName={assistantName}
+                        assistantDescription={assistantDescription}
+                        assistantIcon={assistantIcon}
+                      />
+                    </div>
+                  </div>
+                ) : sidebarTab === "workspace" ? (
+                  <div className="mx-auto h-full max-w-5xl overflow-y-auto pr-1">
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr),minmax(0,1.1fr)]">
+                      <div className="space-y-4">
+                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h2 className="text-sm font-semibold">Workspaces</h2>
+                              <p className="mt-1 text-xs text-slate-500">Switch the active workspace or create a new one.</p>
+                            </div>
+                            <button onClick={createWorkspaceAction} className="text-xs text-blue-500 hover:underline">New</button>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            {state.workspaces.map((workspace) => (
+                              <button
+                                key={workspace.id}
+                                onClick={() => setState((prev) => ({ ...prev, activeWorkspaceId: workspace.id }))}
+                                className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                                  workspace.id === activeWorkspace.id
+                                    ? state.dark
+                                      ? "border-blue-800 bg-blue-950/30"
+                                      : "border-blue-200 bg-blue-50"
+                                    : state.dark
+                                      ? "border-slate-800 hover:bg-slate-800"
+                                      : "border-slate-200 bg-white hover:bg-slate-50"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="truncate font-medium">{workspace.name}</div>
+                                    <div className="mt-1 text-xs text-slate-500">{workspace.chats.length} chats</div>
+                                  </div>
+                                  <div className="flex gap-2 text-[11px] text-slate-400">
+                                    <span onClick={(event) => { event.stopPropagation(); renameWorkspace(workspace.id); }} className="hover:text-blue-500">Rename</span>
+                                    <span onClick={(event) => { event.stopPropagation(); deleteWorkspace(workspace.id); }} className="hover:text-red-500">Delete</span>
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+
+                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <h2 className="text-sm font-semibold">Quick prompts</h2>
+                              <p className="mt-1 text-xs text-slate-500">Drop a shortcut into the composer.</p>
+                            </div>
+                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium text-white ${modeColors[mode]}`}>{modeLabels[mode]}</span>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {QUICK_CHIPS.map((chip) => (
+                              <button
+                                key={chip.label}
+                                onClick={() => {
+                                  if (chip.mode) setMode(chip.mode);
+                                  setSidebarTab("chat");
+                                  setComposerText(chip.text);
+                                }}
+                                className={`rounded-full border px-3 py-1.5 text-xs ${state.dark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
+                              >
+                                {chip.label}
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      </div>
+
+                      <div className="space-y-4">
+                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
+                          <h2 className="text-sm font-semibold">Modes</h2>
+                          <p className="mt-1 text-xs text-slate-500">Pick the response lane for the next message.</p>
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            {MODE_PANEL_OPTIONS.map((option) => (
+                              <button
+                                key={option.id}
+                                onClick={() => setMode(option.id)}
+                                className={`rounded-2xl border px-3 py-2.5 text-left transition-colors ${
+                                  mode === option.id
+                                    ? `${modeColors[option.id]} border-transparent text-white`
+                                    : state.dark
+                                      ? "border-slate-800 bg-slate-950/60 text-slate-100 hover:bg-slate-800"
+                                      : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
+                                }`}
+                              >
+                                <div className="font-medium">{option.label}</div>
+                                <div className={`mt-1 text-xs ${mode === option.id ? "text-white/80" : "text-slate-500"}`}>{option.description}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+
+                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h2 className="text-sm font-semibold">File</h2>
+                              <p className="mt-1 text-xs text-slate-500">Attach one file for analysis.</p>
                             </div>
                             <button
-                              onClick={() => {
-                                setFile(null);
-                                setFilePreview(null);
-                                setMode("auto");
-                              }}
-                              className="ml-auto text-red-500 text-sm"
+                              onClick={() => fileInputRef.current?.click()}
+                              className={`rounded-xl border px-3 py-2 text-xs font-medium ${state.dark ? "border-slate-700 text-slate-100 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
                             >
-                              Remove
+                              {file ? "Replace" : "Add file"}
                             </button>
                           </div>
-                        ) : (
-                          <div className={`mt-3 rounded-2xl border border-dashed px-3 py-4 text-xs ${state.dark ? "border-gray-700 text-gray-400" : "border-gray-300 text-gray-500"}`}>
-                            No file selected.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                        <h2 className="text-sm font-semibold">Preferences</h2>
-
-                        <div className="grid grid-cols-1 gap-3">
-                          <div>
-                            <label className="mb-1 block text-xs text-gray-500">Response style</label>
-                            <select
-                              value={activeWorkspace.settings.styleMode}
-                              onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                                ...workspace,
-                                settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
-                              }))}
-                              className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                            >
-                              <option value="concise">Concise</option>
-                              <option value="detailed">Detailed</option>
-                              <option value="step-by-step">Step by step</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="mb-1 block text-xs text-gray-500">Reply language</label>
-                            <select
-                              value={activeWorkspace.settings.languageLock}
-                              onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                                ...workspace,
-                                settings: { ...workspace.settings, languageLock: e.target.value },
-                              }))}
-                              className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                            >
-                              {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                            </select>
-                          </div>
-                        </div>
-
-                        <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
-                          <span>Use conversation memory</span>
                           <input
-                            type="checkbox"
-                            checked={activeWorkspace.settings.memoryEnabled}
-                            onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                              ...workspace,
-                              settings: { ...workspace.settings, memoryEnabled: e.target.checked },
-                            }))}
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
+                            className="hidden"
+                            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
                           />
-                        </label>
+                          {file ? (
+                            <div className={`mt-3 flex items-center gap-3 rounded-2xl border px-3 py-3 ${state.dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                              {filePreview ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={filePreview} alt="preview" className="h-14 w-14 rounded-xl object-cover" />
+                              ) : (
+                                <div className={`flex h-14 w-14 items-center justify-center rounded-xl text-xs ${state.dark ? "bg-slate-800" : "bg-slate-100"}`}>FILE</div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-medium">{file.name}</div>
+                                <div className="truncate text-xs text-slate-500">{file.type || "unknown file type"}</div>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setFile(null);
+                                  setFilePreview(null);
+                                  setMode("auto");
+                                }}
+                                className="text-sm text-red-500"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <div className={`mt-3 rounded-2xl border border-dashed px-3 py-4 text-xs ${state.dark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
+                              No file selected.
+                            </div>
+                          )}
+                        </section>
 
-                        <textarea
-                          value={activeWorkspace.settings.memoryNotes}
-                          onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
-                            ...workspace,
-                            settings: { ...workspace.settings, memoryNotes: e.target.value },
-                          }))}
-                          placeholder="Pinned memory for this workspace"
-                          rows={3}
-                          className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
-                        />
-
-                        <div className="flex gap-2 flex-wrap">
-                          <button onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, settings: { ...workspace.settings, memoryNotes: "" } }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-                            Clear pinned memory
-                          </button>
-                          <button onClick={clearActiveChat} className="text-xs rounded-xl border px-3 py-2 border-red-300 text-red-500 dark:border-red-900">
-                            Clear active chat
-                          </button>
-                        </div>
+                        <section className={`rounded-3xl border p-4 ${cardBg}`}>
+                          <h2 className="text-sm font-semibold">Preferences</h2>
+                          <div className="mt-3 grid gap-3">
+                            <div>
+                              <label className="mb-1 block text-xs text-slate-500">Response style</label>
+                              <select
+                                value={activeWorkspace.settings.styleMode}
+                                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                                  ...workspace,
+                                  settings: { ...workspace.settings, styleMode: e.target.value as StyleMode },
+                                }))}
+                                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                              >
+                                <option value="concise">Concise</option>
+                                <option value="detailed">Detailed</option>
+                                <option value="step-by-step">Step by step</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-xs text-slate-500">Reply language</label>
+                              <select
+                                value={activeWorkspace.settings.languageLock}
+                                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                                  ...workspace,
+                                  settings: { ...workspace.settings, languageLock: e.target.value },
+                                }))}
+                                className={`w-full rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                              >
+                                {TEXT_LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+                              </select>
+                            </div>
+                            <label className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
+                              <span>Use conversation memory</span>
+                              <input
+                                type="checkbox"
+                                checked={activeWorkspace.settings.memoryEnabled}
+                                onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                                  ...workspace,
+                                  settings: { ...workspace.settings, memoryEnabled: e.target.checked },
+                                }))}
+                              />
+                            </label>
+                            <textarea
+                              value={activeWorkspace.settings.memoryNotes}
+                              onChange={(e) => updateWorkspace(activeWorkspace.id, (workspace) => ({
+                                ...workspace,
+                                settings: { ...workspace.settings, memoryNotes: e.target.value },
+                              }))}
+                              placeholder="Pinned memory for this workspace"
+                              rows={3}
+                              className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${inputBg}`}
+                            />
+                            <div className="flex flex-wrap gap-2">
+                              <button onClick={() => updateWorkspace(activeWorkspace.id, (workspace) => ({ ...workspace, settings: { ...workspace.settings, memoryNotes: "" } }))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs dark:border-slate-700">
+                                Clear pinned memory
+                              </button>
+                              <button onClick={clearActiveChat} className="rounded-xl border border-red-300 px-3 py-2 text-xs text-red-500 dark:border-red-900">
+                                Clear active chat
+                              </button>
+                            </div>
+                          </div>
+                        </section>
                       </div>
                     </div>
-                  )}
-
-                  {sidebarTab === "integrations" && (
+                  </div>
+                ) : sidebarTab === "integrations" ? (
+                  <div className="mx-auto h-full max-w-5xl overflow-y-auto pr-1">
                     <IntegrationsPanel
                       dark={state.dark}
                       linkedProviders={linkedProviders}
@@ -2033,23 +2207,24 @@ export default function Home() {
                       onCopyVsCodePrompt={() => void copyVsCodePrompt()}
                       onDownloadVsCodeBundle={downloadVsCodeBundle}
                     />
-                  )}
-
-                  {sidebarTab === "artifacts" && (
+                  </div>
+                ) : sidebarTab === "artifacts" ? (
+                  <div className="mx-auto h-full max-w-5xl overflow-y-auto">
                     <ArtifactPanel artifacts={artifacts} dark={state.dark} copied={copied} onCopyCode={copyCode} />
-                  )}
-
-                  {sidebarTab === "account" && (
+                  </div>
+                ) : (
+                  <div className="mx-auto h-full max-w-4xl overflow-y-auto pr-1">
                     <div className="space-y-4">
-                      <section className={`rounded-3xl border p-4 ${state.dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
+                      <section className={`rounded-3xl border p-4 ${cardBg}`}>
                         <div>
                           <h2 className="text-sm font-semibold">Chat actions</h2>
-                          <p className="mt-1 text-xs text-gray-500">Share or export the active chat without cluttering the main view.</p>
+                          <p className="mt-1 text-xs text-slate-500">Share or export the active chat without cluttering the main view.</p>
                         </div>
                         <div className="mt-4 grid gap-2">
-                          <button onClick={copyShareLink} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 text-left">{copied === "share-link" ? "Link copied" : "Share chat link"}</button>
-                          <button onClick={exportMarkdown} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 text-left">Export Markdown</button>
-                          <button onClick={exportJson} className="px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 text-left">Export JSON</button>
+                          <button onClick={copyShareLink} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700">{copied === "share-link" ? "Link copied" : "Share chat link"}</button>
+                          <button onClick={exportMarkdown} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700">Export Markdown</button>
+                          <button onClick={exportJson} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700">Export JSON</button>
+                          <button onClick={() => void signOut()} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700">Sign out</button>
                         </div>
                       </section>
 
@@ -2060,168 +2235,152 @@ export default function Home() {
                         cloudSyncMessage={cloudSyncMessage}
                       />
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
-              <div className="border-t border-gray-200 px-4 py-4 dark:border-gray-800">
-                <button onClick={() => void signOut()} className="w-full text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
-                  Sign out
-                </button>
-              </div>
-            </div>
-          </aside>
-
-          <main className={`min-h-0 rounded-3xl border ${cardBg}`}>
-            <section className="flex h-full min-h-0 min-w-0 flex-col">
-              <div className="border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
-                <div className="mx-auto flex max-w-4xl flex-wrap items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-3">
-                      <button
-                        onClick={() => setSidebarOpen(true)}
-                        className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300 xl:hidden"
-                      >
-                        <Menu className="h-4 w-4" />
-                      </button>
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg shadow-blue-500/20">
-                        <Sparkles className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{activeWorkspace.name}</div>
-                        <div className="mt-1 truncate text-xl font-bold text-slate-900 dark:text-white">{activeChat.title}</div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {modeLabels[mode]} mode
-                          {file ? ` • ${file.name}` : ""}
-                          {` • Cloud ${cloudSyncStatus}`}
+              {sidebarTab === "chat" ? (
+                <div className="border-t border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/90">
+                  <div className="mx-auto max-w-5xl space-y-2">
+                    {file ? (
+                      <div className="flex flex-wrap gap-2">
+                        <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                          <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span className="max-w-[240px] truncate">{file.name}</span>
+                          <button
+                            onClick={() => {
+                              setFile(null);
+                              setFilePreview(null);
+                              setMode("auto");
+                            }}
+                            className="ml-1 text-[11px] opacity-70 hover:opacity-100"
+                          >
+                            Remove
+                          </button>
                         </div>
                       </div>
-                    </div>
-                    <div className="mt-2 text-xs text-slate-500">{cloudSyncMessage}</div>
-                  </div>
-                </div>
-              </div>
+                    ) : null}
 
-              <div className="flex-1 min-h-0 px-3 py-4 sm:px-4 md:px-5">
-                <ChatList
-                  chat={activeChat.messages}
-                  loading={loading}
-                  dark={state.dark}
-                  cardBg={cardBg}
-                  codeBg={codeBg}
-                  copied={copied}
-                  speaking={speaking}
-                  chatEndRef={chatEndRef}
-                  onSpeak={speak}
-                  onCopyCode={copyCode}
-                  openReasoning={openReasoning}
-                  onToggleReasoning={toggleReasoning}
-                  onEditUser={editUserMessage}
-                  onResponseAction={applyResponseAction}
-                  onQuickStart={(text, nextMode) => {
-                    if (nextMode) setMode(nextMode);
-                    setComposerText(text);
-                  }}
-                />
-              </div>
-
-              <div className="border-t border-slate-200 bg-white/80 px-4 py-3 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
-                <div className="mx-auto max-w-4xl space-y-2">
-                  {file ? (
-                    <div className="flex flex-wrap gap-2">
-                      <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
-                        <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
-                        <span className="max-w-[240px] truncate">{file.name}</span>
-                        <button
-                          onClick={() => {
-                            setFile(null);
-                            setFilePreview(null);
-                            setMode("auto");
-                          }}
-                          className="ml-1 text-[11px] opacity-70 hover:opacity-100"
-                        >
-                          Remove
-                        </button>
+                    {queuedMessages.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {queuedMessages.map((queuedMessage, index) => {
+                          const isActive = loading && index === 0;
+                          const queueNumber = loading ? index : index + 1;
+                          const queuedLabel = queuedMessage.text || queuedMessage.file?.name || "Queued message";
+                          return (
+                            <div
+                              key={queuedMessage.id}
+                              className={`flex max-w-full items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
+                                isActive
+                                  ? state.dark
+                                    ? "border-blue-800 bg-blue-950/30 text-blue-100"
+                                    : "border-blue-200 bg-blue-50 text-blue-800"
+                                  : state.dark
+                                    ? "border-slate-700 bg-slate-900 text-slate-200"
+                                    : "border-slate-200 bg-white text-slate-700"
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium">{isActive ? "Sending now" : `Queued ${queueNumber}`}</div>
+                                <div className="truncate opacity-80">{queuedLabel}</div>
+                              </div>
+                              {!isActive ? (
+                                <button
+                                  onClick={() => removeQueuedMessage(queuedMessage.id)}
+                                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100"
+                                  title="Remove queued message"
+                                  aria-label="Remove queued message"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
-                  ) : null}
+                    ) : null}
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
-                      title="Attach file"
-                      aria-label="Attach file"
-                    >
-                      <Paperclip className="h-4 w-4" />
-                    </button>
+                    {composerPreview && message.trim() ? (
+                      <div className={`rounded-2xl border px-4 py-3 text-sm ${state.dark ? "border-slate-800 bg-slate-950 text-slate-200" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+                        <ReactMarkdown>{message}</ReactMarkdown>
+                      </div>
+                    ) : null}
 
-                    <div className={`hidden items-center gap-1 rounded-xl p-1 sm:flex ${state.dark ? "bg-slate-900 border border-slate-800" : "bg-slate-100 border border-slate-200"}`}>
+                    <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${state.dark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"}`}>
                       <button
-                        onClick={() => setMode("code")}
-                        className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${mode === "code" ? "bg-white text-blue-700 shadow-sm dark:bg-slate-800 dark:text-blue-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
+                        title="Attach file"
+                        aria-label="Attach file"
                       >
-                        <Code2 className="h-3.5 w-3.5" />
-                        <span>Code</span>
+                        <Paperclip className="h-4 w-4" />
                       </button>
+
+                      <div className={`hidden items-center gap-1 rounded-xl p-1 sm:flex ${state.dark ? "border border-slate-800 bg-slate-900" : "border border-slate-200 bg-slate-100"}`}>
+                        <button
+                          onClick={() => setMode("code")}
+                          className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${assistantMode === "code" ? "bg-white text-blue-700 shadow-sm dark:bg-slate-800 dark:text-blue-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}
+                        >
+                          <Code2 className="h-3.5 w-3.5" />
+                          <span>Kod</span>
+                        </button>
+                        <button
+                          onClick={() => setMode("chat")}
+                          className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${assistantMode === "chat" ? "bg-white text-purple-700 shadow-sm dark:bg-slate-800 dark:text-purple-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}
+                        >
+                          <MessageSquareText className="h-3.5 w-3.5" />
+                          <span>Chat</span>
+                        </button>
+                        <select
+                          value={auxiliaryMode}
+                          onChange={(e) => setMode(e.target.value as Mode)}
+                          className={`rounded-lg border-0 bg-transparent px-2 py-2 text-xs font-medium ${state.dark ? "text-slate-200" : "text-slate-700"}`}
+                        >
+                          <option value="auto">Auto</option>
+                          <option value="search">Search</option>
+                          <option value="image">Image</option>
+                          <option value="upload">File</option>
+                        </select>
+                      </div>
+
+                      <textarea
+                        ref={inputRef}
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            queueComposerMessage();
+                          }
+                        }}
+                        placeholder="Wiadomosc... (Enter to send)"
+                        rows={1}
+                        className={`flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm focus:outline-none ${state.dark ? "text-slate-100 placeholder-slate-500" : "text-slate-900 placeholder-slate-400"}`}
+                        style={{ minHeight: 44, maxHeight: 180 }}
+                      />
+
                       <button
-                        onClick={() => setMode("chat")}
-                        className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${mode === "chat" ? "bg-white text-purple-700 shadow-sm dark:bg-slate-800 dark:text-purple-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}
+                        onClick={() => setComposerPreview((prev) => !prev)}
+                        className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${composerPreview ? (state.dark ? "border-blue-800 bg-blue-950/40 text-blue-200" : "border-blue-200 bg-blue-50 text-blue-700") : (state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600")}`}
+                        title="Preview message"
+                        aria-label="Preview message"
                       >
-                        <MessageSquareText className="h-3.5 w-3.5" />
-                        <span>Chat</span>
+                        <Eye className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        onClick={queueComposerMessage}
+                        disabled={!message.trim() && !file}
+                        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        title={loading ? "Add to queue" : "Send message"}
+                        aria-label={loading ? "Add to queue" : "Send message"}
+                      >
+                        {loading ? <Plus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                       </button>
                     </div>
-
-                    <textarea
-                      ref={inputRef}
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          void sendMessage();
-                        }
-                      }}
-                      placeholder={
-                        mode === "image"
-                          ? "Describe the image to generate..."
-                          : mode === "upload"
-                            ? "Ask about the selected file..."
-                            : mode === "search"
-                              ? "Search the web for something current..."
-                              : "Message..."
-                      }
-                      disabled={loading}
-                      rows={1}
-                      className={`flex-1 resize-none rounded-xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
-                      style={{ minHeight: 44, maxHeight: 180 }}
-                    />
-
-                    <button
-                      onClick={() => {
-                        setSidebarTab("workspace");
-                        setSidebarOpen(true);
-                      }}
-                      className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
-                      title="Open tools"
-                      aria-label="Open tools"
-                    >
-                      <SlidersHorizontal className="h-4 w-4" />
-                    </button>
-
-                    <button
-                      onClick={() => void sendMessage()}
-                      disabled={loading || (!message.trim() && !file)}
-                      className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${modeColors[mode]}`}
-                      title={loading ? "Working" : "Send message"}
-                      aria-label={loading ? "Working" : "Send message"}
-                    >
-                      {loading ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
-                    </button>
                   </div>
                 </div>
-              </div>
+              ) : null}
             </section>
           </main>
         </div>
