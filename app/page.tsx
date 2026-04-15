@@ -1,6 +1,6 @@
 "use client";
 
-import { Braces, MessageSquareText, PlugZap, SlidersHorizontal, UserRound, type LucideIcon } from "lucide-react";
+import { Braces, Code2, ImageIcon, Menu, MessageSquareText, Paperclip, PlugZap, Search, Send, SlidersHorizontal, Sparkles, UserRound, type LucideIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -116,6 +116,7 @@ type ChatListProps = {
   onToggleReasoning: (id: string) => void;
   onEditUser: (text: string) => void;
   onResponseAction: (action: ResponseAction, text: string) => void;
+  onQuickStart: (text: string, mode?: Mode) => void;
 };
 
 type ArtifactPanelProps = {
@@ -391,14 +392,53 @@ const ChatList = memo(function ChatList({
   onToggleReasoning,
   onEditUser,
   onResponseAction,
+  onQuickStart,
 }: ChatListProps) {
   let codeBlockIdx = 0;
+  const emptyStateCards: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
+    { label: "Generate code", hint: "Production-ready implementation", prompt: "Write a complete implementation for: ", mode: "code", icon: Code2 },
+    { label: "Search the web", hint: "Current facts and research", prompt: "Search the web for the latest info about: ", mode: "search", icon: Search },
+    { label: "Plan something", hint: "Steps, structure, next actions", prompt: "Break this into clear implementation steps: ", mode: "chat", icon: MessageSquareText },
+    { label: "Create an image", hint: "Describe a visual concept", prompt: "Generate an image of: ", mode: "image", icon: ImageIcon },
+  ];
 
   return (
-    <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+    <div className="mx-auto flex-1 w-full max-w-4xl overflow-y-auto space-y-4 pr-1">
       {chat.length === 0 && (
-        <div className="text-center text-gray-400 mt-16 text-lg">
-          Start a chat, use auto routing, search the web, or upload a file.
+        <div className="mt-8 text-center sm:mt-12">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg shadow-blue-500/20">
+            <Sparkles className="h-6 w-6 text-white" />
+          </div>
+          <h2 className={`mt-4 text-xl font-bold ${dark ? "text-white" : "text-slate-900"}`}>How can I help?</h2>
+          <p className={`mx-auto mt-2 max-w-xl text-sm ${dark ? "text-slate-400" : "text-slate-600"}`}>
+            Chat, code, search, or generate visuals. The app logic stays the same, but the page now opens with a cleaner Base44-style shell.
+          </p>
+          <div className="mx-auto mt-6 grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2">
+            {emptyStateCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <button
+                  key={card.label}
+                  onClick={() => onQuickStart(card.prompt, card.mode)}
+                  className={`rounded-2xl border p-4 text-left transition-all ${
+                    dark
+                      ? "border-slate-800 bg-slate-900/80 hover:border-blue-800 hover:bg-slate-900"
+                      : "border-slate-200 bg-white shadow-sm shadow-slate-200/70 hover:border-blue-300 hover:shadow-md"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className={`font-medium ${dark ? "text-white" : "text-slate-900"}`}>{card.label}</div>
+                      <div className="mt-1 text-xs text-slate-500">{card.hint}</div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
       {chat.map((entry, index) => (
@@ -651,10 +691,10 @@ export default function Home() {
 
   const artifacts = useMemo(() => extractArtifacts(activeChat.messages), [activeChat.messages]);
 
-  const bg = state.dark ? "bg-gray-950 text-gray-100" : "bg-gray-50 text-gray-900";
-  const cardBg = state.dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200";
-  const inputBg = state.dark ? "bg-gray-900 border-gray-700 text-gray-100 placeholder-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400";
-  const codeBg = state.dark ? "bg-gray-950" : "bg-gray-100";
+  const bg = state.dark ? "bg-slate-950 text-slate-100" : "bg-gradient-to-br from-blue-50 via-white to-purple-50 text-slate-900";
+  const cardBg = state.dark ? "bg-slate-900 border-slate-800" : "bg-white/95 border-slate-200 shadow-sm shadow-slate-200/70";
+  const inputBg = state.dark ? "bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400";
+  const codeBg = state.dark ? "bg-slate-950" : "bg-slate-100";
 
   useEffect(() => {
     stateRef.current = state;
@@ -1637,9 +1677,14 @@ export default function Home() {
           <aside className={`fixed inset-y-4 left-4 z-40 w-[min(24rem,calc(100vw-2rem))] min-h-0 overflow-hidden rounded-3xl border transition-transform duration-200 xl:static xl:w-auto xl:translate-x-0 ${cardBg} ${sidebarOpen ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
             <div className="flex h-full min-h-0 flex-col">
               <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-800">
-                <div className="min-w-0">
-                  <h1 className="text-xl font-bold">Moje AI</h1>
-                  <p className="mt-1 truncate text-xs text-gray-500">{userEmail ? `Signed in as ${userEmail}` : "Checking session..."}</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg shadow-blue-500/20">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="text-xl font-bold">Moje AI</h1>
+                    <p className="mt-1 truncate text-xs text-gray-500">{userEmail ? `Signed in as ${userEmail}` : "Checking session..."}</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setState((prev) => ({ ...prev, dark: !prev.dark }))} className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700">
@@ -2029,36 +2074,35 @@ export default function Home() {
 
           <main className={`min-h-0 rounded-3xl border ${cardBg}`}>
             <section className="flex h-full min-h-0 min-w-0 flex-col">
-              <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
-                <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
+                <div className="mx-auto flex max-w-4xl flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start gap-3">
                       <button
                         onClick={() => setSidebarOpen(true)}
-                        className="mt-0.5 rounded-xl border border-gray-300 px-3 py-2 text-xs font-medium dark:border-gray-700 xl:hidden"
+                        className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300 xl:hidden"
                       >
-                        Menu
+                        <Menu className="h-4 w-4" />
                       </button>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg shadow-blue-500/20">
+                        <Sparkles className="h-5 w-5" />
+                      </div>
                       <div className="min-w-0">
-                        <div className="text-xs uppercase tracking-[0.18em] text-gray-500">{activeWorkspace.name}</div>
-                        <div className="mt-1 truncate text-2xl font-bold">{activeChat.title}</div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{activeWorkspace.name}</div>
+                        <div className="mt-1 truncate text-xl font-bold text-slate-900 dark:text-white">{activeChat.title}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {modeLabels[mode]} mode
+                          {file ? ` • ${file.name}` : ""}
+                          {` • Cloud ${cloudSyncStatus}`}
+                        </div>
                       </div>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className={`rounded-full px-3 py-1.5 text-[11px] font-medium text-white ${modeColors[mode]}`}>{modeLabels[mode]}</span>
-                      <span className={`rounded-full px-3 py-1.5 text-[11px] font-medium ${state.dark ? "bg-gray-800 text-gray-200" : "bg-gray-100 text-gray-700"}`}>{`Cloud ${cloudSyncStatus}`}</span>
-                      {file ? (
-                        <span className={`max-w-full truncate rounded-full px-3 py-1.5 text-[11px] font-medium ${state.dark ? "bg-gray-800 text-gray-200" : "bg-gray-100 text-gray-700"}`}>
-                          {file.name}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-2 text-xs text-gray-500">{cloudSyncMessage}</div>
+                    <div className="mt-2 text-xs text-slate-500">{cloudSyncMessage}</div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0 px-5 py-4">
+              <div className="flex-1 min-h-0 px-3 py-4 sm:px-4 md:px-5">
                 <ChatList
                   chat={activeChat.messages}
                   loading={loading}
@@ -2074,69 +2118,108 @@ export default function Home() {
                   onToggleReasoning={toggleReasoning}
                   onEditUser={editUserMessage}
                   onResponseAction={applyResponseAction}
+                  onQuickStart={(text, nextMode) => {
+                    if (nextMode) setMode(nextMode);
+                    setComposerText(text);
+                  }}
                 />
               </div>
 
-              <div className="border-t border-gray-200 px-5 py-4 dark:border-gray-800">
-                {file ? (
-                  <div className={`mb-3 rounded-2xl border px-3 py-3 flex items-center gap-3 ${state.dark ? "border-gray-800 bg-gray-950" : "border-gray-200 bg-gray-50"}`}>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium truncate">{file.name}</div>
-                      <div className="text-xs text-gray-500 truncate">{mode === "upload" ? "Ready for file analysis" : modeDescriptions[mode]}</div>
+              <div className="border-t border-slate-200 bg-white/80 px-4 py-3 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
+                <div className="mx-auto max-w-4xl space-y-2">
+                  {file ? (
+                    <div className="flex flex-wrap gap-2">
+                      <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                        <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
+                        <span className="max-w-[240px] truncate">{file.name}</span>
+                        <button
+                          onClick={() => {
+                            setFile(null);
+                            setFilePreview(null);
+                            setMode("auto");
+                          }}
+                          className="ml-1 text-[11px] opacity-70 hover:opacity-100"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
+                  ) : null}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
+                      title="Attach file"
+                      aria-label="Attach file"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </button>
+
+                    <div className={`hidden items-center gap-1 rounded-xl p-1 sm:flex ${state.dark ? "bg-slate-900 border border-slate-800" : "bg-slate-100 border border-slate-200"}`}>
+                      <button
+                        onClick={() => setMode("code")}
+                        className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${mode === "code" ? "bg-white text-blue-700 shadow-sm dark:bg-slate-800 dark:text-blue-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}
+                      >
+                        <Code2 className="h-3.5 w-3.5" />
+                        <span>Code</span>
+                      </button>
+                      <button
+                        onClick={() => setMode("chat")}
+                        className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${mode === "chat" ? "bg-white text-purple-700 shadow-sm dark:bg-slate-800 dark:text-purple-300" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"}`}
+                      >
+                        <MessageSquareText className="h-3.5 w-3.5" />
+                        <span>Chat</span>
+                      </button>
+                    </div>
+
+                    <textarea
+                      ref={inputRef}
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void sendMessage();
+                        }
+                      }}
+                      placeholder={
+                        mode === "image"
+                          ? "Describe the image to generate..."
+                          : mode === "upload"
+                            ? "Ask about the selected file..."
+                            : mode === "search"
+                              ? "Search the web for something current..."
+                              : "Message..."
+                      }
+                      disabled={loading}
+                      rows={1}
+                      className={`flex-1 resize-none rounded-xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
+                      style={{ minHeight: 44, maxHeight: 180 }}
+                    />
+
                     <button
                       onClick={() => {
                         setSidebarTab("workspace");
                         setSidebarOpen(true);
                       }}
-                      className="text-xs rounded-xl border px-3 py-2 border-gray-300 dark:border-gray-700 xl:hidden"
+                      className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${state.dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
+                      title="Open tools"
+                      aria-label="Open tools"
                     >
-                      Edit
+                      <SlidersHorizontal className="h-4 w-4" />
+                    </button>
+
+                    <button
+                      onClick={() => void sendMessage()}
+                      disabled={loading || (!message.trim() && !file)}
+                      className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${modeColors[mode]}`}
+                      title={loading ? "Working" : "Send message"}
+                      aria-label={loading ? "Working" : "Send message"}
+                    >
+                      {loading ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
                     </button>
                   </div>
-                ) : null}
-
-                <div className="flex gap-2 items-end">
-                  <textarea
-                    ref={inputRef}
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void sendMessage();
-                      }
-                    }}
-                    placeholder={
-                      mode === "image"
-                        ? "Describe the image to generate..."
-                        : mode === "upload"
-                          ? "Ask about the selected file..."
-                          : mode === "search"
-                            ? "Search the web for something current..."
-                            : "Type a message..."
-                    }
-                    disabled={loading}
-                    rows={1}
-                    className={`flex-1 resize-none rounded-2xl px-4 py-3 text-sm border ${inputBg} focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50`}
-                    style={{ minHeight: 48, maxHeight: 180 }}
-                  />
-                  <button
-                    onClick={() => {
-                      setSidebarTab("workspace");
-                      setSidebarOpen(true);
-                    }}
-                    className="rounded-2xl border border-gray-300 px-3 py-3 text-xs font-medium dark:border-gray-700 xl:hidden"
-                  >
-                    Tools
-                  </button>
-                  <button
-                    onClick={() => void sendMessage()}
-                    disabled={loading || (!message.trim() && !file)}
-                    className={`px-4 py-3 rounded-2xl text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${modeColors[mode]}`}
-                  >
-                    {loading ? "Working..." : mode === "image" ? "Generate" : mode === "search" ? "Search" : "Send"}
-                  </button>
                 </div>
               </div>
             </section>
