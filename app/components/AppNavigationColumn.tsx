@@ -16,19 +16,33 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+export type AppNavigationTab =
+  | "chat"
+  | "sandbox"
+  | "learning"
+  | "projects"
+  | "codebase"
+  | "scripts"
+  | "prompt-library"
+  | "knowledge-export"
+  | "settings"
+  | "notifications"
+  | "ai-learning";
+
 type AppNavigationColumnProps = {
   dark: boolean;
+  activeTab: AppNavigationTab;
+  onSelectTab: (tab: AppNavigationTab) => void;
 };
 
 type AppNavigationItem = {
-  id: string;
+  id: AppNavigationTab;
   label: string;
   icon: LucideIcon;
-  active?: boolean;
 };
 
 const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
-  { id: "chat", label: "Chat", icon: MessageSquareText, active: true },
+  { id: "chat", label: "Chat", icon: MessageSquareText },
   { id: "sandbox", label: "Sandbox", icon: SquareTerminal },
   { id: "learning", label: "Learning", icon: BookOpen },
   { id: "projects", label: "Projekty", icon: FolderKanban },
@@ -41,7 +55,7 @@ const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
   { id: "ai-learning", label: "AI Learning", icon: BrainCircuit },
 ];
 
-export function AppNavigationColumn({ dark }: AppNavigationColumnProps) {
+export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigationColumnProps) {
   const shellClassName = dark
     ? "border-slate-800 bg-slate-900 text-slate-100"
     : "border-slate-200 bg-white/95 text-slate-900 shadow-sm shadow-slate-200/70";
@@ -70,7 +84,8 @@ export function AppNavigationColumn({ dark }: AppNavigationColumnProps) {
         <div className="space-y-1.5">
           {APP_NAVIGATION_ITEMS.map((item) => {
             const Icon = item.icon;
-            const itemClassName = item.active
+            const isActive = activeTab === item.id;
+            const itemClassName = isActive
               ? dark
                 ? "bg-slate-800 text-white"
                 : "bg-slate-700 text-white shadow-sm"
@@ -79,14 +94,16 @@ export function AppNavigationColumn({ dark }: AppNavigationColumnProps) {
                 : "text-slate-700 hover:bg-slate-100";
 
             return (
-              <div
+              <button
                 key={item.id}
-                aria-current={item.active ? "page" : undefined}
+                type="button"
+                onClick={() => onSelectTab(item.id)}
+                aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors ${itemClassName}`}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate">{item.label}</span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -94,3 +111,4 @@ export function AppNavigationColumn({ dark }: AppNavigationColumnProps) {
     </aside>
   );
 }
+
