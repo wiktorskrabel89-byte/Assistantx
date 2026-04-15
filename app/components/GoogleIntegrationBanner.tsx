@@ -26,9 +26,9 @@ export function GoogleIntegrationBanner({
           <Cloud className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-semibold">Connect Google Drive</div>
+          <div className="text-sm font-semibold">Connect Google</div>
           <div className="mt-1 text-sm text-slate-500">
-            Import Drive files directly into the chat instead of downloading them manually first.
+            Access Drive files, Gmail messages, and Calendar events directly inside the chat.
           </div>
         </div>
       </div>

@@ -62,7 +62,7 @@ export function GitHubPanel({
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 dark:border-slate-800">
             <div>
               <div className="text-sm font-semibold">Apps and imports</div>
-              <div className="mt-1 text-xs text-slate-500">GitHub, Google Drive, and VS Code handoff tools for this chat.</div>
+              <div className="mt-1 text-xs text-slate-500">GitHub, Google Drive, Gmail, Calendar, and VS Code handoff tools for this chat.</div>
             </div>
             <button
               onClick={onClose}

@@ -2,11 +2,32 @@
 
 import { useMemo, useState } from "react";
 import type { GitHubFileSummary, OAuthProvider } from "@/lib/integrations";
+import { Mail, Calendar, RefreshCw } from "lucide-react";
+
+type GmailMessageSummary = {
+  id: string;
+  threadId: string;
+  subject: string;
+  from: string;
+  snippet: string;
+  date: string;
+};
+
+type CalendarEventSummary = {
+  id: string;
+  title: string;
+  description: string;
+  start: string;
+  end: string;
+  location: string;
+  htmlLink: string;
+  allDay: boolean;
+};
 
 const PROVIDER_COPY: Record<OAuthProvider, { title: string; description: string }> = {
   google: {
     title: "Google",
-    description: "Link Google with Drive read access so you can pull files straight into the chat.",
+    description: "Link Google for Drive, Gmail, and Calendar access directly in the chat.",
   },
   github: {
     title: "GitHub",
@@ -83,6 +104,14 @@ export function IntegrationsPanel({
   const [driveLoading, setDriveLoading] = useState(false);
   const [driveError, setDriveError] = useState("");
   const [driveMessage, setDriveMessage] = useState("");
+
+  const [gmailMessages, setGmailMessages] = useState<GmailMessageSummary[]>([]);
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailError, setGmailError] = useState("");
+
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventSummary[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState("");
 
   const filteredFiles = useMemo(() => {
     if (!githubRepo) return [];
@@ -186,11 +215,72 @@ export function IntegrationsPanel({
     }
   }
 
+  async function fetchGmailMessages() {
+    setGmailLoading(true);
+    setGmailError("");
+
+    try {
+      const response = await fetch("/api/integrations/gmail?maxResults=10");
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Failed to fetch Gmail messages.");
+      }
+
+      setGmailMessages((data as { messages: GmailMessageSummary[] }).messages);
+    } catch (error) {
+      setGmailError(error instanceof Error ? error.message : "Failed to fetch Gmail messages.");
+    } finally {
+      setGmailLoading(false);
+    }
+  }
+
+  async function fetchCalendarEvents() {
+    setCalendarLoading(true);
+    setCalendarError("");
+
+    try {
+      const response = await fetch("/api/integrations/google-calendar?maxResults=10&daysAhead=7");
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Failed to fetch calendar events.");
+      }
+
+      setCalendarEvents((data as { events: CalendarEventSummary[] }).events);
+    } catch (error) {
+      setCalendarError(error instanceof Error ? error.message : "Failed to fetch calendar events.");
+    } finally {
+      setCalendarLoading(false);
+    }
+  }
+
+  function formatGmailDate(isoDate: string) {
+    if (!isoDate) return "";
+    try {
+      return new Date(isoDate).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return isoDate;
+    }
+  }
+
+  function formatCalendarDate(isoDate: string, allDay: boolean) {
+    if (!isoDate) return "";
+    try {
+      if (allDay) return new Date(isoDate).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      return new Date(isoDate).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return isoDate;
+    }
+  }
+
+  const googleConnected = linkedProviders.includes("google") || authProvider === "google";
+
   return (
     <section className={`rounded-3xl border p-4 ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
       <div>
         <h2 className="text-sm font-semibold">Integrations</h2>
-        <p className="mt-1 text-xs text-gray-500">Google Drive import, GitHub repo browsing, and a VS Code handoff for the active chat.</p>
+        <p className="mt-1 text-xs text-gray-500">Google Drive, Gmail, Calendar, GitHub, and VS Code tools for this chat.</p>
       </div>
 
       <div className="mt-4 space-y-3">
@@ -330,6 +420,112 @@ export function IntegrationsPanel({
             </button>
             {driveError && <div className="text-xs text-rose-400">{driveError}</div>}
             {driveMessage && <div className="text-xs text-emerald-400">{driveMessage}</div>}
+          </div>
+        </div>
+
+        <div className={`rounded-2xl border px-3 py-3 ${dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <Mail className={`mt-0.5 h-4 w-4 shrink-0 ${dark ? "text-blue-400" : "text-blue-600"}`} />
+              <div>
+                <div className="text-sm font-medium">Gmail</div>
+                <p className="mt-1 text-xs leading-5 text-gray-500">View your recent inbox messages. Connect Google to enable Gmail access.</p>
+              </div>
+            </div>
+            <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${googleConnected ? providerBadge(true, dark) : providerBadge(false, dark)}`}>
+              {googleConnected ? "Gmail ready" : "Link Google"}
+            </span>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            <button
+              onClick={() => void fetchGmailMessages()}
+              disabled={gmailLoading || !googleConnected}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-gray-800 text-gray-100 hover:bg-gray-700 disabled:opacity-50" : "bg-white text-gray-900 border border-gray-200 hover:bg-gray-100 disabled:opacity-50"}`}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${gmailLoading ? "animate-spin" : ""}`} />
+              {gmailLoading ? "Loading..." : "Load recent emails"}
+            </button>
+
+            {gmailMessages.length > 0 && (
+              <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                {gmailMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`rounded-xl border px-3 py-2 ${dark ? "border-gray-800 bg-gray-900/80" : "border-gray-200 bg-white"}`}
+                  >
+                    <div className="truncate text-sm font-medium">{msg.subject}</div>
+                    <div className="mt-0.5 truncate text-[11px] text-gray-500">{msg.from}</div>
+                    <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-400">{msg.snippet}</div>
+                    {msg.date && <div className="mt-1 text-[10px] text-gray-500">{formatGmailDate(msg.date)}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {gmailError && <div className="text-xs text-rose-400">{gmailError}</div>}
+          </div>
+        </div>
+
+        <div className={`rounded-2xl border px-3 py-3 ${dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <Calendar className={`mt-0.5 h-4 w-4 shrink-0 ${dark ? "text-green-400" : "text-green-600"}`} />
+              <div>
+                <div className="text-sm font-medium">Google Calendar</div>
+                <p className="mt-1 text-xs leading-5 text-gray-500">View upcoming events from your primary calendar for the next 7 days.</p>
+              </div>
+            </div>
+            <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${googleConnected ? providerBadge(true, dark) : providerBadge(false, dark)}`}>
+              {googleConnected ? "Calendar ready" : "Link Google"}
+            </span>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            <button
+              onClick={() => void fetchCalendarEvents()}
+              disabled={calendarLoading || !googleConnected}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-gray-800 text-gray-100 hover:bg-gray-700 disabled:opacity-50" : "bg-white text-gray-900 border border-gray-200 hover:bg-gray-100 disabled:opacity-50"}`}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${calendarLoading ? "animate-spin" : ""}`} />
+              {calendarLoading ? "Loading..." : "Load upcoming events"}
+            </button>
+
+            {calendarEvents.length > 0 && (
+              <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                {calendarEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className={`rounded-xl border px-3 py-2 ${dark ? "border-gray-800 bg-gray-900/80" : "border-gray-200 bg-white"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{event.title}</div>
+                        <div className="mt-0.5 text-[11px] text-gray-500">{formatCalendarDate(event.start, event.allDay)}</div>
+                        {event.location && <div className="mt-0.5 truncate text-[11px] text-gray-400">{event.location}</div>}
+                      </div>
+                      {event.htmlLink && (
+                        <a
+                          href={event.htmlLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium transition ${dark ? "bg-green-900/60 text-green-200 hover:bg-green-800" : "bg-green-100 text-green-800 hover:bg-green-200"}`}
+                        >
+                          Open
+                        </a>
+                      )}
+                    </div>
+                    {event.description && <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-400">{event.description}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {calendarEvents.length === 0 && !calendarLoading && !calendarError && googleConnected && (
+              <div className="text-xs text-gray-500">No upcoming events loaded yet.</div>
+            )}
+
+            {calendarError && <div className="text-xs text-rose-400">{calendarError}</div>}
           </div>
         </div>
 
