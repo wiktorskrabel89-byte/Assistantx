@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, Plus, type LucideIcon } from "lucide-react";
+import { Braces, Menu, MessageSquareText, Plus, PlugZap, Sparkles, type LucideIcon } from "lucide-react";
 import type { BuiltInAgent, CustomAgent } from "../lib/chat-types";
 
 type ChatHeaderProps = {
@@ -15,6 +15,10 @@ type ChatHeaderProps = {
   onOpenSidebar: () => void;
   onSelectAgent: (agentId: string) => void;
   onOpenAgentManager: () => void;
+  onOpenSessions: () => void;
+  onOpenCodeHistory: () => void;
+  onOpenAiTools: () => void;
+  onOpenApps: () => void;
   onOpenShare: () => void;
   onOpenPrompts: () => void;
   onCreateChat: () => void;
@@ -32,10 +36,16 @@ export function ChatHeader({
   onOpenSidebar,
   onSelectAgent,
   onOpenAgentManager,
+  onOpenSessions,
+  onOpenCodeHistory,
+  onOpenAiTools,
+  onOpenApps,
   onOpenShare,
   onOpenPrompts,
   onCreateChat,
 }: ChatHeaderProps) {
+  const toolButtonClassName = `hidden h-10 w-10 items-center justify-center rounded-xl border lg:flex ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`;
+
   return (
     <div className="border-b border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/90">
       <div className="flex items-center justify-between gap-3">
@@ -56,6 +66,22 @@ export function ChatHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          <button onClick={onOpenSessions} className={toolButtonClassName} title="Sessions" aria-label="Open sessions panel">
+            <MessageSquareText className="h-4 w-4" />
+          </button>
+
+          <button onClick={onOpenCodeHistory} className={toolButtonClassName} title="Code history" aria-label="Open code history panel">
+            <Braces className="h-4 w-4" />
+          </button>
+
+          <button onClick={onOpenAiTools} className={toolButtonClassName} title="AI tools" aria-label="Open AI tools panel">
+            <Sparkles className="h-4 w-4" />
+          </button>
+
+          <button onClick={onOpenApps} className={toolButtonClassName} title="Apps" aria-label="Open apps panel">
+            <PlugZap className="h-4 w-4" />
+          </button>
+
           <select
             value={activeAgentId}
             onChange={(event) => onSelectAgent(event.target.value)}
@@ -73,7 +99,7 @@ export function ChatHeader({
             onClick={onOpenAgentManager}
             className={`hidden rounded-xl border px-3 py-2 text-sm font-medium md:block ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
           >
-            Agents
+            New agent
           </button>
 
           <button

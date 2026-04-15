@@ -8,7 +8,6 @@ import { ChatComposer } from "./components/ChatComposer";
 import { ChatHeader } from "./components/ChatHeader";
 import { ChatSessionsPanel } from "./components/ChatSessionsPanel";
 import { CodeHistoryPanel } from "./components/CodeHistoryPanel";
-import { ConversationToolbar } from "./components/ConversationToolbar";
 import { ConversationsSidebar } from "./components/ConversationsSidebar";
 import { CustomAgentManager } from "./components/CustomAgentManager";
 import { GitHubPanel } from "./components/GitHubPanel";
@@ -31,6 +30,7 @@ import {
 } from "./lib/chat-state";
 import type {
   ChatEntry,
+  MessageFeedback,
   Mode,
   ResponseAction,
   SharePayload,
@@ -51,6 +51,8 @@ type ChatListProps = {
   onToggleReasoning: (id: string) => void;
   onEditUser: (text: string) => void;
   onResponseAction: (action: ResponseAction, text: string) => void;
+  onCreateFollowUp: (prompt: string) => void;
+  onSetFeedback: (messageId: string, value: MessageFeedback | null) => void;
   onQuickStart: (text: string, mode?: Mode) => void;
   assistantName: string;
   assistantDescription: string;
@@ -71,6 +73,8 @@ const ChatList = memo(function ChatList({
   onToggleReasoning,
   onEditUser,
   onResponseAction,
+  onCreateFollowUp,
+  onSetFeedback,
   onQuickStart,
   assistantName,
   assistantDescription,
@@ -156,9 +160,12 @@ const ChatList = memo(function ChatList({
             copied={copied}
             isStreaming={loading && index === chat.length - 1}
             reasoningOpen={openReasoning.has(entry.id)}
+            feedback={entry.feedback}
             onCopyText={onCopyText}
             onToggleReasoning={onToggleReasoning}
             onResponseAction={onResponseAction}
+            onCreateFollowUp={onCreateFollowUp}
+            onFeedbackChange={(value) => onSetFeedback(entry.id, value)}
           />
         </div>
       ))}
@@ -340,6 +347,15 @@ export default function Home() {
     }).catch(() => {});
   }, []);
 
+  const setMessageFeedback = useCallback((messageId: string, feedback: MessageFeedback | null) => {
+    updateChat(activeWorkspace.id, activeChat.id, (chat) => ({
+      ...chat,
+      messages: chat.messages.map((entry) => (
+        entry.id === messageId ? { ...entry, feedback: feedback ?? undefined } : entry
+      )),
+    }));
+  }, [activeChat.id, activeWorkspace.id, updateChat]);
+
   const toggleReasoning = useCallback((id: string) => {
     setOpenReasoning((prev) => {
       const next = new Set(prev);
@@ -364,6 +380,11 @@ export default function Home() {
   const editUserMessage = useCallback((text: string) => {
     setComposerText(text);
   }, [setComposerText]);
+
+  const createFollowUp = useCallback((prompt: string) => {
+    setWorkspaceMode("code");
+    setComposerText(prompt);
+  }, [setComposerText, setWorkspaceMode]);
 
   const handleFile = useCallback((nextFile: File) => {
     if (filePreview?.startsWith("blob:")) URL.revokeObjectURL(filePreview);
@@ -497,6 +518,7 @@ export default function Home() {
         fileName: entry.fileName,
         reasoning: entry.reasoning,
         routeReason: entry.routeReason,
+        feedback: entry.feedback,
       })),
     };
     const share = `${window.location.origin}${window.location.pathname}?share=${encodeURIComponent(toBase64(JSON.stringify(payload)))}`;
@@ -540,6 +562,10 @@ export default function Home() {
                 onOpenSidebar={() => setSidebarOpen(true)}
                 onSelectAgent={selectActiveAgent}
                 onOpenAgentManager={() => setCustomAgentManagerOpen(true)}
+                onOpenSessions={() => togglePanel("sessions")}
+                onOpenCodeHistory={() => togglePanel("history")}
+                onOpenAiTools={() => togglePanel("tools")}
+                onOpenApps={() => togglePanel("apps")}
                 onOpenShare={() => setShareDialogOpen(true)}
                 onOpenPrompts={() => setPromptManagerOpen(true)}
                 onCreateChat={createChatAction}
@@ -547,16 +573,6 @@ export default function Home() {
 
               <div className={`min-h-0 flex-1 px-3 py-4 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
                 <div className="mx-auto flex h-full max-w-5xl flex-col">
-                  <ConversationToolbar
-                    dark={state.dark}
-                    sessionCount={activeWorkspace.chats.length}
-                    artifactCount={artifacts.length}
-                    onOpenSessions={() => togglePanel("sessions")}
-                    onOpenCodeHistory={() => togglePanel("history")}
-                    onOpenAiTools={() => togglePanel("tools")}
-                    onOpenApps={() => togglePanel("apps")}
-                  />
-
                   <GoogleIntegrationBanner
                     dark={state.dark}
                     visible={authReady && !googleLinked}
@@ -586,6 +602,8 @@ export default function Home() {
                       onToggleReasoning={toggleReasoning}
                       onEditUser={editUserMessage}
                       onResponseAction={applyResponseAction}
+                      onCreateFollowUp={createFollowUp}
+                      onSetFeedback={setMessageFeedback}
                       onQuickStart={(text, nextMode) => {
                         if (nextMode) setWorkspaceMode(nextMode);
                         setComposerText(text);
