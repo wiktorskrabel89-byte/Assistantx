@@ -1,9 +1,12 @@
 "use client";
 
+import { useMemo } from "react";
+import { CodeReviewPanel } from "./CodeReviewPanel";
+import { FeedbackEmojis } from "./FeedbackEmojis";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
-import type { ChatEntry, ResponseAction } from "../lib/chat-types";
+import type { ChatEntry, MessageFeedback, ResponseAction } from "../lib/chat-types";
 
 type AIMessageProps = {
   entry: ChatEntry;
@@ -13,9 +16,12 @@ type AIMessageProps = {
   copied: string | null;
   isStreaming: boolean;
   reasoningOpen: boolean;
+  feedback?: MessageFeedback;
   onCopyText: (text: string, id: string) => void;
   onToggleReasoning: (id: string) => void;
   onResponseAction: (action: ResponseAction, text: string) => void;
+  onCreateFollowUp: (prompt: string) => void;
+  onFeedbackChange: (value: MessageFeedback | null) => void;
 };
 
 export function AIMessage({
@@ -26,12 +32,22 @@ export function AIMessage({
   copied,
   isStreaming,
   reasoningOpen,
+  feedback,
   onCopyText,
   onToggleReasoning,
   onResponseAction,
+  onCreateFollowUp,
+  onFeedbackChange,
 }: AIMessageProps) {
   let codeBlockIndex = 0;
   const responseCopyId = `${entry.id}-response`;
+  const codeBlocks = useMemo(() => {
+    const matches = Array.from(entry.ai.matchAll(/```([\w-]+)?\n([\s\S]*?)```/g));
+    return matches.map((match) => ({
+      language: match[1] || "text",
+      code: match[2].trim(),
+    })).filter((block) => block.code.length > 0);
+  }, [entry.ai]);
 
   return (
     <div className="flex justify-start">
@@ -149,6 +165,9 @@ export function AIMessage({
             </>
           ) : null}
         </div>
+
+        <CodeReviewPanel dark={dark} blocks={codeBlocks} onCreateFollowUp={onCreateFollowUp} />
+        {entry.ai ? <FeedbackEmojis dark={dark} value={feedback} onChange={onFeedbackChange} /> : null}
       </div>
     </div>
   );

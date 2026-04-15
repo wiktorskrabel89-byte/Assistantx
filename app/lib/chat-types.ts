@@ -5,6 +5,7 @@ export type StyleMode = "concise" | "detailed" | "step-by-step";
 export type ResponseAction = "summarize" | "checklist" | "translate" | "commit";
 export type CloudSyncStatus = "checking" | "syncing" | "synced" | "error" | "local";
 export type SidebarTab = "chat" | "workspace" | "integrations" | "artifacts" | "account";
+export type MessageFeedback = "love" | "helpful" | "mixed" | "needs-work";
 
 export type ChatEntry = {
   id: string;
@@ -18,6 +19,7 @@ export type ChatEntry = {
   routeReason?: string;
   status?: string;
   stopped?: boolean;
+  feedback?: MessageFeedback;
   createdAt: number;
 };
 
@@ -104,6 +106,7 @@ export type SharePayload = {
     fileName?: string;
     reasoning?: string;
     routeReason?: string;
+    feedback?: MessageFeedback;
   }>;
 };
 
