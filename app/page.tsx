@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, ClipboardCheck, Code2, ImageIcon, Mail, type LucideIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { AIMessage } from "./components/AIMessage";
 import { AIToolsPanel } from "./components/AIToolsPanel";
 import { ChatComposer } from "./components/ChatComposer";
@@ -17,9 +17,11 @@ import { PullToRefresh } from "./components/PullToRefresh";
 import { ShareConversationDialog } from "./components/ShareConversationDialog";
 import { ThinkingIndicator } from "./components/ThinkingIndicator";
 import { useChatTransport } from "./hooks/useChatTransport";
+import { useWorkspaceQueries } from "./hooks/useWorkspaceQueries";
 import { useWorkspaceState } from "./hooks/useWorkspaceState";
 import { useWorkspaceSync } from "./hooks/useWorkspaceSync";
 import {
+  buildChatSessionItems,
   BUILT_IN_AGENTS,
   fromBase64,
   MODE_PANEL_OPTIONS,
@@ -50,6 +52,12 @@ type ChatListProps = {
   onCopyText: (text: string, id: string) => void;
   onToggleReasoning: (id: string) => void;
   onEditUser: (text: string) => void;
+  editingMessageId: string | null;
+  editedMessageContent: string;
+  onStartEditingMessage: (messageId: string, text: string) => void;
+  onEditedMessageChange: (value: string) => void;
+  onCancelEditingMessage: () => void;
+  onSaveEditedMessage: () => void;
   onResponseAction: (action: ResponseAction, text: string) => void;
   onCreateFollowUp: (prompt: string) => void;
   onSetFeedback: (messageId: string, value: MessageFeedback | null) => void;
@@ -72,6 +80,12 @@ const ChatList = memo(function ChatList({
   onCopyText,
   onToggleReasoning,
   onEditUser,
+  editingMessageId,
+  editedMessageContent,
+  onStartEditingMessage,
+  onEditedMessageChange,
+  onCancelEditingMessage,
+  onSaveEditedMessage,
   onResponseAction,
   onCreateFollowUp,
   onSetFeedback,
@@ -143,12 +157,38 @@ const ChatList = memo(function ChatList({
                   {entry.fileName}
                 </div>
               ) : null}
-              <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-2 text-sm text-white">
-                {entry.user}
-              </div>
-              <button onClick={() => onEditUser(entry.user)} className={`mt-1 ml-auto block text-xs ${dark ? "text-blue-300" : "text-blue-600"}`}>
-                Edit and resend
-              </button>
+              {editingMessageId === entry.id ? (
+                <div className="rounded-2xl rounded-tr-sm bg-blue-600/10 p-3">
+                  <textarea
+                    value={editedMessageContent}
+                    onChange={(event) => onEditedMessageChange(event.target.value)}
+                    rows={4}
+                    className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`}
+                  />
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button onClick={onCancelEditingMessage} className={`rounded-lg border px-3 py-1.5 text-xs ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}>
+                      Cancel
+                    </button>
+                    <button onClick={onSaveEditedMessage} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white">
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-2 text-sm text-white">
+                    {entry.user}
+                  </div>
+                  <div className="mt-1 flex justify-end gap-3">
+                    <button onClick={() => onEditUser(entry.user)} className={`text-xs ${dark ? "text-blue-300" : "text-blue-600"}`}>
+                      Edit and resend
+                    </button>
+                    <button onClick={() => onStartEditingMessage(entry.id, entry.user)} className={`text-xs ${dark ? "text-slate-300" : "text-slate-600"}`}>
+                      Edit inline
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -179,7 +219,10 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activePanel, setActivePanel] = useState<"sessions" | "history" | "tools" | "apps" | null>(null);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [codeHistoryOpen, setCodeHistoryOpen] = useState(false);
+  const [aiToolsOpen, setAiToolsOpen] = useState(false);
+  const [appsOpen, setAppsOpen] = useState(false);
   const [promptManagerOpen, setPromptManagerOpen] = useState(false);
   const [customAgentManagerOpen, setCustomAgentManagerOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -187,6 +230,8 @@ export default function Home() {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editedMessageContent, setEditedMessageContent] = useState("");
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -201,11 +246,10 @@ export default function Home() {
     activeWorkspace,
     activeChat,
     artifacts,
-    filteredChats,
-    sessionItems,
     mode,
     chatSearch,
     setChatSearch,
+    updateWorkspace,
     updateChat,
     updateLastMessage,
     setActiveChatId,
@@ -214,11 +258,6 @@ export default function Home() {
     renameChat,
     deleteChat,
     clearActiveChat,
-    setStyleMode,
-    setLanguageLock,
-    setMemoryEnabled,
-    setMemoryNotes,
-    clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,
     deletePromptTemplate,
@@ -242,6 +281,7 @@ export default function Home() {
   } = useWorkspaceSync({ loaded, state, setState, stateRef });
   const {
     loading,
+    stopRequested,
     queuedMessages,
     queueComposerMessage,
     removeQueuedMessage,
@@ -261,6 +301,43 @@ export default function Home() {
     updateChat,
     updateLastMessage,
   });
+  const currentConversationId = activeChat.id;
+  const workspaceQueries = useWorkspaceQueries({
+    activeWorkspace,
+    activeChat,
+    updateWorkspace,
+    updateChat,
+    createCustomAgent,
+    updateCustomAgent,
+  });
+  const selectedAgent = activeAgentId;
+  const userPreferences = workspaceQueries.userPreferencesQuery.data ?? activeWorkspace.settings;
+  const selectedLanguage = userPreferences.languageLock;
+  const conversations = workspaceQueries.conversationsQuery.data ?? activeWorkspace.chats;
+  const customAgents = workspaceQueries.customAgentsQuery.data ?? activeWorkspace.settings.customAgents;
+  const feedbacks = useMemo(
+    () => workspaceQueries.feedbacksQuery.data ?? [],
+    [workspaceQueries.feedbacksQuery.data]
+  );
+  const interactionPatterns = useMemo(
+    () => workspaceQueries.patternsQuery.data ?? [],
+    [workspaceQueries.patternsQuery.data]
+  );
+  const conversationKnowledge = workspaceQueries.conversationKnowledgeQuery.data;
+  const filteredConversations = useMemo(() => {
+    const query = chatSearch.trim().toLowerCase();
+    if (!query) return conversations;
+
+    return conversations.filter((chat) => {
+      const latest = chat.messages[chat.messages.length - 1];
+      const haystack = `${chat.title} ${latest?.user ?? ""} ${latest?.ai ?? ""}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [chatSearch, conversations]);
+  const sessionItems = useMemo(
+    () => buildChatSessionItems(filteredConversations, currentConversationId),
+    [currentConversationId, filteredConversations]
+  );
 
   const bg = state.dark ? "bg-slate-950 text-slate-100" : "bg-gradient-to-br from-blue-50 via-white to-purple-50 text-slate-900";
   const cardBg = state.dark ? "bg-slate-900 border-slate-800" : "bg-white/95 border-slate-200 shadow-sm shadow-slate-200/70";
@@ -348,13 +425,15 @@ export default function Home() {
   }, []);
 
   const setMessageFeedback = useCallback((messageId: string, feedback: MessageFeedback | null) => {
-    updateChat(activeWorkspace.id, activeChat.id, (chat) => ({
-      ...chat,
-      messages: chat.messages.map((entry) => (
-        entry.id === messageId ? { ...entry, feedback: feedback ?? undefined } : entry
-      )),
-    }));
-  }, [activeChat.id, activeWorkspace.id, updateChat]);
+    workspaceQueries.updateConversationMutation.mutate({
+      chatId: currentConversationId,
+      patch: {
+        messages: activeChat.messages.map((entry) => (
+          entry.id === messageId ? { ...entry, feedback: feedback ?? undefined } : entry
+        )),
+      },
+    });
+  }, [activeChat.messages, currentConversationId, workspaceQueries.updateConversationMutation]);
 
   const toggleReasoning = useCallback((id: string) => {
     setOpenReasoning((prev) => {
@@ -381,6 +460,32 @@ export default function Home() {
     setComposerText(text);
   }, [setComposerText]);
 
+  const startEditingMessage = useCallback((messageId: string, text: string) => {
+    setEditingMessageId(messageId);
+    setEditedMessageContent(text);
+  }, []);
+
+  const cancelEditingMessage = useCallback(() => {
+    setEditingMessageId(null);
+    setEditedMessageContent("");
+  }, []);
+
+  const saveEditedMessage = useCallback(() => {
+    if (!editingMessageId || !editedMessageContent.trim()) return;
+
+    workspaceQueries.updateConversationMutation.mutate({
+      chatId: currentConversationId,
+      patch: {
+        messages: activeChat.messages.map((entry) => (
+          entry.id === editingMessageId ? { ...entry, user: editedMessageContent.trim() } : entry
+        )),
+      },
+    });
+
+    setEditingMessageId(null);
+    setEditedMessageContent("");
+  }, [activeChat.messages, currentConversationId, editedMessageContent, editingMessageId, workspaceQueries.updateConversationMutation]);
+
   const createFollowUp = useCallback((prompt: string) => {
     setWorkspaceMode("code");
     setComposerText(prompt);
@@ -403,11 +508,21 @@ export default function Home() {
     if (prompt) {
       setComposerText(prompt);
     }
-    setActivePanel(null);
+    setAppsOpen(false);
   }, [handleFile, setComposerText]);
 
+  const closePanels = useCallback(() => {
+    setSessionsOpen(false);
+    setCodeHistoryOpen(false);
+    setAiToolsOpen(false);
+    setAppsOpen(false);
+  }, []);
+
   const togglePanel = useCallback((panel: "sessions" | "history" | "tools" | "apps") => {
-    setActivePanel((current) => current === panel ? null : panel);
+    setSessionsOpen((current) => panel === "sessions" ? !current : false);
+    setCodeHistoryOpen((current) => panel === "history" ? !current : false);
+    setAiToolsOpen((current) => panel === "tools" ? !current : false);
+    setAppsOpen((current) => panel === "apps" ? !current : false);
   }, []);
 
   const refreshConversation = useCallback(() => {
@@ -460,13 +575,37 @@ export default function Home() {
       "## Workspace",
       `- Workspace: ${activeWorkspace.name}`,
       `- Chat: ${activeChat.title}`,
+      `- Conversation id: ${currentConversationId}`,
+      `- Selected agent: ${selectedAgent}`,
       "- Routing: Automatic model routing",
-      `- Style: ${activeWorkspace.settings.styleMode}`,
-      `- Language lock: ${activeWorkspace.settings.languageLock}`,
+      `- Style: ${userPreferences.styleMode}`,
+      `- Language lock: ${selectedLanguage}`,
     ];
 
-    if (activeWorkspace.settings.memoryNotes.trim()) {
-      sections.push("", "## Pinned memory", activeWorkspace.settings.memoryNotes.trim());
+    if (userPreferences.memoryNotes.trim()) {
+      sections.push("", "## Pinned memory", userPreferences.memoryNotes.trim());
+    }
+
+    if (interactionPatterns.length > 0) {
+      sections.push("", "## Interaction patterns");
+      for (const pattern of interactionPatterns) {
+        sections.push(`- ${pattern.label}: ${pattern.count}`);
+      }
+    }
+
+    if (feedbacks.length > 0) {
+      sections.push("", "## Feedback", `- Rated assistant replies: ${feedbacks.length}`);
+    }
+
+    if (conversationKnowledge) {
+      sections.push("", "## Conversation knowledge");
+      sections.push(`- Artifact count: ${conversationKnowledge.artifactCount}`);
+      sections.push(`- Files mentioned: ${conversationKnowledge.fileMentions.join(", ") || "none"}`);
+      sections.push(`- Topics: ${conversationKnowledge.topTopics.join(", ") || "none"}`);
+      sections.push(`- Artifact languages: ${conversationKnowledge.artifactLanguages.join(", ") || "none"}`);
+      if (conversationKnowledge.summary) {
+        sections.push(`- Summary: ${conversationKnowledge.summary}`);
+      }
     }
 
     sections.push("", "## Conversation");
@@ -486,7 +625,20 @@ export default function Home() {
     }
 
     return sections.join("\n");
-  }, [activeChat, activeWorkspace, artifacts]);
+  }, [
+    activeChat.messages,
+    activeChat.title,
+    activeWorkspace.name,
+    artifacts,
+    conversationKnowledge,
+    currentConversationId,
+    feedbacks.length,
+    interactionPatterns,
+    selectedAgent,
+    selectedLanguage,
+    userPreferences.memoryNotes,
+    userPreferences.styleMode,
+  ]);
 
   const copyVsCodePrompt = useCallback(async () => {
     const bundle = createVsCodeBundle();
@@ -538,8 +690,8 @@ export default function Home() {
             inputBg={inputBg}
             workspaceName={activeWorkspace.name}
             chatSearch={chatSearch}
-            chats={filteredChats}
-            activeChatId={activeChat.id}
+            chats={filteredConversations}
+            activeChatId={currentConversationId}
             onClose={() => setSidebarOpen(false)}
             onSearchChange={setChatSearch}
             onCreateChat={createChatAction}
@@ -556,9 +708,9 @@ export default function Home() {
                 assistantIcon={assistantIcon}
                 assistantName={assistantName}
                 activeChatTitle={activeChat.title}
-                activeAgentId={activeAgentId}
+                activeAgentId={selectedAgent}
                 builtInAgents={BUILT_IN_AGENTS}
-                customAgents={activeWorkspace.settings.customAgents}
+                customAgents={customAgents}
                 onOpenSidebar={() => setSidebarOpen(true)}
                 onSelectAgent={selectActiveAgent}
                 onOpenAgentManager={() => setCustomAgentManagerOpen(true)}
@@ -578,7 +730,7 @@ export default function Home() {
                     visible={authReady && !googleLinked}
                     connecting={oauthLoading === "google"}
                     onConnectGoogle={() => void signInWithProvider("google")}
-                    onOpenApps={() => setActivePanel("apps")}
+                    onOpenApps={() => setAppsOpen(true)}
                   />
 
                   <div className="min-h-0 flex flex-1 flex-col">
@@ -601,6 +753,12 @@ export default function Home() {
                       onCopyText={copyCode}
                       onToggleReasoning={toggleReasoning}
                       onEditUser={editUserMessage}
+                      editingMessageId={editingMessageId}
+                      editedMessageContent={editedMessageContent}
+                      onStartEditingMessage={startEditingMessage}
+                      onEditedMessageChange={setEditedMessageContent}
+                      onCancelEditingMessage={cancelEditingMessage}
+                      onSaveEditedMessage={saveEditedMessage}
                       onResponseAction={applyResponseAction}
                       onCreateFollowUp={createFollowUp}
                       onSetFeedback={setMessageFeedback}
@@ -616,8 +774,8 @@ export default function Home() {
 
                   <ThinkingIndicator
                     dark={state.dark}
-                    visible={loading}
-                    status={latestEntry?.status}
+                    visible={loading || stopRequested}
+                    status={stopRequested ? "Stopping response..." : latestEntry?.status}
                     routeReason={latestEntry?.routeReason}
                   />
                 </div>
@@ -667,11 +825,11 @@ export default function Home() {
         key={`${activeWorkspace.id}-${customAgentManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.customAgents.length}`}
         open={customAgentManagerOpen}
         dark={state.dark}
-        agents={activeWorkspace.settings.customAgents}
+        agents={customAgents}
         modeOptions={MODE_PANEL_OPTIONS.filter((option) => option.id === "chat" || option.id === "code").map((option) => ({ id: option.id, label: option.label }))}
         onClose={() => setCustomAgentManagerOpen(false)}
-        onCreate={createCustomAgent}
-        onUpdate={updateCustomAgent}
+        onCreate={(agent) => workspaceQueries.createCustomAgentMutation.mutate(agent)}
+        onUpdate={(agentId, agent) => workspaceQueries.updateCustomAgentMutation.mutate({ agentId, agent })}
         onDelete={deleteCustomAgent}
       />
 
@@ -689,7 +847,7 @@ export default function Home() {
       />
 
       <ChatSessionsPanel
-        open={activePanel === "sessions"}
+        open={sessionsOpen}
         dark={state.dark}
         workspaceName={activeWorkspace.name}
         searchValue={chatSearch}
@@ -698,63 +856,63 @@ export default function Home() {
         onCreateSession={createChatAction}
         onSelectSession={(chatId) => {
           setActiveChatId(activeWorkspace.id, chatId);
-          setActivePanel(null);
+          closePanels();
         }}
         onRenameSession={renameChat}
         onDeleteSession={deleteChat}
-        onClose={() => setActivePanel(null)}
+        onClose={closePanels}
       />
 
       <AIToolsPanel
-        open={activePanel === "tools"}
+        open={aiToolsOpen}
         dark={state.dark}
         showModes={false}
         mode={mode}
         modeOptions={MODE_PANEL_OPTIONS}
         quickChips={QUICK_CHIPS}
         settings={{
-          styleMode: activeWorkspace.settings.styleMode,
-          languageLock: activeWorkspace.settings.languageLock,
-          memoryEnabled: activeWorkspace.settings.memoryEnabled,
-          memoryNotes: activeWorkspace.settings.memoryNotes,
+          styleMode: userPreferences.styleMode,
+          languageLock: userPreferences.languageLock,
+          memoryEnabled: userPreferences.memoryEnabled,
+          memoryNotes: userPreferences.memoryNotes,
         }}
         languageOptions={TEXT_LANGUAGE_OPTIONS}
-        onClose={() => setActivePanel(null)}
+        onClose={closePanels}
         onModeChange={(modeId) => setWorkspaceMode(modeId as Mode)}
         onQuickChip={(chip) => {
           if (chip.mode) setWorkspaceMode(chip.mode as Mode);
           setComposerText(chip.text);
-          setActivePanel(null);
+          closePanels();
         }}
-        onStyleChange={(value) => setStyleMode(value as StyleMode)}
-        onLanguageChange={setLanguageLock}
-        onMemoryToggle={setMemoryEnabled}
-        onMemoryNotesChange={setMemoryNotes}
-        onClearMemory={clearMemoryNotes}
+        onStyleChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ styleMode: value as StyleMode })}
+        onLanguageChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ languageLock: value })}
+        onMemoryToggle={(enabled) => workspaceQueries.updatePreferencesMutation.mutate({ memoryEnabled: enabled })}
+        onMemoryNotesChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: value })}
+        onClearMemory={() => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: "" })}
         onClearChat={() => {
           clearActiveChat();
-          setActivePanel(null);
+          closePanels();
         }}
       />
 
       <CodeHistoryPanel
-        open={activePanel === "history"}
+        open={codeHistoryOpen}
         dark={state.dark}
         artifacts={artifacts}
         copied={copied}
         onCopyCode={copyCode}
-        onClose={() => setActivePanel(null)}
+        onClose={closePanels}
       />
 
       <GitHubPanel
-        open={activePanel === "apps"}
+        open={appsOpen}
         dark={state.dark}
         linkedProviders={linkedProviders}
         authProvider={authProvider}
         oauthLoading={oauthLoading}
         copied={copied}
         hasArtifacts={artifacts.length > 0}
-        onClose={() => setActivePanel(null)}
+        onClose={closePanels}
         onConnectProvider={(provider) => void signInWithProvider(provider)}
         onImportFile={handleImportedFile}
         onCopyVsCodePrompt={() => void copyVsCodePrompt()}

@@ -112,6 +112,7 @@ export function useChatTransport({
 }: UseChatTransportArgs) {
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [stopRequested, setStopRequested] = useState(false);
   const activeRequestAbortRef = useRef<AbortController | null>(null);
   const activeRequestTargetRef = useRef<ActiveRequestTarget | null>(null);
   const processingQueueRef = useRef(false);
@@ -141,6 +142,7 @@ export function useChatTransport({
     const activeTarget = activeRequestTargetRef.current;
     if (!controller || !activeTarget) return;
 
+    setStopRequested(true);
     updateLastMessage(activeTarget.workspaceId, activeTarget.chatId, (entry) => ({
       ...entry,
       ai: entry.ai || "Stopped by user.",
@@ -418,6 +420,7 @@ export function useChatTransport({
     const queuedMessage = queuedMessages[0];
     processingQueueRef.current = true;
     setLoading(true);
+    setStopRequested(false);
 
     void processQueuedMessage(queuedMessage).finally(() => {
       revokeQueuedPreview(queuedMessage.filePreview);
@@ -425,11 +428,13 @@ export function useChatTransport({
       if (!isMountedRef.current) return;
       setQueuedMessages((prev) => prev.filter((item) => item.id !== queuedMessage.id));
       setLoading(false);
+      setStopRequested(false);
     });
   }, [processQueuedMessage, queuedMessages, revokeQueuedPreview]);
 
   return {
     loading,
+    stopRequested,
     queuedMessages,
     queueComposerMessage,
     removeQueuedMessage,
