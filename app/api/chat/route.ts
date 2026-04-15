@@ -4,6 +4,12 @@ const CODE_MODEL = "openai/gpt-5.4";
 const CHAT_MODEL = "google/gemini-2.5-flash-lite";
 const SEARCH_MODEL = "perplexity/sonar";
 
+function isAbortLikeError(error: unknown) {
+  if (error instanceof DOMException) return error.name === "AbortError";
+  if (error instanceof Error) return error.name === "AbortError" || /aborted/i.test(error.message);
+  return false;
+}
+
 const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
   pl: "Polish",
@@ -168,11 +174,14 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
+  const requestSignal = req.signal;
   const {
     message,
     mode: rawMode,
     modelId,
     allowedModels,
+    assistantName,
+    assistantInstructions,
     history,
     memoryNotes,
     style = "concise",
@@ -204,6 +213,9 @@ export async function POST(req: Request) {
     : style === "step-by-step"
       ? "Explain using concise numbered steps."
       : "Keep responses concise and practical.";
+  const assistantInstruction = typeof assistantInstructions === "string" && assistantInstructions.trim()
+    ? `Additional agent instructions for ${typeof assistantName === "string" && assistantName.trim() ? assistantName.trim() : "this assistant"}: ${assistantInstructions.trim()}`
+    : "";
   const memoryInstruction = typeof memoryNotes === "string" && memoryNotes.trim()
     ? `Important remembered user context: ${memoryNotes.trim()}`
     : "";
@@ -248,15 +260,15 @@ export async function POST(req: Request) {
 
   let systemPrompt: string;
   if (isSearchMode) {
-    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${memoryInstruction}`.trim();
+    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${assistantInstruction} ${memoryInstruction}`.trim();
   } else if (isDeepSeek) {
-    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${memoryInstruction}`.trim();
+    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${assistantInstruction} ${memoryInstruction}`.trim();
   } else if (isGemini) {
-    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${memoryInstruction}`.trim();
+    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${assistantInstruction} ${memoryInstruction}`.trim();
   } else if (inferredCodeRequest) {
-    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${memoryInstruction}`.trim();
+    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${assistantInstruction} ${memoryInstruction}`.trim();
   } else {
-    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${memoryInstruction}`.trim();
+    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${assistantInstruction} ${memoryInstruction}`.trim();
   }
 
   const historyMessages: Array<{ role: string; content: string }> = Array.isArray(history)
@@ -284,6 +296,7 @@ export async function POST(req: Request) {
   const sendOpenRouterRequest = async (body: Record<string, unknown>) => {
     return fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
+      signal: requestSignal,
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
@@ -296,8 +309,26 @@ export async function POST(req: Request) {
 
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
+      const safeEnqueue = (payload: string) => {
+        if (closed || requestSignal.aborted) return;
+        controller.enqueue(encoder.encode(payload));
+      };
+      const safeClose = () => {
+        if (closed) return;
+        closed = true;
+        controller.close();
+      };
+      const handleAbort = () => {
+        safeClose();
+      };
+
+      requestSignal.addEventListener("abort", handleAbort, { once: true });
+
       try {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Analyzing prompt..." })}\n\n`));
+        if (requestSignal.aborted) return;
+
+        safeEnqueue(`data: ${JSON.stringify({ status: "Analyzing prompt..." })}\n\n`);
         let response = await sendOpenRouterRequest(requestBody);
         let effectiveModel = selectedModel;
         let effectiveRouteReason = routeReason;
@@ -312,7 +343,7 @@ export async function POST(req: Request) {
             throw new Error(`OpenRouter error ${response.status}: ${err}`);
           }
 
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Retrying with fallback model..." })}\n\n`));
+          safeEnqueue(`data: ${JSON.stringify({ status: "Retrying with fallback model..." })}\n\n`);
 
           const fallbackRequestBody: Record<string, unknown> = {
             ...requestBody,
@@ -330,12 +361,14 @@ export async function POST(req: Request) {
           }
         }
 
-        const reader = response.body!.getReader();
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("Missing streaming body");
         const decoder = new TextDecoder();
         let modelSent = false;
         let buf = "";
 
         while (true) {
+          if (requestSignal.aborted) return;
           const { value, done } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
@@ -351,16 +384,16 @@ export async function POST(req: Request) {
                 const label = effectiveModel === "openrouter/auto"
                   ? "Auto router"
                   : (MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI");
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: label, routeReason: effectiveRouteReason, status: "Writing response..." })}\n\n`));
+                safeEnqueue(`data: ${JSON.stringify({ model: label, routeReason: effectiveRouteReason, status: "Writing response..." })}\n\n`);
                 modelSent = true;
               }
               const reasoning = parsed.choices?.[0]?.delta?.reasoning;
               if (reasoning) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ reasoning })}\n\n`));
+                safeEnqueue(`data: ${JSON.stringify({ reasoning })}\n\n`);
               }
               const token = parsed.choices?.[0]?.delta?.content;
               if (token) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
+                safeEnqueue(`data: ${JSON.stringify({ token })}\n\n`);
               }
             } catch {
               // Ignore malformed provider chunks.
@@ -368,19 +401,24 @@ export async function POST(req: Request) {
           }
         }
 
+        if (requestSignal.aborted) return;
+
         if (!modelSent) {
           const fallback = effectiveModel === "openrouter/auto"
             ? "Auto Router"
             : (MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI");
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: fallback, routeReason: effectiveRouteReason })}\n\n`));
+          safeEnqueue(`data: ${JSON.stringify({ model: fallback, routeReason: effectiveRouteReason })}\n\n`);
         }
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Done" })}\n\n`));
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        safeEnqueue(`data: ${JSON.stringify({ status: "Done" })}\n\n`);
+        safeEnqueue("data: [DONE]\n\n");
       } catch (error) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `Error: ${(error as Error).message}`, status: "Error" })}\n\n`));
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        if (requestSignal.aborted || isAbortLikeError(error)) return;
+        safeEnqueue(`data: ${JSON.stringify({ token: `Error: ${(error as Error).message}`, status: "Error" })}\n\n`);
+        safeEnqueue("data: [DONE]\n\n");
+      } finally {
+        requestSignal.removeEventListener("abort", handleAbort);
+        safeClose();
       }
-      controller.close();
     },
   });
 
