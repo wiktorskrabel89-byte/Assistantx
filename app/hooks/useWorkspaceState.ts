@@ -304,7 +304,7 @@ export function useWorkspaceState() {
   }, [activeWorkspace.id, updateWorkspace]);
 
   const setIsPremium = useCallback((isPremium: boolean) => {
-    setState((prev) => ({ ...prev, isPremium, premiumRequestsUsed: isPremium ? prev.premiumRequestsUsed : 0 }));
+    setState((prev) => ({ ...prev, isPremium }));
   }, []);
 
   const incrementPremiumRequests = useCallback(() => {

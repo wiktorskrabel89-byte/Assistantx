@@ -289,21 +289,22 @@ export async function POST(req: Request) {
     : "";
 
   const costDowngradeNote = costControlled.downgraded ? ` (downgraded by ${costMode} cost mode)` : "";
+  const planDowngradeNote = (modelId && planEnforcedModelId !== modelId) ? " (switched to free model — premium plan required)" : "";
   const routeReason = isSearchMode
     ? (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model")
     : isAutoRouted
       ? rawMode === "code"
-        ? `Auto router choosing the best coding model${costMode !== "performance" ? ` (${costMode} mode)` : ""}`
+        ? `Auto router choosing the best coding model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
         : rawMode === "chat"
-          ? `Auto router choosing the best chat model${costMode !== "performance" ? ` (${costMode} mode)` : ""}`
-          : `Auto router choosing the best model for this request${costMode !== "performance" ? ` (${costMode} mode)` : ""}`
+          ? `Auto router choosing the best chat model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
+          : `Auto router choosing the best model for this request${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
       : modelId
-        ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}`
+        ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}${planDowngradeNote}`
         : inferredImageRequest
           ? "Auto-detected an image generation request"
           : inferredCodeRequest
-            ? `Auto-detected a coding-focused request${costDowngradeNote}`
-            : `Auto-detected a conversational request${costDowngradeNote}`;
+            ? `Auto-detected a coding-focused request${costDowngradeNote}${planDowngradeNote}`
+            : `Auto-detected a conversational request${costDowngradeNote}${planDowngradeNote}`;
 
   if (!modelId && rawMode === "auto" && inferredImageRequest) {
     const normalizedPrompt = message.replace(/^\s*\/image\s*/i, "").trim() || "A cinematic digital artwork";
