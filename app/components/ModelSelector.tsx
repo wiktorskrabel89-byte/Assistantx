@@ -2,6 +2,7 @@
 
 import { Bot, Code2, MessageSquareText, Zap } from "lucide-react";
 import { MODEL_PRESETS } from "../lib/chat-state";
+import { COST_TIER_LABELS } from "@/lib/ai-config";
 
 type ModelSelectorProps = {
   dark: boolean;
@@ -21,6 +22,19 @@ export function ModelSelector({ dark, preferredModelId, onSelectModel }: ModelSe
     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100";
 
   const sectionLabel = `text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`;
+
+  const tierBadge = (tier: string) => {
+    const label = COST_TIER_LABELS[tier as keyof typeof COST_TIER_LABELS];
+    if (!label) return null;
+    const color = tier === "free"
+      ? "text-emerald-500"
+      : tier === "cheap"
+        ? "text-sky-500"
+        : tier === "standard"
+          ? "text-amber-500"
+          : "text-rose-500";
+    return <span className={`ml-0.5 text-[9px] font-bold ${color}`}>{label}</span>;
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -46,6 +60,7 @@ export function ModelSelector({ dark, preferredModelId, onSelectModel }: ModelSe
         >
           <Bot className="h-3 w-3" />
           {preset.label}
+          {tierBadge(preset.costTier)}
         </button>
       ))}
 
@@ -62,6 +77,7 @@ export function ModelSelector({ dark, preferredModelId, onSelectModel }: ModelSe
         >
           <Bot className="h-3 w-3" />
           {preset.label}
+          {tierBadge(preset.costTier)}
         </button>
       ))}
     </div>

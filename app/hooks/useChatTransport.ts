@@ -393,6 +393,7 @@ export function useChatTransport({
           preferredProgrammingLanguage,
           interactionProfile,
           addInternetContext: queuedMessage.mode === "search",
+          costMode: activeSettings.costMode,
         }),
       });
 

@@ -1,5 +1,7 @@
 export const maxDuration = 60;
 
+import { filterModelsByCostMode, getCheaperAlternative, type CostMode } from "@/lib/ai-config";
+
 const CODE_MODEL = "openai/gpt-5.4";
 const CHAT_MODEL = "google/gemini-2.5-flash-lite";
 const SEARCH_MODEL = "perplexity/sonar";
@@ -15,6 +17,10 @@ function isCreditsError(status: number, body: string): boolean {
     || /\brate\b.*\blimit\b.*\bexceeded\b/i.test(body)
     || /\bout of credits\b/i.test(body)
   );
+}
+
+function usingAutoRouter(allowedModels: unknown, modelId: unknown, inferredImageRequest: boolean): boolean {
+  return !modelId && Array.isArray(allowedModels) && allowedModels.length > 0 && !inferredImageRequest;
 }
 
 function isAbortLikeError(error: unknown) {
@@ -203,21 +209,37 @@ export async function POST(req: Request) {
     preferredProgrammingLanguage,
     interactionProfile,
     addInternetContext = false,
+    costMode: rawCostMode,
   } = await req.json();
   const encoder = new TextEncoder();
+  const costMode: CostMode = (rawCostMode === "thrifty" || rawCostMode === "balanced" || rawCostMode === "performance") ? rawCostMode : "balanced";
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
-  const usingAutoRouter = !modelId && Array.isArray(allowedModels) && allowedModels.length > 0 && !inferredImageRequest;
+
+  // Apply cost control: filter the allowed models list to respect the user's cost mode
+  const costFilteredModels = usingAutoRouter(allowedModels, modelId, inferredImageRequest)
+    ? filterModelsByCostMode(allowedModels, costMode)
+    : allowedModels;
+
+  const isAutoRouted = usingAutoRouter(costFilteredModels, modelId, inferredImageRequest);
+
+  // Apply cost control to manually selected or default model
+  const rawSelectedModel = modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL);
+  const costControlled = !isAutoRouted && !modelId
+    ? getCheaperAlternative(rawSelectedModel, costMode, inferredCodeRequest)
+    : { modelId: rawSelectedModel, downgraded: false };
+
+  const selectedModel = isAutoRouted
+    ? "openrouter/auto"
+    : costControlled.modelId;
+
   const fallbackModel = rawMode === "search"
     ? SEARCH_MODEL
     : inferredCodeRequest
       ? CODE_MODEL
       : CHAT_MODEL;
-  const selectedModel = usingAutoRouter
-    ? "openrouter/auto"
-    : (modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL));
-  const isSearchMode = rawMode === "search" || (!usingAutoRouter && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
+  const isSearchMode = rawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(message);
@@ -249,21 +271,22 @@ export async function POST(req: Request) {
     ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
 
+  const costDowngradeNote = costControlled.downgraded ? ` (downgraded by ${costMode} cost mode)` : "";
   const routeReason = isSearchMode
-    ? (usingAutoRouter ? "Search mode with automatic model routing" : "Search mode using a research-oriented model")
-    : usingAutoRouter
+    ? (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model")
+    : isAutoRouted
       ? rawMode === "code"
-        ? "Auto router choosing the best coding model"
+        ? `Auto router choosing the best coding model${costMode !== "performance" ? ` (${costMode} mode)` : ""}`
         : rawMode === "chat"
-          ? "Auto router choosing the best chat model"
-          : "Auto router choosing the best model for this request"
+          ? `Auto router choosing the best chat model${costMode !== "performance" ? ` (${costMode} mode)` : ""}`
+          : `Auto router choosing the best model for this request${costMode !== "performance" ? ` (${costMode} mode)` : ""}`
       : modelId
         ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}`
         : inferredImageRequest
           ? "Auto-detected an image generation request"
           : inferredCodeRequest
-            ? "Auto-detected a coding-focused request"
-            : "Auto-detected a conversational request";
+            ? `Auto-detected a coding-focused request${costDowngradeNote}`
+            : `Auto-detected a conversational request${costDowngradeNote}`;
 
   if (!modelId && rawMode === "auto" && inferredImageRequest) {
     const normalizedPrompt = message.replace(/^\s*\/image\s*/i, "").trim() || "A cinematic digital artwork";
@@ -318,8 +341,8 @@ export async function POST(req: Request) {
     ],
   };
 
-  if (usingAutoRouter) {
-    requestBody.plugins = [{ id: "auto-router", allowed_models: allowedModels }];
+  if (isAutoRouted) {
+    requestBody.plugins = [{ id: "auto-router", allowed_models: costFilteredModels }];
   }
 
   const sendOpenRouterRequest = async (body: Record<string, unknown>) => {
@@ -364,7 +387,7 @@ export async function POST(req: Request) {
 
         if (!response.ok) {
           const err = await response.text();
-          const shouldAutoRouterFallback = usingAutoRouter
+          const shouldAutoRouterFallback = isAutoRouted
             && response.status === 404
             && /No models match your request and model restrictions/i.test(err);
           const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(response.status, err);

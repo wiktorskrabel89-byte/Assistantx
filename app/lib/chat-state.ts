@@ -7,7 +7,7 @@ import {
   RECOMMENDED_CODING_MODELS,
   SEARCH_MODELS,
 } from "@/lib/ai-config";
-import type { ModelPreset } from "@/lib/ai-config";
+import type { CostMode, ModelPreset } from "@/lib/ai-config";
 import type {
   Artifact,
   BuiltInAgent,
@@ -32,6 +32,11 @@ export const MODEL_PRESETS: { coding: ModelPreset[]; chat: ModelPreset[] } = {
   coding: RECOMMENDED_CODING_MODELS,
   chat: RECOMMENDED_CHAT_MODELS,
 };
+export const COST_MODE_OPTIONS: Array<{ id: CostMode; label: string; icon: string; description: string }> = [
+  { id: "thrifty", label: "Thrifty", icon: "🪙", description: "Use cheapest models to save credits." },
+  { id: "balanced", label: "Balanced", icon: "⚖️", description: "Good quality at moderate cost." },
+  { id: "performance", label: "Performance", icon: "🚀", description: "Best models, higher credit usage." },
+];
 export const QUICK_CHIPS: Array<{ label: string; text: string; mode?: Mode }> = [
   { label: "Explain code", text: "Explain this code: ", mode: "code" },
   { label: "Fix bug", text: "Help me fix this bug: ", mode: "code" },
@@ -149,6 +154,7 @@ export function createSettings(): WorkspaceSettings {
     styleMode: "concise",
     languageLock: "auto",
     preferredModelId: null,
+    costMode: "balanced",
   };
 }
 
