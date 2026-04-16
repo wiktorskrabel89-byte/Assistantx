@@ -1,3 +1,6 @@
+export type CostTier = "free" | "cheap" | "standard" | "premium";
+export type CostMode = "thrifty" | "balanced" | "performance";
+
 export type ModelOption = {
   id: string;
   label: string;
@@ -8,6 +11,7 @@ export type ModelPreset = {
   id: string;
   label: string;
   modelId: string;
+  costTier: CostTier;
 };
 
 export type LanguageOption = {
@@ -146,15 +150,15 @@ export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
-  { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6" },
-  { id: "coding-gpt-5.4", label: "GPT-5.4", modelId: "openai/gpt-5.4" },
-  { id: "coding-deepseek-r1", label: "DeepSeek R1", modelId: "deepseek/deepseek-r1" },
+  { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6", costTier: "premium" },
+  { id: "coding-gpt-5.4", label: "GPT-5.4", modelId: "openai/gpt-5.4", costTier: "premium" },
+  { id: "coding-deepseek-r1", label: "DeepSeek R1", modelId: "deepseek/deepseek-r1", costTier: "standard" },
 ];
 
 export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
-  { id: "chat-gpt-5.1", label: "GPT-5.1", modelId: "openai/gpt-5.1" },
-  { id: "chat-claude-sonnet", label: "Claude Sonnet 4.5", modelId: "anthropic/claude-sonnet-4.5" },
-  { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview" },
+  { id: "chat-gpt-5.1", label: "GPT-5.1", modelId: "openai/gpt-5.1", costTier: "standard" },
+  { id: "chat-claude-sonnet", label: "Claude Sonnet 4.5", modelId: "anthropic/claude-sonnet-4.5", costTier: "standard" },
+  { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview", costTier: "cheap" },
 ];
 
 export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
@@ -162,3 +166,106 @@ export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.1";
 
 export const FREE_CODING_MODEL = "deepseek/deepseek-r1:free";
 export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+
+/**
+ * Maps model IDs to cost tiers for the cost control system.
+ * Models not listed here default to "standard".
+ */
+export const MODEL_COST_TIERS: Record<string, CostTier> = {
+  // Free-tier models
+  "deepseek/deepseek-r1:free": "free",
+  "meta-llama/llama-3.3-70b-instruct:free": "free",
+  "meta-llama/llama-4-scout:free": "free",
+  "google/gemini-2.0-flash-exp:free": "free",
+  "mistralai/mistral-small-3.1-24b-instruct:free": "free",
+  "qwen/qwen3-235b-a22b:free": "free",
+  // Cheap models — fast, low cost per token
+  "google/gemini-2.5-flash-lite": "cheap",
+  "google/gemini-3-flash-preview": "cheap",
+  "openai/gpt-5-mini": "cheap",
+  "openai/gpt-5-nano": "cheap",
+  "x-ai/grok-3-mini": "cheap",
+  "meta-llama/llama-3.3-70b-instruct": "cheap",
+  // Standard models — good quality, moderate cost
+  "deepseek/deepseek-r1": "standard",
+  "deepseek/deepseek-v3.2": "standard",
+  "anthropic/claude-sonnet-4.5": "standard",
+  "openai/gpt-5": "standard",
+  "openai/gpt-5.1": "standard",
+  "qwen/qwen3-235b-a22b": "standard",
+  "perplexity/sonar": "standard",
+  "moonshotai/kimi-k2-thinking": "standard",
+  "minimax/minimax-m2.5": "standard",
+  // Premium models — frontier, high cost per token
+  "anthropic/claude-opus-4.5": "premium",
+  "anthropic/claude-opus-4.6": "premium",
+  "openai/gpt-5.4": "premium",
+  "openai/gpt-5.2": "premium",
+  "openai/gpt-5.2-pro": "premium",
+  "x-ai/grok-4": "premium",
+  "google/gemini-3-pro-preview": "premium",
+};
+
+/** Returns the cost tier for a model ID. Unknown models default to "standard". */
+export function getModelCostTier(modelId: string): CostTier {
+  return MODEL_COST_TIERS[modelId] ?? "standard";
+}
+
+/** Maximum cost tier allowed for each cost mode. */
+const COST_MODE_CAPS: Record<CostMode, CostTier> = {
+  thrifty: "cheap",
+  balanced: "standard",
+  performance: "premium",
+};
+
+const TIER_ORDER: Record<CostTier, number> = {
+  free: 0,
+  cheap: 1,
+  standard: 2,
+  premium: 3,
+};
+
+/** Checks whether a model is within the allowed cost tier for the given cost mode. */
+export function isModelAllowedByCostMode(modelId: string, costMode: CostMode): boolean {
+  const tier = getModelCostTier(modelId);
+  const cap = COST_MODE_CAPS[costMode];
+  return TIER_ORDER[tier] <= TIER_ORDER[cap];
+}
+
+/** Filters a list of model IDs to only those allowed by the cost mode. Returns at least the original list if nothing passes. */
+export function filterModelsByCostMode(modelIds: string[], costMode: CostMode): string[] {
+  const filtered = modelIds.filter((id) => isModelAllowedByCostMode(id, costMode));
+  return filtered.length > 0 ? filtered : modelIds;
+}
+
+/** Returns a cheaper alternative for a model when cost mode restricts it. Falls back to the cheapest available model or the original. */
+export function getCheaperAlternative(modelId: string, costMode: CostMode, isCodeRequest: boolean): { modelId: string; downgraded: boolean } {
+  if (isModelAllowedByCostMode(modelId, costMode)) {
+    return { modelId, downgraded: false };
+  }
+
+  // Pick the best model within budget for the request type
+  const candidates = isCodeRequest
+    ? ["deepseek/deepseek-r1", "deepseek/deepseek-v3.2", "deepseek/deepseek-r1:free"]
+    : ["google/gemini-3-flash-preview", "openai/gpt-5-mini", "meta-llama/llama-3.3-70b-instruct", "meta-llama/llama-3.3-70b-instruct:free"];
+
+  for (const candidate of candidates) {
+    if (isModelAllowedByCostMode(candidate, costMode)) {
+      return { modelId: candidate, downgraded: true };
+    }
+  }
+
+  // Final fallback: free model
+  return {
+    modelId: isCodeRequest ? FREE_CODING_MODEL : FREE_CHAT_MODEL,
+    downgraded: true,
+  };
+}
+
+/** Human-readable labels for cost tiers */
+export const COST_TIER_LABELS: Record<CostTier, string> = {
+  free: "Free",
+  cheap: "$",
+  standard: "$$",
+  premium: "$$$",
+};

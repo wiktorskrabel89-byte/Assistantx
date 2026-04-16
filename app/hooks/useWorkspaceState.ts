@@ -296,6 +296,13 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setCostMode = useCallback((costMode: import("@/lib/ai-config").CostMode) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, costMode },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const setMemoryEnabled = useCallback((memoryEnabled: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -497,6 +504,7 @@ export function useWorkspaceState() {
     setStyleMode,
     setLanguageLock,
     setPreferredModelId,
+    setCostMode,
     setMemoryEnabled,
     setMemoryNotes,
     clearMemoryNotes,

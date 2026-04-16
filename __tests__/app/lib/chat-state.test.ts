@@ -118,6 +118,7 @@ describe("createSettings", () => {
     expect(s.memoryEnabled).toBe(true);
     expect(s.styleMode).toBe("concise");
     expect(s.languageLock).toBe("auto");
+    expect(s.costMode).toBe("balanced");
     expect(Array.isArray(s.promptTemplates)).toBe(true);
     expect(Array.isArray(s.customAgents)).toBe(true);
   });

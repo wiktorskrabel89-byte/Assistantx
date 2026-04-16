@@ -9,12 +9,33 @@ type PullToRefreshProps = {
   onRefresh: () => void | Promise<void>;
 };
 
+/**
+ * Minimum downward distance (px) the user must drag before the gesture
+ * is recognised as a pull-to-refresh rather than a normal scroll.
+ * Until this threshold is crossed the touch events are left alone so
+ * the browser can scroll normally.
+ */
+const ACTIVATION_THRESHOLD = 12;
+
+/** Distance (px) at which releasing triggers the refresh callback. */
+const TRIGGER_THRESHOLD = 72;
+
+/** Maximum visual pull distance (px). */
+const MAX_PULL = 92;
+
 export function PullToRefresh({ dark, disabled = false, scrollContainerRef, onRefresh }: PullToRefreshProps) {
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const pullDistanceRef = useRef(0);
   const startYRef = useRef<number | null>(null);
-  const activeRef = useRef(false);
+  /** Whether the current gesture has been confirmed as a pull-to-refresh. */
+  const confirmedRef = useRef(false);
+  /**
+   * Whether we already decided this gesture is a normal scroll (user
+   * started scrolling sideways or upward, or the container was not at
+   * the top). Once set, the gesture is ignored until the next touchstart.
+   */
+  const rejectedRef = useRef(false);
 
   useEffect(() => {
     pullDistanceRef.current = pullDistance;
@@ -24,31 +45,56 @@ export function PullToRefresh({ dark, disabled = false, scrollContainerRef, onRe
     const element = scrollContainerRef.current;
     if (!element || disabled) return;
 
+    const isAtTop = () => element.scrollTop <= 1;
+
     const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || element.scrollTop > 0 || refreshing) return;
+      if (event.touches.length !== 1 || refreshing) return;
+
+      // Only consider the gesture if the scroll container is at the very top.
+      if (!isAtTop()) {
+        rejectedRef.current = true;
+        return;
+      }
+
       startYRef.current = event.touches[0].clientY;
-      activeRef.current = true;
+      confirmedRef.current = false;
+      rejectedRef.current = false;
     };
 
     const handleTouchMove = (event: TouchEvent) => {
-      if (!activeRef.current || startYRef.current === null) return;
+      // Already decided this touch is a normal scroll — bail out.
+      if (rejectedRef.current || startYRef.current === null) return;
+
       const delta = event.touches[0].clientY - startYRef.current;
 
-      if (delta <= 0 || element.scrollTop > 0) {
+      // If the user scrolls upward or the container moved away from the
+      // top (e.g. momentum scroll), reject the gesture permanently.
+      if (delta <= 0 || !isAtTop()) {
+        rejectedRef.current = true;
         setPullDistance(0);
         return;
       }
 
+      // Wait until the drag exceeds the activation threshold before
+      // intercepting the touch. This lets short/gentle swipes scroll
+      // normally instead of being hijacked.
+      if (!confirmedRef.current) {
+        if (delta < ACTIVATION_THRESHOLD) return;
+        confirmedRef.current = true;
+      }
+
+      // Now we own the gesture — prevent the browser from scrolling.
       event.preventDefault();
-      setPullDistance(Math.min(delta * 0.55, 92));
+      setPullDistance(Math.min(delta * 0.55, MAX_PULL));
     };
 
     const finishPull = () => {
-      if (!activeRef.current) return;
-      activeRef.current = false;
+      const wasConfirmed = confirmedRef.current;
       startYRef.current = null;
+      confirmedRef.current = false;
+      rejectedRef.current = false;
 
-      if (pullDistanceRef.current >= 72) {
+      if (wasConfirmed && pullDistanceRef.current >= TRIGGER_THRESHOLD) {
         setRefreshing(true);
         void Promise.resolve(onRefresh()).finally(() => {
           setRefreshing(false);
@@ -72,7 +118,7 @@ export function PullToRefresh({ dark, disabled = false, scrollContainerRef, onRe
   }, [disabled, onRefresh, refreshing, scrollContainerRef]);
 
   const height = refreshing ? 44 : pullDistance;
-  const label = refreshing ? "Refreshing..." : pullDistance >= 72 ? "Release to refresh" : "Pull to refresh";
+  const label = refreshing ? "Refreshing..." : pullDistance >= TRIGGER_THRESHOLD ? "Release to refresh" : "Pull to refresh";
 
   return (
     <div style={{ height }} className="shrink-0 overflow-hidden transition-[height] duration-150 ease-out">

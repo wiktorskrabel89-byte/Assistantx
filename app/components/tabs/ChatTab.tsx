@@ -9,6 +9,7 @@ import { ChatSessionsPanel } from "../ChatSessionsPanel";
 import { CodeHistoryPanel } from "../CodeHistoryPanel";
 import { ConversationToolbar } from "../ConversationToolbar";
 import { ConversationsSidebar } from "../ConversationsSidebar";
+import { CostModeSelector } from "../CostModeSelector";
 import { CustomAgentManager } from "../CustomAgentManager";
 import { GitHubPanel } from "../GitHubPanel";
 import { GoogleIntegrationBanner } from "../GoogleIntegrationBanner";
@@ -54,6 +55,7 @@ export function ChatTab() {
     setActiveChatId,
     setWorkspaceMode,
     setPreferredModelId,
+    setCostMode,
     createChatAction,
     renameChat,
     deleteChat,
@@ -614,11 +616,17 @@ export function ChatTab() {
           </div>
 
           <div className={`border-t border-slate-200 px-4 py-2 dark:border-slate-800 ${state.dark ? "bg-slate-900/90" : "bg-white/90"}`}>
-            <div className="mx-auto max-w-5xl">
+            <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3">
               <ModelSelector
                 dark={state.dark}
                 preferredModelId={activeWorkspace.settings.preferredModelId ?? null}
                 onSelectModel={setPreferredModelId}
+              />
+              <div className={`hidden sm:block h-5 w-px ${state.dark ? "bg-slate-700" : "bg-slate-200"}`} />
+              <CostModeSelector
+                dark={state.dark}
+                costMode={activeWorkspace.settings.costMode ?? "balanced"}
+                onSelectCostMode={setCostMode}
               />
             </div>
           </div>
