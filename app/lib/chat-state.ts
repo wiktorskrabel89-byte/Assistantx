@@ -189,6 +189,8 @@ export function createDefaultState(): StoredState {
     workspaces: [workspace],
     activeWorkspaceId: workspace.id,
     dark: false,
+    isPremium: false,
+    premiumRequestsUsed: 0,
   };
 }
 
@@ -350,5 +352,9 @@ export function upgradeState(value: StoredState | null): StoredState | null {
     workspaces,
     activeWorkspaceId,
     dark: Boolean(value.dark),
+    isPremium: Boolean((value as Record<string, unknown>).isPremium),
+    premiumRequestsUsed: typeof (value as Record<string, unknown>).premiumRequestsUsed === "number"
+      ? (value as Record<string, unknown>).premiumRequestsUsed as number
+      : 0,
   };
 }

@@ -12,6 +12,7 @@ describe("ModelSelector", () => {
       <ModelSelector
         dark={overrides.dark ?? false}
         preferredModelId={overrides.preferredModelId ?? null}
+        isPremium={overrides.isPremium ?? true}
         onSelectModel={onSelectModel}
       />
     );
