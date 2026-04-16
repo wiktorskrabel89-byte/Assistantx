@@ -14,6 +14,7 @@ import { CustomAgentManager } from "../CustomAgentManager";
 import { GitHubPanel } from "../GitHubPanel";
 import { GoogleIntegrationBanner } from "../GoogleIntegrationBanner";
 import { ModelSelector } from "../ModelSelector";
+import { PremiumPlanBanner } from "../PremiumPlanBanner";
 import { PromptManager } from "../PromptManager";
 import { PullToRefresh } from "../PullToRefresh";
 import { ShareConversationDialog } from "../ShareConversationDialog";
@@ -56,6 +57,8 @@ export function ChatTab() {
     setWorkspaceMode,
     setPreferredModelId,
     setCostMode,
+    setIsPremium,
+    incrementPremiumRequests,
     createChatAction,
     renameChat,
     deleteChat,
@@ -547,6 +550,13 @@ export function ChatTab() {
 
           <div className={`min-h-0 flex-1 px-3 py-4 transition-colors duration-200 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
             <div className="mx-auto flex h-full max-w-5xl flex-col">
+              <PremiumPlanBanner
+                dark={state.dark}
+                isPremium={state.isPremium}
+                premiumRequestsUsed={state.premiumRequestsUsed}
+                onTogglePremium={() => setIsPremium(!state.isPremium)}
+              />
+
               <GoogleIntegrationBanner
                 dark={state.dark}
                 visible={authReady && !googleLinked}
@@ -620,6 +630,7 @@ export function ChatTab() {
               <ModelSelector
                 dark={state.dark}
                 preferredModelId={activeWorkspace.settings.preferredModelId ?? null}
+                isPremium={state.isPremium}
                 onSelectModel={setPreferredModelId}
               />
               <div className={`hidden sm:block h-5 w-px ${state.dark ? "bg-slate-700" : "bg-slate-200"}`} />

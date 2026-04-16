@@ -78,6 +78,8 @@ export type StoredState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   dark: boolean;
+  isPremium: boolean;
+  premiumRequestsUsed: number;
 };
 
 export type Artifact = {

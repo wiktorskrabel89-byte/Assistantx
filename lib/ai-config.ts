@@ -1,5 +1,22 @@
 export type CostTier = "free" | "cheap" | "standard" | "premium";
 export type CostMode = "thrifty" | "balanced" | "performance";
+export type UserPlan = "free" | "premium";
+
+export type PremiumPlanInfo = {
+  priceUsd: number;
+  pricePln: number;
+  unlimitedChats: boolean;
+  premiumRequestsPerMonth: number;
+  description: string;
+};
+
+export const PREMIUM_PLAN: PremiumPlanInfo = {
+  priceUsd: 10,
+  pricePln: 30,
+  unlimitedChats: true,
+  premiumRequestsPerMonth: 300,
+  description: "Unlimited chats, 300 premium requests/month, access to all models.",
+};
 
 export type ModelOption = {
   id: string;
@@ -269,3 +286,32 @@ export const COST_TIER_LABELS: Record<CostTier, string> = {
   standard: "$$",
   premium: "$$$",
 };
+
+/**
+ * Models available to free-plan users (only the :free variants on OpenRouter).
+ */
+export const FREE_PLAN_MODELS: string[] = Object.entries(MODEL_COST_TIERS)
+  .filter(([, tier]) => tier === "free")
+  .map(([id]) => id);
+
+/** Returns true if the given model requires a premium plan. */
+export function isModelPremiumOnly(modelId: string): boolean {
+  return !FREE_PLAN_MODELS.includes(modelId);
+}
+
+/**
+ * Filters a list of model IDs to only those accessible to the user's plan.
+ * Premium users get all models; free users only get :free models.
+ */
+export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): string[] {
+  if (userPlan === "premium") return modelIds;
+  const filtered = modelIds.filter((id) => !isModelPremiumOnly(id));
+  return filtered.length > 0 ? filtered : [FREE_CHAT_MODEL];
+}
+
+/**
+ * Returns the appropriate fallback model for a free-plan user.
+ */
+export function getFreePlanFallback(isCodeRequest: boolean): string {
+  return isCodeRequest ? FREE_CODING_MODEL : FREE_CHAT_MODEL;
+}

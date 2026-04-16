@@ -303,6 +303,14 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setIsPremium = useCallback((isPremium: boolean) => {
+    setState((prev) => ({ ...prev, isPremium, premiumRequestsUsed: isPremium ? prev.premiumRequestsUsed : 0 }));
+  }, []);
+
+  const incrementPremiumRequests = useCallback(() => {
+    setState((prev) => ({ ...prev, premiumRequestsUsed: prev.premiumRequestsUsed + 1 }));
+  }, []);
+
   const setMemoryEnabled = useCallback((memoryEnabled: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -505,6 +513,8 @@ export function useWorkspaceState() {
     setLanguageLock,
     setPreferredModelId,
     setCostMode,
+    setIsPremium,
+    incrementPremiumRequests,
     setMemoryEnabled,
     setMemoryNotes,
     clearMemoryNotes,

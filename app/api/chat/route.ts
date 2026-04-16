@@ -1,6 +1,6 @@
 export const maxDuration = 60;
 
-import { filterModelsByCostMode, getCheaperAlternative, type CostMode } from "@/lib/ai-config";
+import { filterModelsByCostMode, filterModelsByPlan, getCheaperAlternative, getFreePlanFallback, isModelPremiumOnly, type CostMode, type UserPlan } from "@/lib/ai-config";
 
 const CODE_MODEL = "openai/gpt-5.4";
 const CHAT_MODEL = "google/gemini-2.5-flash-lite";
@@ -210,24 +210,40 @@ export async function POST(req: Request) {
     interactionProfile,
     addInternetContext = false,
     costMode: rawCostMode,
+    userPlan: rawUserPlan,
   } = await req.json();
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
+  const VALID_USER_PLANS: UserPlan[] = ["free", "premium"];
+  const userPlan: UserPlan = VALID_USER_PLANS.includes(rawUserPlan) ? rawUserPlan : "free";
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
 
-  // Apply cost control: filter the allowed models list to respect the user's cost mode
-  const costFilteredModels = usingAutoRouter(allowedModels, modelId, inferredImageRequest)
-    ? filterModelsByCostMode(allowedModels, costMode)
+  // Apply plan-based model filtering: free users can only use :free models
+  const planFilteredAllowedModels = Array.isArray(allowedModels)
+    ? filterModelsByPlan(allowedModels, userPlan)
     : allowedModels;
 
-  const isAutoRouted = usingAutoRouter(costFilteredModels, modelId, inferredImageRequest);
+  // If user manually selected a non-free model but is on free plan, override to free fallback
+  const planEnforcedModelId = modelId && userPlan === "free" && isModelPremiumOnly(modelId)
+    ? getFreePlanFallback(inferredCodeRequest)
+    : modelId;
+
+  // Apply cost control: filter the allowed models list to respect the user's cost mode
+  const costFilteredModels = usingAutoRouter(planFilteredAllowedModels, planEnforcedModelId, inferredImageRequest)
+    ? filterModelsByCostMode(planFilteredAllowedModels, costMode)
+    : planFilteredAllowedModels;
+
+  const isAutoRouted = usingAutoRouter(costFilteredModels, planEnforcedModelId, inferredImageRequest);
 
   // Apply cost control to manually selected or default model
-  const rawSelectedModel = modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL);
-  const costControlled = !isAutoRouted && !modelId
+  const defaultModel = userPlan === "free"
+    ? getFreePlanFallback(inferredCodeRequest)
+    : (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL);
+  const rawSelectedModel = planEnforcedModelId ?? defaultModel;
+  const costControlled = !isAutoRouted && !planEnforcedModelId
     ? getCheaperAlternative(rawSelectedModel, costMode, inferredCodeRequest)
     : { modelId: rawSelectedModel, downgraded: false };
 

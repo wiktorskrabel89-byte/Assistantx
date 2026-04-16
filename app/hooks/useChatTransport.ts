@@ -394,6 +394,7 @@ export function useChatTransport({
           interactionProfile,
           addInternetContext: queuedMessage.mode === "search",
           costMode: activeSettings.costMode,
+          userPlan: stateRef.current.isPremium ? "premium" : "free",
         }),
       });
 
