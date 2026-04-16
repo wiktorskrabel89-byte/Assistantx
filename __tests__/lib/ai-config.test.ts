@@ -11,6 +11,13 @@ import {
   DEFAULT_SEARCH_MODEL,
   RECOMMENDED_CODING_MODELS,
   RECOMMENDED_CHAT_MODELS,
+  getModelCostTier,
+  isModelAllowedByCostMode,
+  filterModelsByCostMode,
+  getCheaperAlternative,
+  MODEL_COST_TIERS,
+  FREE_CODING_MODEL,
+  FREE_CHAT_MODEL,
 } from "@/lib/ai-config";
 
 const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.+-]+$/;
@@ -77,6 +84,7 @@ describe("recommended model presets", () => {
       expect(p).toHaveProperty("id");
       expect(p).toHaveProperty("label");
       expect(p).toHaveProperty("modelId");
+      expect(p).toHaveProperty("costTier");
       expect(p.modelId).toMatch(MODEL_ID_PATTERN);
     }
   });
@@ -85,6 +93,7 @@ describe("recommended model presets", () => {
     expect(RECOMMENDED_CHAT_MODELS.length).toBeGreaterThan(0);
     for (const p of RECOMMENDED_CHAT_MODELS) {
       expect(p.modelId).toMatch(MODEL_ID_PATTERN);
+      expect(p).toHaveProperty("costTier");
     }
   });
 
@@ -97,5 +106,134 @@ describe("recommended model presets", () => {
     for (const id of allIds) {
       expect(id).toMatch(MODEL_ID_PATTERN);
     }
+  });
+});
+
+describe("cost control system", () => {
+  describe("getModelCostTier", () => {
+    it("returns free for free models", () => {
+      expect(getModelCostTier("deepseek/deepseek-r1:free")).toBe("free");
+      expect(getModelCostTier("meta-llama/llama-3.3-70b-instruct:free")).toBe("free");
+    });
+
+    it("returns cheap for budget models", () => {
+      expect(getModelCostTier("google/gemini-2.5-flash-lite")).toBe("cheap");
+      expect(getModelCostTier("openai/gpt-5-mini")).toBe("cheap");
+    });
+
+    it("returns standard for mid-tier models", () => {
+      expect(getModelCostTier("deepseek/deepseek-r1")).toBe("standard");
+      expect(getModelCostTier("anthropic/claude-sonnet-4.5")).toBe("standard");
+    });
+
+    it("returns premium for frontier models", () => {
+      expect(getModelCostTier("anthropic/claude-opus-4.6")).toBe("premium");
+      expect(getModelCostTier("openai/gpt-5.4")).toBe("premium");
+    });
+
+    it("defaults to standard for unknown models", () => {
+      expect(getModelCostTier("unknown/model-x")).toBe("standard");
+    });
+  });
+
+  describe("isModelAllowedByCostMode", () => {
+    it("thrifty allows free and cheap only", () => {
+      expect(isModelAllowedByCostMode("deepseek/deepseek-r1:free", "thrifty")).toBe(true);
+      expect(isModelAllowedByCostMode("openai/gpt-5-mini", "thrifty")).toBe(true);
+      expect(isModelAllowedByCostMode("deepseek/deepseek-r1", "thrifty")).toBe(false);
+      expect(isModelAllowedByCostMode("openai/gpt-5.4", "thrifty")).toBe(false);
+    });
+
+    it("balanced allows up to standard", () => {
+      expect(isModelAllowedByCostMode("deepseek/deepseek-r1:free", "balanced")).toBe(true);
+      expect(isModelAllowedByCostMode("openai/gpt-5-mini", "balanced")).toBe(true);
+      expect(isModelAllowedByCostMode("deepseek/deepseek-r1", "balanced")).toBe(true);
+      expect(isModelAllowedByCostMode("openai/gpt-5.4", "balanced")).toBe(false);
+    });
+
+    it("performance allows everything", () => {
+      expect(isModelAllowedByCostMode("deepseek/deepseek-r1:free", "performance")).toBe(true);
+      expect(isModelAllowedByCostMode("openai/gpt-5.4", "performance")).toBe(true);
+      expect(isModelAllowedByCostMode("anthropic/claude-opus-4.6", "performance")).toBe(true);
+    });
+  });
+
+  describe("filterModelsByCostMode", () => {
+    const models = [
+      "deepseek/deepseek-r1:free",
+      "openai/gpt-5-mini",
+      "deepseek/deepseek-r1",
+      "openai/gpt-5.4",
+    ];
+
+    it("thrifty keeps only free and cheap models", () => {
+      const filtered = filterModelsByCostMode(models, "thrifty");
+      expect(filtered).toContain("deepseek/deepseek-r1:free");
+      expect(filtered).toContain("openai/gpt-5-mini");
+      expect(filtered).not.toContain("deepseek/deepseek-r1");
+      expect(filtered).not.toContain("openai/gpt-5.4");
+    });
+
+    it("balanced keeps free, cheap, and standard models", () => {
+      const filtered = filterModelsByCostMode(models, "balanced");
+      expect(filtered).toContain("deepseek/deepseek-r1:free");
+      expect(filtered).toContain("openai/gpt-5-mini");
+      expect(filtered).toContain("deepseek/deepseek-r1");
+      expect(filtered).not.toContain("openai/gpt-5.4");
+    });
+
+    it("performance keeps all models", () => {
+      const filtered = filterModelsByCostMode(models, "performance");
+      expect(filtered).toEqual(models);
+    });
+
+    it("returns original list when filtering would remove all models", () => {
+      const premiumOnly = ["openai/gpt-5.4", "anthropic/claude-opus-4.6"];
+      const filtered = filterModelsByCostMode(premiumOnly, "thrifty");
+      expect(filtered).toEqual(premiumOnly);
+    });
+  });
+
+  describe("getCheaperAlternative", () => {
+    it("returns the same model if within budget", () => {
+      const result = getCheaperAlternative("openai/gpt-5-mini", "thrifty", false);
+      expect(result.modelId).toBe("openai/gpt-5-mini");
+      expect(result.downgraded).toBe(false);
+    });
+
+    it("downgrades premium coding model in thrifty mode", () => {
+      const result = getCheaperAlternative("openai/gpt-5.4", "thrifty", true);
+      expect(result.downgraded).toBe(true);
+      expect(getModelCostTier(result.modelId)).not.toBe("premium");
+    });
+
+    it("downgrades premium chat model in thrifty mode", () => {
+      const result = getCheaperAlternative("anthropic/claude-opus-4.6", "thrifty", false);
+      expect(result.downgraded).toBe(true);
+    });
+
+    it("performance mode never downgrades", () => {
+      const result = getCheaperAlternative("openai/gpt-5.4", "performance", true);
+      expect(result.modelId).toBe("openai/gpt-5.4");
+      expect(result.downgraded).toBe(false);
+    });
+  });
+
+  describe("MODEL_COST_TIERS consistency", () => {
+    it("free models contain :free suffix", () => {
+      for (const [id, tier] of Object.entries(MODEL_COST_TIERS)) {
+        if (tier === "free") {
+          expect(id).toMatch(/:free$/);
+        }
+      }
+    });
+
+    it("FREE_CODING_MODEL is mapped as free tier", () => {
+      expect(getModelCostTier(FREE_CODING_MODEL)).toBe("free");
+    });
+
+    it("FREE_CHAT_MODEL is mapped as free tier", () => {
+      expect(getModelCostTier(FREE_CHAT_MODEL)).toBe("free");
+    });
   });
 });
