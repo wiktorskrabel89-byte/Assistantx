@@ -350,7 +350,7 @@ describe("upgradeState", () => {
   });
 
   it("returns null for state with no workspaces", () => {
-    expect(upgradeState({ workspaces: [], activeWorkspaceId: "", dark: false })).toBeNull();
+    expect(upgradeState({ workspaces: [], activeWorkspaceId: "", dark: false, isPremium: false, premiumRequestsUsed: 0 })).toBeNull();
   });
 
   it("upgrades a valid minimal state", () => {
@@ -376,6 +376,8 @@ describe("upgradeState", () => {
       ],
       activeWorkspaceId: "ws1",
       dark: true,
+      isPremium: false,
+      premiumRequestsUsed: 0,
     };
 
     const upgraded = upgradeState(state)!;
@@ -402,6 +404,8 @@ describe("upgradeState", () => {
       ],
       activeWorkspaceId: "ws1",
       dark: false,
+      isPremium: false,
+      premiumRequestsUsed: 0,
     };
 
     const upgraded = upgradeState(state)!;
@@ -423,6 +427,8 @@ describe("upgradeState", () => {
       ],
       activeWorkspaceId: "ws1",
       dark: false,
+      isPremium: false,
+      premiumRequestsUsed: 0,
     };
 
     const upgraded = upgradeState(state)!;

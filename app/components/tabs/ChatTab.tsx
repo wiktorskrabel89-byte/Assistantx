@@ -58,7 +58,6 @@ export function ChatTab() {
     setPreferredModelId,
     setCostMode,
     setIsPremium,
-    incrementPremiumRequests,
     createChatAction,
     renameChat,
     deleteChat,
