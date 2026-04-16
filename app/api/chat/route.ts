@@ -10,11 +10,10 @@ function isCreditsError(status: number, body: string): boolean {
   return (
     status === 402
     || status === 429
-    || /insufficient.*credits/i.test(body)
-    || /payment.*required/i.test(body)
-    || /rate.*limit.*exceeded/i.test(body)
-    || /out of credits/i.test(body)
-    || /billing/i.test(body)
+    || /\binsufficient\b.*\bcredits\b/i.test(body)
+    || /\bpayment\b.*\brequired\b/i.test(body)
+    || /\brate\b.*\blimit\b.*\bexceeded\b/i.test(body)
+    || /\bout of credits\b/i.test(body)
   );
 }
 
@@ -368,15 +367,15 @@ export async function POST(req: Request) {
           const shouldAutoRouterFallback = usingAutoRouter
             && response.status === 404
             && /No models match your request and model restrictions/i.test(err);
-          const shouldCreditsFallback = isCreditsError(response.status, err);
+          const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(response.status, err);
 
           if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
             throw new Error(`OpenRouter error ${response.status}: ${err}`);
           }
 
           const freeModel = inferredCodeRequest ? FREE_CODE_MODEL : FREE_CHAT_MODEL;
-          const creditFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
-          const creditFallbackReason = shouldCreditsFallback
+          const selectedFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
+          const fallbackReason = shouldCreditsFallback
             ? `${routeReason}. Insufficient credits detected, switched to free model.`
             : `${routeReason}. Auto-router found no eligible models, so a direct fallback model was used.`;
 
@@ -384,13 +383,13 @@ export async function POST(req: Request) {
 
           const fallbackRequestBody: Record<string, unknown> = {
             ...requestBody,
-            model: creditFallbackModel,
+            model: selectedFallbackModel,
           };
           delete fallbackRequestBody.plugins;
 
           response = await sendOpenRouterRequest(fallbackRequestBody);
-          effectiveModel = creditFallbackModel;
-          effectiveRouteReason = creditFallbackReason;
+          effectiveModel = selectedFallbackModel;
+          effectiveRouteReason = fallbackReason;
 
           if (!response.ok) {
             const fallbackErr = await response.text();
