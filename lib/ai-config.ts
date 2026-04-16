@@ -4,6 +4,12 @@ export type ModelOption = {
   description: string;
 };
 
+export type ModelPreset = {
+  id: string;
+  label: string;
+  modelId: string;
+};
+
 export type LanguageOption = {
   code: string;
   label: string;
@@ -138,3 +144,18 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
 export const DEFAULT_CHAT_MODEL = CHAT_MODELS[0].id;
 export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
+
+export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
+  { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6" },
+  { id: "coding-gpt-5.4", label: "GPT-5.4", modelId: "openai/gpt-5.4" },
+  { id: "coding-deepseek-r1", label: "DeepSeek R1", modelId: "deepseek/deepseek-r1" },
+];
+
+export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
+  { id: "chat-gpt-5.1", label: "GPT-5.1", modelId: "openai/gpt-5.1" },
+  { id: "chat-claude-sonnet", label: "Claude Sonnet 4.5", modelId: "anthropic/claude-sonnet-4.5" },
+  { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview" },
+];
+
+export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
+export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.1";
