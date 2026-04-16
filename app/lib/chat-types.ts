@@ -59,6 +59,7 @@ export type WorkspaceSettings = {
   promptTemplates: PromptTemplate[];
   styleMode: StyleMode;
   languageLock: string;
+  preferredModelId: string | null;
 };
 
 export type Workspace = {

@@ -12,6 +12,7 @@ import { ConversationsSidebar } from "../ConversationsSidebar";
 import { CustomAgentManager } from "../CustomAgentManager";
 import { GitHubPanel } from "../GitHubPanel";
 import { GoogleIntegrationBanner } from "../GoogleIntegrationBanner";
+import { ModelSelector } from "../ModelSelector";
 import { PromptManager } from "../PromptManager";
 import { PullToRefresh } from "../PullToRefresh";
 import { ShareConversationDialog } from "../ShareConversationDialog";
@@ -52,6 +53,7 @@ export function ChatTab() {
     updateLastMessage,
     setActiveChatId,
     setWorkspaceMode,
+    setPreferredModelId,
     createChatAction,
     renameChat,
     deleteChat,
@@ -607,6 +609,16 @@ export function ChatTab() {
                 visible={loading || stopRequested}
                 status={stopRequested ? "Stopping response..." : latestEntry?.status}
                 routeReason={latestEntry?.routeReason}
+              />
+            </div>
+          </div>
+
+          <div className={`border-t border-slate-200 px-4 py-2 dark:border-slate-800 ${state.dark ? "bg-slate-900/90" : "bg-white/90"}`}>
+            <div className="mx-auto max-w-5xl">
+              <ModelSelector
+                dark={state.dark}
+                preferredModelId={activeWorkspace.settings.preferredModelId ?? null}
+                onSelectModel={setPreferredModelId}
               />
             </div>
           </div>

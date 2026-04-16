@@ -289,6 +289,13 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setPreferredModelId = useCallback((preferredModelId: string | null) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, preferredModelId },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const setMemoryEnabled = useCallback((memoryEnabled: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -489,6 +496,7 @@ export function useWorkspaceState() {
     clearActiveChat,
     setStyleMode,
     setLanguageLock,
+    setPreferredModelId,
     setMemoryEnabled,
     setMemoryNotes,
     clearMemoryNotes,

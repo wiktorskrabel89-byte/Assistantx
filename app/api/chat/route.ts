@@ -3,6 +3,19 @@ export const maxDuration = 60;
 const CODE_MODEL = "openai/gpt-5.4";
 const CHAT_MODEL = "google/gemini-2.5-flash-lite";
 const SEARCH_MODEL = "perplexity/sonar";
+const FREE_CODE_MODEL = "deepseek/deepseek-r1:free";
+const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+
+function isCreditsError(status: number, body: string): boolean {
+  return (
+    status === 402
+    || status === 429
+    || /\binsufficient\b.*\bcredits\b/i.test(body)
+    || /\bpayment\b.*\brequired\b/i.test(body)
+    || /\brate\b.*\blimit\b.*\bexceeded\b/i.test(body)
+    || /\bout of credits\b/i.test(body)
+  );
+}
 
 function isAbortLikeError(error: unknown) {
   if (error instanceof DOMException) return error.name === "AbortError";
@@ -351,25 +364,32 @@ export async function POST(req: Request) {
 
         if (!response.ok) {
           const err = await response.text();
-          const shouldFallback = usingAutoRouter
+          const shouldAutoRouterFallback = usingAutoRouter
             && response.status === 404
             && /No models match your request and model restrictions/i.test(err);
+          const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(response.status, err);
 
-          if (!shouldFallback) {
+          if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
             throw new Error(`OpenRouter error ${response.status}: ${err}`);
           }
 
-          safeEnqueue(`data: ${JSON.stringify({ status: "Retrying with fallback model..." })}\n\n`);
+          const freeModel = inferredCodeRequest ? FREE_CODE_MODEL : FREE_CHAT_MODEL;
+          const selectedFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
+          const fallbackReason = shouldCreditsFallback
+            ? `${routeReason}. Insufficient credits detected, switched to free model.`
+            : `${routeReason}. Auto-router found no eligible models, so a direct fallback model was used.`;
+
+          safeEnqueue(`data: ${JSON.stringify({ status: shouldCreditsFallback ? "Switching to free model..." : "Retrying with fallback model..." })}\n\n`);
 
           const fallbackRequestBody: Record<string, unknown> = {
             ...requestBody,
-            model: fallbackModel,
+            model: selectedFallbackModel,
           };
           delete fallbackRequestBody.plugins;
 
           response = await sendOpenRouterRequest(fallbackRequestBody);
-          effectiveModel = fallbackModel;
-          effectiveRouteReason = `${routeReason}. Auto-router found no eligible models, so a direct fallback model was used.`;
+          effectiveModel = selectedFallbackModel;
+          effectiveRouteReason = fallbackReason;
 
           if (!response.ok) {
             const fallbackErr = await response.text();

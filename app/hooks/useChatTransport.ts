@@ -274,6 +274,10 @@ export function useChatTransport({
     const activeCustomAgent = activeSettings.customAgents.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
     const activeBuiltInAgent = BUILT_IN_AGENTS.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
     const allowedModels = getAllowedModels(queuedMessage.mode);
+    const preferredModelId = activeSettings.preferredModelId ?? null;
+    const effectiveAllowedModels = preferredModelId
+      ? [preferredModelId]
+      : allowedModels;
     const recentMessages = chat.messages.slice(-8);
     const history = activeSettings.memoryEnabled
       ? recentMessages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
@@ -378,7 +382,7 @@ export function useChatTransport({
         body: JSON.stringify({
           message: userMsg,
           mode: queuedMessage.mode,
-          allowedModels,
+          allowedModels: effectiveAllowedModels,
           history,
           assistantName: activeCustomAgent?.name,
           assistantPurpose,
