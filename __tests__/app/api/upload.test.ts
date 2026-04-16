@@ -106,7 +106,7 @@ describe("POST /api/upload", () => {
     const res = await POST(req);
     const events = await readSseEvents(res);
 
-    expect(events[0]).toHaveProperty("model", "Gemini 2.5 Flash (Vision)");
+    expect(events[1]).toHaveProperty("model", "Gemini 2.5 Flash (Vision)");
   });
 
   it("streams token events from the upstream API", async () => {
