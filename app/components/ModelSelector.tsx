@@ -2,7 +2,7 @@
 
 import { Bot, Code2, MessageSquareText, Zap } from "lucide-react";
 import { MODEL_PRESETS } from "../lib/chat-state";
-import { COST_TIER_LABELS } from "@/lib/ai-config";
+import { COST_TIER_LABELS, type CostTier } from "@/lib/ai-config";
 
 type ModelSelectorProps = {
   dark: boolean;
@@ -23,8 +23,8 @@ export function ModelSelector({ dark, preferredModelId, onSelectModel }: ModelSe
 
   const sectionLabel = `text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`;
 
-  const tierBadge = (tier: string) => {
-    const label = COST_TIER_LABELS[tier as keyof typeof COST_TIER_LABELS];
+  const tierBadge = (tier: CostTier) => {
+    const label = COST_TIER_LABELS[tier];
     if (!label) return null;
     const color = tier === "free"
       ? "text-emerald-500"

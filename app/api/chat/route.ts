@@ -212,7 +212,8 @@ export async function POST(req: Request) {
     costMode: rawCostMode,
   } = await req.json();
   const encoder = new TextEncoder();
-  const costMode: CostMode = (rawCostMode === "thrifty" || rawCostMode === "balanced" || rawCostMode === "performance") ? rawCostMode : "balanced";
+  const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
+  const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
