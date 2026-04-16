@@ -3,8 +3,11 @@ import {
   CHAT_MODELS,
   CODE_MODELS,
   LANGUAGE_OPTIONS,
+  RECOMMENDED_CHAT_MODELS,
+  RECOMMENDED_CODING_MODELS,
   SEARCH_MODELS,
 } from "@/lib/ai-config";
+import type { ModelPreset } from "@/lib/ai-config";
 import type {
   Artifact,
   BuiltInAgent,
@@ -25,6 +28,10 @@ type AutoRoutedMode = Exclude<Mode, "image" | "upload">;
 export const STORAGE_KEY = "moje-ai.workspace-state.v3";
 export const NEW_CHAT_TITLE = "New chat";
 export const TEXT_LANGUAGE_OPTIONS = LANGUAGE_OPTIONS;
+export const MODEL_PRESETS: { coding: ModelPreset[]; chat: ModelPreset[] } = {
+  coding: RECOMMENDED_CODING_MODELS,
+  chat: RECOMMENDED_CHAT_MODELS,
+};
 export const QUICK_CHIPS: Array<{ label: string; text: string; mode?: Mode }> = [
   { label: "Explain code", text: "Explain this code: ", mode: "code" },
   { label: "Fix bug", text: "Help me fix this bug: ", mode: "code" },
@@ -141,6 +148,7 @@ export function createSettings(): WorkspaceSettings {
     promptTemplates: createDefaultPromptTemplates(),
     styleMode: "concise",
     languageLock: "auto",
+    preferredModelId: null,
   };
 }
 
