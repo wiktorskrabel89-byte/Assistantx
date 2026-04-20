@@ -1,9 +1,22 @@
 export const maxDuration = 60;
 
-import { filterModelsByCostMode, filterModelsByPlan, getCheaperAlternative, getFreePlanFallback, isModelPremiumOnly, type CostMode, type UserPlan } from "@/lib/ai-config";
 
-const CODE_MODEL = "openai/gpt-5.4";
-const CHAT_MODEL = "google/gemini-2.5-flash-lite";
+
+// 3 best truly free coding models on OpenRouter (2026)
+const FREE_CODING_MODELS = [
+  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, strong code)
+  "deepseek/deepseek-r1:free", // DeepSeek R1 (open, $0, code)
+  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
+];
+// 3 best truly free chatting models on OpenRouter (2026)
+const FREE_CHAT_MODELS = [
+  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, chat)
+  "deepseek/deepseek-r1:free", // DeepSeek R1 (open, $0, chat)
+  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
+];
+
+const CODE_MODEL = FREE_CODING_MODELS[0];
+const CHAT_MODEL = FREE_CHAT_MODELS[1];
 const SEARCH_MODEL = "perplexity/sonar";
 const FREE_CODE_MODEL = "deepseek/deepseek-r1:free";
 const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
@@ -256,7 +269,21 @@ export async function POST(req: Request) {
     : inferredCodeRequest
       ? CODE_MODEL
       : CHAT_MODEL;
-  const isSearchMode = rawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
+
+  // Allow user to choose from free models for coding/chatting
+  let selectedModel = usingAutoRouter
+    ? "openrouter/auto"
+    : (modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL));
+
+  // If user requests a free model for coding/chatting, allow selection
+  if (!modelId && rawMode === "code" && FREE_CODING_MODELS.length > 0) {
+    selectedModel = CODE_MODEL;
+  } else if (!modelId && rawMode === "chat" && FREE_CHAT_MODELS.length > 0) {
+    selectedModel = CHAT_MODEL;
+  }
+
+  // Optionally: expose FREE_CODING_MODELS and FREE_CHAT_MODELS in API response for UI
+  const isSearchMode = rawMode === "search" || (!usingAutoRouter && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(message);
@@ -328,17 +355,25 @@ export async function POST(req: Request) {
     });
   }
 
+  // --- RAG logic: inject relevant context into the system prompt ---
+  let ragContext = "";
+  // Use memoryNotes as RAG context if available (or fetch from Supabase/vector store here)
+  if (typeof memoryNotes === "string" && memoryNotes.trim()) {
+    ragContext = `\n\nRelevant context:\n${memoryNotes.trim()}`;
+  }
+  // You can extend this to fetch from a vector store if needed
+
   let systemPrompt: string;
   if (isSearchMode) {
-    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (isDeepSeek) {
-    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (isGemini) {
-    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (inferredCodeRequest) {
-    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else {
-    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${memoryInstruction}`.trim();
+    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   }
 
   const historyMessages: Array<{ role: string; content: string }> = Array.isArray(history)

@@ -9,4 +9,7 @@ def note_tool(content: str) -> str:
     Use this tool to take notes about important information found during your research.
     """
     notes_storage.append(content)
+    # Enforce a memory limit of 20 notes (keep only the 20 most recent)
+    if len(notes_storage) > 20:
+        del notes_storage[:-20]
     return f"Note saved: {content}"
