@@ -260,9 +260,7 @@ export async function POST(req: Request) {
     ? getCheaperAlternative(rawSelectedModel, costMode, inferredCodeRequest)
     : { modelId: rawSelectedModel, downgraded: false };
 
-  const selectedModel = isAutoRouted
-    ? "openrouter/auto"
-    : costControlled.modelId;
+
 
   const fallbackModel = rawMode === "search"
     ? SEARCH_MODEL
@@ -271,9 +269,10 @@ export async function POST(req: Request) {
 
 
   // Allow user to choose from free models for coding/chatting
-  let selectedModel = usingAutoRouter
+
+  let selectedModel = isAutoRouted
     ? "openrouter/auto"
-    : (modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL));
+    : costControlled.modelId;
 
   // If user requests a free model for coding/chatting, allow selection
   if (!modelId && rawMode === "code" && FREE_CODING_MODELS.length > 0) {
