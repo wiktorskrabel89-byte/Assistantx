@@ -18,6 +18,23 @@ const FREE_CHAT_MODELS = [
 const CODE_MODEL = FREE_CODING_MODELS[0];
 const CHAT_MODEL = FREE_CHAT_MODELS[1];
 const SEARCH_MODEL = "perplexity/sonar";
+const FREE_CODE_MODEL = "deepseek/deepseek-r1:free";
+const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+
+function isCreditsError(status: number, body: string): boolean {
+  return (
+    status === 402
+    || status === 429
+    || /\binsufficient\b.*\bcredits\b/i.test(body)
+    || /\bpayment\b.*\brequired\b/i.test(body)
+    || /\brate\b.*\blimit\b.*\bexceeded\b/i.test(body)
+    || /\bout of credits\b/i.test(body)
+  );
+}
+
+function usingAutoRouter(allowedModels: unknown, modelId: unknown, inferredImageRequest: boolean): boolean {
+  return !modelId && Array.isArray(allowedModels) && allowedModels.length > 0 && !inferredImageRequest;
+}
 
 function isAbortLikeError(error: unknown) {
   if (error instanceof DOMException) return error.name === "AbortError";
@@ -131,7 +148,7 @@ const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> =
   },
 ];
 
-function detectLanguage(text: string): { lang: string; name: string } | null {
+export function detectLanguage(text: string): { lang: string; name: string } | null {
   const trimmed = text.trim();
   if (trimmed.length < 2) return null;
 
@@ -205,12 +222,48 @@ export async function POST(req: Request) {
     preferredProgrammingLanguage,
     interactionProfile,
     addInternetContext = false,
+    costMode: rawCostMode,
+    userPlan: rawUserPlan,
   } = await req.json();
   const encoder = new TextEncoder();
+  const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
+  const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
+  const VALID_USER_PLANS: UserPlan[] = ["free", "premium"];
+  const userPlan: UserPlan = VALID_USER_PLANS.includes(rawUserPlan) ? rawUserPlan : "free";
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
-  const usingAutoRouter = !modelId && Array.isArray(allowedModels) && allowedModels.length > 0 && !inferredImageRequest;
+
+  // Apply plan-based model filtering: free users can only use :free models
+  const planFilteredAllowedModels = Array.isArray(allowedModels)
+    ? filterModelsByPlan(allowedModels, userPlan)
+    : allowedModels;
+
+  // If user manually selected a non-free model but is on free plan, override to free fallback
+  const planEnforcedModelId = modelId && userPlan === "free" && isModelPremiumOnly(modelId)
+    ? getFreePlanFallback(inferredCodeRequest)
+    : modelId;
+
+  // Apply cost control: filter the allowed models list to respect the user's cost mode
+  const costFilteredModels = usingAutoRouter(planFilteredAllowedModels, planEnforcedModelId, inferredImageRequest)
+    ? filterModelsByCostMode(planFilteredAllowedModels, costMode)
+    : planFilteredAllowedModels;
+
+  const isAutoRouted = usingAutoRouter(costFilteredModels, planEnforcedModelId, inferredImageRequest);
+
+  // Apply cost control to manually selected or default model
+  const defaultModel = userPlan === "free"
+    ? getFreePlanFallback(inferredCodeRequest)
+    : (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL);
+  const rawSelectedModel = planEnforcedModelId ?? defaultModel;
+  const costControlled = !isAutoRouted && !planEnforcedModelId
+    ? getCheaperAlternative(rawSelectedModel, costMode, inferredCodeRequest)
+    : { modelId: rawSelectedModel, downgraded: false };
+
+  const selectedModel = isAutoRouted
+    ? "openrouter/auto"
+    : costControlled.modelId;
+
   const fallbackModel = rawMode === "search"
     ? SEARCH_MODEL
     : inferredCodeRequest
@@ -262,21 +315,23 @@ export async function POST(req: Request) {
     ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
 
+  const costDowngradeNote = costControlled.downgraded ? ` (downgraded by ${costMode} cost mode)` : "";
+  const planDowngradeNote = (modelId && planEnforcedModelId !== modelId) ? " (switched to free model — premium plan required)" : "";
   const routeReason = isSearchMode
-    ? (usingAutoRouter ? "Search mode with automatic model routing" : "Search mode using a research-oriented model")
-    : usingAutoRouter
+    ? (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model")
+    : isAutoRouted
       ? rawMode === "code"
-        ? "Auto router choosing the best coding model"
+        ? `Auto router choosing the best coding model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
         : rawMode === "chat"
-          ? "Auto router choosing the best chat model"
-          : "Auto router choosing the best model for this request"
+          ? `Auto router choosing the best chat model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
+          : `Auto router choosing the best model for this request${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
       : modelId
-        ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}`
+        ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}${planDowngradeNote}`
         : inferredImageRequest
           ? "Auto-detected an image generation request"
           : inferredCodeRequest
-            ? "Auto-detected a coding-focused request"
-            : "Auto-detected a conversational request";
+            ? `Auto-detected a coding-focused request${costDowngradeNote}${planDowngradeNote}`
+            : `Auto-detected a conversational request${costDowngradeNote}${planDowngradeNote}`;
 
   if (!modelId && rawMode === "auto" && inferredImageRequest) {
     const normalizedPrompt = message.replace(/^\s*\/image\s*/i, "").trim() || "A cinematic digital artwork";
@@ -339,8 +394,8 @@ export async function POST(req: Request) {
     ],
   };
 
-  if (usingAutoRouter) {
-    requestBody.plugins = [{ id: "auto-router", allowed_models: allowedModels }];
+  if (isAutoRouted) {
+    requestBody.plugins = [{ id: "auto-router", allowed_models: costFilteredModels }];
   }
 
   const sendOpenRouterRequest = async (body: Record<string, unknown>) => {
@@ -385,25 +440,32 @@ export async function POST(req: Request) {
 
         if (!response.ok) {
           const err = await response.text();
-          const shouldFallback = usingAutoRouter
+          const shouldAutoRouterFallback = isAutoRouted
             && response.status === 404
             && /No models match your request and model restrictions/i.test(err);
+          const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(response.status, err);
 
-          if (!shouldFallback) {
+          if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
             throw new Error(`OpenRouter error ${response.status}: ${err}`);
           }
 
-          safeEnqueue(`data: ${JSON.stringify({ status: "Retrying with fallback model..." })}\n\n`);
+          const freeModel = inferredCodeRequest ? FREE_CODE_MODEL : FREE_CHAT_MODEL;
+          const selectedFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
+          const fallbackReason = shouldCreditsFallback
+            ? `${routeReason}. Insufficient credits detected, switched to free model.`
+            : `${routeReason}. Auto-router found no eligible models, so a direct fallback model was used.`;
+
+          safeEnqueue(`data: ${JSON.stringify({ status: shouldCreditsFallback ? "Switching to free model..." : "Retrying with fallback model..." })}\n\n`);
 
           const fallbackRequestBody: Record<string, unknown> = {
             ...requestBody,
-            model: fallbackModel,
+            model: selectedFallbackModel,
           };
           delete fallbackRequestBody.plugins;
 
           response = await sendOpenRouterRequest(fallbackRequestBody);
-          effectiveModel = fallbackModel;
-          effectiveRouteReason = `${routeReason}. Auto-router found no eligible models, so a direct fallback model was used.`;
+          effectiveModel = selectedFallbackModel;
+          effectiveRouteReason = fallbackReason;
 
           if (!response.ok) {
             const fallbackErr = await response.text();

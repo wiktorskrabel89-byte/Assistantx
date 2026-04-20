@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { CostMode } from "@/lib/ai-config";
 
 export type Mode = "auto" | "code" | "chat" | "search" | "image" | "upload";
 export type StyleMode = "concise" | "detailed" | "step-by-step";
@@ -59,6 +60,8 @@ export type WorkspaceSettings = {
   promptTemplates: PromptTemplate[];
   styleMode: StyleMode;
   languageLock: string;
+  preferredModelId: string | null;
+  costMode: CostMode;
 };
 
 export type Workspace = {
@@ -75,6 +78,8 @@ export type StoredState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   dark: boolean;
+  isPremium: boolean;
+  premiumRequestsUsed: number;
 };
 
 export type Artifact = {

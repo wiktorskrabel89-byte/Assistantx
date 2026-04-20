@@ -3,8 +3,11 @@ import {
   CHAT_MODELS,
   CODE_MODELS,
   LANGUAGE_OPTIONS,
+  RECOMMENDED_CHAT_MODELS,
+  RECOMMENDED_CODING_MODELS,
   SEARCH_MODELS,
 } from "@/lib/ai-config";
+import type { CostMode, ModelPreset } from "@/lib/ai-config";
 import type {
   Artifact,
   BuiltInAgent,
@@ -25,6 +28,15 @@ type AutoRoutedMode = Exclude<Mode, "image" | "upload">;
 export const STORAGE_KEY = "moje-ai.workspace-state.v3";
 export const NEW_CHAT_TITLE = "New chat";
 export const TEXT_LANGUAGE_OPTIONS = LANGUAGE_OPTIONS;
+export const MODEL_PRESETS: { coding: ModelPreset[]; chat: ModelPreset[] } = {
+  coding: RECOMMENDED_CODING_MODELS,
+  chat: RECOMMENDED_CHAT_MODELS,
+};
+export const COST_MODE_OPTIONS: Array<{ id: CostMode; label: string; icon: string; description: string }> = [
+  { id: "thrifty", label: "Thrifty", icon: "🪙", description: "Use cheapest models to save credits." },
+  { id: "balanced", label: "Balanced", icon: "⚖️", description: "Good quality at moderate cost." },
+  { id: "performance", label: "Performance", icon: "🚀", description: "Best models, higher credit usage." },
+];
 export const QUICK_CHIPS: Array<{ label: string; text: string; mode?: Mode }> = [
   { label: "Explain code", text: "Explain this code: ", mode: "code" },
   { label: "Fix bug", text: "Help me fix this bug: ", mode: "code" },
@@ -141,6 +153,8 @@ export function createSettings(): WorkspaceSettings {
     promptTemplates: createDefaultPromptTemplates(),
     styleMode: "concise",
     languageLock: "auto",
+    preferredModelId: null,
+    costMode: "balanced",
   };
 }
 
@@ -175,6 +189,8 @@ export function createDefaultState(): StoredState {
     workspaces: [workspace],
     activeWorkspaceId: workspace.id,
     dark: false,
+    isPremium: false,
+    premiumRequestsUsed: 0,
   };
 }
 
@@ -336,5 +352,9 @@ export function upgradeState(value: StoredState | null): StoredState | null {
     workspaces,
     activeWorkspaceId,
     dark: Boolean(value.dark),
+    isPremium: Boolean((value as Record<string, unknown>).isPremium),
+    premiumRequestsUsed: typeof (value as Record<string, unknown>).premiumRequestsUsed === "number"
+      ? (value as Record<string, unknown>).premiumRequestsUsed as number
+      : 0,
   };
 }

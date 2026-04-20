@@ -289,6 +289,28 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setPreferredModelId = useCallback((preferredModelId: string | null) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, preferredModelId },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setCostMode = useCallback((costMode: import("@/lib/ai-config").CostMode) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, costMode },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setIsPremium = useCallback((isPremium: boolean) => {
+    setState((prev) => ({ ...prev, isPremium }));
+  }, []);
+
+  const incrementPremiumRequests = useCallback(() => {
+    setState((prev) => ({ ...prev, premiumRequestsUsed: prev.premiumRequestsUsed + 1 }));
+  }, []);
+
   const setMemoryEnabled = useCallback((memoryEnabled: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -489,6 +511,10 @@ export function useWorkspaceState() {
     clearActiveChat,
     setStyleMode,
     setLanguageLock,
+    setPreferredModelId,
+    setCostMode,
+    setIsPremium,
+    incrementPremiumRequests,
     setMemoryEnabled,
     setMemoryNotes,
     clearMemoryNotes,
