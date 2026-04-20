@@ -267,8 +267,8 @@ export async function POST(req: Request) {
   const fallbackModel = rawMode === "search"
     ? SEARCH_MODEL
     : inferredCodeRequest
-      ? CODE_MODEL
-      : CHAT_MODEL;
+
+
 
   // Allow user to choose from free models for coding/chatting
   let selectedModel = usingAutoRouter
