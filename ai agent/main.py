@@ -98,17 +98,41 @@ def is_code_request(message: str) -> bool:
     msg_lower = message.lower()
     return any(keyword in msg_lower for keyword in CODE_KEYWORDS)
 
+
+# --- Streaming, System Prompt, History Limit, RAG ---
 @app.post("/chat")
 async def chat(msg: Message):
     mode = msg.mode
     if mode == "auto":
         mode = "code" if is_code_request(msg.message) else "chat"
 
+
+    # --- Limit history to 20 (Supabase) ---
+    # Example: fetch last 20 messages from Supabase (pseudo, adapt to your schema)
+    # history = supabase_client.table("chat_history").select("*").order("created_at", desc=True).limit(20).execute().data[::-1]
+    history = []  # Replace with actual Supabase fetch if needed
+
+    # --- RAG: retrieve context from SupabaseVectorStore ---
+    # Use retriever to get relevant context for the user message
+    rag_context = ""
+    try:
+        docs = retriever.get_relevant_documents(msg.message)
+        if docs:
+            rag_context = "\n\n".join([d.page_content for d in docs if hasattr(d, "page_content")])
+    except Exception as e:
+        rag_context = ""  # fallback if retrieval fails
+
+    # --- System prompt ---
+    system_prompt = SystemMessage(content="You are a powerful AI assistant that writes clear and complete answers.")
+
     if mode == "code":
-        messages = [
-            SystemMessage(content="You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical."),
-            HumanMessage(content=msg.message),
-        ]
+        messages = [system_prompt, SystemMessage(content="You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical.")]
+        # Add RAG context if available
+        if rag_context:
+            messages.append(SystemMessage(content=f"Relevant context:\n{rag_context}"))
+        # Add history if available
+        messages += history
+        messages.append(HumanMessage(content=msg.message))
 
         async def stream_code():
             yield f"data: {json.dumps({'model': 'Claude Sonnet 4.6'})}\n\n"
@@ -120,10 +144,13 @@ async def chat(msg: Message):
         return StreamingResponse(stream_code(), media_type="text/event-stream")
 
     else:
-        chat_messages = [
-            SystemMessage(content="Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational."),
-            HumanMessage(content=msg.message),
-        ]
+        chat_messages = [system_prompt, SystemMessage(content="Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.")]
+        # Add RAG context if available
+        if rag_context:
+            chat_messages.append(SystemMessage(content=f"Relevant context:\n{rag_context}"))
+        # Add history if available
+        chat_messages += history
+        chat_messages.append(HumanMessage(content=msg.message))
 
         async def stream_chat():
             yield f"data: {json.dumps({'model': 'GPT-4.5 Preview'})}\n\n"
