@@ -430,6 +430,7 @@ export async function POST(req: Request) {
 
       requestSignal.addEventListener("abort", handleAbort, { once: true });
 
+
       try {
         if (requestSignal.aborted) return;
 
@@ -438,38 +439,77 @@ export async function POST(req: Request) {
         let effectiveModel = selectedModel;
         let effectiveRouteReason = routeReason;
 
+        // Helper: get ordered list of models to try (paid first if allowed, then free)
+        function getModelFallbackList() {
+          // Prefer paid models if user is premium, otherwise free
+          const { CODE_MODELS, CHAT_MODELS } = require("@/lib/ai-config");
+          const isCode = inferredCodeRequest;
+          const allModels = isCode ? CODE_MODELS : CHAT_MODELS;
+          // Filter out the current model and duplicates
+          const tried = new Set([requestBody.model, selectedModel]);
+          return allModels
+            .map((m: any) => m.id)
+            .filter((id: string) => !tried.has(id));
+        }
+
+        // Try fallback models on 404 (no endpoint found)
         if (!response.ok) {
-          const err = await response.text();
-          const shouldAutoRouterFallback = isAutoRouted
-            && response.status === 404
-            && /No models match your request and model restrictions/i.test(err);
-          const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(response.status, err);
+          let err = await response.text();
+          let triedModels = [requestBody.model || selectedModel];
+          let status = response.status;
+          let fallbackReason = routeReason;
+          let found = false;
 
-          if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
-            throw new Error(`OpenRouter error ${response.status}: ${err}`);
-          }
-
-          const freeModel = inferredCodeRequest ? FREE_CODE_MODEL : FREE_CHAT_MODEL;
-          const selectedFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
-          const fallbackReason = shouldCreditsFallback
-            ? `${routeReason}. Insufficient credits detected, switched to free model.`
-            : `${routeReason}. Auto-router found no eligible models, so a direct fallback model was used.`;
-
-          safeEnqueue(`data: ${JSON.stringify({ status: shouldCreditsFallback ? "Switching to free model..." : "Retrying with fallback model..." })}\n\n`);
-
-          const fallbackRequestBody: Record<string, unknown> = {
-            ...requestBody,
-            model: selectedFallbackModel,
-          };
-          delete fallbackRequestBody.plugins;
-
-          response = await sendOpenRouterRequest(fallbackRequestBody);
-          effectiveModel = selectedFallbackModel;
-          effectiveRouteReason = fallbackReason;
-
-          if (!response.ok) {
-            const fallbackErr = await response.text();
-            throw new Error(`OpenRouter error ${response.status}: ${fallbackErr}`);
+          // Try all models in order if 404 (no endpoint found)
+          if (status === 404 && /No endpoints found|No models match/i.test(err)) {
+            const fallbackList = getModelFallbackList();
+            for (const modelId of fallbackList) {
+              safeEnqueue(`data: ${JSON.stringify({ status: `Model ${triedModels.at(-1)} unavailable, trying ${modelId}...` })}\n\n`);
+              const fallbackRequestBody: Record<string, unknown> = {
+                ...requestBody,
+                model: modelId,
+              };
+              delete fallbackRequestBody.plugins;
+              response = await sendOpenRouterRequest(fallbackRequestBody);
+              triedModels.push(modelId);
+              if (response.ok) {
+                effectiveModel = modelId;
+                fallbackReason = `Auto-fallback: ${routeReason}. Tried: ${triedModels.join(", ")}`;
+                found = true;
+                break;
+              } else {
+                err = await response.text();
+                status = response.status;
+              }
+            }
+            if (!found) {
+              throw new Error(`OpenRouter error 404: No available models. Tried: ${triedModels.join(", ")}. Last error: ${err}`);
+            }
+          } else {
+            // Credits fallback or other error
+            const shouldAutoRouterFallback = isAutoRouted && status === 404 && /No models match your request and model restrictions/i.test(err);
+            const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(status, err);
+            if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
+              throw new Error(`OpenRouter error ${status}: ${err}`);
+            }
+            const freeModel = inferredCodeRequest ? FREE_CODE_MODEL : FREE_CHAT_MODEL;
+            const selectedFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
+            fallbackReason = shouldCreditsFallback
+              ? `${routeReason}. Insufficient credits detected, switched to free model.`
+              : `${routeReason}. Auto-router found no eligible models, so a direct fallback model was used.`;
+            safeEnqueue(`data: ${JSON.stringify({ status: shouldCreditsFallback ? "Switching to free model..." : "Retrying with fallback model..." })}\n\n`);
+            const fallbackRequestBody: Record<string, unknown> = {
+              ...requestBody,
+              model: selectedFallbackModel,
+            };
+            delete fallbackRequestBody.plugins;
+            response = await sendOpenRouterRequest(fallbackRequestBody);
+            effectiveModel = selectedFallbackModel;
+            effectiveRouteReason = fallbackReason;
+            if (!response.ok) {
+              const fallbackErr = await response.text();
+              throw new Error(`OpenRouter error ${response.status}: ${fallbackErr}`);
+            }
           }
         }
 

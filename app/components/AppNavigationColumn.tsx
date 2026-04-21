@@ -43,6 +43,7 @@ type AppNavigationItem = {
 };
 
 const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
+    { id: "jarvis", label: "Jarvis", icon: BrainCircuit },
   { id: "chat", label: "Chat", icon: MessageSquareText },
   { id: "sandbox", label: "Sandbox", icon: SquareTerminal },
   { id: "learning", label: "Learning", icon: BookOpen },
