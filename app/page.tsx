@@ -15,7 +15,7 @@ import {
   ScriptsTab,
   SettingsTab,
 } from "./components/tabs";
-import { JarvisTab } from "./components/tabs/JarvisTab";
+import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 
 function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
