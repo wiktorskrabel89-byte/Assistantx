@@ -1,0 +1,13 @@
+{
+  "name": "jarvis-android",
+  "version": "0.1.0",
+  "main": "App.js",
+  "description": "Minimalny szkielet aplikacji Jarvis Android (React Native)",
+  "scripts": {
+    "start": "react-native start"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-native": "^0.73.0"
+  }
+}
