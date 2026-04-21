@@ -1,3 +1,6 @@
+
+import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative } from "@/lib/ai-config";
+import type { CostMode, UserPlan } from "@/lib/ai-config";
 export const maxDuration = 60;
 
 
@@ -260,7 +263,9 @@ export async function POST(req: Request) {
     ? getCheaperAlternative(rawSelectedModel, costMode, inferredCodeRequest)
     : { modelId: rawSelectedModel, downgraded: false };
 
-  const selectedModel = isAutoRouted
+
+  // Determine selected model with cost control and free model logic
+  let selectedModel = isAutoRouted
     ? "openrouter/auto"
     : costControlled.modelId;
 
@@ -269,11 +274,6 @@ export async function POST(req: Request) {
     : inferredCodeRequest
       ? CODE_MODEL
       : CHAT_MODEL;
-
-  // Allow user to choose from free models for coding/chatting
-  let selectedModel = usingAutoRouter
-    ? "openrouter/auto"
-    : (modelId ?? (inferredCodeRequest ? CODE_MODEL : CHAT_MODEL));
 
   // If user requests a free model for coding/chatting, allow selection
   if (!modelId && rawMode === "code" && FREE_CODING_MODELS.length > 0) {
