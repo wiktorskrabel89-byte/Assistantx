@@ -27,7 +27,8 @@ export type AppNavigationTab =
   | "knowledge-export"
   | "settings"
   | "notifications"
-  | "ai-learning";
+  | "ai-learning"
+  | "jarvis";
 
 type AppNavigationColumnProps = {
   dark: boolean;
@@ -53,6 +54,7 @@ const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
   { id: "settings", label: "Ustawienia", icon: Settings2 },
   { id: "notifications", label: "Powiadomienia", icon: Bell },
   { id: "ai-learning", label: "AI Learning", icon: BrainCircuit },
+  { id: "jarvis", label: "Jarvis", icon: BrainCircuit },
 ];
 
 export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigationColumnProps) {
