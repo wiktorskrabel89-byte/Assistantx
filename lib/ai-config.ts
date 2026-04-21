@@ -167,7 +167,7 @@ export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
-  { id: "coding-deepseek-r1-free", label: "DeepSeek R1 (Free)", modelId: "deepseek/deepseek-r1:free", costTier: "free" },
+  // Removed DeepSeek R1 (Free) as it is unavailable
   { id: "coding-qwen3-235b-free", label: "Qwen 3 235B (Free)", modelId: "qwen/qwen3-235b-a22b:free", costTier: "free" },
   { id: "coding-mistral-small-3.1-free", label: "Mistral Small 3.1 (Free)", modelId: "mistralai/mistral-small-3.1-24b-instruct:free", costTier: "free" },
   { id: "coding-llama-4-scout-free", label: "Llama 4 Scout (Free)", modelId: "meta-llama/llama-4-scout:free", costTier: "free" },
@@ -187,7 +187,7 @@ export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
 export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
 export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.1";
 
-export const FREE_CODING_MODEL = "deepseek/deepseek-r1:free";
+export const FREE_CODING_MODEL = "openrouter/elephant-alpha";
 export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 /**
@@ -196,7 +196,7 @@ export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
  */
 export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
-  "deepseek/deepseek-r1:free": "free",
+  // "deepseek/deepseek-r1:free": "free", // removed unavailable model
   "meta-llama/llama-3.3-70b-instruct:free": "free",
   "meta-llama/llama-4-scout:free": "free",
   "google/gemini-2.0-flash-exp:free": "free",
@@ -269,7 +269,7 @@ export function getCheaperAlternative(modelId: string, costMode: CostMode, isCod
 
   // Pick the best model within budget for the request type
   const candidates = isCodeRequest
-    ? ["deepseek/deepseek-r1", "deepseek/deepseek-v3.2", "deepseek/deepseek-r1:free"]
+    ? ["deepseek/deepseek-r1", "deepseek/deepseek-v3.2"]
     : ["google/gemini-3-flash-preview", "openai/gpt-5-mini", "meta-llama/llama-3.3-70b-instruct", "meta-llama/llama-3.3-70b-instruct:free"];
 
   for (const candidate of candidates) {

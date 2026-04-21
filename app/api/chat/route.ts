@@ -8,20 +8,20 @@ export const maxDuration = 60;
 // 3 best truly free coding models on OpenRouter (2026)
 const FREE_CODING_MODELS = [
   "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, strong code)
-  "deepseek/deepseek-r1:free", // DeepSeek R1 (open, $0, code)
+  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
   "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
 ];
 // 3 best truly free chatting models on OpenRouter (2026)
 const FREE_CHAT_MODELS = [
   "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, chat)
-  "deepseek/deepseek-r1:free", // DeepSeek R1 (open, $0, chat)
+  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
   "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
 ];
 
 const CODE_MODEL = FREE_CODING_MODELS[0];
 const CHAT_MODEL = FREE_CHAT_MODELS[1];
 const SEARCH_MODEL = "perplexity/sonar";
-const FREE_CODE_MODEL = "deepseek/deepseek-r1:free";
+const FREE_CODE_MODEL = "openrouter/elephant-alpha";
 const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 function isCreditsError(status: number, body: string): boolean {
@@ -179,7 +179,7 @@ const MODEL_LABELS: Record<string, string> = {
   "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
   "meta-llama/llama-4-scout:free": "Llama 4 Scout",
   "deepseek/deepseek-v3.2": "DeepSeek V3.2",
-  "deepseek/deepseek-r1:free": "DeepSeek R1",
+  // "deepseek/deepseek-r1:free": "DeepSeek R1", // removed unavailable model
   "deepseek/deepseek-r1": "DeepSeek R1",
   "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash",
   "google/gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
