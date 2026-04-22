@@ -264,16 +264,18 @@ export async function POST(req: Request) {
     : { modelId: rawSelectedModel, downgraded: false };
 
 
-  // Determine selected model with cost control and free model logic
-  let selectedModel = isAutoRouted
-    ? "openrouter/auto"
-    : costControlled.modelId;
 
   const fallbackModel = rawMode === "search"
     ? SEARCH_MODEL
     : inferredCodeRequest
-      ? CODE_MODEL
-      : CHAT_MODEL;
+
+
+
+  // Allow user to choose from free models for coding/chatting
+
+  let selectedModel = isAutoRouted
+    ? "openrouter/auto"
+    : costControlled.modelId;
 
   // If user requests a free model for coding/chatting, allow selection
   if (!modelId && rawMode === "code" && FREE_CODING_MODELS.length > 0) {
