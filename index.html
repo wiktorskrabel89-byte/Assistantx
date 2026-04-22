@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Jarvis Desktop</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      background: #16213e;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #0f3460;
+    }
+    header h1 { font-size: 1.2rem; color: #00d4ff; letter-spacing: 2px; }
+    #status { font-size: 0.8rem; color: #ff6b6b; }
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg { max-width: 75%; padding: 10px 14px; border-radius: 12px; line-height: 1.5; word-break: break-word; }
+    .msg.user   { background: #0f3460; align-self: flex-end; border-bottom-right-radius: 2px; }
+    .msg.jarvis { background: #16213e; border: 1px solid #0f3460; align-self: flex-start; border-bottom-left-radius: 2px; }
+    .sender { font-weight: bold; color: #00d4ff; margin-right: 4px; }
+    .msg.user .sender { color: #a0c4ff; }
+    footer {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #16213e;
+      border-top: 1px solid #0f3460;
+    }
+    #input {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #0f3460;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    #input:focus { border-color: #00d4ff; }
+    #send {
+      padding: 10px 20px;
+      background: #00d4ff;
+      color: #1a1a2e;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    #send:hover { background: #00b8d9; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1a2e; }
+    ::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🤖 JARVIS</h1>
+    <span id="status">🔴 Łączenie...</span>
+  </header>
+  <div id="chat"></div>
+  <footer>
+    <input id="input" type="text" placeholder="Napisz do Jarvisa lub wydaj komendę..." autofocus />
+    <button id="send">Wyślij</button>
+  </footer>
+  <script src="ChatAI.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "jarvis-server",
+  "version": "0.1.0",
+  "main": "server.js",
+  "description": "Jarvis WebSocket relay server + Claude AI",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
