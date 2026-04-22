@@ -3,17 +3,17 @@
 
 export const CHAT_MODELS = [
   {
-    id: "nvidia/nemotron-3-super:free",
-    label: "Nemotron 3 Super (Free)",
-    description: "Nemotron 3 Super, $0, top free model for chat and code"
+    id: "meta-llama/llama-4-scout:free",
+    label: "Llama 4 Scout (Free)",
+    description: "Open, $0, chat and code"
   }
 ];
 
 export const CODE_MODELS = [
   {
-    id: "nvidia/nemotron-3-super:free",
-    label: "Nemotron 3 Super (Free)",
-    description: "Nemotron 3 Super, $0, top free model for code"
+    id: "inclusionai/ling-2.6-flash:free",
+    label: "Ling 2.6 Flash (Free)",
+    description: "Ling-2.6-flash, $0, strong code"
   }
 ];
 

@@ -118,6 +118,12 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
               </div>
             );
           })}
+                {item.id === "jarvis" && (
+                  <div className="ml-10 mt-1 flex flex-col gap-1 text-xs">
+                    <a href="/downloads/jarvis-windows.exe" download className="text-blue-600 hover:underline">Pobierz Jarvis Windows</a>
+                    <a href="/downloads/jarvis-android.apk" download className="text-blue-600 hover:underline">Pobierz Jarvis Android</a>
+                  </div>
+                )}
         </div>
       </div>
     </aside>
