@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Code2, Crown, Lock, MessageSquareText, Zap } from "lucide-react";
+import { Bot, Code2, Crown, Lock, MessageSquareText, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import { MODEL_PRESETS } from "../lib/chat-state";
 import { COST_TIER_LABELS, isModelPremiumOnly, type CostTier } from "@/lib/ai-config";
 
@@ -11,7 +11,10 @@ type ModelSelectorProps = {
   onSelectModel: (modelId: string | null) => void;
 };
 
+import React, { useState } from "react";
+
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel }: ModelSelectorProps) {
+  const [open, setOpen] = useState(false);
   const isAuto = preferredModelId === null;
 
   const pillBase = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none";
@@ -41,64 +44,80 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="w-full">
       <button
-        onClick={() => onSelectModel(null)}
-        className={`${pillBase} ${isAuto ? pillActive : pillInactive}`}
-        title="Automatically pick the best model for your request"
+        className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold mb-2"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls="model-selector-list"
       >
-        <Zap className="h-3 w-3" />
-        Auto
+        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {open ? "Ukryj wybór modelu" : "Pokaż wybór modelu"}
       </button>
+      {open && (
+        <div
+          id="model-selector-list"
+          className="flex flex-wrap items-center gap-2 overflow-x-auto max-w-full scrollbar-thin scrollbar-thumb-slate-400 scrollbar-track-slate-100"
+        >
+          <button
+            onClick={() => onSelectModel(null)}
+            className={`${pillBase} ${isAuto ? pillActive : pillInactive}`}
+            title="Automatically pick the best model for your request"
+          >
+            <Zap className="h-3 w-3" />
+            Auto
+          </button>
 
-      {isPremium && (
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-500">
-          <Crown className="h-3 w-3" />
-          Premium
-        </span>
+          {isPremium && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-500">
+              <Crown className="h-3 w-3" />
+              Premium
+            </span>
+          )}
+
+          <span className={sectionLabel}>
+            <Code2 className="mr-0.5 inline h-3 w-3" />
+            Coding
+          </span>
+          {MODEL_PRESETS.coding.map((preset) => {
+            const locked = !isPremium && isModelPremiumOnly(preset.modelId);
+            return (
+              <button
+                key={preset.id}
+                onClick={() => !locked && onSelectModel(preset.modelId)}
+                className={`${pillBase} ${locked ? pillLocked : preferredModelId === preset.modelId ? pillActive : pillInactive}`}
+                title={locked ? `Premium plan required for ${preset.label}` : `Use ${preset.label} for coding`}
+                disabled={locked}
+              >
+                {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                {preset.label}
+                {tierBadge(preset.costTier)}
+              </button>
+            );
+          })}
+
+          <span className={sectionLabel}>
+            <MessageSquareText className="mr-0.5 inline h-3 w-3" />
+            Chat
+          </span>
+          {MODEL_PRESETS.chat.map((preset) => {
+            const locked = !isPremium && isModelPremiumOnly(preset.modelId);
+            return (
+              <button
+                key={preset.id}
+                onClick={() => !locked && onSelectModel(preset.modelId)}
+                className={`${pillBase} ${locked ? pillLocked : preferredModelId === preset.modelId ? pillActive : pillInactive}`}
+                title={locked ? `Premium plan required for ${preset.label}` : `Use ${preset.label} for chatting`}
+                disabled={locked}
+              >
+                {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                {preset.label}
+                {tierBadge(preset.costTier)}
+              </button>
+            );
+          })}
+        </div>
       )}
-
-      <span className={sectionLabel}>
-        <Code2 className="mr-0.5 inline h-3 w-3" />
-        Coding
-      </span>
-      {MODEL_PRESETS.coding.map((preset) => {
-        const locked = !isPremium && isModelPremiumOnly(preset.modelId);
-        return (
-          <button
-            key={preset.id}
-            onClick={() => !locked && onSelectModel(preset.modelId)}
-            className={`${pillBase} ${locked ? pillLocked : preferredModelId === preset.modelId ? pillActive : pillInactive}`}
-            title={locked ? `Premium plan required for ${preset.label}` : `Use ${preset.label} for coding`}
-            disabled={locked}
-          >
-            {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-            {preset.label}
-            {tierBadge(preset.costTier)}
-          </button>
-        );
-      })}
-
-      <span className={sectionLabel}>
-        <MessageSquareText className="mr-0.5 inline h-3 w-3" />
-        Chat
-      </span>
-      {MODEL_PRESETS.chat.map((preset) => {
-        const locked = !isPremium && isModelPremiumOnly(preset.modelId);
-        return (
-          <button
-            key={preset.id}
-            onClick={() => !locked && onSelectModel(preset.modelId)}
-            className={`${pillBase} ${locked ? pillLocked : preferredModelId === preset.modelId ? pillActive : pillInactive}`}
-            title={locked ? `Premium plan required for ${preset.label}` : `Use ${preset.label} for chatting`}
-            disabled={locked}
-          >
-            {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-            {preset.label}
-            {tierBadge(preset.costTier)}
-          </button>
-        );
-      })}
     </div>
   );
 }

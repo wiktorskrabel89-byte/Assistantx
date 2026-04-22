@@ -15,6 +15,7 @@ import {
   ScriptsTab,
   SettingsTab,
 } from "./components/tabs";
+import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 
 function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
@@ -43,6 +44,8 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
       return <NotificationsTab dark={state.dark} />;
     case "ai-learning":
       return <AILearningTab dark={state.dark} />;
+    case "jarvis":
+      return <JarvisTab />;
     default:
       return null;
   }

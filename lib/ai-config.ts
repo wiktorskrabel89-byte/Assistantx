@@ -167,12 +167,18 @@ export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
+  // Removed DeepSeek R1 (Free) as it is unavailable
+  { id: "coding-qwen3-235b-free", label: "Qwen 3 235B (Free)", modelId: "qwen/qwen3-235b-a22b:free", costTier: "free" },
+  { id: "coding-mistral-small-3.1-free", label: "Mistral Small 3.1 (Free)", modelId: "mistralai/mistral-small-3.1-24b-instruct:free", costTier: "free" },
+  { id: "coding-llama-4-scout-free", label: "Llama 4 Scout (Free)", modelId: "meta-llama/llama-4-scout:free", costTier: "free" },
   { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6", costTier: "premium" },
   { id: "coding-gpt-5.4", label: "GPT-5.4", modelId: "openai/gpt-5.4", costTier: "premium" },
   { id: "coding-deepseek-r1", label: "DeepSeek R1", modelId: "deepseek/deepseek-r1", costTier: "standard" },
 ];
 
 export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
+  { id: "chat-llama-3.3-free", label: "Llama 3.3 70B (Free)", modelId: "meta-llama/llama-3.3-70b-instruct:free", costTier: "free" },
+  { id: "chat-gemini-2-flash-free", label: "Gemini 2.0 Flash (Free)", modelId: "google/gemini-2.0-flash-exp:free", costTier: "free" },
   { id: "chat-gpt-5.1", label: "GPT-5.1", modelId: "openai/gpt-5.1", costTier: "standard" },
   { id: "chat-claude-sonnet", label: "Claude Sonnet 4.5", modelId: "anthropic/claude-sonnet-4.5", costTier: "standard" },
   { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview", costTier: "cheap" },
@@ -181,7 +187,7 @@ export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
 export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
 export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.1";
 
-export const FREE_CODING_MODEL = "deepseek/deepseek-r1:free";
+export const FREE_CODING_MODEL = "openrouter/elephant-alpha";
 export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 /**
@@ -190,7 +196,7 @@ export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
  */
 export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
-  "deepseek/deepseek-r1:free": "free",
+  // "deepseek/deepseek-r1:free": "free", // removed unavailable model
   "meta-llama/llama-3.3-70b-instruct:free": "free",
   "meta-llama/llama-4-scout:free": "free",
   "google/gemini-2.0-flash-exp:free": "free",
@@ -263,7 +269,7 @@ export function getCheaperAlternative(modelId: string, costMode: CostMode, isCod
 
   // Pick the best model within budget for the request type
   const candidates = isCodeRequest
-    ? ["deepseek/deepseek-r1", "deepseek/deepseek-v3.2", "deepseek/deepseek-r1:free"]
+    ? ["deepseek/deepseek-r1", "deepseek/deepseek-v3.2"]
     : ["google/gemini-3-flash-preview", "openai/gpt-5-mini", "meta-llama/llama-3.3-70b-instruct", "meta-llama/llama-3.3-70b-instruct:free"];
 
   for (const candidate of candidates) {

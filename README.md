@@ -18,6 +18,11 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+
+## Integrations Setup
+
+See [INTEGRATIONS_SETUP.md](INTEGRATIONS_SETUP.md) for step-by-step instructions to configure Supabase and OpenRouter for all integrations (Google, GitHub, etc.).
+
 ## Supabase Auth And Cloud Sync
 
 This app now uses Supabase magic-link authentication and can sync workspaces to the database.
