@@ -3,37 +3,17 @@
 
 export const CHAT_MODELS = [
   {
-    id: "openrouter/elephant-alpha",
-    label: "Elephant Alpha (Free)",
-    description: "100B, $0, strong chat and code"
-  },
-  {
     id: "meta-llama/llama-4-scout:free",
     label: "Llama 4 Scout (Free)",
-    description: "Open, $0, chat and code"
-  },
-  {
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    label: "Llama 3.3 70B (Free)",
     description: "Open, $0, chat and code"
   }
 ];
 
 export const CODE_MODELS = [
   {
-    id: "openrouter/elephant-alpha",
-    label: "Elephant Alpha (Free)",
-    description: "100B, $0, strong chat and code"
-  },
-  {
-    id: "meta-llama/llama-4-scout:free",
-    label: "Llama 4 Scout (Free)",
-    description: "Open, $0, chat and code"
-  },
-  {
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    label: "Llama 3.3 70B (Free)",
-    description: "Open, $0, chat and code"
+    id: "inclusionai/ling-2.6-flash:free",
+    label: "Ling 2.6 Flash (Free)",
+    description: "Ling-2.6-flash, $0, strong code"
   }
 ];
 
