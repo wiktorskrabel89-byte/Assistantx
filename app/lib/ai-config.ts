@@ -3,17 +3,17 @@
 
 export const CHAT_MODELS = [
   {
-    id: "inclusionai/ling-2.6-flash:free",
-    label: "Ling 2.6 Flash (Free)",
-    description: "Ling-2.6-flash, $0, strong chat and code"
+    id: "nvidia/nemotron-3-super:free",
+    label: "Nemotron 3 Super (Free)",
+    description: "Nemotron 3 Super, $0, top free model for chat and code"
   }
 ];
 
 export const CODE_MODELS = [
   {
-    id: "inclusionai/ling-2.6-flash:free",
-    label: "Ling 2.6 Flash (Free)",
-    description: "Ling-2.6-flash, $0, strong code"
+    id: "nvidia/nemotron-3-super:free",
+    label: "Nemotron 3 Super (Free)",
+    description: "Nemotron 3 Super, $0, top free model for code"
   }
 ];
 
