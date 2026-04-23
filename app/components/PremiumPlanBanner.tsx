@@ -3,6 +3,16 @@
 import { Check, Crown, Sparkles } from "lucide-react";
 import { PREMIUM_PLAN } from "@/lib/ai-config";
 
+async function handleStripeCheckout() {
+  const res = await fetch("/api/stripe/checkout", { method: "POST" });
+  const data = await res.json();
+  if (data.url) {
+    window.location.href = data.url;
+  } else {
+    alert("Failed to start checkout. Please try again later.");
+  }
+}
+
 type PremiumPlanBannerProps = {
   dark: boolean;
   isPremium: boolean;
@@ -51,7 +61,7 @@ export function PremiumPlanBanner({ dark, isPremium, premiumRequestsUsed, onTogg
         <span className={`text-sm font-bold ${dark ? "text-white" : "text-slate-900"}`}>Upgrade to Premium</span>
       </div>
       <p className={`mt-1.5 text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>
-        ${PREMIUM_PLAN.priceUsd}/month or {PREMIUM_PLAN.pricePln} zl/month
+        ${PREMIUM_PLAN.priceUsd}/month &middot; You can pay for the premium plan anytime
       </p>
       <ul className={`mt-3 space-y-1.5 text-xs ${dark ? "text-slate-300" : "text-slate-600"}`}>
         <li className="flex items-center gap-1.5">
@@ -65,7 +75,7 @@ export function PremiumPlanBanner({ dark, isPremium, premiumRequestsUsed, onTogg
         </li>
       </ul>
       <button
-        onClick={onTogglePremium}
+        onClick={handleStripeCheckout}
         className="mt-3 w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2.5 text-xs font-bold text-white shadow-sm transition-all hover:from-amber-600 hover:to-orange-600"
       >
         <Crown className="mr-1 inline h-3.5 w-3.5" />

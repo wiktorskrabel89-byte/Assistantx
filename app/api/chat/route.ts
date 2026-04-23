@@ -4,6 +4,7 @@ import type { CostMode, UserPlan } from "@/lib/ai-config";
 export const maxDuration = 60;
 
 
+<<<<<<< HEAD
 
 // 3 best truly free coding models on OpenRouter (2026)
 const FREE_CODING_MODELS = [
@@ -20,6 +21,13 @@ const FREE_CHAT_MODELS = [
 
 const CODE_MODEL = FREE_CODING_MODELS[0];
 const CHAT_MODEL = FREE_CHAT_MODELS[1];
+=======
+import { filterModelsByCostMode, filterModelsByPlan, getCheaperAlternative, getFreePlanFallback, isModelPremiumOnly, type CostMode, type UserPlan } from "@/lib/ai-config";
+import { fetchLatestModelId } from "../openrouter/models";
+
+let CODE_MODEL = "openai/gpt-5.4";
+let CHAT_MODEL = "google/gemini-2.5-flash-lite";
+>>>>>>> 38591c4 (WIP: changes for pull request)
 const SEARCH_MODEL = "perplexity/sonar";
 const FREE_CODE_MODEL = "openrouter/elephant-alpha";
 const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
@@ -209,6 +217,11 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
+    // Dynamically fetch latest GPT and Claude models at runtime
+    const latestGpt = await fetchLatestModelId("openai/gpt-");
+    if (latestGpt) CODE_MODEL = latestGpt;
+    const latestClaude = await fetchLatestModelId("anthropic/claude-");
+    if (latestClaude) CHAT_MODEL = latestClaude;
   const requestSignal = req.signal;
   const {
     message,
