@@ -3,6 +3,7 @@
 import { fetchLatestModelId } from "../openrouter/models";
 import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
+import { filterModelsByPlan } from "@/lib/ai-config";
 
 // Use the free model constants for consistency
 let CODE_MODEL = "nvidia/nemotron-3-super:free";
