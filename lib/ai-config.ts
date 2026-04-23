@@ -78,6 +78,11 @@ export const CHAT_MODELS: ModelOption[] = [
 ];
 
 export const CODE_MODELS: ModelOption[] = [
+    {
+      id: "nvidia/nemotron-3-super-120b-a12b:free",
+      label: "Nemotron 3 Super 120B (Free)",
+      description: "NVIDIA's top free code and chat model.",
+    },
   {
     id: "meta-llama/llama-3-70b-instruct",
     label: "Llama 3 70B Instruct (Free)",
