@@ -5,11 +5,25 @@ import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
 
 // Use the free model constants for consistency
-let CODE_MODEL = "nvidia/nemotron-3-super:free";
-let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 const SEARCH_MODEL = "perplexity/sonar";
-const FREE_CODE_MODEL = "nvidia/nemotron-3-super:free";
+let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+const FREE_CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+
+// Fallbacks
+const FALLBACK_CODE_MODEL = "deepseek-ai/deepseek-coder:latest";
+const FALLBACK_CHAT_MODEL = "mistralai/mixtral-8x22b-instruct";
+
+// Helper to select fallback if primary fails
+async function tryWithFallback(modelId, fallbackId, fn) {
+  try {
+    return await fn(modelId);
+  } catch (err) {
+    // Optionally log the error
+    return await fn(fallbackId);
+  }
+}
 
 function isCreditsError(status: number, body: string): boolean {
   return (
