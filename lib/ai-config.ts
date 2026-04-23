@@ -35,30 +35,21 @@ export type LanguageOption = {
 };
 
 export const CHAT_MODELS: ModelOption[] = [
+  // Only include models referenced in RECOMMENDED_CHAT_MODELS or as free fallbacks
   {
-    id: "meta-llama/llama-3.3-70b-instruct",
-    label: "Llama 3.3 70B",
-    description: "Balanced everyday chat model.",
-  },
-  {
-    id: "meta-llama/llama-3-70b-instruct",
-    label: "Llama 3 70B Instruct (Free)",
+    id: "meta-llama/llama-3.3-70b-instruct:free",
+    label: "Llama 3.3 70B (Free)",
     description: "Best free open model for chat and reasoning.",
   },
   {
-    id: "deepseek-ai/deepseek-coder:latest",
-    label: "DeepSeek Coder (Free)",
-    description: "Top free model for coding and chat.",
+    id: "google/gemini-2.0-flash-exp:free",
+    label: "Gemini 2.0 Flash (Free)",
+    description: "Fast free chat model.",
   },
   {
-    id: "mistralai/mixtral-8x22b-instruct",
-    label: "Mixtral 8x22B Instruct (Free)",
-    description: "Strong free model for chat and code.",
-  },
-  {
-    id: "google/gemini-3-flash-preview",
-    label: "Gemini 3 Flash",
-    description: "Fast general-purpose chat.",
+    id: "openai/gpt-5.1",
+    label: "GPT-5.1",
+    description: "Standard OpenAI chat model.",
   },
   {
     id: "anthropic/claude-sonnet-4.5",
@@ -66,63 +57,48 @@ export const CHAT_MODELS: ModelOption[] = [
     description: "Strong reasoning and writing.",
   },
   {
-    id: "openai/gpt-5-mini",
-    label: "GPT-5 Mini",
-    description: "Fast compact OpenAI model.",
-  },
-  {
-    id: "x-ai/grok-3-mini",
-    label: "Grok 3 Mini",
-    description: "Quick conversational answers.",
+    id: "google/gemini-3-flash-preview",
+    label: "Gemini 3 Flash",
+    description: "Fast general-purpose chat.",
   },
 ];
 
 export const CODE_MODELS: ModelOption[] = [
+  // Only include models referenced in RECOMMENDED_CODING_MODELS or as free fallbacks
   {
-    id: "meta-llama/llama-3-70b-instruct",
-    label: "Llama 3 70B Instruct (Free)",
-    description: "Best free open model for code and chat.",
+    id: "nvidia/nemotron-3-super-120b-a12b:free",
+    label: "Nemotron 3 Super 120B (Free)",
+    description: "NVIDIA's top free code and chat model.",
   },
   {
-    id: "deepseek-ai/deepseek-coder:latest",
-    label: "DeepSeek Coder (Free)",
-    description: "Top free model for coding and chat.",
+    id: "qwen/qwen3-235b-a22b:free",
+    label: "Qwen 3 235B (Free)",
+    description: "Large open model for code tasks.",
   },
   {
-    id: "mistralai/mixtral-8x22b-instruct",
-    label: "Mixtral 8x22B Instruct (Free)",
+    id: "mistralai/mistral-small-3.1-24b-instruct:free",
+    label: "Mistral Small 3.1 (Free)",
     description: "Strong free model for chat and code.",
   },
-  // ...existing code models below
+  {
+    id: "meta-llama/llama-4-scout:free",
+    label: "Llama 4 Scout (Free)",
+    description: "Llama 4 Scout free coding model.",
+  },
+  {
+    id: "anthropic/claude-opus-4.6",
+    label: "Claude Opus 4.6",
+    description: "Premium code and analysis model.",
+  },
   {
     id: "openai/gpt-5.4",
     label: "GPT-5.4",
     description: "Latest frontier coding model.",
   },
   {
-    id: "deepseek/deepseek-v3.2",
-    label: "DeepSeek V3.2",
-    description: "Fast coding model.",
-  },
-  {
     id: "deepseek/deepseek-r1",
     label: "DeepSeek R1",
     description: "Reasoning-heavy coding model.",
-  },
-  {
-    id: "anthropic/claude-sonnet-4.5",
-    label: "Claude Sonnet 4.5",
-    description: "High-quality code generation.",
-  },
-  {
-    id: "openai/gpt-5",
-    label: "GPT-5",
-    description: "Premium code and analysis model.",
-  },
-  {
-    id: "qwen/qwen3-235b-a22b",
-    label: "Qwen 3 235B",
-    description: "Large open model for code tasks.",
   },
 ];
 
@@ -196,10 +172,10 @@ export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
-  // Removed DeepSeek R1 (Free) as it is unavailable
   { id: "coding-qwen3-235b-free", label: "Qwen 3 235B (Free)", modelId: "qwen/qwen3-235b-a22b:free", costTier: "free" },
   { id: "coding-mistral-small-3.1-free", label: "Mistral Small 3.1 (Free)", modelId: "mistralai/mistral-small-3.1-24b-instruct:free", costTier: "free" },
   { id: "coding-llama-4-scout-free", label: "Llama 4 Scout (Free)", modelId: "meta-llama/llama-4-scout:free", costTier: "free" },
+  // Locked/paid models below, as in screenshot
   { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6", costTier: "premium" },
   { id: "coding-gpt-5.4", label: "GPT-5.4", modelId: "openai/gpt-5.4", costTier: "premium" },
   { id: "coding-deepseek-r1", label: "DeepSeek R1", modelId: "deepseek/deepseek-r1", costTier: "standard" },
@@ -208,6 +184,7 @@ export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
 export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
   { id: "chat-llama-3.3-free", label: "Llama 3.3 70B (Free)", modelId: "meta-llama/llama-3.3-70b-instruct:free", costTier: "free" },
   { id: "chat-gemini-2-flash-free", label: "Gemini 2.0 Flash (Free)", modelId: "google/gemini-2.0-flash-exp:free", costTier: "free" },
+  // Locked/paid models below, as in screenshot
   { id: "chat-gpt-5.1", label: "GPT-5.1", modelId: "openai/gpt-5.1", costTier: "standard" },
   { id: "chat-claude-sonnet", label: "Claude Sonnet 4.5", modelId: "anthropic/claude-sonnet-4.5", costTier: "standard" },
   { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview", costTier: "cheap" },
