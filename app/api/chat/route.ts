@@ -112,6 +112,57 @@ async function tryWithFallback<T>(modelId: string, fallbackId: string, fn: (id: 
   }
 }
 
+async function getAuthUserId(req: Request): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) return null;
+    const token = authHeader.replace("Bearer ", "");
+    const supabase = await getSupabase();
+    const { data } = await supabase.auth.getUser(token);
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getMemoryHistory(conversationId: string) {
+  const supabase = await getSupabase();
+  const { data } = await supabase.rpc("get_memory_limited_messages", {
+    p_conversation_id: conversationId,
+    p_max_tokens: 4000,
+    p_max_messages: 20,
+  });
+  return data ?? [];
+}
+
+async function getMemorySummaries(conversationId: string) {
+  const supabase = await getSupabase();
+  const { data } = await supabase
+    .from("memory_summaries")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
+  const supabase = await getSupabase();
+  await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    role,
+    content,
+    token_count: Math.ceil(content.length / 4),
+  });
+}
+
+async function ensureConversation(conversationId: string, userId: string | null) {
+  const supabase = await getSupabase();
+  await supabase.from("conversations").upsert(
+    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
+    { onConflict: "id" }
+  );
+}
+
 function isCreditsError(status: number, body: string): boolean {
   return (
     status === 402
