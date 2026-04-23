@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/server";
 
+import { createClient } from "@/lib/server";
 function getSupabase() {
   // This assumes createClient returns a promise, so you may need to adjust usage to await getSupabase()
   // If createClient is synchronous, remove await in usages.
@@ -72,6 +72,7 @@ async function ensureConversation(conversationId: string, userId: string | null)
     { onConflict: "id" }
   );
 }
+
 
 // Define free model arrays for compatibility with logic below
 
