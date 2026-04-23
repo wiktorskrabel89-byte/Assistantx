@@ -2,13 +2,13 @@
 
 import { fetchLatestModelId } from "../openrouter/models";
 import type { CostMode, UserPlan } from "@/lib/ai-config";
-import { filterModelsByPlan, isModelPremiumOnly } from "@/lib/ai-config";
+import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
 
 // Use the free model constants for consistency
-let CODE_MODEL = "openrouter/elephant-alpha";
+let CODE_MODEL = "nvidia/nemotron-3-super:free";
 let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 const SEARCH_MODEL = "perplexity/sonar";
-const FREE_CODE_MODEL = "openrouter/elephant-alpha";
+const FREE_CODE_MODEL = "nvidia/nemotron-3-super:free";
 const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 function isCreditsError(status: number, body: string): boolean {
@@ -270,9 +270,9 @@ export async function POST(req: Request) {
     : costControlled.modelId;
 
   // If user requests a free model for coding/chatting, allow selection
-  if (!modelId && rawMode === "code" && FREE_CODING_MODELS.length > 0) {
+  if (!modelId && rawMode === "code" && TOP_FREE_CODE_MODELS.length > 0) {
     selectedModel = CODE_MODEL;
-  } else if (!modelId && rawMode === "chat" && FREE_CHAT_MODELS.length > 0) {
+  } else if (!modelId && rawMode === "chat" && TOP_FREE_CHAT_MODELS.length > 0) {
     selectedModel = CHAT_MODEL;
   }
 

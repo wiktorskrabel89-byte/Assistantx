@@ -348,12 +348,12 @@ export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): stri
  * Returns the appropriate fallback model for a free-plan user.
  */
 // Top 3 free models for chat and coding
-const TOP_FREE_CHAT_MODELS = [
+export const TOP_FREE_CHAT_MODELS = [
   "meta-llama/llama-3-70b-instruct:free",
   "deepseek-ai/deepseek-coder:free",
   "mistralai/mixtral-8x22b-instruct:free",
 ];
-const TOP_FREE_CODE_MODELS = [
+export const TOP_FREE_CODE_MODELS = [
   "deepseek-ai/deepseek-coder:free",
   "meta-llama/llama-3-70b-instruct:free",
   "mistralai/mixtral-8x22b-instruct:free",
