@@ -2,7 +2,7 @@
 
 import { fetchLatestModelId } from "../openrouter/models";
 import type { CostMode, UserPlan } from "@/lib/ai-config";
-import { filterModelsByPlan } from "@/lib/ai-config";
+import { filterModelsByPlan, isModelPremiumOnly } from "@/lib/ai-config";
 
 // Use the free model constants for consistency
 let CODE_MODEL = "openrouter/elephant-alpha";
