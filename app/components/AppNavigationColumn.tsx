@@ -97,16 +97,23 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
                 : "text-slate-700 hover:bg-slate-100";
 
             return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id)}
-                aria-current={isActive ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ease-out ${itemClassName}`}
-              >
-                <Icon className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
-                <span className="truncate">{item.label}</span>
-              </button>
+              <div key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectTab(item.id)}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ease-out ${itemClassName}`}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+                  <span className="truncate">{item.label}</span>
+                </button>
+                {item.id === "jarvis" && (
+                  <div className="ml-10 mt-1 flex flex-col gap-1 text-xs">
+                    <a href="/downloads/jarvis-windows.exe" download className="text-blue-600 hover:underline">Pobierz Jarvis Windows</a>
+                    <a href="/downloads/jarvis-android.apk" download className="text-blue-600 hover:underline">Pobierz Jarvis Android</a>
+                  </div>
+                )}
+              </div>
             );
           })}
                 {item.id === "jarvis" && (
