@@ -16,7 +16,7 @@ const FALLBACK_CODE_MODEL = "deepseek-ai/deepseek-coder:latest";
 const FALLBACK_CHAT_MODEL = "mistralai/mixtral-8x22b-instruct";
 
 // Helper to select fallback if primary fails
-async function tryWithFallback(modelId, fallbackId, fn) {
+async function tryWithFallback<T>(modelId: string, fallbackId: string, fn: (id: string) => Promise<T>): Promise<T> {
   try {
     return await fn(modelId);
   } catch (err) {
@@ -180,8 +180,6 @@ const MODEL_LABELS: Record<string, string> = {
   "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
   "meta-llama/llama-4-scout:free": "Llama 4 Scout",
   "deepseek/deepseek-v3.2": "DeepSeek V3.2",
-  // "deepseek/deepseek-r1:free": "DeepSeek R1", // removed unavailable model
-  "deepseek/deepseek-r1": "DeepSeek R1",
   "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash",
   "google/gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
   "google/gemini-3-flash-preview": "Gemini 3 Flash",
