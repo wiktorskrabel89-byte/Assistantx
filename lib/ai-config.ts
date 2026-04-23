@@ -4,7 +4,6 @@ export type UserPlan = "free" | "premium";
 
 export type PremiumPlanInfo = {
   priceUsd: number;
-  pricePln: number;
   unlimitedChats: boolean;
   premiumRequestsPerMonth: number;
   description: string;
@@ -12,7 +11,6 @@ export type PremiumPlanInfo = {
 
 export const PREMIUM_PLAN: PremiumPlanInfo = {
   priceUsd: 10,
-  pricePln: 30,
   unlimitedChats: true,
   premiumRequestsPerMonth: 300,
   description: "Unlimited chats, 300 premium requests/month, access to all models.",
@@ -43,6 +41,21 @@ export const CHAT_MODELS: ModelOption[] = [
     description: "Balanced everyday chat model.",
   },
   {
+    id: "meta-llama/llama-3-70b-instruct",
+    label: "Llama 3 70B Instruct (Free)",
+    description: "Best free open model for chat and reasoning.",
+  },
+  {
+    id: "deepseek-ai/deepseek-coder:latest",
+    label: "DeepSeek Coder (Free)",
+    description: "Top free model for coding and chat.",
+  },
+  {
+    id: "mistralai/mixtral-8x22b-instruct",
+    label: "Mixtral 8x22B Instruct (Free)",
+    description: "Strong free model for chat and code.",
+  },
+  {
     id: "google/gemini-3-flash-preview",
     label: "Gemini 3 Flash",
     description: "Fast general-purpose chat.",
@@ -65,6 +78,22 @@ export const CHAT_MODELS: ModelOption[] = [
 ];
 
 export const CODE_MODELS: ModelOption[] = [
+  {
+    id: "meta-llama/llama-3-70b-instruct",
+    label: "Llama 3 70B Instruct (Free)",
+    description: "Best free open model for code and chat.",
+  },
+  {
+    id: "deepseek-ai/deepseek-coder:latest",
+    label: "DeepSeek Coder (Free)",
+    description: "Top free model for coding and chat.",
+  },
+  {
+    id: "mistralai/mixtral-8x22b-instruct",
+    label: "Mixtral 8x22B Instruct (Free)",
+    description: "Strong free model for chat and code.",
+  },
+  // ...existing code models below
   {
     id: "openai/gpt-5.4",
     label: "GPT-5.4",
@@ -318,6 +347,29 @@ export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): stri
 /**
  * Returns the appropriate fallback model for a free-plan user.
  */
+// Top 3 free models for chat and coding
+const TOP_FREE_CHAT_MODELS = [
+  "meta-llama/llama-3-70b-instruct:free",
+  "deepseek-ai/deepseek-coder:free",
+  "mistralai/mixtral-8x22b-instruct:free",
+];
+const TOP_FREE_CODE_MODELS = [
+  "deepseek-ai/deepseek-coder:free",
+  "meta-llama/llama-3-70b-instruct:free",
+  "mistralai/mixtral-8x22b-instruct:free",
+];
+
+/**
+ * Returns a random model from the list if available, otherwise falls back to the best single model.
+ */
 export function getFreePlanFallback(isCodeRequest: boolean): string {
+  const candidates = isCodeRequest ? TOP_FREE_CODE_MODELS : TOP_FREE_CHAT_MODELS;
+  // Filter to only those present in FREE_PLAN_MODELS (in case some are not available)
+  const available = candidates.filter((id) => FREE_PLAN_MODELS.includes(id));
+  if (available.length > 0) {
+    // Pick one at random
+    return available[Math.floor(Math.random() * available.length)];
+  }
+  // Fallback to the original best single model
   return isCodeRequest ? FREE_CODING_MODEL : FREE_CHAT_MODEL;
 }
