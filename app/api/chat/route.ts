@@ -1,33 +1,10 @@
 
-import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative } from "@/lib/ai-config";
-import type { CostMode, UserPlan } from "@/lib/ai-config";
-export const maxDuration = 60;
 
-
-<<<<<<< HEAD
-
-// 3 best truly free coding models on OpenRouter (2026)
-const FREE_CODING_MODELS = [
-  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, strong code)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
-];
-// 3 best truly free chatting models on OpenRouter (2026)
-const FREE_CHAT_MODELS = [
-  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, chat)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
-];
-
-const CODE_MODEL = FREE_CODING_MODELS[0];
-const CHAT_MODEL = FREE_CHAT_MODELS[1];
-=======
-import { filterModelsByCostMode, filterModelsByPlan, getCheaperAlternative, getFreePlanFallback, isModelPremiumOnly, type CostMode, type UserPlan } from "@/lib/ai-config";
 import { fetchLatestModelId } from "../openrouter/models";
 
-let CODE_MODEL = "openai/gpt-5.4";
-let CHAT_MODEL = "google/gemini-2.5-flash-lite";
->>>>>>> 38591c4 (WIP: changes for pull request)
+// Use the free model constants for consistency
+const CODE_MODEL = "openrouter/elephant-alpha";
+const CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 const SEARCH_MODEL = "perplexity/sonar";
 const FREE_CODE_MODEL = "openrouter/elephant-alpha";
 const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
