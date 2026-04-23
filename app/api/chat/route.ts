@@ -3,8 +3,8 @@
 import { fetchLatestModelId } from "../openrouter/models";
 
 // Use the free model constants for consistency
-const CODE_MODEL = "openrouter/elephant-alpha";
-const CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+let CODE_MODEL = "openrouter/elephant-alpha";
+let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 const SEARCH_MODEL = "perplexity/sonar";
 const FREE_CODE_MODEL = "openrouter/elephant-alpha";
 const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
