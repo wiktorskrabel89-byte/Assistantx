@@ -61,7 +61,6 @@ export const CHAT_MODELS: ModelOption[] = [
     label: "Claude Opus 4.7",
     description: "Latest premium Claude model for chat and code.",
   },
-  {
     id: "google/gemini-3-flash-preview",
     label: "Gemini 3 Flash",
     description: "Fast general-purpose chat.",
@@ -76,16 +75,10 @@ export const CODE_MODELS: ModelOption[] = [
     description: "NVIDIA's best free code model.",
   },
   {
-    id: "nvidia/nemotron-3-super-120b-a12b:free",
-    label: "Nemotron 3 Super 120B (Free)",
-    description: "NVIDIA's top free code and chat model.",
-  },
-  {
     id: "qwen/qwen3-235b-a22b:free",
     label: "Qwen 3 235B (Free)",
     description: "Large open model for code tasks.",
   },
-  {
     id: "mistralai/mistral-small-3.1-24b-instruct:free",
     label: "Mistral Small 3.1 (Free)",
     description: "Strong free model for chat and code.",
@@ -100,22 +93,28 @@ export const CODE_MODELS: ModelOption[] = [
     label: "Claude Opus 4.6",
     description: "Premium code and analysis model.",
   },
+<<<<<<< HEAD
   {
     id: "anthropic/claude-opus-4.7",
     label: "Claude Opus 4.7",
     description: "Latest premium Claude model for code and analysis.",
   },
+=======
+>>>>>>> e439809 (chore: run e2e tests and update status)
   {
     id: "openai/gpt-5.4",
     label: "GPT-5.4",
     description: "Latest frontier coding model.",
   },
   {
+<<<<<<< HEAD
     id: "openai/gpt-5.5",
     label: "GPT-5.5",
     description: "Latest premium OpenAI coding model.",
   },
   {
+=======
+>>>>>>> e439809 (chore: run e2e tests and update status)
     id: "deepseek/deepseek-r1",
     label: "DeepSeek R1",
     description: "Reasoning-heavy coding model.",
