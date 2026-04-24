@@ -1,10 +1,64 @@
-
-
 import { fetchLatestModelId } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
+<<<<<<< feature/remove-tag-ui-2026-04-24
+import { createClient } from "@supabase/supabase-js";
+=======
+>>>>>>> main
 import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
 import { request } from "playwright/test";
+
+// Supabase memory limiter
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+async function getAuthUserId(req: Request): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) return null;
+    const token = authHeader.replace("Bearer ", "");
+    const { data } = await supabase.auth.getUser(token);
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getMemoryHistory(conversationId: string) {
+  const { data } = await supabase.rpc("get_memory_limited_messages", {
+    p_conversation_id: conversationId,
+    p_max_tokens: 4000,
+    p_max_messages: 20,
+  });
+  return data ?? [];
+}
+
+async function getMemorySummaries(conversationId: string) {
+  const { data } = await supabase
+    .from("memory_summaries")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
+  await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    role,
+    content,
+    token_count: Math.ceil(content.length / 4),
+  });
+}
+
+async function ensureConversation(conversationId: string, userId: string | null) {
+  await supabase.from("conversations").upsert(
+    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
+    { onConflict: "id" }
+  );
+}
 
 // Use the free model constants for consistency
 const SEARCH_MODEL = "perplexity/sonar";
@@ -229,6 +283,7 @@ export const POST = async (req: Request) => {
     assistantInstructions,
     history,
     memoryNotes,
+    conversationId,
     style = "concise",
     languageLock = "auto",
     preferredProgrammingLanguage,
@@ -404,12 +459,55 @@ export const POST = async (req: Request) => {
     systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   }
 
-  const historyMessages: Array<{ role: string; content: string }> = Array.isArray(history)
-    ? history.flatMap((entry: { user: string; ai: string }) => [
-        { role: "user", content: entry.user },
-        { role: "assistant", content: entry.ai },
-      ])
-    : [];
+  // Build history: use Supabase memory if conversationId provided, else fall back to client history
+  let historyMessages: Array<{ role: string; content: string }> = [];
+  if (conversationId) {
+    await ensureConversation(conversationId, await getAuthUserId(req));
+    await saveMessage(conversationId, "user", message);
+    const [summaries, memMessages] = await Promise.all([
+      getMemorySummaries(conversationId),
+      getMemoryHistory(conversationId),
+    ]);
+    const summaryMessages = summaries.map((s: any) => ({
+      role: "system",
+      content: `[Earlier conversation summary]: ${s.summary}`,
+    }));
+    const recentMessages = memMessages
+      .filter((m: any) => m.content !== message) // exclude the message we just saved
+      .map((m: any) => ({ role: m.role, content: m.content }));
+    historyMessages = [...summaryMessages, ...recentMessages];
+  } else {
+    historyMessages = Array.isArray(history)
+      ? history.flatMap((entry: { user: string; ai: string }) => [
+          { role: "user", content: entry.user },
+          { role: "assistant", content: entry.ai },
+        ])
+      : [];
+  }
+
+
+  // List of models that support reasoning depth (thinkingEffort)
+  const REASONING_MODELS = [
+    "openai/gpt-5.4",
+    "openai/gpt-5.1",
+    "openai/gpt-5.2",
+    "openai/gpt-5.2-pro",
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano",
+    "openai/gpt-5",
+    "openai/gpt-oss-120b",
+    "google/gemini-3-flash-preview",
+    "google/gemini-3-pro-preview",
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.5-flash-lite",
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-v3.2",
+    "moonshotai/kimi-k2-thinking",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "minimax/minimax-m2.5",
+    "perplexity/sonar",
+    // Add more as needed
+  ];
 
 
   // List of models that support reasoning depth (thinkingEffort)
@@ -473,17 +571,27 @@ export const POST = async (req: Request) => {
   const stream = new ReadableStream({
     async start(controller) {
       let closed = false;
+      let fullReply = "";
       const safeEnqueue = (payload: string) => {
         if (closed || requestSignal.aborted) return;
+        // Collect assistant tokens for saving
+        try {
+          const parsed = JSON.parse(payload.replace(/^data: /, "").trim());
+          if (parsed.token) fullReply += parsed.token;
+        } catch {}
         controller.enqueue(encoder.encode(payload));
       };
-      const safeClose = () => {
+      const safeClose = async () => {
         if (closed) return;
         closed = true;
+        // Save assistant reply to Supabase memory
+        if (conversationId && fullReply.trim()) {
+          await saveMessage(conversationId, "assistant", fullReply.trim());
+        }
         controller.close();
       };
       const handleAbort = () => {
-        safeClose();
+        void safeClose();
       };
 
       requestSignal.addEventListener("abort", handleAbort, { once: true });
@@ -627,7 +735,7 @@ export const POST = async (req: Request) => {
         safeEnqueue("data: [DONE]\n\n");
       } finally {
         requestSignal.removeEventListener("abort", handleAbort);
-        safeClose();
+        await safeClose();
       }
     },
   });

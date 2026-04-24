@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { createClient } from "@/lib/client";
 import { BUILT_IN_AGENTS, createId, createMessage, deriveTitle, getAllowedModels, NEW_CHAT_TITLE } from "../lib/chat-state";
 import { type ActiveRequestTarget, type ChatStreamChunk, isAbortLikeError } from "../lib/chat-transport";
 import type { ChatEntry, ChatThread, Mode, QueuedMessage, StoredState } from "../lib/chat-types";
@@ -376,15 +377,23 @@ export function useChatTransport({
         messages: [...chat.messages, pending],
       }));
 
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         signal: requestAbortController.signal,
         body: JSON.stringify({
           message: userMsg,
           mode: queuedMessage.mode,
           allowedModels: effectiveAllowedModels,
           history,
+          conversationId: chatId,
           assistantName: activeCustomAgent?.name,
           assistantPurpose,
           assistantInstructions: activeCustomAgent?.instructions,
