@@ -1,66 +1,21 @@
+import { filterModelsByCostMode, filterModelsByPlan, getCheaperAlternative, getFreePlanFallback, isModelPremiumOnly, type CostMode, type UserPlan } from "@/lib/ai-config";
 import { fetchLatestModelId } from "../openrouter/models";
-import { fetchAllModels } from "../openrouter/fetchAllModels";
-<<<<<<< feature/remove-tag-ui-2026-04-24
-import { createClient } from "@supabase/supabase-js";
-=======
->>>>>>> main
-import type { CostMode, UserPlan } from "@/lib/ai-config";
-import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
-import { request } from "playwright/test";
 
-// Supabase memory limiter
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// 3 best truly free coding models on OpenRouter (2026)
+const FREE_CODING_MODELS = [
+  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, strong code)
+  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
+  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
+];
+// 3 best truly free chatting models on OpenRouter (2026)
+const FREE_CHAT_MODELS = [
+  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, chat)
+  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
+  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
+];
 
-async function getAuthUserId(req: Request): Promise<string | null> {
-  try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) return null;
-    const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabase.auth.getUser(token);
-    return data.user?.id ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function getMemoryHistory(conversationId: string) {
-  const { data } = await supabase.rpc("get_memory_limited_messages", {
-    p_conversation_id: conversationId,
-    p_max_tokens: 4000,
-    p_max_messages: 20,
-  });
-  return data ?? [];
-}
-
-async function getMemorySummaries(conversationId: string) {
-  const { data } = await supabase
-    .from("memory_summaries")
-    .select("*")
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
-  return data ?? [];
-}
-
-async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
-  await supabase.from("messages").insert({
-    conversation_id: conversationId,
-    role,
-    content,
-    token_count: Math.ceil(content.length / 4),
-  });
-}
-
-async function ensureConversation(conversationId: string, userId: string | null) {
-  await supabase.from("conversations").upsert(
-    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
-    { onConflict: "id" }
-  );
-}
-
-// Use the free model constants for consistency
+let CODE_MODEL = FREE_CODING_MODELS[0];
+let CHAT_MODEL = FREE_CHAT_MODELS[1];
 const SEARCH_MODEL = "perplexity/sonar";
 let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
