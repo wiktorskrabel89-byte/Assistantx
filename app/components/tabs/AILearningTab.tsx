@@ -1,15 +1,20 @@
 "use client";
 
+
 import { useEffect, useState } from "react";
 import AdminPanel from "../AdminPanel";
+import { createClient } from "@/lib/client";
 
-// Dummy admin check: replace with real logic (e.g. from user session)
 function useIsAdmin() {
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
-    // TODO: Replace with real admin check (e.g. from Supabase user/session)
-    // For now, allow admin if localStorage.admin === "1"
-    setIsAdmin(typeof window !== "undefined" && localStorage.getItem("admin") === "1");
+    async function checkAdmin() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      // Example: check for admin email or role
+      setIsAdmin(!!user && (user.email?.endsWith("@yourdomain.com") || user.role === "admin"));
+    }
+    checkAdmin();
   }, []);
   return isAdmin;
 }

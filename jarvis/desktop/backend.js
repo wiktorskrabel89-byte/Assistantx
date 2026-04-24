@@ -114,8 +114,16 @@ function closeApp(app) {
 }
 
 function takeScreenshot() {
-  // TODO: Implement screenshot functionality
-  respond('🖼️ Screenshot wykonany (funkcja w budowie).');
+  // Basic screenshot stub for Windows using PowerShell
+  const { exec } = require('child_process');
+  const screenshotPath = `screenshot_${Date.now()}.png`;
+  exec(`powershell -command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $bmp = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width, [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height); $graphics = [System.Drawing.Graphics]::FromImage($bmp); $graphics.CopyFromScreen(0, 0, 0, 0, $bmp.Size); $bmp.Save('${screenshotPath}'); $graphics.Dispose(); $bmp.Dispose();"`, (error) => {
+    if (error) {
+      respond('❌ Screenshot failed: ' + error.message);
+    } else {
+      respond(`🖼️ Screenshot saved as ${screenshotPath}`);
+    }
+  });
 }
 
 module.exports = {

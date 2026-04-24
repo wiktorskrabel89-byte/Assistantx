@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
+import { useState } from "react";
 import { useCallback, useLayoutEffect, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
@@ -20,9 +21,19 @@ type ChatComposerProps = {
   onRemoveFile: () => void;
   onTogglePreview: () => void;
   onStopGeneration: () => void;
-  onQueueMessage: () => void;
+  onQueueMessage: (thinkingEffort: number) => void;
   onRemoveQueuedMessage: (queueId: string) => void;
+  selectedModel: string;
 };
+
+// Supported models for reasoning depth
+const REASONING_MODELS = [
+  "openai/gpt-5.4",
+  "google/gemini-3-flash-preview",
+  "google/gemini-3-pro-preview",
+  "deepseek/deepseek-r1",
+  "moonshotai/kimi-k2-thinking",
+];
 
 export function ChatComposer({
   dark,
@@ -41,6 +52,7 @@ export function ChatComposer({
   onStopGeneration,
   onQueueMessage,
   onRemoveQueuedMessage,
+  selectedModel,
 }: ChatComposerProps) {
   const resizeComposer = useCallback(() => {
     const textarea = inputRef.current;
@@ -55,6 +67,11 @@ export function ChatComposer({
   useLayoutEffect(() => {
     resizeComposer();
   }, [message, resizeComposer]);
+
+  // Reasoning depth state
+  const [thinkingEffort, setThinkingEffort] = useState("Medium");
+
+  const showThinkingEffort = REASONING_MODELS.some((id) => selectedModel.includes(id.split("/").pop()!));
 
   return (
     <div className="border-t border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/90">
@@ -135,6 +152,22 @@ export function ChatComposer({
           }}
         />
 
+        {showThinkingEffort && (
+          <div className="mb-2 flex items-center gap-2">
+            <label htmlFor="thinking-effort" className="text-xs font-medium text-slate-500 dark:text-slate-400">Thinking Effort:</label>
+            <select
+              id="thinking-effort"
+              value={thinkingEffort}
+              onChange={e => setThinkingEffort(e.target.value)}
+              className="rounded border px-2 py-1 text-xs dark:bg-slate-900 dark:text-slate-100"
+            >
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+              <option value="Xhigh">Xhigh</option>
+            </select>
+          </div>
+        )}
         <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${dark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"}`}>
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -155,7 +188,10 @@ export function ChatComposer({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                onQueueMessage();
+                let effortNum = 2;
+                if (thinkingEffort === "Low") effortNum = 1;
+                else if (thinkingEffort === "High") effortNum = 3;
+                onQueueMessage(effortNum);
               }
             }}
             placeholder="Wiadomosc... (Enter to send)"
@@ -185,7 +221,12 @@ export function ChatComposer({
           ) : null}
 
           <button
-            onClick={onQueueMessage}
+            onClick={() => {
+              let effortNum = 2;
+              if (thinkingEffort === "Low") effortNum = 1;
+              else if (thinkingEffort === "High") effortNum = 3;
+              onQueueMessage(showThinkingEffort ? effortNum : 2);
+            }}
             disabled={!message.trim() && !file}
             className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
             title={loading ? "Add to queue" : "Send message"}

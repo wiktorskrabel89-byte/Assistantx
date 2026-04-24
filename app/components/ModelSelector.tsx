@@ -1,7 +1,8 @@
 "use client";
 
 import { Bot, Code2, Crown, Lock, MessageSquareText, Zap, ChevronDown, ChevronUp } from "lucide-react";
-import { MODEL_PRESETS } from "../lib/chat-state";
+import { useEffect, useState } from "react";
+import { fetchAllModels } from "../api/openrouter/fetchAllModels";
 import { COST_TIER_LABELS, isModelPremiumOnly, type CostTier } from "@/lib/ai-config";
 
 type ModelSelectorProps = {
@@ -11,11 +12,15 @@ type ModelSelectorProps = {
   onSelectModel: (modelId: string | null) => void;
 };
 
-import React, { useState } from "react";
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
+  const [allModels, setAllModels] = useState<any[]>([]);
   const isAuto = preferredModelId === null;
+
+  useEffect(() => {
+    fetchAllModels().then(setAllModels);
+  }, []);
 
   const pillBase = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none";
   const pillActive = dark
@@ -77,42 +82,21 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
 
           <span className={sectionLabel}>
             <Code2 className="mr-0.5 inline h-3 w-3" />
-            Coding
+            All Models
           </span>
-          {MODEL_PRESETS.coding.map((preset) => {
-            const locked = !isPremium && isModelPremiumOnly(preset.modelId);
+          {allModels.map((model) => {
+            const locked = !isPremium && (model.id.includes("opus") || (model.description && model.description.toLowerCase().includes("premium")));
             return (
               <button
-                key={preset.id}
-                onClick={() => !locked && onSelectModel(preset.modelId)}
-                className={`${pillBase} ${locked ? pillLocked : preferredModelId === preset.modelId ? pillActive : pillInactive}`}
-                title={locked ? `Premium plan required for ${preset.label}` : `Use ${preset.label} for coding`}
+                key={model.id}
+                onClick={() => !locked && onSelectModel(model.id)}
+                className={`${pillBase} ${locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
+                title={locked ? `Premium plan required for ${model.id}` : `Use ${model.id}`}
                 disabled={locked}
               >
                 {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-                {preset.label}
-                {tierBadge(preset.costTier)}
-              </button>
-            );
-          })}
-
-          <span className={sectionLabel}>
-            <MessageSquareText className="mr-0.5 inline h-3 w-3" />
-            Chat
-          </span>
-          {MODEL_PRESETS.chat.map((preset) => {
-            const locked = !isPremium && isModelPremiumOnly(preset.modelId);
-            return (
-              <button
-                key={preset.id}
-                onClick={() => !locked && onSelectModel(preset.modelId)}
-                className={`${pillBase} ${locked ? pillLocked : preferredModelId === preset.modelId ? pillActive : pillInactive}`}
-                title={locked ? `Premium plan required for ${preset.label}` : `Use ${preset.label} for chatting`}
-                disabled={locked}
-              >
-                {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-                {preset.label}
-                {tierBadge(preset.costTier)}
+                {model.id}
+                {model.description ? <span className="ml-1 text-xs text-slate-400">{model.description}</span> : null}
               </button>
             );
           })}
