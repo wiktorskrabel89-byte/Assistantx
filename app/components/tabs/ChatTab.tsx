@@ -552,30 +552,6 @@ export function ChatTab() {
   // Tag assignment UI for current conversation
   return (
     <>
-      <div className="flex gap-2 items-center mb-2">
-        <span className="font-semibold">Filter by tag:</span>
-        <button className={`px-2 py-1 rounded ${!activeTag ? 'bg-blue-500 text-white' : 'bg-slate-200'}`} onClick={() => setActiveTag("")}>All</button>
-        {allTags.map(tag => (
-          <button key={tag} className={`px-2 py-1 rounded ${activeTag === tag ? 'bg-blue-500 text-white' : 'bg-slate-200'}`} onClick={() => setActiveTag(tag)}>{tag}</button>
-        ))}
-      </div>
-      <div className="flex gap-2 items-center mb-4">
-        <span className="font-semibold">Tags for this conversation:</span>
-        {(activeChat.tags || []).map(tag => (
-          <span key={tag} className="bg-blue-100 text-blue-800 px-2 py-1 rounded mr-1 flex items-center">
-            {tag}
-            <button className="ml-1 text-xs text-red-500" onClick={() => handleRemoveTag(tag)} title="Remove tag">×</button>
-          </span>
-        ))}
-        <input
-          className="border rounded px-2 py-1 text-sm"
-          placeholder="Add tag"
-          value={tagInput}
-          onChange={e => setTagInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); }}
-        />
-        <button className="bg-blue-500 text-white px-2 py-1 rounded" onClick={handleAddTag}>Add</button>
-      </div>
       <ConversationsSidebar
         open={sidebarOpen}
         dark={state.dark}
