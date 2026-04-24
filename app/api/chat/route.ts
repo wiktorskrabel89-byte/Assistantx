@@ -346,6 +346,7 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
+<<<<<<< HEAD
 // List of models that support reasoning depth (thinkingEffort)
 const REASONING_MODELS = [
   "openai/gpt-5.4",
@@ -371,6 +372,10 @@ const REASONING_MODELS = [
 
 export const POST = async (req: Request) => {
 
+=======
+
+export const POST = async (req: Request) => {
+>>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)
   // Dynamically fetch latest GPT and Claude models at runtime
   const latestGpt = await fetchLatestModelId("openai/gpt-");
   if (latestGpt) CODE_MODEL = latestGpt;
@@ -413,9 +418,13 @@ export const POST = async (req: Request) => {
       }
       allowedModelsFinal = allowedModels;
     }
+<<<<<<< HEAD
   } catch (err) {
     console.error('Error in chat route:', err);
   }
+=======
+  } catch {}
+>>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
@@ -597,6 +606,30 @@ export const POST = async (req: Request) => {
 
 
 
+
+
+  // List of models that support reasoning depth (thinkingEffort)
+  const REASONING_MODELS = [
+    "openai/gpt-5.4",
+    "openai/gpt-5.1",
+    "openai/gpt-5.2",
+    "openai/gpt-5.2-pro",
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano",
+    "openai/gpt-5",
+    "openai/gpt-oss-120b",
+    "google/gemini-3-flash-preview",
+    "google/gemini-3-pro-preview",
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.5-flash-lite",
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-v3.2",
+    "moonshotai/kimi-k2-thinking",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "minimax/minimax-m2.5",
+    "perplexity/sonar",
+    // Add more as needed
+  ];
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
@@ -811,5 +844,9 @@ export const POST = async (req: Request) => {
   return new Response(stream, {
     headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
   });
+<<<<<<< HEAD
 };
 
+=======
+};
+>>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)
