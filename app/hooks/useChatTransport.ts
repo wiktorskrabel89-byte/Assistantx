@@ -152,7 +152,7 @@ export function useChatTransport({
     controller.abort();
   }, [updateLastMessage]);
 
-  const queueComposerMessage = useCallback(() => {
+  const queueComposerMessage = useCallback((thinkingEffort: number) => {
     const text = message.trim();
     if (!text && !file) return;
 
@@ -165,6 +165,7 @@ export function useChatTransport({
       file,
       filePreview: file?.type.startsWith("image/") ? URL.createObjectURL(file) : null,
       createdAt: Date.now(),
+      thinkingEffort,
     };
 
     setQueuedMessages((prev) => [...prev, queuedMessage]);
@@ -395,6 +396,7 @@ export function useChatTransport({
           addInternetContext: queuedMessage.mode === "search",
           costMode: activeSettings.costMode,
           userPlan: stateRef.current.isPremium ? "premium" : "free",
+          thinkingEffort: queuedMessage.thinkingEffort,
         }),
       });
 

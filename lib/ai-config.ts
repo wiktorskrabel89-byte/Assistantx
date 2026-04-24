@@ -57,6 +57,11 @@ export const CHAT_MODELS: ModelOption[] = [
     description: "Strong reasoning and writing.",
   },
   {
+    id: "anthropic/claude-opus-4.7",
+    label: "Claude Opus 4.7",
+    description: "Latest premium Claude model for chat and code.",
+  },
+  {
     id: "google/gemini-3-flash-preview",
     label: "Gemini 3 Flash",
     description: "Fast general-purpose chat.",
@@ -89,6 +94,11 @@ export const CODE_MODELS: ModelOption[] = [
     id: "anthropic/claude-opus-4.6",
     label: "Claude Opus 4.6",
     description: "Premium code and analysis model.",
+  },
+  {
+    id: "anthropic/claude-opus-4.7",
+    label: "Claude Opus 4.7",
+    description: "Latest premium Claude model for code and analysis.",
   },
   {
     id: "openai/gpt-5.4",
@@ -177,6 +187,7 @@ export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
   { id: "coding-llama-4-scout-free", label: "Llama 4 Scout (Free)", modelId: "meta-llama/llama-4-scout:free", costTier: "free" },
   // Locked/paid models below, as in screenshot
   { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6", costTier: "premium" },
+  { id: "coding-claude-opus-4.7", label: "Claude Opus 4.7", modelId: "anthropic/claude-opus-4.7", costTier: "premium" },
   { id: "coding-gpt-5.4", label: "GPT-5.4", modelId: "openai/gpt-5.4", costTier: "premium" },
   { id: "coding-deepseek-r1", label: "DeepSeek R1", modelId: "deepseek/deepseek-r1", costTier: "standard" },
 ];
@@ -228,6 +239,7 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Premium models — frontier, high cost per token
   "anthropic/claude-opus-4.5": "premium",
   "anthropic/claude-opus-4.6": "premium",
+  "anthropic/claude-opus-4.7": "premium",
   "openai/gpt-5.4": "premium",
   "openai/gpt-5.2": "premium",
   "openai/gpt-5.2-pro": "premium",

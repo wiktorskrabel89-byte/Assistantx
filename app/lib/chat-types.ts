@@ -28,6 +28,7 @@ export type ChatThread = {
   id: string;
   title: string;
   messages: ChatEntry[];
+  tags?: string[];
   createdAt: number;
   updatedAt: number;
 };
@@ -99,6 +100,7 @@ export type QueuedMessage = {
   file: File | null;
   filePreview: string | null;
   createdAt: number;
+  thinkingEffort?: number;
 };
 
 export type SharePayload = {
