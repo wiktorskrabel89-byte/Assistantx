@@ -1,7 +1,22 @@
 
 "use client";
 
+<<<<<<< HEAD
 
+=======
+// Utility to extract all unique tags from conversations
+function getAllTags(conversations: any[]): string[] {
+  const tagSet = new Set<string>();
+  for (const chat of conversations) {
+    if (Array.isArray(chat.tags)) {
+      for (const tag of chat.tags) {
+        tagSet.add(tag);
+      }
+    }
+  }
+  return Array.from(tagSet);
+}
+>>>>>>> aab6a3c (WIP: update chat route and related files)
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIToolsPanel } from "../AIToolsPanel";
@@ -31,7 +46,7 @@ import {
   MODE_PANEL_OPTIONS,
   QUICK_CHIPS,
   stripMarkdown,
-  TEXT_LANGUAGE_OPTIONS,
+  // function getAllTags(conversations: any[]): string[] {
   toBase64,
 } from "../../lib/chat-state";
 import type {
@@ -44,7 +59,37 @@ import type {
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 
 export function ChatTab() {
+<<<<<<< HEAD
 // ...existing code...
+=======
+        // Tag input state
+        const [tagInput, setTagInput] = useState("");
+
+        // Add tag to active chat
+        function handleAddTag() {
+          if (!activeChat) return;
+          const tag = tagInput.trim();
+          if (!tag) return;
+          if (activeChat.tags?.includes(tag)) return;
+          updateChat(
+            activeWorkspace.id,
+            activeChat.id,
+            (chat) => ({ ...chat, tags: [...(chat.tags ?? []), tag] })
+          );
+          setTagInput("");
+        }
+      // Remove tag from active chat
+  function handleRemoveTag(tag: string) {
+    if (!activeChat || !Array.isArray(activeChat.tags)) return;
+    updateChat(
+      activeWorkspace.id,
+      activeChat.id,
+      (chat) => ({ ...chat, tags: (chat.tags ?? []).filter((t: string) => t !== tag) })
+    );
+  }
+    // Tag filter state
+    const [activeTag, setActiveTag] = useState<string>("");
+>>>>>>> aab6a3c (WIP: update chat route and related files)
   const {
     state,
     loaded,
@@ -108,18 +153,6 @@ export function ChatTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importedShareRef = useRef(false);
-
-  const {
-    loading,
-    stopRequested,
-    queuedMessages,
-    queueComposerMessage,
-    removeQueuedMessage,
-    stopCurrentGeneration,
-  } = useChatTransport({
-    activeWorkspaceId: activeWorkspace.id,
-    activeChatId: activeChat.id,
-    message,
     mode,
     file,
     setMessage,
@@ -509,9 +542,40 @@ export function ChatTab() {
     setTimeout(() => setCopied(null), 2000);
   }, [activeChat]);
 
+<<<<<<< HEAD
   // ...existing code...
+=======
+  const allTags = useMemo(() => getAllTags(conversations), [conversations]);
+
+  // Tag filter UI
+  // Tag assignment UI for current conversation
+>>>>>>> aab6a3c (WIP: update chat route and related files)
   return (
     <>
+      <div className="flex gap-2 items-center mb-2">
+        <span className="font-semibold">Filter by tag:</span>
+        <button className={`px-2 py-1 rounded ${!activeTag ? 'bg-blue-500 text-white' : 'bg-slate-200'}`} onClick={() => setActiveTag("")}>All</button>
+        {allTags.map(tag => (
+          <button key={tag} className={`px-2 py-1 rounded ${activeTag === tag ? 'bg-blue-500 text-white' : 'bg-slate-200'}`} onClick={() => setActiveTag(tag)}>{tag}</button>
+        ))}
+      </div>
+      <div className="flex gap-2 items-center mb-4">
+        <span className="font-semibold">Tags for this conversation:</span>
+        {(activeChat.tags || []).map(tag => (
+          <span key={tag} className="bg-blue-100 text-blue-800 px-2 py-1 rounded mr-1 flex items-center">
+            {tag}
+            <button className="ml-1 text-xs text-red-500" onClick={() => handleRemoveTag(tag)} title="Remove tag">×</button>
+          </span>
+        ))}
+        <input
+          className="border rounded px-2 py-1 text-sm"
+          placeholder="Add tag"
+          value={tagInput}
+          onChange={e => setTagInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); }}
+        />
+        <button className="bg-blue-500 text-white px-2 py-1 rounded" onClick={handleAddTag}>Add</button>
+      </div>
       <ConversationsSidebar
         open={sidebarOpen}
         dark={state.dark}
