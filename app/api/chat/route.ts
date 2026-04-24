@@ -1,8 +1,10 @@
 
 
 import { fetchLatestModelId } from "../openrouter/models";
+import { fetchAllModels } from "../openrouter/fetchAllModels";
 import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
+import { request } from "playwright/test";
 
 // Use the free model constants for consistency
 const SEARCH_MODEL = "perplexity/sonar";
@@ -176,6 +178,7 @@ export function detectLanguage(text: string): { lang: string; name: string } | n
 }
 
 const MODEL_LABELS: Record<string, string> = {
+  "nvidia/nemotron-3-super-120b-a12b:free": "Nemotron 3 Super 120B (Free)",
   "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
   "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
   "meta-llama/llama-4-scout:free": "Llama 4 Scout",
@@ -207,12 +210,14 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
-export async function POST(req: Request) {
-    // Dynamically fetch latest GPT and Claude models at runtime
-    const latestGpt = await fetchLatestModelId("openai/gpt-");
-    if (latestGpt) CODE_MODEL = latestGpt;
-    const latestClaude = await fetchLatestModelId("anthropic/claude-");
-    if (latestClaude) CHAT_MODEL = latestClaude;
+
+export const POST = async (req: Request) => {
+  // Dynamically fetch latest GPT and Claude models at runtime
+  const latestGpt = await fetchLatestModelId("openai/gpt-");
+  if (latestGpt) CODE_MODEL = latestGpt;
+  const latestClaude = await fetchLatestModelId("anthropic/claude-");
+  if (latestClaude) CHAT_MODEL = latestClaude;
+
   const requestSignal = req.signal;
   const {
     message,
@@ -231,7 +236,24 @@ export async function POST(req: Request) {
     addInternetContext = false,
     costMode: rawCostMode,
     userPlan: rawUserPlan,
+    thinkingEffort, // New: reasoning depth (Low, Medium, High, Xhigh)
   } = await req.json();
+
+  // Fetch all Claude models and add any new ones to allowedModels
+  let allowedModelsFinal = allowedModels;
+  try {
+    const allModels = await fetchAllModels();
+    const claudeModels = allModels.filter((m: any) => m.id.startsWith("anthropic/claude-"));
+    if (Array.isArray(allowedModels)) {
+      const allowedSet = new Set(allowedModels);
+      for (const model of claudeModels) {
+        if (!allowedSet.has(model.id)) {
+          allowedModels.push(model.id);
+        }
+      }
+      allowedModelsFinal = allowedModels;
+    }
+  } catch {}
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
@@ -242,9 +264,9 @@ export async function POST(req: Request) {
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
 
   // Apply plan-based model filtering: free users can only use :free models
-  const planFilteredAllowedModels = Array.isArray(allowedModels)
-    ? filterModelsByPlan(allowedModels, userPlan)
-    : allowedModels;
+  const planFilteredAllowedModels = Array.isArray(allowedModelsFinal)
+    ? filterModelsByPlan(allowedModelsFinal, userPlan)
+    : allowedModelsFinal;
 
   // If user manually selected a non-free model but is on free plan, override to free fallback
   const planEnforcedModelId = modelId && userPlan === "free" && isModelPremiumOnly(modelId)
@@ -389,6 +411,30 @@ export async function POST(req: Request) {
       ])
     : [];
 
+
+  // List of models that support reasoning depth (thinkingEffort)
+  const REASONING_MODELS = [
+    "openai/gpt-5.4",
+    "openai/gpt-5.1",
+    "openai/gpt-5.2",
+    "openai/gpt-5.2-pro",
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano",
+    "openai/gpt-5",
+    "openai/gpt-oss-120b",
+    "google/gemini-3-flash-preview",
+    "google/gemini-3-pro-preview",
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.5-flash-lite",
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-v3.2",
+    "moonshotai/kimi-k2-thinking",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "minimax/minimax-m2.5",
+    "perplexity/sonar",
+    // Add more as needed
+  ];
+
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
     stream: true,
@@ -399,6 +445,12 @@ export async function POST(req: Request) {
       { role: "user", content: message },
     ],
   };
+
+  // Only send reasoning_level if supported and provided
+  if (thinkingEffort && REASONING_MODELS.some((id) => selectedModel.includes(id.split("/").pop()!))) {
+    // OpenRouter, Gemini, DeepSeek, etc. use 'reasoning_level' or 'thinking_effort'
+    requestBody.reasoning_level = thinkingEffort;
+  }
 
   if (isAutoRouted) {
     requestBody.plugins = [{ id: "auto-router", allowed_models: costFilteredModels }];
@@ -583,4 +635,4 @@ export async function POST(req: Request) {
   return new Response(stream, {
     headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
   });
-}
+};
