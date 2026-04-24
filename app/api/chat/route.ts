@@ -600,12 +600,15 @@ export const POST = async (req: Request) => {
         ])
       : [];
   }
+<<<<<<< HEAD
 
 
 
 
 
 
+=======
+>>>>>>> a259ad7 (feat: enable Supabase auth and memory in chat route, update env.local, and fix chat transport headers)
 
 
   // List of models that support reasoning depth (thinkingEffort)
@@ -676,9 +679,13 @@ export const POST = async (req: Request) => {
         try {
           const parsed = JSON.parse(payload.replace(/^data: /, "").trim());
           if (parsed.token) fullReply += parsed.token;
+<<<<<<< HEAD
         } catch (err) {
           console.error('Error in chat route (inner):', err);
         }
+=======
+        } catch {}
+>>>>>>> a259ad7 (feat: enable Supabase auth and memory in chat route, update env.local, and fix chat transport headers)
         controller.enqueue(encoder.encode(payload));
       };
       const safeClose = async () => {
