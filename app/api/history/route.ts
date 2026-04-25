@@ -22,7 +22,8 @@ export async function GET() {
 
     if (error) throw error;
     return Response.json({ messages: data ?? [] });
-  } catch {
+  } catch (err) {
+    console.error("GET chat-history error:", err);
     return Response.json({ messages: [] });
   }
 }
@@ -44,7 +45,8 @@ export async function POST(req: Request) {
 
     if (error) throw error;
     return Response.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error("POST chat-history error:", err);
     return Response.json({ ok: false });
   }
 }
@@ -58,7 +60,8 @@ export async function DELETE() {
     const { error } = await supabase.from("chat_history").delete().eq("user_id", user.id);
     if (error) throw error;
     return Response.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error("DELETE chat-history error:", err);
     return Response.json({ ok: false });
   }
 }

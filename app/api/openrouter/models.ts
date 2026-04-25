@@ -1,3 +1,4 @@
+// NOTE: This endpoint and fetchAllModels.ts both hit /v1/models independently. Consider merging or caching to avoid double requests.
 // Fetches the latest models from OpenRouter API
 export async function fetchLatestModelId(prefix: string): Promise<string | null> {
   try {

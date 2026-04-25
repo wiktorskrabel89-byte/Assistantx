@@ -1,3 +1,4 @@
+// NOTE: This endpoint and models.ts both hit /v1/models independently. Consider merging or caching to avoid double requests.
 // Fetches all available models from OpenRouter API
 export async function fetchAllModels(): Promise<any[]> {
   try {
