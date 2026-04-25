@@ -1,8 +1,8 @@
 import { fetchLatestModelId } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
 import { createClient } from "@supabase/supabase-js";
-import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
+import type { CostMode, UserPlan } from "@/lib/ai-config";
 
 // Supabase memory limiter
 const supabase = createClient(
@@ -55,24 +55,7 @@ async function ensureConversation(conversationId: string, userId: string | null)
     { onConflict: "id" }
   );
 }
-import { filterModelsByCostMode, filterModelsByPlan, getCheaperAlternative, getFreePlanFallback, isModelPremiumOnly, type CostMode, type UserPlan } from "@/lib/ai-config";
-import { fetchLatestModelId } from "../openrouter/models";
 
-// 3 best truly free coding models on OpenRouter (2026)
-const FREE_CODING_MODELS = [
-  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, strong code)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
-];
-// 3 best truly free chatting models on OpenRouter (2026)
-const FREE_CHAT_MODELS = [
-  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, chat)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
-];
-
-let CODE_MODEL = FREE_CODING_MODELS[0];
-let CHAT_MODEL = FREE_CHAT_MODELS[1];
 const SEARCH_MODEL = "perplexity/sonar";
 let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
@@ -498,28 +481,6 @@ export const POST = async (req: Request) => {
   }
 
 
-  // List of models that support reasoning depth (thinkingEffort)
-  const REASONING_MODELS = [
-    "openai/gpt-5.4",
-    "openai/gpt-5.1",
-    "openai/gpt-5.2",
-    "openai/gpt-5.2-pro",
-    "openai/gpt-5-mini",
-    "openai/gpt-5-nano",
-    "openai/gpt-5",
-    "openai/gpt-oss-120b",
-    "google/gemini-3-flash-preview",
-    "google/gemini-3-pro-preview",
-    "google/gemini-2.0-flash-exp:free",
-    "google/gemini-2.5-flash-lite",
-    "deepseek/deepseek-r1",
-    "deepseek/deepseek-v3.2",
-    "moonshotai/kimi-k2-thinking",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "minimax/minimax-m2.5",
-    "perplexity/sonar",
-    // Add more as needed
-  ];
 
 
   // List of models that support reasoning depth (thinkingEffort)
