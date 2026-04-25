@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { fetchLatestModelId } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
 import { createClient } from "@supabase/supabase-js";
@@ -812,7 +811,4 @@ export async function POST(req: Request) {
   });
 }
 
-<<<<<<< HEAD
 export { POST };
-=======
->>>>>>> main
