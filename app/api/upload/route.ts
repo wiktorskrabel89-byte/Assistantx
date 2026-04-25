@@ -1,4 +1,4 @@
-import { PDFParse } from "pdf-parse";
+import pdfParse from "pdf-parse";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,13 +15,8 @@ async function extractDocumentText(file: File, bytes: ArrayBuffer) {
   const mimeType = file.type;
 
   if (mimeType === "application/pdf" || extension === "pdf") {
-    const parser = new PDFParse({ data: Buffer.from(bytes) });
-    try {
-      const parsed = await parser.getText();
-      return parsed.text.trim();
-    } finally {
-      await parser.destroy();
-    }
+    const result = await pdfParse(Buffer.from(bytes));
+    return result.text.trim();
   }
 
   if (mimeType.startsWith("text/") || TEXT_EXTENSIONS.has(extension) || mimeType === "application/json") {
@@ -60,6 +55,8 @@ export async function POST(req: Request) {
           }
 
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: isImage ? "Analyzing image..." : "Reading document..." })}\n\n`));
+          // Move 'Writing response...' status outside the token loop
+          let writingStatusSent = false;
 
           const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
@@ -115,7 +112,10 @@ export async function POST(req: Request) {
                 const parsed = JSON.parse(raw);
                 const token = parsed.choices?.[0]?.delta?.content;
                 if (token) {
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Writing response..." })}\n\n`));
+                  if (!writingStatusSent) {
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Writing response..." })}\n\n`));
+                    writingStatusSent = true;
+                  }
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
                 }
               } catch { /* ignore */ }
