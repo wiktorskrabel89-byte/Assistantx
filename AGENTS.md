@@ -4,7 +4,7 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# Project: Moje AI
+# Project: AssistantX
 
 An AI workspace built with **Next.js 16** and a **Python FastAPI** backend. Features multi-model chat, file uploads, image generation, code review, GitHub/Google Drive integrations, and Supabase-backed authentication with cloud workspace sync.
 

@@ -16,10 +16,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Moje AI",
-    template: "%s | Moje AI",
+    default: "AssistantX",
+    template: "%s | AssistantX",
   },
-  description: "Moje AI is an AI workspace for chat, uploads, integrations, and cloud-synced projects.",
+  description: "AssistantX is an AI workspace for chat, uploads, integrations, and cloud-synced projects.",
 };
 
 export const viewport: Viewport = {
