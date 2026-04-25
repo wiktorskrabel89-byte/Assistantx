@@ -1,4 +1,5 @@
 import pdfParse from "pdf-parse";
+import JSZip from "jszip";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,7 +11,7 @@ function getExtension(name: string) {
   return parts.length > 1 ? parts.pop() ?? "" : "";
 }
 
-async function extractDocumentText(file: File, bytes: ArrayBuffer) {
+async function extractDocumentText(file: File, bytes: ArrayBuffer): Promise<string> {
   const extension = getExtension(file.name);
   const mimeType = file.type;
 
