@@ -1,24 +1,5 @@
 import { fetchLatestModelId } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
-import { createClient } from "@supabase/supabase-js";
-// import type { Database } from "../../../types/supabase";
-type Database = any; // TEMP: Remove when types/supabase.ts is generated
-import type { CostMode, UserPlan } from "@/lib/ai-config";
-import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
-
-export const dynamic = "force-dynamic";
-
-// Lazy Supabase client — initialized at request time, not build time
-let _supabase: ReturnType<typeof createClient> | null = null;
-function getSupabase() {
-  if (!_supabase) {
-    _supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-  return _supabase;
-}
 
 async function getAuthUserId(req: Request): Promise<string | null> {
   try {
@@ -68,9 +49,9 @@ async function ensureConversation(conversationId: string, userId: string | null)
   );
 }
 
-const SEARCH_MODEL = "perplexity/sonar";
 let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+const SEARCH_MODEL = "perplexity/sonar";
 const FREE_CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
@@ -271,6 +252,28 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
+// List of models that support reasoning depth (thinkingEffort)
+const REASONING_MODELS = [
+  "openai/gpt-5.4",
+  "openai/gpt-5.1",
+  "openai/gpt-5.2",
+  "openai/gpt-5.2-pro",
+  "openai/gpt-5-mini",
+  "openai/gpt-5-nano",
+  "openai/gpt-5",
+  "openai/gpt-oss-120b",
+  "google/gemini-3-flash-preview",
+  "google/gemini-3-pro-preview",
+  "google/gemini-2.0-flash-exp:free",
+  "google/gemini-2.5-flash-lite",
+  "deepseek/deepseek-r1",
+  "deepseek/deepseek-v3.2",
+  "moonshotai/kimi-k2-thinking",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "minimax/minimax-m2.5",
+  "perplexity/sonar",
+  // Add more as needed
+];
 
 const POST = async (req: Request) => {
 
@@ -367,9 +370,9 @@ const POST = async (req: Request) => {
     : costControlled.modelId;
 
   // If user requests a free model for coding/chatting, allow selection
-  if (!modelId && rawMode === "code" && TOP_FREE_CODE_MODELS.length > 0) {
+  if (!modelId && rawMode === "code" && FREE_CODING_MODELS.length > 0) {
     selectedModel = CODE_MODEL;
-  } else if (!modelId && rawMode === "chat" && TOP_FREE_CHAT_MODELS.length > 0) {
+  } else if (!modelId && rawMode === "chat" && FREE_CHAT_MODELS.length > 0) {
     selectedModel = CHAT_MODEL;
   }
 
@@ -496,28 +499,8 @@ const POST = async (req: Request) => {
 
 
 
-  // List of models that support reasoning depth (thinkingEffort)
-  const REASONING_MODELS = [
-    "openai/gpt-5.4",
-    "openai/gpt-5.1",
-    "openai/gpt-5.2",
-    "openai/gpt-5.2-pro",
-    "openai/gpt-5-mini",
-    "openai/gpt-5-nano",
-    "openai/gpt-5",
-    "openai/gpt-oss-120b",
-    "google/gemini-3-flash-preview",
-    "google/gemini-3-pro-preview",
-    "google/gemini-2.0-flash-exp:free",
-    "google/gemini-2.5-flash-lite",
-    "deepseek/deepseek-r1",
-    "deepseek/deepseek-v3.2",
-    "moonshotai/kimi-k2-thinking",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "minimax/minimax-m2.5",
-    "perplexity/sonar",
-    // Add more as needed
-  ];
+
+
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
@@ -729,6 +712,34 @@ const POST = async (req: Request) => {
   return new Response(stream, {
     headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
   });
+};
+
+// Ensures a conversation exists in the database (stub for now)
+async function ensureConversation(conversationId: string, userId: string | null) {
+  // Implement DB logic as needed, or leave as stub for serverless
+  return;
 }
 
-export { POST };
+// Extracts user ID from request (stub for now)
+async function getAuthUserId(req: Request): Promise<string | null> {
+  // Implement auth logic as needed, or leave as stub for serverless
+  return null;
+}
+
+// Saves a message to the database (stub for now)
+async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
+  // Implement DB logic as needed, or leave as stub for serverless
+  return;
+}
+
+// Retrieves memory summaries for a conversation (stub for now)
+async function getMemorySummaries(conversationId: string) {
+  // Implement DB logic as needed, or leave as stub for serverless
+  return [];
+}
+
+// Retrieves memory history for a conversation (stub for now)
+async function getMemoryHistory(conversationId: string) {
+  // Implement DB logic as needed, or leave as stub for serverless
+  return [];
+}
