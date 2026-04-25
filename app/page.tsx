@@ -84,6 +84,7 @@ function HomeContent() {
       </div>
     </>
   );
+<<<<<<< HEAD
 }
 
 export default function Home() {
@@ -93,3 +94,6 @@ export default function Home() {
     </WorkspaceProvider>
   );
 }
+=======
+}
+>>>>>>> main

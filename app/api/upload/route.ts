@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import JSZip from "jszip";
 
 export const runtime = "nodejs";
@@ -40,6 +41,12 @@ async function extractDocumentText(file: File, bytes: ArrayBuffer): Promise<stri
   return "";
 }
 
+=======
+import OpenAI from "openai";
+
+export const maxDuration = 60;
+
+>>>>>>> main
 export async function POST(req: Request) {
   const encoder = new TextEncoder();
 
@@ -58,6 +65,7 @@ export async function POST(req: Request) {
     const isImage = mimeType.startsWith("image/");
     const extractedText = isImage ? "" : await extractDocumentText(file, bytes);
 
+<<<<<<< HEAD
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -139,6 +147,37 @@ export async function POST(req: Request) {
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (e) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `Error: ${(e as Error).message}`, status: "Error" })}\n\n`));
+=======
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: "GPT-4.5 Preview" })}\n\n`));
+          const response = await openai.chat.completions.create({
+            model: "gpt-4.5-preview",
+            stream: true,
+            messages: [
+              { role: "system", content: "You are a helpful assistant with vision capabilities. Detect the language of the user's message and always respond in that same language." },
+              {
+                role: "user",
+                content: [
+                  { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+                  { type: "text", text: message },
+                ],
+              },
+            ],
+          });
+          for await (const chunk of response) {
+            const text = chunk.choices[0]?.delta?.content;
+            if (text) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: text })}\n\n`));
+            }
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        } catch (e) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `Error: ${(e as Error).message}` })}\n\n`));
+>>>>>>> main
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         }
         controller.close();
@@ -158,4 +197,9 @@ export async function POST(req: Request) {
     });
     return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
   }
+<<<<<<< HEAD
 }
+=======
+}
+
+>>>>>>> main
