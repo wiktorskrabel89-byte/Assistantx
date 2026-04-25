@@ -1,12 +1,8 @@
 import { fetchLatestModelId } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
-<<<<<<< feature/remove-tag-ui-2026-04-24
 import { createClient } from "@supabase/supabase-js";
-=======
->>>>>>> main
 import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
-import { request } from "playwright/test";
 
 // Supabase memory limiter
 const supabase = createClient(
@@ -486,28 +482,6 @@ export const POST = async (req: Request) => {
   }
 
 
-  // List of models that support reasoning depth (thinkingEffort)
-  const REASONING_MODELS = [
-    "openai/gpt-5.4",
-    "openai/gpt-5.1",
-    "openai/gpt-5.2",
-    "openai/gpt-5.2-pro",
-    "openai/gpt-5-mini",
-    "openai/gpt-5-nano",
-    "openai/gpt-5",
-    "openai/gpt-oss-120b",
-    "google/gemini-3-flash-preview",
-    "google/gemini-3-pro-preview",
-    "google/gemini-2.0-flash-exp:free",
-    "google/gemini-2.5-flash-lite",
-    "deepseek/deepseek-r1",
-    "deepseek/deepseek-v3.2",
-    "moonshotai/kimi-k2-thinking",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "minimax/minimax-m2.5",
-    "perplexity/sonar",
-    // Add more as needed
-  ];
 
 
   // List of models that support reasoning depth (thinkingEffort)
