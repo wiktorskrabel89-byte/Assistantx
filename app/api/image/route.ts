@@ -5,11 +5,6 @@ export async function POST(req: Request) {
     const { prompt } = await req.json();
     const encoded = encodeURIComponent(prompt);
     const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&enhance=true`;
-
-    // Verify the image is reachable
-    const check = await fetch(url, { method: "HEAD" });
-    if (!check.ok) throw new Error("Image generation failed");
-
     return Response.json({ url, model: "Pollinations.ai (Free)" });
   } catch (error) {
     console.error("Image generation error:", error);
