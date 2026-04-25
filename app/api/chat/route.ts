@@ -7,10 +7,12 @@ import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterMode
 export const dynamic = "force-dynamic";
 
 // Lazy Supabase client — initialized at request time, not build time
-let _supabase: ReturnType<typeof createClient> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _supabase: ReturnType<typeof createClient<any>> | null = null;
 function getSupabase() {
   if (!_supabase) {
-    _supabase = createClient(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _supabase = createClient<any>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
