@@ -1,12 +1,34 @@
-import { fetchLatestModelId } from "../openrouter/models";
+import { createClient } from "@/lib/server";
+
+function getSupabase() {
+  // This assumes createClient returns a promise, so you may need to adjust usage to await getSupabase()
+  // If createClient is synchronous, remove await in usages.
+  // For now, return createClient() directly for compatibility.
+  return createClient();
+}
+import {
+  fetchLatestModelId,
+} from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
+import {
+  CostMode,
+  UserPlan,
+  filterModelsByPlan,
+  isModelPremiumOnly,
+  getFreePlanFallback,
+  filterModelsByCostMode,
+  getCheaperAlternative,
+  TOP_FREE_CODE_MODELS,
+  TOP_FREE_CHAT_MODELS,
+} from "@/lib/ai-config";
 
 async function getAuthUserId(req: Request): Promise<string | null> {
   try {
     const authHeader = req.headers.get("authorization");
     if (!authHeader) return null;
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await getSupabase().auth.getUser(token);
+    const supabase = await getSupabase();
+    const { data } = await supabase.auth.getUser(token);
     return data.user?.id ?? null;
   } catch {
     return null;
@@ -15,8 +37,8 @@ async function getAuthUserId(req: Request): Promise<string | null> {
 
 // @ts-ignore: Supabase types are not available, ignore argument type error
 async function getMemoryHistory(conversationId: string) {
-  // @ts-expect-error: Supabase types are not available, ignore argument type error
-  const { data } = await getSupabase().rpc("get_memory_limited_messages", {
+  const supabase = await getSupabase();
+  const { data } = await supabase.rpc("get_memory_limited_messages", {
     p_conversation_id: conversationId,
     p_max_tokens: 4000,
     p_max_messages: 20,
@@ -25,7 +47,8 @@ async function getMemoryHistory(conversationId: string) {
 }
 
 async function getMemorySummaries(conversationId: string) {
-  const { data } = await getSupabase()
+  const supabase = await getSupabase();
+  const { data } = await supabase
     .from("memory_summaries")
     .select("*")
     .eq("conversation_id", conversationId)
@@ -34,26 +57,31 @@ async function getMemorySummaries(conversationId: string) {
 }
 
 async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
-  await getSupabase().from("messages").insert({
+  const supabase = await getSupabase();
+  await supabase.from("messages").insert({
     conversation_id: conversationId,
     role,
     content,
     token_count: Math.ceil(content.length / 4),
-  } as Database["public"]["Tables"]["messages"]["Insert"]);
+  });
 }
 
 async function ensureConversation(conversationId: string, userId: string | null) {
-  await getSupabase().from("conversations").upsert(
-    { id: conversationId, ...(userId ? { user_id: userId } : {}) } as Database["public"]["Tables"]["conversations"]["Insert"],
+  const supabase = await getSupabase();
+  await supabase.from("conversations").upsert(
+    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
     { onConflict: "id" }
   );
 }
 
-let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+// Define free model arrays for compatibility with logic below
+const FREE_CODING_MODELS = TOP_FREE_CODE_MODELS;
+const FREE_CHAT_MODELS = TOP_FREE_CHAT_MODELS;
+let CODE_MODEL = FREE_CODING_MODELS[0];
+let CHAT_MODEL = FREE_CHAT_MODELS[0];
 const SEARCH_MODEL = "perplexity/sonar";
-const FREE_CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+const FREE_CODE_MODEL = FREE_CODING_MODELS[0];
+const FREE_CHAT_MODEL = FREE_CHAT_MODELS[0];
 
 // Fallbacks
 const FALLBACK_CODE_MODEL = "deepseek-ai/deepseek-coder:latest";
@@ -714,32 +742,3 @@ const POST = async (req: Request) => {
   });
 };
 
-// Ensures a conversation exists in the database (stub for now)
-async function ensureConversation(conversationId: string, userId: string | null) {
-  // Implement DB logic as needed, or leave as stub for serverless
-  return;
-}
-
-// Extracts user ID from request (stub for now)
-async function getAuthUserId(req: Request): Promise<string | null> {
-  // Implement auth logic as needed, or leave as stub for serverless
-  return null;
-}
-
-// Saves a message to the database (stub for now)
-async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
-  // Implement DB logic as needed, or leave as stub for serverless
-  return;
-}
-
-// Retrieves memory summaries for a conversation (stub for now)
-async function getMemorySummaries(conversationId: string) {
-  // Implement DB logic as needed, or leave as stub for serverless
-  return [];
-}
-
-// Retrieves memory history for a conversation (stub for now)
-async function getMemoryHistory(conversationId: string) {
-  // Implement DB logic as needed, or leave as stub for serverless
-  return [];
-}
