@@ -4,18 +4,26 @@ import { createClient } from "@supabase/supabase-js";
 import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
 
-// Supabase memory limiter
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = "force-dynamic";
+
+// Lazy Supabase client — initialized at request time, not build time
+let _supabase: ReturnType<typeof createClient> | null = null;
+function getSupabase() {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+  return _supabase;
+}
 
 async function getAuthUserId(req: Request): Promise<string | null> {
   try {
     const authHeader = req.headers.get("authorization");
     if (!authHeader) return null;
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabase.auth.getUser(token);
+    const { data } = await getSupabase().auth.getUser(token);
     return data.user?.id ?? null;
   } catch {
     return null;
@@ -23,7 +31,7 @@ async function getAuthUserId(req: Request): Promise<string | null> {
 }
 
 async function getMemoryHistory(conversationId: string) {
-  const { data } = await supabase.rpc("get_memory_limited_messages", {
+  const { data } = await getSupabase().rpc("get_memory_limited_messages", {
     p_conversation_id: conversationId,
     p_max_tokens: 4000,
     p_max_messages: 20,
@@ -32,7 +40,7 @@ async function getMemoryHistory(conversationId: string) {
 }
 
 async function getMemorySummaries(conversationId: string) {
-  const { data } = await supabase
+  const { data } = await getSupabase()
     .from("memory_summaries")
     .select("*")
     .eq("conversation_id", conversationId)
@@ -41,7 +49,7 @@ async function getMemorySummaries(conversationId: string) {
 }
 
 async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
-  await supabase.from("messages").insert({
+  await getSupabase().from("messages").insert({
     conversation_id: conversationId,
     role,
     content,
@@ -51,7 +59,7 @@ async function saveMessage(conversationId: string, role: "user" | "assistant", c
 
 async function ensureConversation(conversationId: string, userId: string | null) {
 
-  await supabase.from("conversations").upsert(
+  await getSupabase().from("conversations").upsert(
     { id: conversationId, ...(userId ? { user_id: userId } : {}) },
     { onConflict: "id" }
   );
@@ -721,5 +729,3 @@ const POST = async (req: Request) => {
 }
 
 export { POST };
-
-
