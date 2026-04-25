@@ -1,16 +1,18 @@
 import { fetchLatestModelId } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
 import { createClient } from "@supabase/supabase-js";
+// import type { Database } from "../../../types/supabase";
+type Database = any; // TEMP: Remove when types/supabase.ts is generated
 import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 
 // Lazy Supabase client — initialized at request time, not build time
-let _supabase: ReturnType<typeof createClient> | null = null;
+let _supabase: ReturnType<typeof createClient<Database>> | null = null;
 function getSupabase() {
   if (!_supabase) {
-    _supabase = createClient(
+    _supabase = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
@@ -54,13 +56,12 @@ async function saveMessage(conversationId: string, role: "user" | "assistant", c
     role,
     content,
     token_count: Math.ceil(content.length / 4),
-  });
+  } as Database["public"]["Tables"]["messages"]["Insert"]);
 }
 
 async function ensureConversation(conversationId: string, userId: string | null) {
-
   await getSupabase().from("conversations").upsert(
-    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
+    { id: conversationId, ...(userId ? { user_id: userId } : {}) } as Database["public"]["Tables"]["conversations"]["Insert"],
     { onConflict: "id" }
   );
 }
