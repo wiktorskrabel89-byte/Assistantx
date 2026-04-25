@@ -1,4 +1,8 @@
+
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const PublicChatWidget = dynamic(() => import("./components/PublicChatWidget"), { ssr: false });
 
 export default function PublicHome() {
   return (
@@ -20,6 +24,7 @@ export default function PublicHome() {
         <Link href="/auth/login" className="inline-block bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">Sign In</Link>
       </div>
       <footer className="mt-8 text-gray-400 text-sm">&copy; {new Date().getFullYear()} AssistantX. All rights reserved.</footer>
+      <PublicChatWidget />
     </main>
   );
 }
