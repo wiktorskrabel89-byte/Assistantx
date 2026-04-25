@@ -4,7 +4,7 @@ test('cała aplikacja ładuje się i główne funkcje są widoczne', async ({ pa
   // Strona główna/czat
   await page.goto('/');
   // Nagłówek aplikacji
-  await expect(page.locator('text=Moje AI')).toBeVisible();
+  await expect(page.locator('text=AssistantX')).toBeVisible();
   // Widoczność zakładki Chat
   await expect(page.locator('text=Chat')).toBeVisible();
   // Pole tekstowe czatu

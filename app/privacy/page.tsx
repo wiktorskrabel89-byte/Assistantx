@@ -3,14 +3,14 @@ import { LegalDocument } from "@/app/components/LegalDocument";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "How Moje AI collects, uses, stores, and protects personal information.",
+  description: "How AssistantX collects, uses, stores, and protects personal information.",
 };
 
 export default function PrivacyPage() {
   return (
     <LegalDocument
       title="Privacy Policy"
-      description="This Privacy Policy explains how Moje AI collects, uses, stores, and shares information when you use the website, sign in, upload content, connect integrations, or use AI features."
+      description="This Privacy Policy explains how AssistantX collects, uses, stores, and shares information when you use the website, sign in, upload content, connect integrations, or use AI features."
       lastUpdated="April 14, 2026"
     >
       <section>
@@ -42,7 +42,7 @@ export default function PrivacyPage() {
       <section>
         <h2>3. Third-Party Services And Processors</h2>
         <p>
-          Moje AI relies on third-party providers to deliver core features. Depending on how you use the site, your data may be processed by infrastructure or service providers such as Supabase for authentication and database storage, OpenRouter and model providers for AI responses, GitHub or Google for connected integrations, and hosting, CDN, logging, or analytics providers used to run the website.
+          AssistantX relies on third-party providers to deliver core features. Depending on how you use the site, your data may be processed by infrastructure or service providers such as Supabase for authentication and database storage, OpenRouter and model providers for AI responses, GitHub or Google for connected integrations, and hosting, CDN, logging, or analytics providers used to run the website.
         </p>
         <p>
           These providers process data under their own terms and privacy policies. We only send the information reasonably needed to deliver the requested feature.

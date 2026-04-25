@@ -25,8 +25,8 @@ export async function POST(req: Request) {
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://moje-ai.vercel.app",
-        "X-Title": "Moje AI",
+        "HTTP-Referer": "https://assistantx.vercel.app",
+        "X-Title": "AssistantX",
       },
       body: JSON.stringify({
         model: "openai/gpt-5.4",

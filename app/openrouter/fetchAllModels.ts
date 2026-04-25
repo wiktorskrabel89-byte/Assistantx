@@ -6,8 +6,8 @@ export async function fetchAllModels(): Promise<Array<{ id: string; [key: string
     headers: {
       "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": "https://moje-ai.vercel.app",
-      "X-Title": "Moje AI",
+      "HTTP-Referer": "https://assistantx.vercel.app",
+      "X-Title": "AssistantX",
     },
     next: { revalidate: 60 }, // Cache for 1 minute
   });

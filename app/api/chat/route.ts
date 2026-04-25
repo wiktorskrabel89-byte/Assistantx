@@ -1,19 +1,53 @@
-import { filterModelsByCostMode, filterModelsByPlan, getCheaperAlternative, getFreePlanFallback, isModelPremiumOnly, type CostMode, type UserPlan } from "@/lib/ai-config";
 import { fetchLatestModelId } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
 
-// 3 best truly free coding models on OpenRouter (2026)
-const FREE_CODING_MODELS = [
-  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, strong code)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, code)
-];
-// 3 best truly free chatting models on OpenRouter (2026)
-const FREE_CHAT_MODELS = [
-  "openrouter/elephant-alpha", // Elephant Alpha (100B, $0, chat)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
-  "meta-llama/llama-4-scout:free", // Llama 4 Scout (open, $0, chat)
-];
+async function getAuthUserId(req: Request): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) return null;
+    const token = authHeader.replace("Bearer ", "");
+    const { data } = await getSupabase().auth.getUser(token);
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// @ts-ignore: Supabase types are not available, ignore argument type error
+async function getMemoryHistory(conversationId: string) {
+  // @ts-expect-error: Supabase types are not available, ignore argument type error
+  const { data } = await getSupabase().rpc("get_memory_limited_messages", {
+    p_conversation_id: conversationId,
+    p_max_tokens: 4000,
+    p_max_messages: 20,
+  });
+  return data ?? [];
+}
+
+async function getMemorySummaries(conversationId: string) {
+  const { data } = await getSupabase()
+    .from("memory_summaries")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
+  await getSupabase().from("messages").insert({
+    conversation_id: conversationId,
+    role,
+    content,
+    token_count: Math.ceil(content.length / 4),
+  } as Database["public"]["Tables"]["messages"]["Insert"]);
+}
+
+async function ensureConversation(conversationId: string, userId: string | null) {
+  await getSupabase().from("conversations").upsert(
+    { id: conversationId, ...(userId ? { user_id: userId } : {}) } as Database["public"]["Tables"]["conversations"]["Insert"],
+    { onConflict: "id" }
+  );
+}
 
 let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
@@ -162,7 +196,7 @@ const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> =
   },
 ];
 
-export function detectLanguage(text: string): { lang: string; name: string } | null {
+function detectLanguage(text: string): { lang: string; name: string } | null {
   const trimmed = text.trim();
   if (trimmed.length < 2) return null;
 
@@ -241,7 +275,8 @@ const REASONING_MODELS = [
   // Add more as needed
 ];
 
-export const POST = async (req: Request) => {
+const POST = async (req: Request) => {
+
   // Dynamically fetch latest GPT and Claude models at runtime
   const latestGpt = await fetchLatestModelId("openai/gpt-");
   if (latestGpt) CODE_MODEL = latestGpt;
@@ -495,8 +530,8 @@ export const POST = async (req: Request) => {
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://moje-ai.vercel.app",
-        "X-Title": "Moje AI",
+        "HTTP-Referer": "https://assistantx.vercel.app",
+        "X-Title": "AssistantX",
       },
       body: JSON.stringify(body),
     });
