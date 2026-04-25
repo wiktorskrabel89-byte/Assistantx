@@ -1,3 +1,60 @@
+import { fetchLatestModelId } from "../openrouter/models";
+import { fetchAllModels } from "../openrouter/fetchAllModels";
+import { createClient } from "@supabase/supabase-js";
+import type { CostMode, UserPlan } from "@/lib/ai-config";
+import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
+
+// Supabase memory limiter
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+async function getAuthUserId(req: Request): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) return null;
+    const token = authHeader.replace("Bearer ", "");
+    const { data } = await supabase.auth.getUser(token);
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getMemoryHistory(conversationId: string) {
+  const { data } = await supabase.rpc("get_memory_limited_messages", {
+    p_conversation_id: conversationId,
+    p_max_tokens: 4000,
+    p_max_messages: 20,
+  });
+  return data ?? [];
+}
+
+async function getMemorySummaries(conversationId: string) {
+  const { data } = await supabase
+    .from("memory_summaries")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
+  await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    role,
+    content,
+    token_count: Math.ceil(content.length / 4),
+  });
+}
+
+async function ensureConversation(conversationId: string, userId: string | null) {
+  await supabase.from("conversations").upsert(
+    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
+    { onConflict: "id" }
+  );
+}
 import { filterModelsByCostMode, filterModelsByPlan, getCheaperAlternative, getFreePlanFallback, isModelPremiumOnly, type CostMode, type UserPlan } from "@/lib/ai-config";
 import { fetchLatestModelId } from "../openrouter/models";
 
