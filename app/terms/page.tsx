@@ -3,20 +3,20 @@ import { LegalDocument } from "@/app/components/LegalDocument";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "The terms that govern access to and use of Moje AI.",
+  description: "The terms that govern access to and use of AssistantX.",
 };
 
 export default function TermsPage() {
   return (
     <LegalDocument
       title="Terms of Service"
-      description="These Terms of Service govern your access to and use of Moje AI, including chat, uploads, integrations, exports, and related services. By using the site, you agree to these terms."
+      description="These Terms of Service govern your access to and use of AssistantX, including chat, uploads, integrations, exports, and related services. By using the site, you agree to these terms."
       lastUpdated="April 14, 2026"
     >
       <section>
         <h2>1. Acceptance Of Terms</h2>
         <p>
-          By accessing or using Moje AI, you agree to be bound by these Terms of Service and by our Privacy Policy. If you do not agree, do not use the service.
+          By accessing or using AssistantX, you agree to be bound by these Terms of Service and by our Privacy Policy. If you do not agree, do not use the service.
         </p>
       </section>
 
@@ -49,7 +49,7 @@ export default function TermsPage() {
       <section>
         <h2>5. Your Content</h2>
         <p>
-          You retain ownership of content you submit to the service. By using Moje AI, you grant us a limited, non-exclusive license to host, store, reproduce, transmit, and process that content only as needed to operate, secure, and improve the service and to fulfill the features you request.
+          You retain ownership of content you submit to the service. By using AssistantX, you grant us a limited, non-exclusive license to host, store, reproduce, transmit, and process that content only as needed to operate, secure, and improve the service and to fulfill the features you request.
         </p>
       </section>
 
@@ -91,7 +91,7 @@ export default function TermsPage() {
       <section>
         <h2>11. Limitation Of Liability</h2>
         <p>
-          To the maximum extent permitted by law, the operator of Moje AI will not be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for any loss of profits, revenue, goodwill, data, or business opportunity arising from or related to your use of the service.
+          To the maximum extent permitted by law, the operator of AssistantX will not be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for any loss of profits, revenue, goodwill, data, or business opportunity arising from or related to your use of the service.
         </p>
       </section>
 
@@ -105,7 +105,9 @@ export default function TermsPage() {
       <section>
         <h2>13. Contact</h2>
         <p>
-          If you have questions about these Terms of Service, contact the operator using the contact details or support channel made available on this website.
+          If you have questions about these Terms of Service, contact the operator at
+          <a href="mailto:support@assistantx.pl" className="text-blue-600 underline ml-1">support@assistantx.pl</a>
+          or visit our <a href="/page-public" className="text-blue-600 underline ml-1">public home page</a> for more information.
         </p>
       </section>
     </LegalDocument>
