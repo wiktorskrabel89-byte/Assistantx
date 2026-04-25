@@ -32,7 +32,9 @@ async function getAuthUserId(req: Request): Promise<string | null> {
   }
 }
 
+// @ts-ignore: Supabase types are not available, ignore argument type error
 async function getMemoryHistory(conversationId: string) {
+  // @ts-expect-error: Supabase types are not available, ignore argument type error
   const { data } = await getSupabase().rpc("get_memory_limited_messages", {
     p_conversation_id: conversationId,
     p_max_tokens: 4000,
