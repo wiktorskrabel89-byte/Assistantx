@@ -106,6 +106,11 @@ export const CODE_MODELS: ModelOption[] = [
     description: "Latest frontier coding model.",
   },
   {
+    id: "openai/gpt-5.5",
+    label: "GPT-5.5",
+    description: "Latest premium OpenAI coding model.",
+  },
+  {
     id: "deepseek/deepseek-r1",
     label: "DeepSeek R1",
     description: "Reasoning-heavy coding model.",
@@ -189,6 +194,7 @@ export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
   { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6", costTier: "premium" },
   { id: "coding-claude-opus-4.7", label: "Claude Opus 4.7", modelId: "anthropic/claude-opus-4.7", costTier: "premium" },
   { id: "coding-gpt-5.4", label: "GPT-5.4", modelId: "openai/gpt-5.4", costTier: "premium" },
+  { id: "coding-gpt-5.5", label: "GPT-5.5", modelId: "openai/gpt-5.5", costTier: "premium" },
   { id: "coding-deepseek-r1", label: "DeepSeek R1", modelId: "deepseek/deepseek-r1", costTier: "standard" },
 ];
 
@@ -241,6 +247,7 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "anthropic/claude-opus-4.6": "premium",
   "anthropic/claude-opus-4.7": "premium",
   "openai/gpt-5.4": "premium",
+  "openai/gpt-5.5": "premium",
   "openai/gpt-5.2": "premium",
   "openai/gpt-5.2-pro": "premium",
   "x-ai/grok-4": "premium",
