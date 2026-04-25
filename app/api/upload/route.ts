@@ -39,7 +39,6 @@ async function extractDocumentText(file: File, bytes: ArrayBuffer): Promise<stri
 
   return "";
 }
-
 export async function POST(req: Request) {
   const encoder = new TextEncoder();
 
