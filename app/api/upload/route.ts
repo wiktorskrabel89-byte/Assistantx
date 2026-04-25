@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import pdfParse from "pdf-parse";
+import JSZip from "jszip";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
