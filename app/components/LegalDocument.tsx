@@ -17,7 +17,7 @@ export function LegalDocument({
       <div className="mx-auto max-w-4xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-300">
           <div className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-cyan-200">
-            Moje AI Legal
+            AssistantX Legal
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/" className="rounded-xl border border-white/10 px-3 py-2 transition hover:bg-white/10">

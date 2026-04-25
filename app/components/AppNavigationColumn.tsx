@@ -70,7 +70,7 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
     <aside className={`hidden min-h-0 overflow-hidden rounded-[26px] border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
       <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
         <div className="rounded-2xl bg-gradient-to-br from-slate-700 to-slate-500 px-4 py-4 text-white shadow-sm">
-          <div className="text-[1.35rem] font-bold tracking-tight">Moje AI</div>
+          <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
           <div className="mt-1 text-xs text-slate-200/90">Powered by AI</div>
         </div>
 

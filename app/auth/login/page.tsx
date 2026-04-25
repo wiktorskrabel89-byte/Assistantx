@@ -166,7 +166,7 @@ export default function LoginPage() {
       <div className="mx-auto max-w-5xl grid gap-10 lg:grid-cols-[1.15fr,0.85fr] items-center min-h-[80vh]">
         <section>
           <div className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-cyan-200">
-            Moje AI Cloud
+            AssistantX Cloud
           </div>
           <h1 className="mt-5 text-5xl font-semibold tracking-tight text-balance">Sign in to sync your workspaces across devices.</h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300">
