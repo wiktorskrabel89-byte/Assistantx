@@ -74,10 +74,25 @@ async function ensureConversation(conversationId: string, userId: string | null)
 }
 
 // Define free model arrays for compatibility with logic below
-const FREE_CODING_MODELS = TOP_FREE_CODE_MODELS;
-const FREE_CHAT_MODELS = TOP_FREE_CHAT_MODELS;
-let CODE_MODEL = FREE_CODING_MODELS[0];
-let CHAT_MODEL = FREE_CHAT_MODELS[0];
+
+// Explicitly include NVIDIA and Llama models in free arrays
+const FREE_CODING_MODELS = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  ...TOP_FREE_CODE_MODELS.filter(
+    (id) => id !== "nvidia/nemotron-3-super-120b-a12b:free" && id !== "meta-llama/llama-3.3-70b-instruct:free"
+  ),
+];
+const FREE_CHAT_MODELS = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  ...TOP_FREE_CHAT_MODELS.filter(
+    (id) => id !== "nvidia/nemotron-3-super-120b-a12b:free" && id !== "meta-llama/llama-3.3-70b-instruct:free"
+  ),
+];
+// Set NVIDIA as default coding model and Llama as default chat model
+let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 const SEARCH_MODEL = "perplexity/sonar";
 const FREE_CODE_MODEL = FREE_CODING_MODELS[0];
 const FREE_CHAT_MODEL = FREE_CHAT_MODELS[0];
