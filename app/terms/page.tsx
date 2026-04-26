@@ -107,15 +107,14 @@ export default function TermsPage() {
         <section>
           <h2>13. Contact</h2>
           <p>
-            If you have questions about these Terms of Service, contact the operator at
-            <a href="mailto:support.assistantx.pl@gmail.com" className="text-blue-600 underline ml-1">support.assistantx.pl@gmail.com</a>.
+            If you have questions about these Terms of Service, contact the operator using the contact details or support channel made available on this website.
           </p>
           <p style={{ marginTop: 24 }}>
-            <strong>Visit our homepage:</strong> <a href="/support" target="_blank" rel="noopener noreferrer">assistantx/support</a>
+            <strong>Visit our homepage:</strong> <a href="/support" target="_blank" rel="noopener noreferrer">Support</a>
           </p>
         </section>
       </LegalDocument>
-      <ChatbotSection />
+      {/* ChatbotSection removed: users should use the Support page for chat */}
     </>
   );
 }
