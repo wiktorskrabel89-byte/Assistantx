@@ -1,23 +1,13 @@
 import { fetchLatestModelId } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
-import { createClient } from "@supabase/supabase-js";
-// import type { Database } from "../../../types/supabase";
-type Database = any; // TEMP: Remove when types/supabase.ts is generated
+import { createClient } from "@/lib/server";
 import type { CostMode, UserPlan } from "@/lib/ai-config";
 import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 
-// Lazy Supabase client — initialized at request time, not build time
-let _supabase: ReturnType<typeof createClient> | null = null;
 function getSupabase() {
-  if (!_supabase) {
-    _supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-  return _supabase;
+  return createClient();
 }
 
 async function getAuthUserId(req: Request): Promise<string | null> {
@@ -25,17 +15,17 @@ async function getAuthUserId(req: Request): Promise<string | null> {
     const authHeader = req.headers.get("authorization");
     if (!authHeader) return null;
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await getSupabase().auth.getUser(token);
+    const supabase = await getSupabase();
+    const { data } = await supabase.auth.getUser(token);
     return data.user?.id ?? null;
   } catch {
     return null;
   }
 }
 
-// @ts-ignore: Supabase types are not available, ignore argument type error
 async function getMemoryHistory(conversationId: string) {
-  // @ts-expect-error: Supabase types are not available, ignore argument type error
-  const { data } = await getSupabase().rpc("get_memory_limited_messages", {
+  const supabase = await getSupabase();
+  const { data } = await supabase.rpc("get_memory_limited_messages", {
     p_conversation_id: conversationId,
     p_max_tokens: 4000,
     p_max_messages: 20,
@@ -44,7 +34,8 @@ async function getMemoryHistory(conversationId: string) {
 }
 
 async function getMemorySummaries(conversationId: string) {
-  const { data } = await getSupabase()
+  const supabase = await getSupabase();
+  const { data } = await supabase
     .from("memory_summaries")
     .select("*")
     .eq("conversation_id", conversationId)
@@ -53,26 +44,31 @@ async function getMemorySummaries(conversationId: string) {
 }
 
 async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
-  await getSupabase().from("messages").insert({
+  const supabase = await getSupabase();
+  await supabase.from("messages").insert({
     conversation_id: conversationId,
     role,
     content,
     token_count: Math.ceil(content.length / 4),
-  } as Database["public"]["Tables"]["messages"]["Insert"]);
+  });
 }
 
 async function ensureConversation(conversationId: string, userId: string | null) {
-  await getSupabase().from("conversations").upsert(
-    { id: conversationId, ...(userId ? { user_id: userId } : {}) } as Database["public"]["Tables"]["conversations"]["Insert"],
+  const supabase = await getSupabase();
+  await supabase.from("conversations").upsert(
+    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
     { onConflict: "id" }
   );
 }
 
+// Define free model arrays for compatibility with logic below
+const FREE_CODING_MODELS = TOP_FREE_CODE_MODELS;
+const FREE_CHAT_MODELS = TOP_FREE_CHAT_MODELS;
+let CODE_MODEL = FREE_CODING_MODELS[0];
+let CHAT_MODEL = FREE_CHAT_MODELS[0];
 const SEARCH_MODEL = "perplexity/sonar";
-let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
-const FREE_CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+const FREE_CODE_MODEL = FREE_CODING_MODELS[0];
+const FREE_CHAT_MODEL = FREE_CHAT_MODELS[0];
 
 // Fallbacks
 const FALLBACK_CODE_MODEL = "deepseek-ai/deepseek-coder:latest";
@@ -271,6 +267,28 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
+// List of models that support reasoning depth (thinkingEffort)
+const REASONING_MODELS = [
+  "openai/gpt-5.4",
+  "openai/gpt-5.1",
+  "openai/gpt-5.2",
+  "openai/gpt-5.2-pro",
+  "openai/gpt-5-mini",
+  "openai/gpt-5-nano",
+  "openai/gpt-5",
+  "openai/gpt-oss-120b",
+  "google/gemini-3-flash-preview",
+  "google/gemini-3-pro-preview",
+  "google/gemini-2.0-flash-exp:free",
+  "google/gemini-2.5-flash-lite",
+  "deepseek/deepseek-r1",
+  "deepseek/deepseek-v3.2",
+  "moonshotai/kimi-k2-thinking",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "minimax/minimax-m2.5",
+  "perplexity/sonar",
+  // Add more as needed
+];
 
 const POST = async (req: Request) => {
 
@@ -367,9 +385,9 @@ const POST = async (req: Request) => {
     : costControlled.modelId;
 
   // If user requests a free model for coding/chatting, allow selection
-  if (!modelId && rawMode === "code" && TOP_FREE_CODE_MODELS.length > 0) {
+  if (!modelId && rawMode === "code" && FREE_CODING_MODELS.length > 0) {
     selectedModel = CODE_MODEL;
-  } else if (!modelId && rawMode === "chat" && TOP_FREE_CHAT_MODELS.length > 0) {
+  } else if (!modelId && rawMode === "chat" && FREE_CHAT_MODELS.length > 0) {
     selectedModel = CHAT_MODEL;
   }
 
@@ -496,28 +514,8 @@ const POST = async (req: Request) => {
 
 
 
-  // List of models that support reasoning depth (thinkingEffort)
-  const REASONING_MODELS = [
-    "openai/gpt-5.4",
-    "openai/gpt-5.1",
-    "openai/gpt-5.2",
-    "openai/gpt-5.2-pro",
-    "openai/gpt-5-mini",
-    "openai/gpt-5-nano",
-    "openai/gpt-5",
-    "openai/gpt-oss-120b",
-    "google/gemini-3-flash-preview",
-    "google/gemini-3-pro-preview",
-    "google/gemini-2.0-flash-exp:free",
-    "google/gemini-2.5-flash-lite",
-    "deepseek/deepseek-r1",
-    "deepseek/deepseek-v3.2",
-    "moonshotai/kimi-k2-thinking",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "minimax/minimax-m2.5",
-    "perplexity/sonar",
-    // Add more as needed
-  ];
+
+
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
@@ -729,6 +727,5 @@ const POST = async (req: Request) => {
   return new Response(stream, {
     headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
   });
-}
+};
 
-export { POST };
