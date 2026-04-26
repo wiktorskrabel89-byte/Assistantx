@@ -25,7 +25,7 @@ import type {
 
 type AutoRoutedMode = Exclude<Mode, "image" | "upload">;
 
-export const STORAGE_KEY = "moje-ai.workspace-state.v3";
+export const STORAGE_KEY = "assistantx.workspace-state.v3";
 export const NEW_CHAT_TITLE = "New chat";
 export const TEXT_LANGUAGE_OPTIONS = LANGUAGE_OPTIONS;
 export const MODEL_PRESETS: { coding: ModelPreset[]; chat: ModelPreset[] } = {
