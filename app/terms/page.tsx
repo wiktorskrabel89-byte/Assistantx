@@ -106,10 +106,18 @@ export default function TermsPage() {
         <h2>13. Contact</h2>
         <p>
           If you have questions about these Terms of Service, contact the operator at
-          <a href="mailto:support.assistantx.pl@gmail.com" className="text-blue-600 underline ml-1">support.assistantx.pl@gmail.com</a>
-          or visit our <a href="/page-public" className="text-blue-600 underline ml-1">public home page</a> for more information.
+          <a href="mailto:support.assistantx.pl@gmail.com" className="text-blue-600 underline ml-1">support.assistantx.pl@gmail.com</a>.
+        </p>
+        <p style={{ marginTop: 24 }}>
+          <strong>Visit our homepage:</strong> <a href="https://assistantx.vercel.app" target="_blank" rel="noopener noreferrer">https://assistantx.vercel.app</a>
         </p>
       </section>
     </LegalDocument>
+    <div className="mt-10 flex justify-center">
+      {/* Embedded AssistantX Chatbot */}
+      <div style={{ minWidth: 320, maxWidth: 400, width: '100%' }}>
+        {typeof window !== 'undefined' && require("@/app/components/PublicChatWidget").default()}
+      </div>
+    </div>
   );
 }
