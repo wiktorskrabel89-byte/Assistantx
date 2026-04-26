@@ -1,26 +1,14 @@
+import { fetchLatestModelId } from "../openrouter/models";
+import { fetchAllModels } from "../openrouter/fetchAllModels";
 import { createClient } from "@/lib/server";
+import type { CostMode, UserPlan } from "@/lib/ai-config";
+import { filterModelsByPlan, isModelPremiumOnly, getFreePlanFallback, filterModelsByCostMode, getCheaperAlternative, TOP_FREE_CODE_MODELS, TOP_FREE_CHAT_MODELS } from "@/lib/ai-config";
+
+export const dynamic = "force-dynamic";
 
 function getSupabase() {
-  // This assumes createClient returns a promise, so you may need to adjust usage to await getSupabase()
-  // If createClient is synchronous, remove await in usages.
-  // For now, return createClient() directly for compatibility.
   return createClient();
 }
-import {
-  fetchLatestModelId,
-} from "../openrouter/models";
-import { fetchAllModels } from "../openrouter/fetchAllModels";
-import {
-  CostMode,
-  UserPlan,
-  filterModelsByPlan,
-  isModelPremiumOnly,
-  getFreePlanFallback,
-  filterModelsByCostMode,
-  getCheaperAlternative,
-  TOP_FREE_CODE_MODELS,
-  TOP_FREE_CHAT_MODELS,
-} from "@/lib/ai-config";
 
 async function getAuthUserId(req: Request): Promise<string | null> {
   try {
@@ -35,7 +23,6 @@ async function getAuthUserId(req: Request): Promise<string | null> {
   }
 }
 
-// @ts-ignore: Supabase types are not available, ignore argument type error
 async function getMemoryHistory(conversationId: string) {
   const supabase = await getSupabase();
   const { data } = await supabase.rpc("get_memory_limited_messages", {
