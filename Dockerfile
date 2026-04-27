@@ -16,7 +16,7 @@ ARG SUPABASE_SERVICE_KEY
 ENV SUPABASE_SERVICE_KEY=$SUPABASE_SERVICE_KEY
 
 COPY . .
-RUN npm run build
+RUN rm -rf .next && npm run build
 
 ENV NODE_ENV=production
 ENV PORT=3000

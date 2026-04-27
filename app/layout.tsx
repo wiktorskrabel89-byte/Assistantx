@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import { QueryProvider } from "./components/QueryProvider";
 import "./globals.css";
 
@@ -55,7 +54,6 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>
-        <Analytics />
       </body>
     </html>
   );
