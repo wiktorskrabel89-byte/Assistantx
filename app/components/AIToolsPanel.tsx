@@ -150,6 +150,8 @@ export function AIToolsPanel({
                 <div>
                   <label className="mb-1 block text-xs text-slate-500">Response style</label>
                   <select
+                    id="style-mode"
+                    name="styleMode"
                     value={settings.styleMode}
                     onChange={(event) => onStyleChange(event.target.value)}
                     className={`w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`}
@@ -163,6 +165,8 @@ export function AIToolsPanel({
                 <div>
                   <label className="mb-1 block text-xs text-slate-500">Reply language</label>
                   <select
+                    id="reply-language"
+                    name="replyLanguage"
                     value={settings.languageLock}
                     onChange={(event) => onLanguageChange(event.target.value)}
                     className={`w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`}
@@ -177,12 +181,16 @@ export function AIToolsPanel({
                   <span>Use conversation memory</span>
                   <input
                     type="checkbox"
+                    id="memory-enabled"
+                    name="memoryEnabled"
                     checked={settings.memoryEnabled}
                     onChange={(event) => onMemoryToggle(event.target.checked)}
                   />
                 </label>
 
                 <textarea
+                  id="memory-notes"
+                  name="memoryNotes"
                   value={settings.memoryNotes}
                   onChange={(event) => onMemoryNotesChange(event.target.value)}
                   rows={4}

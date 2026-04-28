@@ -568,6 +568,8 @@ export function ChatTab() {
           </span>
         ))}
         <input
+          id="chat-tag-input"
+          name="chatTagInput"
           className="border rounded px-2 py-1 text-sm"
           placeholder="Add tag"
           value={tagInput}

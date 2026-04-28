@@ -15,6 +15,8 @@ export function WorkspaceBackupPanel({ onBackup, onRestore }: { onBackup: () => 
         </button>
         <input
           type="file"
+          id="workspace-backup-upload"
+          name="workspaceBackupUpload"
           accept="application/json"
           onChange={e => setRestoreFile(e.target.files?.[0] ?? null)}
         />

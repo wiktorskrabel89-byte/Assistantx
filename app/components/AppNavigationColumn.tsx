@@ -77,6 +77,8 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
         <div className="relative mt-4">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
+            id="app-nav-search"
+            name="appNavSearch"
             placeholder="Szukaj..."
             className={`w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm ${searchClassName}`}
           />
