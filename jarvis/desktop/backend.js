@@ -17,7 +17,9 @@ function connectToBackend() {
   ws = new WebSocket(BACKEND_URL);
 
   ws.on('open', () => {
-    console.log('[✓] Połączono z serwerem Jarvis');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[✓] Połączono z serwerem Jarvis');
+    }
     ws.send(JSON.stringify({ type: 'register', role: 'desktop' }));
   });
 
@@ -26,11 +28,15 @@ function connectToBackend() {
     try {
       const msg = JSON.parse(data);
       if (msg.type === 'command') handleCommand(msg);
-    } catch {}
+    } catch (err) {
+      console.error('Connection error:', err);
+    }
   });
 
   ws.on('close', () => {
-    console.log('[!] Rozłączono. Ponawiam za 3s...');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[!] Rozłączono. Ponawiam za 3s...');
+    }
     setTimeout(connectToBackend, 3000);
   });
 
@@ -52,7 +58,9 @@ function sendMessageToBackend(obj) {
 // ─── Obsługa komend ────────────────────────────────────────────────────────────
 function handleCommand(msg) {
   const { command, app } = msg;
-  console.log(`[komenda] ${command}${app ? ' → ' + app : ''}`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[komenda] ${command}${app ? ' → ' + app : ''}`);
+  }
 
   switch (command) {
     case 'openApp':   return openApp(app);
@@ -141,17 +149,23 @@ function connectToBackend() {
   const ws = new WebSocket(BACKEND_URL);
 
   ws.on('open', () => {
-    console.log('Połączono z backendem!');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Połączono z backendem!');
+    }
     // Możesz wysłać token autoryzacyjny tutaj
   });
 
   ws.on('message', (data) => {
-    console.log('Odebrano wiadomość:', data);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Odebrano wiadomość:', data);
+    }
     // Obsłuż polecenia z backendu
   });
 
   ws.on('close', () => {
-    console.log('Rozłączono z backendem.');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Rozłączono z backendem.');
+    }
   });
 
   ws.on('error', (err) => {

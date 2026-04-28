@@ -1,3 +1,4 @@
+// TODO: ScriptsTab: Implement full feature. Partial idea/code exists—review and complete implementation.
 "use client";
 
 import { CodeXml } from "lucide-react";

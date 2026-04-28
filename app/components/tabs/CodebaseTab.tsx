@@ -1,3 +1,4 @@
+// TODO: CodebaseTab: Implement full feature. Partial idea/code exists—review and complete implementation.
 "use client";
 
 import { Database } from "lucide-react";

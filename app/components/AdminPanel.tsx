@@ -1,3 +1,4 @@
+// TODO: Placeholder AdminPanel. Implement real admin features.
 import { useState } from "react";
 import { WorkspaceBackupPanel } from "./WorkspaceBackupPanel";
 
