@@ -126,8 +126,8 @@ export const GOOGLE_DRIVE_EXPORTS: Record<string, { mimeType: string; extension:
 };
 
 const PROVIDER_COOKIE_NAMES: Record<OAuthProvider, string> = {
-  google: "moje_ai_google_provider_token",
-  github: "moje_ai_github_provider_token",
+  google: "assistantx_google_provider_token",
+  github: "assistantx_github_provider_token",
 };
 
 const PROVIDER_SCOPES: Record<OAuthProvider, string> = {

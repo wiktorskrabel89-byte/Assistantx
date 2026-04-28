@@ -1,3 +1,4 @@
+// TODO: SandboxTab: Implement full feature. Partial idea/code exists—review and complete implementation.
 "use client";
 
 import { SquareTerminal } from "lucide-react";

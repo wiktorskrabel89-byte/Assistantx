@@ -18,6 +18,8 @@ app.prepare().then(() => {
   });
 
   httpServer.listen(port, hostname, () => {
-    console.log(`> Ready on http://${hostname}:${port}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`> Ready on http://${hostname}:${port}`);
+    }
   });
 });

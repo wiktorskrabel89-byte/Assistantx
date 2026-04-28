@@ -1,6 +1,5 @@
 "use client";
-
-import { useCallback, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
 import {
@@ -52,6 +51,10 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
 }
 
 function HomeContent() {
+  useEffect(() => {
+    console.log("SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log("SUPABASE_PUBLISHABLE_KEY:", process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+  }, []);
   const { state } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
 

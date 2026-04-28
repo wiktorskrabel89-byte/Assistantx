@@ -329,6 +329,8 @@ export function IntegrationsPanel({
 
           <div className="mt-3 space-y-2">
             <input
+              id="github-repo-input"
+              name="githubRepoInput"
               value={githubRepoInput}
               onChange={(event) => setGithubRepoInput(event.target.value)}
               placeholder="owner/repo or https://github.com/owner/repo"
@@ -336,6 +338,8 @@ export function IntegrationsPanel({
             />
             <div className="flex gap-2">
               <input
+                id="github-ref-input"
+                name="githubRefInput"
                 value={githubRefInput}
                 onChange={(event) => setGithubRefInput(event.target.value)}
                 placeholder="Branch or tag (optional)"
@@ -358,6 +362,8 @@ export function IntegrationsPanel({
                   {githubRepo.truncated ? " • Tree truncated by GitHub API" : ""}
                 </div>
                 <input
+                  id="github-file-filter"
+                  name="githubFileFilter"
                   value={githubFilter}
                   onChange={(event) => setGithubFilter(event.target.value)}
                   placeholder="Filter files"
@@ -406,6 +412,8 @@ export function IntegrationsPanel({
 
           <div className="mt-3 space-y-2">
             <input
+              id="drive-input"
+              name="driveInput"
               value={driveInput}
               onChange={(event) => setDriveInput(event.target.value)}
               placeholder="https://drive.google.com/file/... or file ID"

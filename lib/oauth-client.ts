@@ -1,6 +1,6 @@
 import { getProviderLabel, isOAuthProvider, type OAuthProvider } from "@/lib/integrations";
 
-const OAUTH_PENDING_STORAGE_KEY = "moje-ai.oauth-pending-provider";
+const OAUTH_PENDING_STORAGE_KEY = "assistantx.oauth-pending-provider";
 
 type OAuthErrorLike = {
   code?: string | null;

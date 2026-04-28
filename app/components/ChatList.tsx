@@ -126,6 +126,8 @@ export const ChatList = memo(function ChatList({
               {editingMessageId === entry.id ? (
                 <div className="rounded-2xl rounded-tr-sm bg-blue-600/10 p-3">
                   <textarea
+                    id="edit-message-content"
+                    name="editMessageContent"
                     value={editedMessageContent}
                     onChange={(event) => onEditedMessageChange(event.target.value)}
                     rows={4}

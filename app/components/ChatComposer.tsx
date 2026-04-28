@@ -6,7 +6,7 @@ import { useCallback, useLayoutEffect, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
 
-type ChatComposerProps = {
+export type ChatComposerProps = {
   dark: boolean;
   message: string;
   file: File | null;
@@ -54,10 +54,10 @@ export function ChatComposer({
   onRemoveQueuedMessage,
   selectedModel,
 }: ChatComposerProps) {
+  // Auto-resize textarea
   const resizeComposer = useCallback(() => {
     const textarea = inputRef.current;
     if (!textarea) return;
-
     textarea.style.height = "0px";
     const nextHeight = Math.min(Math.max(textarea.scrollHeight, 44), 180);
     textarea.style.height = `${nextHeight}px`;
@@ -143,6 +143,8 @@ export function ChatComposer({
         <input
           ref={fileInputRef}
           type="file"
+          id="chat-file-upload"
+          name="chatFileUpload"
           accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
           className="hidden"
           onChange={(event) => {
@@ -154,21 +156,20 @@ export function ChatComposer({
 
         {showThinkingEffort && (
           <div className="mb-2 flex items-center gap-2">
-            <label htmlFor="thinking-effort" className="text-xs font-medium text-slate-500 dark:text-slate-400">Thinking Effort:</label>
+            <span className="text-xs opacity-70">Reasoning depth:</span>
             <select
-              id="thinking-effort"
+              className="rounded-md border px-2 py-1 text-xs dark:bg-slate-900 dark:text-slate-100"
               value={thinkingEffort}
-              onChange={e => setThinkingEffort(e.target.value)}
-              className="rounded border px-2 py-1 text-xs dark:bg-slate-900 dark:text-slate-100"
+              onChange={(e) => setThinkingEffort(e.target.value)}
             >
               <option value="Low">Low</option>
               <option value="Medium">Medium</option>
               <option value="High">High</option>
-              <option value="Xhigh">Xhigh</option>
             </select>
           </div>
         )}
-        <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${dark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"}`}>
+
+        <div className="flex items-end gap-2">
           <button
             onClick={() => fileInputRef.current?.click()}
             className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
@@ -180,6 +181,8 @@ export function ChatComposer({
 
           <textarea
             ref={inputRef}
+            id="chat-message"
+            name="chatMessage"
             value={message}
             onChange={(event) => {
               onMessageChange(event.target.value);

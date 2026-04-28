@@ -180,6 +180,8 @@ export function CustomAgentManager({
               <div>
                 <label className="mb-1 block text-xs text-slate-500">Agent name</label>
                 <input
+                  id="agent-name"
+                  name="agentName"
                   value={draftName}
                   onChange={(event) => setDraftName(event.target.value)}
                   placeholder="Frontend reviewer"
@@ -190,6 +192,8 @@ export function CustomAgentManager({
               <div>
                 <label className="mb-1 block text-xs text-slate-500">Short description</label>
                 <input
+                  id="agent-description"
+                  name="agentDescription"
                   value={draftDescription}
                   onChange={(event) => setDraftDescription(event.target.value)}
                   placeholder="Reviews React UI work and spots regressions"
@@ -200,6 +204,8 @@ export function CustomAgentManager({
               <div>
                 <label className="mb-1 block text-xs text-slate-500">Instructions</label>
                 <textarea
+                  id="agent-instructions"
+                  name="agentInstructions"
                   value={draftInstructions}
                   onChange={(event) => setDraftInstructions(event.target.value)}
                   rows={12}

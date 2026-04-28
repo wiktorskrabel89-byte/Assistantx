@@ -4,6 +4,7 @@
 import UserProfileEditor, { UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 
+// TODO: Replace mockProfile with real user data from Supabase or session. This is a temporary mock for UI only.
 const mockProfile: UserProfile = {
   avatarUrl: "",
   displayName: "Your Name",

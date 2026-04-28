@@ -134,6 +134,8 @@ export function PromptManager({
               <div>
                 <label className="mb-1 block text-xs text-slate-500">Label</label>
                 <input
+                  id="prompt-label"
+                  name="promptLabel"
                   value={draftLabel}
                   onChange={(event) => setDraftLabel(event.target.value)}
                   placeholder="Template name"
@@ -144,11 +146,13 @@ export function PromptManager({
               <div>
                 <label className="mb-1 block text-xs text-slate-500">Prompt</label>
                 <textarea
+                  id="prompt-text"
+                  name="promptText"
                   value={draftText}
                   onChange={(event) => setDraftText(event.target.value)}
                   rows={12}
                   placeholder="Write the prompt template here"
-                  className={`w-full resize-none rounded-2xl border px-3 py-3 text-sm ${dark ? "border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder-slate-400"}`}
+                  className={`w-full resize-none rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder-slate-400"}`}
                 />
               </div>
             </div>
