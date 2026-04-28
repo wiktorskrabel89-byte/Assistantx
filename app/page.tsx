@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 "use client";
-
-import { useCallback, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
 import {
