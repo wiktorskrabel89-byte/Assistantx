@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 "use client";
 
 import { useCallback, useState } from "react";
@@ -52,6 +53,10 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
 }
 
 function HomeContent() {
+    useEffect(() => {
+      console.log("SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+      console.log("SUPABASE_ANON_KEY:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+    }, []);
   const { state } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
 
