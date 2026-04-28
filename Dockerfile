@@ -16,10 +16,12 @@ ARG SUPABASE_SERVICE_KEY
 ENV SUPABASE_SERVICE_KEY=$SUPABASE_SERVICE_KEY
 
 COPY . .
-RUN rm -rf .next && npm run build
+RUN rm -rf .next && npm run build \
+	&& cp -r .next/static .next/standalone/.next/static \
+	&& cp -r public .next/standalone/public
 
 ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", ".next/standalone/server.js"]
