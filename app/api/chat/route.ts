@@ -349,7 +349,9 @@ export const POST = async (req: Request) => {
       }
       allowedModelsFinal = allowedModels;
     }
-  } catch {}
+  } catch (err) {
+    console.error('Error in chat route:', err);
+  }
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
@@ -577,7 +579,9 @@ export const POST = async (req: Request) => {
         try {
           const parsed = JSON.parse(payload.replace(/^data: /, "").trim());
           if (parsed.token) fullReply += parsed.token;
-        } catch {}
+        } catch (err) {
+          console.error('Error in chat route (inner):', err);
+        }
         controller.enqueue(encoder.encode(payload));
       };
       const safeClose = async () => {

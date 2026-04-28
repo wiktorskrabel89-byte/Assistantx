@@ -236,6 +236,8 @@ export default function LoginPage() {
               <span className="mb-2 block text-sm text-slate-200">Email address</span>
               <input
                 type="email"
+                id="login-email"
+                name="email"
                 autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}

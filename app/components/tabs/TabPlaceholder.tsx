@@ -1,3 +1,4 @@
+// TODO: This is a generic placeholder for tabs. Replace with real content as features are built.
 "use client";
 
 import type { LucideIcon } from "lucide-react";

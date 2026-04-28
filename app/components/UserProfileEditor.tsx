@@ -29,19 +29,19 @@ export default function UserProfileEditor({ profile, onSave }: UserProfileProps)
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-4">
       <label>
         Avatar URL
-        <input name="avatarUrl" value={form.avatarUrl || ''} onChange={handleChange} className="input" />
+        <input id="avatar-url" name="avatarUrl" value={form.avatarUrl || ''} onChange={handleChange} className="input" />
       </label>
       <label>
         Display Name
-        <input name="displayName" value={form.displayName} onChange={handleChange} className="input" required />
+        <input id="display-name" name="displayName" value={form.displayName} onChange={handleChange} className="input" required />
       </label>
       <label>
         Email
-        <input name="email" value={form.email} onChange={handleChange} className="input" required type="email" />
+        <input id="profile-email" name="email" value={form.email} onChange={handleChange} className="input" required type="email" />
       </label>
       <label>
         Bio
-        <textarea name="bio" value={form.bio || ''} onChange={handleChange} className="input" />
+        <textarea id="profile-bio" name="bio" value={form.bio || ''} onChange={handleChange} className="input" />
       </label>
       <button type="submit" className="btn btn-primary">Save Profile</button>
     </form>

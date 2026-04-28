@@ -1,1 +1,3 @@
-console.log('Jarvis Desktop uruchomiony!');
+if (process.env.NODE_ENV !== 'production') {
+	console.log('Jarvis Desktop uruchomiony!');
+}
