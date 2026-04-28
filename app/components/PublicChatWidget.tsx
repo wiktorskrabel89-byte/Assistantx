@@ -65,6 +65,8 @@ export default function PublicChatWidget() {
       >
         <input
           ref={inputRef}
+          id="public-chat-input"
+          name="publicChatInput"
           className="flex-1 px-3 py-2 rounded-bl-xl outline-none"
           placeholder="Ask about this website…"
           value={input}

@@ -37,26 +37,28 @@ const REASONING_MODELS = [
 
 export function ChatComposer({
   dark,
-  message,
-  file,
-  filePreview,
-  queuedMessages,
-  loading,
-  composerPreview,
-  fileInputRef,
-  inputRef,
-  onMessageChange,
-  onSelectFile,
-  onRemoveFile,
-  onTogglePreview,
-  onStopGeneration,
-  onQueueMessage,
-  onRemoveQueuedMessage,
-  selectedModel,
-}: ChatComposerProps) {
-  const resizeComposer = useCallback(() => {
-    const textarea = inputRef.current;
-    if (!textarea) return;
+          <textarea
+            ref={inputRef}
+            id="chat-message"
+            name="chatMessage"
+            value={message}
+            onChange={(event) => {
+              onMessageChange(event.target.value);
+              resizeComposer();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                let effortNum = 2;
+                if (thinkingEffort === "Low") effortNum = 1;
+                else if (thinkingEffort === "High") effortNum = 3;
+                onQueueMessage(effortNum);
+              }
+            }}
+            placeholder="Wiadomosc... (Enter to send)"
+            rows={1}
+            className={`flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm focus:outline-none ${dark ? "text-slate-100 placeholder-slate-500" : "text-slate-900 placeholder-slate-400"}`}
+          />
 
     textarea.style.height = "0px";
     const nextHeight = Math.min(Math.max(textarea.scrollHeight, 44), 180);
@@ -143,6 +145,8 @@ export function ChatComposer({
         <input
           ref={fileInputRef}
           type="file"
+          id="chat-file-upload"
+          name="chatFileUpload"
           accept="image/*,.txt,.md,.csv,.json,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.css,.sql,.xml,.yml,.yaml"
           className="hidden"
           onChange={(event) => {
