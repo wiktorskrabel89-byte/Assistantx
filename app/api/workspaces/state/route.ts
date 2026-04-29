@@ -84,6 +84,7 @@ export async function GET() {
   try {
     const { supabase, user } = await getAuthenticatedUser();
     if (!user) {
+      console.error("[GET /api/workspaces/state] No user authenticated");
       return Response.json({ code: "unauthorized", error: "Sign in to load your cloud workspace." }, { status: 401 });
     }
 
@@ -93,13 +94,17 @@ export async function GET() {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (error) throw error;
+    if (error) {
+      console.error("[GET /api/workspaces/state] Supabase error:", error);
+      throw error;
+    }
 
     return Response.json({
       state: data?.state_json ?? null,
       updatedAt: data?.updated_at ?? null,
     });
   } catch (error) {
+    console.error("[GET /api/workspaces/state] Exception:", error);
     const { status, payload } = buildWorkspaceSyncError(error, "Failed to load cloud workspace state.");
     return Response.json(payload, { status });
   }

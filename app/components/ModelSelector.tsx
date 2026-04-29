@@ -19,7 +19,12 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   const isAuto = preferredModelId === null;
 
   useEffect(() => {
-    fetchAllModels().then(setAllModels);
+    fetchAllModels().then((models) => {
+      setAllModels(models);
+      if (!models || models.length === 0) {
+        console.warn('ModelSelector: No models loaded', models);
+      }
+    });
   }, []);
 
   const pillBase = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none";
