@@ -15,6 +15,7 @@ ENV SUPABASE_KEY=$SUPABASE_KEY
 ARG SUPABASE_SERVICE_KEY
 ENV SUPABASE_SERVICE_KEY=$SUPABASE_SERVICE_KEY
 
+
 COPY . .
 RUN rm -rf .next && npm run build
 RUN cp -r .next/static .next/standalone/.next/static
