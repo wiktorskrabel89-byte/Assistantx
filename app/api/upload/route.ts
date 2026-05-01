@@ -1,6 +1,5 @@
 import JSZip from "jszip";
-import pdfParse from "pdf-parse";
-import JSZip from "jszip";
+import { PDFParse } from "pdf-parse";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,8 +16,13 @@ async function extractDocumentText(file: File, bytes: ArrayBuffer): Promise<stri
   const mimeType = file.type;
 
   if (mimeType === "application/pdf" || extension === "pdf") {
-    const result = await pdfParse(Buffer.from(bytes));
-    return result.text.trim();
+    const parser = new PDFParse({ data: Buffer.from(bytes) });
+    try {
+      const result = await parser.getText();
+      return result.text.trim();
+    } finally {
+      await parser.destroy();
+    }
   }
 
   if (mimeType === "application/zip" || extension === "zip") {

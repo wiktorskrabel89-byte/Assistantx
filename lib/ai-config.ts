@@ -61,10 +61,7 @@ export const CHAT_MODELS: ModelOption[] = [
     label: "Claude Opus 4.7",
     description: "Latest premium Claude model for chat and code.",
   },
-<<<<<<< HEAD
-=======
   {
->>>>>>> aab6a3c (WIP: update chat route and related files)
     id: "google/gemini-3-flash-preview",
     label: "Gemini 3 Flash",
     description: "Fast general-purpose chat.",

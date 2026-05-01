@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-<<<<<<< HEAD
     <>
       <LegalDocument
         title="Privacy Policy"
@@ -29,26 +28,6 @@ export default function PrivacyPage() {
             <li>Technical and usage data, such as IP address, browser type, device information, request logs, and analytics or performance telemetry.</li>
           </ul>
         </section>
-=======
-    <LegalDocument
-      title="Privacy Policy"
-      description="This Privacy Policy explains how AssistantX collects, uses, stores, and shares information when you use the website, sign in, upload content, connect integrations, or use AI features."
-      lastUpdated="April 14, 2026"
-    >
-      <section>
-        <h2>1. Information We Collect</h2>
-        <p>
-          We collect information you provide directly, information generated while you use the service, and limited technical data needed to operate and secure the app.
-        </p>
-        <ul>
-          <li>Account data, such as your email address, authentication provider, and session information.</li>
-          <li>Workspace content, such as chat messages, pinned memory, workspace settings, exports, and cloud-synced state.</li>
-          <li>Files and media you upload, including images and documents processed through the app.</li>
-          <li>Integration data, such as Google Drive and GitHub connection status, imported file metadata, and temporary provider tokens used to complete linked features.</li>
-          <li>Technical and usage data, such as IP address, browser type, device information, request logs, and analytics or performance telemetry.</li>
-        </ul>
-      </section>
->>>>>>> 9dc37eb (fix: resolve merge conflict in package.json (stripe dep) and sync with remote)
 
         <section>
           <h2>2. How We Use Information</h2>
@@ -62,7 +41,6 @@ export default function PrivacyPage() {
           </ul>
         </section>
 
-<<<<<<< HEAD
         <section>
           <h2>3. Third-Party Services And Processors</h2>
           <p>
@@ -72,17 +50,6 @@ export default function PrivacyPage() {
             These providers process data under their own terms and privacy policies. We only send the information reasonably needed to deliver the requested feature.
           </p>
         </section>
-=======
-      <section>
-        <h2>3. Third-Party Services And Processors</h2>
-        <p>
-          AssistantX relies on third-party providers to deliver core features. Depending on how you use the site, your data may be processed by infrastructure or service providers such as Supabase for authentication and database storage, OpenRouter and model providers for AI responses, GitHub or Google for connected integrations, and hosting, CDN, logging, or analytics providers used to run the website.
-        </p>
-        <p>
-          These providers process data under their own terms and privacy policies. We only send the information reasonably needed to deliver the requested feature.
-        </p>
-      </section>
->>>>>>> 9dc37eb (fix: resolve merge conflict in package.json (stripe dep) and sync with remote)
 
         <section>
           <h2>4. Cookies, Local Storage, And Similar Technologies</h2>

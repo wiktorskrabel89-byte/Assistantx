@@ -11,6 +11,8 @@ import {
 } from "../openrouter/models";
 import { fetchAllModels } from "../openrouter/fetchAllModels";
 import {
+  CHAT_MODELS,
+  CODE_MODELS,
   CostMode,
   UserPlan,
   filterModelsByPlan,
@@ -97,71 +99,6 @@ let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 const SEARCH_MODEL = "perplexity/sonar";
 const FREE_CODE_MODEL = FREE_CODING_MODELS[0];
 const FREE_CHAT_MODEL = FREE_CHAT_MODELS[0];
-
-// Fallbacks
-const FALLBACK_CODE_MODEL = "deepseek-ai/deepseek-coder:latest";
-const FALLBACK_CHAT_MODEL = "mistralai/mixtral-8x22b-instruct";
-
-// Helper to select fallback if primary fails
-async function tryWithFallback<T>(modelId: string, fallbackId: string, fn: (id: string) => Promise<T>): Promise<T> {
-  try {
-    return await fn(modelId);
-  } catch (err) {
-    // Optionally log the error
-    return await fn(fallbackId);
-  }
-}
-
-async function getAuthUserId(req: Request): Promise<string | null> {
-  try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) return null;
-    const token = authHeader.replace("Bearer ", "");
-    const supabase = await getSupabase();
-    const { data } = await supabase.auth.getUser(token);
-    return data.user?.id ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function getMemoryHistory(conversationId: string) {
-  const supabase = await getSupabase();
-  const { data } = await supabase.rpc("get_memory_limited_messages", {
-    p_conversation_id: conversationId,
-    p_max_tokens: 4000,
-    p_max_messages: 20,
-  });
-  return data ?? [];
-}
-
-async function getMemorySummaries(conversationId: string) {
-  const supabase = await getSupabase();
-  const { data } = await supabase
-    .from("memory_summaries")
-    .select("*")
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
-  return data ?? [];
-}
-
-async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
-  const supabase = await getSupabase();
-  await supabase.from("messages").insert({
-    conversation_id: conversationId,
-    role,
-    content,
-    token_count: Math.ceil(content.length / 4),
-  });
-}
-
-async function ensureConversation(conversationId: string, userId: string | null) {
-  const supabase = await getSupabase();
-  await supabase.from("conversations").upsert(
-    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
-    { onConflict: "id" }
-  );
-}
 
 function isCreditsError(status: number, body: string): boolean {
   return (
@@ -346,36 +283,7 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
-<<<<<<< HEAD
-// List of models that support reasoning depth (thinkingEffort)
-const REASONING_MODELS = [
-  "openai/gpt-5.4",
-  "openai/gpt-5.1",
-  "openai/gpt-5.2",
-  "openai/gpt-5.2-pro",
-  "openai/gpt-5-mini",
-  "openai/gpt-5-nano",
-  "openai/gpt-5",
-  "openai/gpt-oss-120b",
-  "google/gemini-3-flash-preview",
-  "google/gemini-3-pro-preview",
-  "google/gemini-2.0-flash-exp:free",
-  "google/gemini-2.5-flash-lite",
-  "deepseek/deepseek-r1",
-  "deepseek/deepseek-v3.2",
-  "moonshotai/kimi-k2-thinking",
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "minimax/minimax-m2.5",
-  "perplexity/sonar",
-  // Add more as needed
-];
-
 export const POST = async (req: Request) => {
-
-=======
-
-export const POST = async (req: Request) => {
->>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)
   // Dynamically fetch latest GPT and Claude models at runtime
   const latestGpt = await fetchLatestModelId("openai/gpt-");
   if (latestGpt) CODE_MODEL = latestGpt;
@@ -408,7 +316,7 @@ export const POST = async (req: Request) => {
   let allowedModelsFinal = allowedModels;
   try {
     const allModels = await fetchAllModels();
-    const claudeModels = allModels.filter((m: any) => m.id.startsWith("anthropic/claude-"));
+    const claudeModels = allModels.filter((m) => m.id.startsWith("anthropic/claude-"));
     if (Array.isArray(allowedModels)) {
       const allowedSet = new Set(allowedModels);
       for (const model of claudeModels) {
@@ -418,13 +326,7 @@ export const POST = async (req: Request) => {
       }
       allowedModelsFinal = allowedModels;
     }
-<<<<<<< HEAD
-  } catch (err) {
-    console.error('Error in chat route:', err);
-  }
-=======
   } catch {}
->>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
@@ -465,6 +367,8 @@ export const POST = async (req: Request) => {
   const fallbackModel = rawMode === "search"
     ? SEARCH_MODEL
     : inferredCodeRequest
+      ? FREE_CODE_MODEL
+      : FREE_CHAT_MODEL;
 
 
 
@@ -564,15 +468,15 @@ export const POST = async (req: Request) => {
 
   let systemPrompt: string;
   if (isSearchMode) {
-    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (isDeepSeek) {
-    systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (isGemini) {
-    systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (inferredCodeRequest) {
-    systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else {
-    systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   }
 
   // Build history: use Supabase memory if conversationId provided, else fall back to client history
@@ -584,13 +488,13 @@ export const POST = async (req: Request) => {
       getMemorySummaries(conversationId),
       getMemoryHistory(conversationId),
     ]);
-    const summaryMessages = summaries.map((s: any) => ({
+    const summaryMessages = summaries.map((s: { summary: string }) => ({
       role: "system",
       content: `[Earlier conversation summary]: ${s.summary}`,
     }));
     const recentMessages = memMessages
-      .filter((m: any) => m.content !== message) // exclude the message we just saved
-      .map((m: any) => ({ role: m.role, content: m.content }));
+      .filter((m: { content: string }) => m.content !== message) // exclude the message we just saved
+      .map((m: { role: string; content: string }) => ({ role: m.role, content: m.content }));
     historyMessages = [...summaryMessages, ...recentMessages];
   } else {
     historyMessages = Array.isArray(history)
@@ -600,15 +504,6 @@ export const POST = async (req: Request) => {
         ])
       : [];
   }
-<<<<<<< HEAD
-
-
-
-
-
-
-=======
->>>>>>> a259ad7 (feat: enable Supabase auth and memory in chat route, update env.local, and fix chat transport headers)
 
 
   // List of models that support reasoning depth (thinkingEffort)
@@ -679,13 +574,7 @@ export const POST = async (req: Request) => {
         try {
           const parsed = JSON.parse(payload.replace(/^data: /, "").trim());
           if (parsed.token) fullReply += parsed.token;
-<<<<<<< HEAD
-        } catch (err) {
-          console.error('Error in chat route (inner):', err);
-        }
-=======
         } catch {}
->>>>>>> a259ad7 (feat: enable Supabase auth and memory in chat route, update env.local, and fix chat transport headers)
         controller.enqueue(encoder.encode(payload));
       };
       const safeClose = async () => {
@@ -715,20 +604,19 @@ export const POST = async (req: Request) => {
         // Helper: get ordered list of models to try (paid first if allowed, then free)
         function getModelFallbackList() {
           // Prefer paid models if user is premium, otherwise free
-          const { CODE_MODELS, CHAT_MODELS } = require("@/lib/ai-config");
           const isCode = inferredCodeRequest;
           const allModels = isCode ? CODE_MODELS : CHAT_MODELS;
           // Filter out the current model and duplicates
           const tried = new Set([requestBody.model, selectedModel]);
           return allModels
-            .map((m: any) => m.id)
+              .map((m) => m.id)
             .filter((id: string) => !tried.has(id));
         }
 
         // Try fallback models on 404 (no endpoint found)
         if (!response.ok) {
           let err = await response.text();
-          let triedModels = [requestBody.model || selectedModel];
+            const triedModels = [requestBody.model || selectedModel];
           let status = response.status;
           let fallbackReason = routeReason;
           let found = false;
@@ -851,9 +739,4 @@ export const POST = async (req: Request) => {
   return new Response(stream, {
     headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
   });
-<<<<<<< HEAD
 };
-
-=======
-};
->>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)

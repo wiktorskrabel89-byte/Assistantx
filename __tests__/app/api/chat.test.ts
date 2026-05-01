@@ -64,7 +64,6 @@ describe("detectLanguage", () => {
 
   it("handles text with exactly 2 characters", () => {
     // Should not return null (length is exactly 2)
-    const result = detectLanguage("ab");
     // might return null or some language — important is it doesn't throw
     expect(() => detectLanguage("ab")).not.toThrow();
   });
