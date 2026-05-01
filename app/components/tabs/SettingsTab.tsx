@@ -12,7 +12,7 @@ const mockProfile: UserProfile = {
   bio: "",
 };
 
-export function SettingsTab({ dark }: { dark: boolean }) {
+export function SettingsTab() {
   async function handleSave(profile: UserProfile) {
     const supabase = createClient();
     // Example: update user profile in Supabase

@@ -6,7 +6,6 @@ import { updateSession } from "@/lib/middleware";
 
 const mockGetClaims = jest.fn();
 const mockGetAll = jest.fn(() => []);
-const mockSetAll = jest.fn();
 
 jest.mock("@supabase/ssr", () => ({
   createServerClient: jest.fn(() => ({

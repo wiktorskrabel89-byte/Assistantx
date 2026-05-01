@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { LegalDocument } from "@/app/components/LegalDocument";
-import ChatbotSection from "@/app/components/ChatbotSection";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -47,21 +46,12 @@ export default function TermsPage() {
           </ul>
         </section>
 
-<<<<<<< HEAD
         <section>
           <h2>5. Your Content</h2>
           <p>
             You retain ownership of content you submit to the service. By using AssistantX, you grant us a limited, non-exclusive license to host, store, reproduce, transmit, and process that content only as needed to operate, secure, and improve the service and to fulfill the features you request.
           </p>
         </section>
-=======
-      <section>
-        <h2>5. Your Content</h2>
-        <p>
-          You retain ownership of content you submit to the service. By using AssistantX, you grant us a limited, non-exclusive license to host, store, reproduce, transmit, and process that content only as needed to operate, secure, and improve the service and to fulfill the features you request.
-        </p>
-      </section>
->>>>>>> f2f3569 (fix: add contact email and public home page link to Terms of Service)
 
         <section>
           <h2>6. AI Outputs</h2>
@@ -98,21 +88,12 @@ export default function TermsPage() {
           </p>
         </section>
 
-<<<<<<< HEAD
         <section>
           <h2>11. Limitation Of Liability</h2>
           <p>
             To the maximum extent permitted by law, the operator of AssistantX will not be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for any loss of profits, revenue, goodwill, data, or business opportunity arising from or related to your use of the service.
           </p>
         </section>
-=======
-      <section>
-        <h2>11. Limitation Of Liability</h2>
-        <p>
-          To the maximum extent permitted by law, the operator of AssistantX will not be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for any loss of profits, revenue, goodwill, data, or business opportunity arising from or related to your use of the service.
-        </p>
-      </section>
->>>>>>> f2f3569 (fix: add contact email and public home page link to Terms of Service)
 
         <section>
           <h2>12. Changes To These Terms</h2>

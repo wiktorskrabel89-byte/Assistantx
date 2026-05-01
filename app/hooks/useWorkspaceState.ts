@@ -184,14 +184,13 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, activeWorkspace.settings.lastMode, updateWorkspace]);
 
-  useEffect(() => {
-    if (mode === activeWorkspace.settings.lastMode) return;
-    setMode(activeWorkspace.settings.lastMode);
-  }, [activeWorkspace.id, activeWorkspace.settings.lastMode, mode]);
-
   const setActiveWorkspaceId = useCallback((workspaceId: string) => {
+    const nextWorkspace = stateRef.current.workspaces.find((workspace) => workspace.id === workspaceId);
+    if (nextWorkspace && mode !== nextWorkspace.settings.lastMode) {
+      setMode(nextWorkspace.settings.lastMode);
+    }
     setState((prev) => ({ ...prev, activeWorkspaceId: workspaceId }));
-  }, []);
+  }, [mode]);
 
   const setActiveChatId = useCallback((workspaceId: string, chatId: string) => {
     updateWorkspace(workspaceId, (workspace) => ({ ...workspace, activeChatId: chatId }));

@@ -1,9 +1,13 @@
 "use client";
 
-import { Bot, Code2, Crown, Lock, MessageSquareText, Zap, ChevronDown, ChevronUp } from "lucide-react";
+import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchAllModels } from "../api/openrouter/fetchAllModels";
-import { COST_TIER_LABELS, isModelPremiumOnly, type CostTier } from "@/lib/ai-config";
+
+type OpenRouterModel = {
+  id: string;
+  description?: string;
+};
 
 type ModelSelectorProps = {
   dark: boolean;
@@ -15,7 +19,7 @@ type ModelSelectorProps = {
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
-  const [allModels, setAllModels] = useState<any[]>([]);
+  const [allModels, setAllModels] = useState<OpenRouterModel[]>([]);
   const isAuto = preferredModelId === null;
 
   useEffect(() => {
@@ -39,19 +43,6 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
     : "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed opacity-60";
 
   const sectionLabel = `text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`;
-
-  const tierBadge = (tier: CostTier) => {
-    const label = COST_TIER_LABELS[tier];
-    if (!label) return null;
-    const color = tier === "free"
-      ? "text-emerald-500"
-      : tier === "cheap"
-        ? "text-sky-500"
-        : tier === "standard"
-          ? "text-amber-500"
-          : "text-rose-500";
-    return <span className={`ml-0.5 text-[9px] font-bold ${color}`}>{label}</span>;
-  };
 
   return (
     <div className="w-full">
@@ -90,7 +81,7 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
             All Models
           </span>
           {allModels.map((model) => {
-            const locked = !isPremium && (model.id.includes("opus") || (model.description && model.description.toLowerCase().includes("premium")));
+            const locked = Boolean(!isPremium && (model.id.includes("opus") || model.description?.toLowerCase().includes("premium")));
             return (
               <button
                 key={model.id}

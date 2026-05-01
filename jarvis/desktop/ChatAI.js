@@ -1,8 +1,6 @@
 // jarvis/desktop/ChatAI.js
 // Prosty komponent czatu AI (placeholder, Electron)
 
-const { ipcRenderer } = require('electron');
-
 window.addEventListener('DOMContentLoaded', () => {
   const chat = document.getElementById('chat');
   const input = document.getElementById('input');

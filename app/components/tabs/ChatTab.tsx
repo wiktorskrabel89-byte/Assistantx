@@ -1,23 +1,6 @@
 
 "use client";
 
-<<<<<<< HEAD
-
-=======
-// Utility to extract all unique tags from conversations
-function getAllTags(conversations: any[]): string[] {
-  const tagSet = new Set<string>();
-  for (const chat of conversations) {
-    if (Array.isArray(chat.tags)) {
-      for (const tag of chat.tags) {
-        tagSet.add(tag);
-      }
-    }
-  }
-  return Array.from(tagSet);
-}
->>>>>>> aab6a3c (WIP: update chat route and related files)
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIToolsPanel } from "../AIToolsPanel";
 import { ChatComposer } from "../ChatComposer";
@@ -37,7 +20,6 @@ import { PromptManager } from "../PromptManager";
 import { PullToRefresh } from "../PullToRefresh";
 import { ShareConversationDialog } from "../ShareConversationDialog";
 import { ThinkingIndicator } from "../ThinkingIndicator";
-import { useChatTransport } from "../../hooks/useChatTransport";
 import { useWorkspaceQueries } from "../../hooks/useWorkspaceQueries";
 import {
   buildChatSessionItems,
@@ -46,12 +28,14 @@ import {
   MODE_PANEL_OPTIONS,
   QUICK_CHIPS,
   stripMarkdown,
+  TEXT_LANGUAGE_OPTIONS,
   // function getAllTags(conversations: any[]): string[] {
   toBase64,
 } from "../../lib/chat-state";
 import type {
   MessageFeedback,
   Mode,
+  QueuedMessage,
   ResponseAction,
   SharePayload,
   StyleMode,
@@ -59,37 +43,6 @@ import type {
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 
 export function ChatTab() {
-<<<<<<< HEAD
-// ...existing code...
-=======
-        // Tag input state
-        const [tagInput, setTagInput] = useState("");
-
-        // Add tag to active chat
-        function handleAddTag() {
-          if (!activeChat) return;
-          const tag = tagInput.trim();
-          if (!tag) return;
-          if (activeChat.tags?.includes(tag)) return;
-          updateChat(
-            activeWorkspace.id,
-            activeChat.id,
-            (chat) => ({ ...chat, tags: [...(chat.tags ?? []), tag] })
-          );
-          setTagInput("");
-        }
-      // Remove tag from active chat
-  function handleRemoveTag(tag: string) {
-    if (!activeChat || !Array.isArray(activeChat.tags)) return;
-    updateChat(
-      activeWorkspace.id,
-      activeChat.id,
-      (chat) => ({ ...chat, tags: (chat.tags ?? []).filter((t: string) => t !== tag) })
-    );
-  }
-    // Tag filter state
-    const [activeTag, setActiveTag] = useState<string>("");
->>>>>>> aab6a3c (WIP: update chat route and related files)
   const {
     state,
     loaded,
@@ -101,7 +54,6 @@ export function ChatTab() {
     setChatSearch,
     updateWorkspace,
     updateChat,
-    updateLastMessage,
     setActiveChatId,
     setWorkspaceMode,
     setPreferredModelId,
@@ -123,7 +75,6 @@ export function ChatTab() {
     assistantDescription,
     activeAgentId,
     assistantIcon,
-    stateRef,
     authReady,
     authProvider,
     linkedProviders,
@@ -144,6 +95,7 @@ export function ChatTab() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -153,17 +105,6 @@ export function ChatTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importedShareRef = useRef(false);
-    mode,
-    file,
-    setMessage,
-    setFile,
-    setFilePreview,
-    setComposerPreview,
-    inputRef,
-    stateRef,
-    updateChat,
-    updateLastMessage,
-  });
 
   const currentConversationId = activeChat.id;
   const workspaceQueries = useWorkspaceQueries({
@@ -208,6 +149,40 @@ export function ChatTab() {
   const codeBg = state.dark ? "bg-slate-950" : "bg-slate-100";
   const googleLinked = linkedProviders.includes("google") || authProvider === "google";
   const latestEntry = activeChat.messages[activeChat.messages.length - 1];
+  const loading = workspaceQueries.updateConversationMutation.isPending;
+  const stopRequested = false;
+
+  const stopCurrentGeneration = useCallback(() => {
+    // Streaming cancel wiring is not currently available in this tab state slice.
+  }, []);
+
+  const queueComposerMessage = useCallback((thinkingEffort: number) => {
+    const text = message.trim();
+    if (!text && !file) return;
+
+    setQueuedMessages((prev) => [
+      ...prev,
+      {
+        id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        workspaceId: activeWorkspace.id,
+        chatId: activeChat.id,
+        text,
+        mode,
+        file,
+        filePreview,
+        createdAt: Date.now(),
+        thinkingEffort,
+      },
+    ]);
+
+    setMessage("");
+    setFile(null);
+    setFilePreview(null);
+  }, [activeChat.id, activeWorkspace.id, file, filePreview, message, mode]);
+
+  const removeQueuedMessage = useCallback((queueId: string) => {
+    setQueuedMessages((prev) => prev.filter((item) => item.id !== queueId));
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -542,14 +517,6 @@ export function ChatTab() {
     setTimeout(() => setCopied(null), 2000);
   }, [activeChat]);
 
-<<<<<<< HEAD
-  // ...existing code...
-=======
-  const allTags = useMemo(() => getAllTags(conversations), [conversations]);
-
-  // Tag filter UI
-  // Tag assignment UI for current conversation
->>>>>>> aab6a3c (WIP: update chat route and related files)
   return (
     <>
       <ConversationsSidebar

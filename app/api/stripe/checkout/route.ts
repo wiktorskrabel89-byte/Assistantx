@@ -2,6 +2,7 @@
 // Anyone can visit the success URL and appear as premium.
 // You must implement a Stripe webhook to verify payment server-side before granting premium access.
 import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
 
 // You must set STRIPE_SECRET_KEY in your environment variables
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Stripe secret key not set" }, { status: 500 });
   }
 
-  const stripe = require("stripe")(stripeSecretKey);
+  const stripe = new Stripe(stripeSecretKey);
 
   // You can customize the price, currency, and product details here
   const session = await stripe.checkout.sessions.create({

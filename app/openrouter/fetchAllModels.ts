@@ -1,7 +1,7 @@
 // Fetches the latest available models from OpenRouter
 // Returns an array of model objects with at least an 'id' property
 
-export async function fetchAllModels(): Promise<Array<{ id: string; [key: string]: any }>> {
+export async function fetchAllModels(): Promise<Array<{ id: string }>> {
   const res = await fetch("https://openrouter.ai/api/v1/models", {
     headers: {
       "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,

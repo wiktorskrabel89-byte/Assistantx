@@ -19,7 +19,7 @@ function useIsAdmin() {
   return isAdmin;
 }
 
-export function AILearningTab({ dark }: { dark: boolean }) {
+export function AILearningTab() {
   const isAdmin = useIsAdmin();
   if (!isAdmin) {
     return (
