@@ -3,9 +3,6 @@
  */
 import { POST } from "@/app/api/image/route";
 
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
-
 describe("POST /api/image", () => {
   function makeRequest(body: object) {
     return new Request("http://localhost/api/image", {
@@ -16,34 +13,44 @@ describe("POST /api/image", () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    // Ensure no OpenAI key so tests use Pollinations path
+    delete process.env.OPENAI_API_KEY;
   });
 
-  it("returns a URL on success", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true });
-
+  it("returns a Pollinations URL and model name on success", async () => {
     const req = makeRequest({ prompt: "a cute cat" });
     const res = await POST(req);
     const json = await res.json();
 
-    expect(json.url).toBeTruthy();
+    expect(json.url).toContain("image.pollinations.ai");
     expect(json.model).toBe("Pollinations.ai (Free)");
   });
 
-  it("includes the encoded prompt in the image URL", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true });
-
+  it("encodes the prompt in the Pollinations URL", async () => {
     const req = makeRequest({ prompt: "a red apple" });
-    await POST(req);
+    const res = await POST(req);
+    const json = await res.json();
 
-    const calledUrl = mockFetch.mock.calls[0][0] as string;
-    expect(calledUrl).toContain(encodeURIComponent("a red apple"));
+    expect(json.url).toContain(encodeURIComponent("a red apple"));
   });
 
-  it("returns error payload when fetch response is not ok", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false });
+  it("includes width, height, nologo and enhance query params", async () => {
+    const req = makeRequest({ prompt: "test" });
+    const res = await POST(req);
+    const json = await res.json();
 
-    const req = makeRequest({ prompt: "a blue sky" });
+    expect(json.url).toContain("width=1024");
+    expect(json.url).toContain("height=1024");
+    expect(json.url).toContain("nologo=true");
+    expect(json.url).toContain("enhance=true");
+  });
+
+  it("returns error payload when request body is invalid JSON", async () => {
+    const req = new Request("http://localhost/api/image", {
+      method: "POST",
+      body: "not-valid-json",
+      headers: { "Content-Type": "application/json" },
+    });
     const res = await POST(req);
     const json = await res.json();
 
@@ -52,26 +59,12 @@ describe("POST /api/image", () => {
     expect(json.error).toBeDefined();
   });
 
-  it("returns error payload when fetch throws", async () => {
-    mockFetch.mockRejectedValueOnce(new Error("network error"));
-
-    const req = makeRequest({ prompt: "a mountain" });
+  it("url is a well-formed https URL", async () => {
+    const req = makeRequest({ prompt: "mountain lake" });
     const res = await POST(req);
     const json = await res.json();
 
-    expect(json.url).toBeNull();
-    expect(json.error).toBeDefined();
-  });
-
-  it("uses HEAD method to verify image URL", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true });
-
-    const req = makeRequest({ prompt: "test" });
-    await POST(req);
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ method: "HEAD" })
-    );
+    expect(() => new URL(json.url)).not.toThrow();
+    expect(json.url).toMatch(/^https:\/\//);
   });
 });

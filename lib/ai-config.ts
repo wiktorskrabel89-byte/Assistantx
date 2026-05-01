@@ -225,6 +225,7 @@ export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
   // "deepseek/deepseek-r1:free": "free", // removed unavailable model
+  "nvidia/nemotron-3-super:free": "free",
   "meta-llama/llama-3.3-70b-instruct:free": "free",
   "meta-llama/llama-4-scout:free": "free",
   "google/gemini-2.0-flash-exp:free": "free",

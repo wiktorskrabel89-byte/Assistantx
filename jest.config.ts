@@ -7,8 +7,11 @@ const config: Config = {
   coverageProvider: "v8",
   testEnvironment: "jest-environment-jsdom",
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
+  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/e2e/"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
+    // Redirect ESM dist of react-syntax-highlighter to CJS equivalent
+    "^react-syntax-highlighter/dist/esm/(.*)$": "react-syntax-highlighter/dist/cjs/$1",
   },
 };
 
