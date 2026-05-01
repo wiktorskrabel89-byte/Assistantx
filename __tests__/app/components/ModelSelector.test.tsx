@@ -28,14 +28,14 @@ describe("ModelSelector", () => {
   async function expandSelector(overrides: Partial<Parameters<typeof ModelSelector>[0]> = {}) {
     const result = renderSelector(overrides);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Poka[żz] wyb[oó]r modelu/i }));
+      fireEvent.click(screen.getByRole("button", { name: "Pokaż wybór modelu" }));
     });
     return result;
   }
 
   it("renders the toggle button collapsed by default", () => {
     renderSelector();
-    expect(screen.getByRole("button", { name: /Poka[żz] wyb[oó]r modelu/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pokaż wybór modelu" })).toBeInTheDocument();
   });
 
   it("expands to show Auto button when toggle is clicked", async () => {
@@ -76,7 +76,7 @@ describe("ModelSelector", () => {
   it("collapses the list when toggle is clicked a second time", async () => {
     await expandSelector();
     // Click again to collapse
-    fireEvent.click(screen.getByRole("button", { name: /Ukryj wyb[oó]r modelu/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Ukryj wybór modelu" }));
     expect(screen.queryByRole("button", { name: /Auto/i })).not.toBeInTheDocument();
   });
 

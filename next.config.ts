@@ -2,7 +2,8 @@
 const nextConfig = {
   output: 'standalone',
   generateEtags: false,
-  // Allow Jest (via nextJest) to transpile ESM-only packages in the react-markdown ecosystem
+  // Allow Next.js's webpack/turbopack build process to transpile ESM-only packages
+  // in the react-markdown and react-syntax-highlighter dependency trees
   transpilePackages: [
     'react-markdown',
     'unified',
