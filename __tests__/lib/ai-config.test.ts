@@ -20,7 +20,7 @@ import {
   FREE_CHAT_MODEL,
 } from "@/lib/ai-config";
 
-const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.+-]+$/;
+const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.:+-]+$/;
 
 describe("ai-config model arrays", () => {
   it("CHAT_MODELS is non-empty with well-formed entries", () => {
@@ -112,7 +112,7 @@ describe("recommended model presets", () => {
 describe("cost control system", () => {
   describe("getModelCostTier", () => {
     it("returns free for free models", () => {
-      expect(getModelCostTier("deepseek/deepseek-r1:free")).toBe("free");
+      expect(getModelCostTier("nvidia/nemotron-3-super:free")).toBe("free");
       expect(getModelCostTier("meta-llama/llama-3.3-70b-instruct:free")).toBe("free");
     });
 
@@ -138,14 +138,14 @@ describe("cost control system", () => {
 
   describe("isModelAllowedByCostMode", () => {
     it("thrifty allows free and cheap only", () => {
-      expect(isModelAllowedByCostMode("deepseek/deepseek-r1:free", "thrifty")).toBe(true);
+      expect(isModelAllowedByCostMode("meta-llama/llama-3.3-70b-instruct:free", "thrifty")).toBe(true);
       expect(isModelAllowedByCostMode("openai/gpt-5-mini", "thrifty")).toBe(true);
       expect(isModelAllowedByCostMode("deepseek/deepseek-r1", "thrifty")).toBe(false);
       expect(isModelAllowedByCostMode("openai/gpt-5.4", "thrifty")).toBe(false);
     });
 
     it("balanced allows up to standard", () => {
-      expect(isModelAllowedByCostMode("deepseek/deepseek-r1:free", "balanced")).toBe(true);
+      expect(isModelAllowedByCostMode("meta-llama/llama-3.3-70b-instruct:free", "balanced")).toBe(true);
       expect(isModelAllowedByCostMode("openai/gpt-5-mini", "balanced")).toBe(true);
       expect(isModelAllowedByCostMode("deepseek/deepseek-r1", "balanced")).toBe(true);
       expect(isModelAllowedByCostMode("openai/gpt-5.4", "balanced")).toBe(false);
@@ -160,7 +160,7 @@ describe("cost control system", () => {
 
   describe("filterModelsByCostMode", () => {
     const models = [
-      "deepseek/deepseek-r1:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
       "openai/gpt-5-mini",
       "deepseek/deepseek-r1",
       "openai/gpt-5.4",
@@ -168,7 +168,7 @@ describe("cost control system", () => {
 
     it("thrifty keeps only free and cheap models", () => {
       const filtered = filterModelsByCostMode(models, "thrifty");
-      expect(filtered).toContain("deepseek/deepseek-r1:free");
+      expect(filtered).toContain("meta-llama/llama-3.3-70b-instruct:free");
       expect(filtered).toContain("openai/gpt-5-mini");
       expect(filtered).not.toContain("deepseek/deepseek-r1");
       expect(filtered).not.toContain("openai/gpt-5.4");
@@ -176,7 +176,7 @@ describe("cost control system", () => {
 
     it("balanced keeps free, cheap, and standard models", () => {
       const filtered = filterModelsByCostMode(models, "balanced");
-      expect(filtered).toContain("deepseek/deepseek-r1:free");
+      expect(filtered).toContain("meta-llama/llama-3.3-70b-instruct:free");
       expect(filtered).toContain("openai/gpt-5-mini");
       expect(filtered).toContain("deepseek/deepseek-r1");
       expect(filtered).not.toContain("openai/gpt-5.4");
