@@ -67,7 +67,7 @@ export function PromptManager({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
-      <div className={`flex h-[min(46rem,calc(100vh-2rem))] w-full max-w-5xl overflow-hidden rounded-[28px] border shadow-2xl ${dark ? "border-slate-800 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`}>
+      <div className={`flex h-[min(46rem,calc(100vh-2rem))] w-full max-w-5xl overflow-hidden rounded-[28px] border shadow-2xl ${dark ? "border-slate-800 bg-slate-950 text-slate-100" : "border-sky-200/70 bg-white text-slate-900"}`}>
         <div className={`flex w-full max-w-xs flex-col border-r ${dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-slate-50"}`}>
           <div className="flex items-center justify-between px-4 py-4">
             <div>
@@ -102,7 +102,7 @@ export function PromptManager({
                     setDraftText(template.text);
                     setDraftMode(template.mode);
                   }}
-                  className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${!isCreating && selectedId === template.id ? (dark ? "border-blue-700 bg-blue-950/30" : "border-blue-200 bg-blue-50") : (dark ? "border-slate-800 bg-slate-950 hover:bg-slate-800" : "border-slate-200 bg-white hover:bg-slate-100")}`}
+                  className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${!isCreating && selectedId === template.id ? (dark ? "border-cyan-700 bg-cyan-950/30" : "border-sky-200 bg-sky-50") : (dark ? "border-slate-800 bg-slate-950 hover:bg-slate-800" : "border-slate-200 bg-white hover:bg-slate-100")}`}
                 >
                   <div className="truncate text-sm font-semibold">{template.label}</div>
                   <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">{template.mode}</div>
@@ -163,7 +163,7 @@ export function PromptManager({
               {selectedTemplate ? (
                 <button
                   onClick={() => onApply(selectedTemplate.id)}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+                  className="rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-2 text-sm font-medium text-white hover:from-sky-800 hover:to-cyan-700"
                 >
                   Apply to composer
                 </button>

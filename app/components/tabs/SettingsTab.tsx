@@ -30,9 +30,17 @@ export function SettingsTab() {
   }
 
   return (
-    <div className="max-w-xl mx-auto py-8">
-      <h2 className="text-2xl font-bold mb-4">Edit Profile</h2>
-      <UserProfileEditor profile={mockProfile} onSave={handleSave} />
-    </div>
+    <section className="h-full min-h-0 overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-3xl rounded-3xl border border-sky-200/60 bg-white/90 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)] backdrop-blur sm:p-8">
+        <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/70 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">
+          Ustawienia profilu
+        </div>
+        <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-900">Edit Profile</h2>
+        <p className="mt-2 text-sm leading-7 text-slate-600">Zarzadzaj profilem i informacjami widocznymi w przestrzeni AssistantX.</p>
+        <div className="mt-6">
+          <UserProfileEditor profile={mockProfile} onSave={handleSave} />
+        </div>
+      </div>
+    </section>
   );
 }

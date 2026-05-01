@@ -74,7 +74,7 @@ export function ChatComposer({
   const showThinkingEffort = REASONING_MODELS.some((id) => selectedModel.includes(id.split("/").pop()!));
 
   return (
-    <div className="border-t border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/90">
+    <div className="border-t border-slate-200 bg-white/85 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
       <div className="mx-auto max-w-5xl space-y-2">
         {file ? (
           <div className="flex flex-wrap gap-2">
@@ -107,8 +107,8 @@ export function ChatComposer({
                   className={`flex max-w-full items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
                     isActive
                       ? dark
-                        ? "border-blue-800 bg-blue-950/30 text-blue-100"
-                        : "border-blue-200 bg-blue-50 text-blue-800"
+                        ? "border-cyan-800 bg-cyan-950/30 text-cyan-100"
+                        : "border-sky-200 bg-sky-50 text-sky-800"
                       : dark
                         ? "border-slate-700 bg-slate-900 text-slate-200"
                         : "border-slate-200 bg-white text-slate-700"
@@ -161,7 +161,7 @@ export function ChatComposer({
               id="thinking-effort"
               value={thinkingEffort}
               onChange={e => setThinkingEffort(e.target.value)}
-              className="rounded border px-2 py-1 text-xs dark:bg-slate-900 dark:text-slate-100"
+              className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="Low">Low</option>
               <option value="Medium">Medium</option>
@@ -170,7 +170,11 @@ export function ChatComposer({
             </select>
           </div>
         )}
+<<<<<<< chore/fix-lint-build-and-conflicts-2026-05-01
+        <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${dark ? "border-slate-800 bg-slate-950" : "border-sky-200/60 bg-white/95"}`}>
+=======
         <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${dark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"}`}>
+>>>>>>> main
           <button
             onClick={() => fileInputRef.current?.click()}
             className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
@@ -232,7 +236,7 @@ export function ChatComposer({
               onQueueMessage(showThinkingEffort ? effortNum : 2);
             }}
             disabled={!message.trim() && !file}
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 text-white transition-all hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
             title={loading ? "Add to queue" : "Send message"}
             aria-label={loading ? "Add to queue" : "Send message"}
           >

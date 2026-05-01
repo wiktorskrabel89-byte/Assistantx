@@ -64,10 +64,10 @@ function HomeContent() {
 
   const bg = state.dark
     ? "bg-slate-950 text-slate-100"
-    : "bg-gradient-to-br from-blue-50 via-white to-purple-50 text-slate-900";
+    : "bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.18),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.15),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] text-slate-900";
   const cardBg = state.dark
     ? "bg-slate-900 border-slate-800"
-    : "bg-white/95 border-slate-200 shadow-sm shadow-slate-200/70";
+    : "bg-white/92 border-sky-200/60 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.28)]";
   const isChatTab = activeAppTab === "chat";
 
   return (

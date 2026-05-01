@@ -61,17 +61,17 @@ const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
 export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigationColumnProps) {
   const shellClassName = dark
     ? "border-slate-800 bg-slate-900 text-slate-100"
-    : "border-slate-200 bg-white/95 text-slate-900 shadow-sm shadow-slate-200/70";
+    : "border-sky-200/60 bg-white/92 text-slate-900 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.28)]";
   const searchClassName = dark
     ? "border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500"
-    : "border-slate-200 bg-white text-slate-900 placeholder-slate-400";
+    : "border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100";
 
   return (
     <aside className={`hidden min-h-0 overflow-hidden rounded-[26px] border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
       <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-        <div className="rounded-2xl bg-gradient-to-br from-slate-700 to-slate-500 px-4 py-4 text-white shadow-sm">
+        <div className="rounded-2xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 px-4 py-4 text-white shadow-sm">
           <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
-          <div className="mt-1 text-xs text-slate-200/90">Powered by AI</div>
+          <div className="mt-1 text-xs text-white/90">Powered by AI</div>
         </div>
 
         <div className="relative mt-4">
@@ -93,10 +93,10 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
             const itemClassName = isActive
               ? dark
                 ? "bg-slate-800 text-white"
-                : "bg-slate-700 text-white shadow-sm"
+                : "bg-gradient-to-r from-sky-700 to-cyan-600 text-white shadow-sm"
               : dark
                 ? "text-slate-300 hover:bg-slate-800/80"
-                : "text-slate-700 hover:bg-slate-100";
+                : "text-slate-700 hover:bg-sky-50";
 
             return (
               <div key={item.id}>
@@ -111,8 +111,8 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
                 </button>
                 {item.id === "jarvis" && (
                   <div className="ml-10 mt-1 flex flex-col gap-1 text-xs">
-                    <a href="/downloads/jarvis-windows.exe" download className="text-blue-600 hover:underline">Pobierz Jarvis Windows</a>
-                    <a href="/downloads/jarvis-android.apk" download className="text-blue-600 hover:underline">Pobierz Jarvis Android</a>
+                    <a href="/downloads/jarvis-windows.exe" download className="text-sky-600 hover:underline">Pobierz Jarvis Windows</a>
+                    <a href="/downloads/jarvis-android.apk" download className="text-sky-600 hover:underline">Pobierz Jarvis Android</a>
                   </div>
                 )}
               </div>

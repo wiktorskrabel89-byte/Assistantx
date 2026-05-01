@@ -144,7 +144,7 @@ export function ChatTab() {
     [currentConversationId, filteredConversations]
   );
 
-  const cardBg = state.dark ? "bg-slate-900 border-slate-800" : "bg-white/95 border-slate-200 shadow-sm shadow-slate-200/70";
+  const cardBg = state.dark ? "bg-slate-900 border-slate-800" : "bg-white/92 border-sky-200/60 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.22)]";
   const inputBg = state.dark ? "bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400";
   const codeBg = state.dark ? "bg-slate-950" : "bg-slate-100";
   const googleLinked = linkedProviders.includes("google") || authProvider === "google";

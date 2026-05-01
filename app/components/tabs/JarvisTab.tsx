@@ -2,24 +2,61 @@
 
 export default function JarvisTab() {
   return (
-    <div className="flex flex-col gap-8 p-8 items-center">
-      <h1 className="text-3xl font-bold mb-4">Jarvis App Download</h1>
-      <div className="flex gap-4 mb-8">
-        <a
-          href="/jarvis/JarvisSetup.exe"
-          download
-          className="rounded-xl bg-blue-600 px-6 py-3 text-white font-semibold shadow hover:bg-blue-700 transition"
-        >
-          Download for Windows
-        </a>
-        <a
-          href="/jarvis/JarvisApp.apk"
-          download
-          className="rounded-xl bg-green-600 px-6 py-3 text-white font-semibold shadow hover:bg-green-700 transition"
-        >
-          Download for Android
-        </a>
+    <section className="flex h-full min-h-0 flex-col overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6">
+        <div className="rounded-3xl border border-sky-200/60 bg-white/90 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)] backdrop-blur sm:p-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800 shadow-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-sky-500 to-amber-400" />
+            AssistantX Jarvis
+          </div>
+
+          <h1 className="mt-5 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            Download Jarvis
+            <span className="block bg-gradient-to-r from-sky-700 via-cyan-600 to-amber-500 bg-clip-text text-transparent">
+              for desktop and mobile
+            </span>
+          </h1>
+
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
+            Keep your AssistantX assistant close at hand. Install Jarvis on Windows or Android and continue your workflows with the same account and ecosystem.
+          </p>
+
+          <div className="mt-7 grid gap-3 sm:grid-cols-2">
+            <a
+              href="/jarvis/JarvisSetup.exe"
+              download
+              className="group inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700"
+            >
+              <span>Download for Windows</span>
+              <span className="ml-2 transition-transform group-hover:translate-x-0.5">{"->"}</span>
+            </a>
+
+            <a
+              href="/jarvis/JarvisApp.apk"
+              download
+              className="group inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/60"
+            >
+              <span>Download for Android</span>
+              <span className="ml-2 transition-transform group-hover:translate-x-0.5">{"->"}</span>
+            </a>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-sky-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
+            <div className="text-sm font-semibold text-slate-900">Fast install</div>
+            <p className="mt-2 text-xs leading-6 text-slate-600">Get up and running in minutes with a direct installer and APK package.</p>
+          </div>
+          <div className="rounded-2xl border border-amber-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
+            <div className="text-sm font-semibold text-slate-900">Same ecosystem</div>
+            <p className="mt-2 text-xs leading-6 text-slate-600">Continue using your AssistantX flows, tools, and integrations across platforms.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
+            <div className="text-sm font-semibold text-slate-900">Private workflow</div>
+            <p className="mt-2 text-xs leading-6 text-slate-600">Use your own account context and keep your work sessions organized per device.</p>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }

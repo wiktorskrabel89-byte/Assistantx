@@ -72,7 +72,7 @@ export const ChatList = memo(function ChatList({
     <div ref={scrollRef} className="mx-auto flex-1 w-full max-w-4xl overflow-y-auto space-y-4 pr-1">
       {chat.length === 0 ? (
         <div className="mt-8 text-center sm:mt-12">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-500 shadow-lg shadow-blue-500/20">
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 shadow-lg shadow-cyan-500/20">
             <AssistantIcon className="h-6 w-6 text-white" />
           </div>
           <h2 className={`mt-5 text-[2rem] font-bold tracking-tight ${dark ? "text-white" : "text-slate-900"}`}>Jak moge Ci pomoc?</h2>
@@ -91,11 +91,11 @@ export const ChatList = memo(function ChatList({
                   className={`rounded-xl border px-4 py-3 text-left transition-all ${
                     dark
                       ? "border-slate-800 bg-slate-900/80 hover:border-blue-800 hover:bg-slate-900"
-                      : "border-slate-200 bg-white shadow-sm hover:border-blue-300 hover:shadow-md"
+                      : "border-slate-200 bg-white shadow-sm hover:border-sky-300 hover:shadow-md"
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${dark ? "bg-slate-800 text-blue-300" : "bg-blue-50 text-blue-600"}`}>
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${dark ? "bg-slate-800 text-cyan-300" : "bg-sky-50 text-sky-700"}`}>
                       <Icon className="h-4 w-4" strokeWidth={2.2} />
                     </div>
                     <div>
@@ -124,7 +124,7 @@ export const ChatList = memo(function ChatList({
                 </div>
               ) : null}
               {editingMessageId === entry.id ? (
-                <div className="rounded-2xl rounded-tr-sm bg-blue-600/10 p-3">
+                <div className="rounded-2xl rounded-tr-sm bg-sky-600/10 p-3">
                   <textarea
                     id="edit-message-content"
                     name="editMessageContent"
@@ -148,7 +148,7 @@ export const ChatList = memo(function ChatList({
                     {entry.user}
                   </div>
                   <div className="mt-1 flex justify-end gap-3">
-                    <button onClick={() => onEditUser(entry.user)} className={`text-xs ${dark ? "text-blue-300" : "text-blue-600"}`}>
+                    <button onClick={() => onEditUser(entry.user)} className={`text-xs ${dark ? "text-cyan-300" : "text-sky-700"}`}>
                       Edit and resend
                     </button>
                     <button onClick={() => onStartEditingMessage(entry.id, entry.user)} className={`text-xs ${dark ? "text-slate-300" : "text-slate-600"}`}>

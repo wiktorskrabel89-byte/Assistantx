@@ -6,15 +6,15 @@
   <title>Jarvis Desktop</title>
   <style>
     :root {
-      color-scheme: dark;
-      --bg: #101725;
-      --panel: #172237;
-      --panel-border: #2c3d5e;
-      --accent: #67e8f9;
-      --accent-2: #22c55e;
-      --text: #e5eefb;
-      --muted: #9db0cd;
-      --danger: #f97316;
+      color-scheme: light;
+      --bg: #eff5ff;
+      --panel: rgba(255, 255, 255, 0.9);
+      --panel-border: rgba(125, 211, 252, 0.55);
+      --accent: #0369a1;
+      --accent-2: #0891b2;
+      --text: #0f172a;
+      --muted: #475569;
+      --danger: #ea580c;
     }
 
     * {
@@ -25,7 +25,10 @@
       margin: 0;
       min-height: 100vh;
       font-family: "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #1f3357 0%, var(--bg) 55%);
+      background:
+        radial-gradient(circle at 12% 14%, rgba(14, 165, 233, 0.16), transparent 34%),
+        radial-gradient(circle at 88% 82%, rgba(251, 146, 60, 0.14), transparent 36%),
+        linear-gradient(140deg, #f8fafc, #e2e8f0 48%, #dbeafe);
       color: var(--text);
       padding: 24px;
     }
@@ -39,11 +42,12 @@
     }
 
     .panel {
-      background: rgba(23, 34, 55, 0.92);
+      background: var(--panel);
       border: 1px solid var(--panel-border);
       border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+      box-shadow: 0 24px 80px -28px rgba(14, 116, 144, 0.25);
+      backdrop-filter: blur(8px);
     }
 
     h1, h2, p {
@@ -61,10 +65,11 @@
       gap: 8px;
       padding: 8px 12px;
       border-radius: 999px;
-      background: rgba(103, 232, 249, 0.12);
-      color: var(--accent);
+      background: rgba(3, 105, 161, 0.08);
+      color: #075985;
       font-size: 14px;
       width: fit-content;
+      border: 1px solid rgba(56, 189, 248, 0.45);
     }
 
     .muted {
@@ -79,8 +84,8 @@
       word-break: break-all;
       padding: 10px 12px;
       border-radius: 12px;
-      background: rgba(10, 16, 28, 0.6);
-      border: 1px solid rgba(157, 176, 205, 0.18);
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.35);
     }
 
     .actions {
@@ -94,15 +99,15 @@
       border-radius: 12px;
       padding: 12px 14px;
       cursor: pointer;
-      color: #08111f;
-      background: linear-gradient(135deg, var(--accent) 0%, #a7f3d0 100%);
+      color: #ffffff;
+      background: linear-gradient(135deg, #0369a1 0%, #0891b2 100%);
       font-weight: 700;
     }
 
     button.secondary {
       color: var(--text);
-      background: rgba(157, 176, 205, 0.12);
-      border: 1px solid rgba(157, 176, 205, 0.24);
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.35);
     }
 
     .composer {
@@ -115,8 +120,8 @@
     input {
       width: 100%;
       border-radius: 12px;
-      border: 1px solid rgba(157, 176, 205, 0.24);
-      background: rgba(10, 16, 28, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(255, 255, 255, 0.86);
       color: var(--text);
       padding: 12px 14px;
       outline: none;
@@ -134,12 +139,12 @@
     .message {
       padding: 12px 14px;
       border-radius: 14px;
-      background: rgba(10, 16, 28, 0.72);
-      border: 1px solid rgba(157, 176, 205, 0.16);
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.3);
     }
 
     .message.system {
-      border-color: rgba(34, 197, 94, 0.28);
+      border-color: rgba(14, 165, 233, 0.45);
     }
 
     .message.error {

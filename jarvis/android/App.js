@@ -37,7 +37,7 @@ export default function App() {
             <Text style={styles.buttonText}>Open Discord</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={() => sendCommand('screenshot')}>
-            <Text style={styles.buttonText}>Screenshot</Text>
+            <Text style={styles.buttonTextSecondary}>Screenshot</Text>
           </Pressable>
         </View>
 
@@ -70,7 +70,7 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#07111f',
+    backgroundColor: '#eef4ff',
   },
   container: {
     flex: 1,
@@ -78,31 +78,31 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   title: {
-    color: '#e2e8f0',
+    color: '#0f172a',
     fontSize: 30,
     fontWeight: '700',
   },
   subtitle: {
-    color: '#94a3b8',
+    color: '#475569',
     fontSize: 15,
     lineHeight: 22,
   },
   panel: {
-    backgroundColor: '#132235',
-    borderColor: '#29405d',
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
     borderRadius: 16,
     borderWidth: 1,
     gap: 6,
     padding: 16,
   },
   label: {
-    color: '#67e8f9',
+    color: '#0369a1',
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   value: {
-    color: '#e2e8f0',
+    color: '#0f172a',
     fontSize: 14,
     marginBottom: 6,
   },
@@ -114,31 +114,36 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   input: {
-    borderColor: '#29405d',
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
     borderRadius: 14,
     borderWidth: 1,
-    color: '#e2e8f0',
+    color: '#0f172a',
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: '#22c55e',
+    backgroundColor: '#0369a1',
     borderRadius: 14,
     flex: 1,
     paddingVertical: 14,
   },
   secondaryButton: {
     alignItems: 'center',
-    backgroundColor: '#0f172a',
-    borderColor: '#29405d',
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
     borderRadius: 14,
     borderWidth: 1,
     flex: 1,
     paddingVertical: 14,
   },
   buttonText: {
-    color: '#e2e8f0',
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  buttonTextSecondary: {
+    color: '#0f172a',
     fontWeight: '700',
   },
   log: {
@@ -146,14 +151,14 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   message: {
-    backgroundColor: '#0f172a',
-    borderColor: '#1e293b',
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
   },
   messageText: {
-    color: '#cbd5e1',
+    color: '#334155',
     fontSize: 13,
   },
   empty: {
