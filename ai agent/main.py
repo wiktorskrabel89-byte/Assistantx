@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality")
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -37,6 +37,70 @@ app.add_middleware(
     allow_methods=["POST", "GET", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
+
+
+class JarvisSocketManager:
+    def __init__(self):
+        self.connections: dict[WebSocket, dict[str, str | None]] = {}
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.connections[websocket] = {"role": None, "token": None}
+
+    def disconnect(self, websocket: WebSocket):
+        self.connections.pop(websocket, None)
+
+    def register(self, websocket: WebSocket, role: str | None, token: str | None):
+        self.connections[websocket] = {
+            "role": role or "unknown",
+            "token": token,
+        }
+
+    def peers(self, *, exclude: WebSocket | None = None, role: str | None = None):
+        for websocket, meta in self.connections.items():
+            if exclude is not None and websocket is exclude:
+                continue
+            if role is not None and meta.get("role") != role:
+                continue
+            yield websocket, meta
+
+    def summary(self):
+        entries = []
+        for _websocket, meta in self.connections.items():
+            entries.append(
+                {
+                    "role": meta.get("role") or "unknown",
+                    "token": meta.get("token"),
+                }
+            )
+
+        role_counts = {}
+        for entry in entries:
+            role = entry["role"]
+            role_counts[role] = role_counts.get(role, 0) + 1
+
+        return {
+            "active_connections": len(entries),
+            "role_counts": role_counts,
+            "clients": entries,
+        }
+
+    async def send_json(self, websocket: WebSocket, payload: dict):
+        await websocket.send_text(json.dumps(payload))
+
+    async def broadcast(self, payload: dict, *, exclude: WebSocket | None = None, role: str | None = None):
+        stale_connections = []
+        for websocket, _meta in self.peers(exclude=exclude, role=role):
+            try:
+                await self.send_json(websocket, payload)
+            except Exception:
+                stale_connections.append(websocket)
+
+        for websocket in stale_connections:
+            self.disconnect(websocket)
+
+
+socket_manager = JarvisSocketManager()
 
 class Message(BaseModel):
     message: str
@@ -97,6 +161,137 @@ CODE_KEYWORDS = [
 def is_code_request(message: str) -> bool:
     msg_lower = message.lower()
     return any(keyword in msg_lower for keyword in CODE_KEYWORDS)
+
+
+@app.websocket("/ws")
+async def jarvis_websocket(websocket: WebSocket):
+    await socket_manager.connect(websocket)
+    await socket_manager.send_json(
+        websocket,
+        {
+            "type": "status",
+            "status": "connected",
+            "message": "Jarvis WebSocket connected.",
+        },
+    )
+
+    try:
+        while True:
+            raw_message = await websocket.receive_text()
+
+            try:
+                payload = json.loads(raw_message)
+            except json.JSONDecodeError:
+                await socket_manager.send_json(
+                    websocket,
+                    {
+                        "type": "error",
+                        "message": "Invalid JSON payload.",
+                    },
+                )
+                continue
+
+            message_type = payload.get("type")
+            role = payload.get("role")
+            token = payload.get("token")
+
+            if message_type == "register":
+                socket_manager.register(websocket, role, token)
+                await socket_manager.send_json(
+                    websocket,
+                    {
+                        "type": "registered",
+                        "role": role or "unknown",
+                        "token": token,
+                    },
+                )
+                await socket_manager.broadcast(
+                    {
+                        "type": "peer_registered",
+                        "role": role or "unknown",
+                        "token": token,
+                    },
+                    exclude=websocket,
+                )
+                continue
+
+            sender = socket_manager.connections.get(websocket, {"role": role, "token": token})
+            sender_role = sender.get("role") or role or "unknown"
+            sender_token = sender.get("token") or token
+
+            if message_type == "desktop_prompt":
+                text = payload.get("text", "")
+                await socket_manager.send_json(
+                    websocket,
+                    {
+                        "type": "ack",
+                        "message": "Prompt received by Jarvis backend.",
+                        "text": text,
+                    },
+                )
+                await socket_manager.broadcast(
+                    {
+                        "type": "desktop_prompt",
+                        "text": text,
+                        "from_role": sender_role,
+                        "token": sender_token,
+                    },
+                    exclude=websocket,
+                )
+                continue
+
+            if message_type == "response":
+                await socket_manager.broadcast(
+                    {
+                        "type": "response",
+                        "text": payload.get("text", ""),
+                        "from_role": sender_role,
+                        "token": sender_token,
+                    },
+                    exclude=websocket,
+                )
+                continue
+
+            if message_type == "command":
+                command = payload.get("command")
+                app_name = payload.get("app")
+                await socket_manager.broadcast(
+                    {
+                        "type": "command",
+                        "command": command,
+                        "app": app_name,
+                        "from_role": sender_role,
+                        "token": sender_token,
+                    },
+                    exclude=websocket,
+                )
+                await socket_manager.send_json(
+                    websocket,
+                    {
+                        "type": "ack",
+                        "message": f"Command queued: {command}",
+                    },
+                )
+                continue
+
+            await socket_manager.send_json(
+                websocket,
+                {
+                    "type": "warning",
+                    "message": f"Unsupported message type: {message_type}",
+                },
+            )
+    except WebSocketDisconnect:
+        socket_manager.disconnect(websocket)
+
+
+@app.get("/jarvis/status")
+async def jarvis_status():
+    return {
+        "ok": True,
+        "websocket_path": "/ws",
+        **socket_manager.summary(),
+    }
 
 
 # --- Streaming, System Prompt, History Limit, RAG ---
