@@ -57,18 +57,13 @@ function HomeContent() {
   }, []);
   const { state } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
-
-  const handleSelectAppTab = useCallback((tab: AppNavigationTab) => {
-    setActiveAppTab(tab);
-  }, []);
-
-  const bg = state.dark
-    ? "bg-slate-950 text-slate-100"
-    : "bg-gradient-to-br from-blue-50 via-white to-purple-50 text-slate-900";
-  const cardBg = state.dark
-    ? "bg-slate-900 border-slate-800"
-    : "bg-white/95 border-slate-200 shadow-sm shadow-slate-200/70";
-  const isChatTab = activeAppTab === "chat";
+export default function Home() {
+  return (
+    <WorkspaceProvider>
+      <HomeContent />
+    </WorkspaceProvider>
+  );
+}
 
   return (
     <>
@@ -87,6 +82,7 @@ function HomeContent() {
       </div>
     </>
   );
+<<<<<<< HEAD
 }
 
 export default function Home() {
@@ -96,3 +92,6 @@ export default function Home() {
     </WorkspaceProvider>
   );
 }
+=======
+}
+>>>>>>> e176f02 (fix: remove leftover old code from page.tsx causing build error)

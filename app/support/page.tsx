@@ -1,6 +1,4 @@
 "use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import ChatbotSection from "@/app/components/ChatbotSection";
 
 export default function SupportPage() {

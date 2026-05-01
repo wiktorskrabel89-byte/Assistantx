@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/server";
 
+import { createClient } from "@/lib/server";
 function getSupabase() {
   // This assumes createClient returns a promise, so you may need to adjust usage to await getSupabase()
   // If createClient is synchronous, remove await in usages.
@@ -73,11 +73,27 @@ async function ensureConversation(conversationId: string, userId: string | null)
   );
 }
 
+
 // Define free model arrays for compatibility with logic below
-const FREE_CODING_MODELS = TOP_FREE_CODE_MODELS;
-const FREE_CHAT_MODELS = TOP_FREE_CHAT_MODELS;
-let CODE_MODEL = FREE_CODING_MODELS[0];
-let CHAT_MODEL = FREE_CHAT_MODELS[0];
+
+// Explicitly include NVIDIA and Llama models in free arrays
+const FREE_CODING_MODELS = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  ...TOP_FREE_CODE_MODELS.filter(
+    (id) => id !== "nvidia/nemotron-3-super-120b-a12b:free" && id !== "meta-llama/llama-3.3-70b-instruct:free"
+  ),
+];
+const FREE_CHAT_MODELS = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  ...TOP_FREE_CHAT_MODELS.filter(
+    (id) => id !== "nvidia/nemotron-3-super-120b-a12b:free" && id !== "meta-llama/llama-3.3-70b-instruct:free"
+  ),
+];
+// Set NVIDIA as default coding model and Llama as default chat model
+let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 const SEARCH_MODEL = "perplexity/sonar";
 const FREE_CODE_MODEL = FREE_CODING_MODELS[0];
 const FREE_CHAT_MODEL = FREE_CHAT_MODELS[0];
@@ -94,6 +110,57 @@ async function tryWithFallback<T>(modelId: string, fallbackId: string, fn: (id: 
     // Optionally log the error
     return await fn(fallbackId);
   }
+}
+
+async function getAuthUserId(req: Request): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) return null;
+    const token = authHeader.replace("Bearer ", "");
+    const supabase = await getSupabase();
+    const { data } = await supabase.auth.getUser(token);
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getMemoryHistory(conversationId: string) {
+  const supabase = await getSupabase();
+  const { data } = await supabase.rpc("get_memory_limited_messages", {
+    p_conversation_id: conversationId,
+    p_max_tokens: 4000,
+    p_max_messages: 20,
+  });
+  return data ?? [];
+}
+
+async function getMemorySummaries(conversationId: string) {
+  const supabase = await getSupabase();
+  const { data } = await supabase
+    .from("memory_summaries")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
+  const supabase = await getSupabase();
+  await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    role,
+    content,
+    token_count: Math.ceil(content.length / 4),
+  });
+}
+
+async function ensureConversation(conversationId: string, userId: string | null) {
+  const supabase = await getSupabase();
+  await supabase.from("conversations").upsert(
+    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
+    { onConflict: "id" }
+  );
 }
 
 function isCreditsError(status: number, body: string): boolean {
@@ -279,6 +346,7 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
+<<<<<<< HEAD
 // List of models that support reasoning depth (thinkingEffort)
 const REASONING_MODELS = [
   "openai/gpt-5.4",
@@ -304,6 +372,10 @@ const REASONING_MODELS = [
 
 export const POST = async (req: Request) => {
 
+=======
+
+export const POST = async (req: Request) => {
+>>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)
   // Dynamically fetch latest GPT and Claude models at runtime
   const latestGpt = await fetchLatestModelId("openai/gpt-");
   if (latestGpt) CODE_MODEL = latestGpt;
@@ -346,9 +418,13 @@ export const POST = async (req: Request) => {
       }
       allowedModelsFinal = allowedModels;
     }
+<<<<<<< HEAD
   } catch (err) {
     console.error('Error in chat route:', err);
   }
+=======
+  } catch {}
+>>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
@@ -524,12 +600,39 @@ export const POST = async (req: Request) => {
         ])
       : [];
   }
+<<<<<<< HEAD
 
 
 
 
 
 
+=======
+>>>>>>> a259ad7 (feat: enable Supabase auth and memory in chat route, update env.local, and fix chat transport headers)
+
+
+  // List of models that support reasoning depth (thinkingEffort)
+  const REASONING_MODELS = [
+    "openai/gpt-5.4",
+    "openai/gpt-5.1",
+    "openai/gpt-5.2",
+    "openai/gpt-5.2-pro",
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano",
+    "openai/gpt-5",
+    "openai/gpt-oss-120b",
+    "google/gemini-3-flash-preview",
+    "google/gemini-3-pro-preview",
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.5-flash-lite",
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-v3.2",
+    "moonshotai/kimi-k2-thinking",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "minimax/minimax-m2.5",
+    "perplexity/sonar",
+    // Add more as needed
+  ];
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
@@ -576,9 +679,13 @@ export const POST = async (req: Request) => {
         try {
           const parsed = JSON.parse(payload.replace(/^data: /, "").trim());
           if (parsed.token) fullReply += parsed.token;
+<<<<<<< HEAD
         } catch (err) {
           console.error('Error in chat route (inner):', err);
         }
+=======
+        } catch {}
+>>>>>>> a259ad7 (feat: enable Supabase auth and memory in chat route, update env.local, and fix chat transport headers)
         controller.enqueue(encoder.encode(payload));
       };
       const safeClose = async () => {
@@ -744,5 +851,9 @@ export const POST = async (req: Request) => {
   return new Response(stream, {
     headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
   });
+<<<<<<< HEAD
 };
 
+=======
+};
+>>>>>>> 1131e36 (Fix: ensure allowedModels includes all Claude models and refactor POST handler)

@@ -1,7 +1,22 @@
 
 "use client";
 
+<<<<<<< HEAD
 
+=======
+// Utility to extract all unique tags from conversations
+function getAllTags(conversations: any[]): string[] {
+  const tagSet = new Set<string>();
+  for (const chat of conversations) {
+    if (Array.isArray(chat.tags)) {
+      for (const tag of chat.tags) {
+        tagSet.add(tag);
+      }
+    }
+  }
+  return Array.from(tagSet);
+}
+>>>>>>> aab6a3c (WIP: update chat route and related files)
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIToolsPanel } from "../AIToolsPanel";
@@ -31,7 +46,7 @@ import {
   MODE_PANEL_OPTIONS,
   QUICK_CHIPS,
   stripMarkdown,
-  TEXT_LANGUAGE_OPTIONS,
+  // function getAllTags(conversations: any[]): string[] {
   toBase64,
 } from "../../lib/chat-state";
 import type {
@@ -44,7 +59,37 @@ import type {
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 
 export function ChatTab() {
+<<<<<<< HEAD
 // ...existing code...
+=======
+        // Tag input state
+        const [tagInput, setTagInput] = useState("");
+
+        // Add tag to active chat
+        function handleAddTag() {
+          if (!activeChat) return;
+          const tag = tagInput.trim();
+          if (!tag) return;
+          if (activeChat.tags?.includes(tag)) return;
+          updateChat(
+            activeWorkspace.id,
+            activeChat.id,
+            (chat) => ({ ...chat, tags: [...(chat.tags ?? []), tag] })
+          );
+          setTagInput("");
+        }
+      // Remove tag from active chat
+  function handleRemoveTag(tag: string) {
+    if (!activeChat || !Array.isArray(activeChat.tags)) return;
+    updateChat(
+      activeWorkspace.id,
+      activeChat.id,
+      (chat) => ({ ...chat, tags: (chat.tags ?? []).filter((t: string) => t !== tag) })
+    );
+  }
+    // Tag filter state
+    const [activeTag, setActiveTag] = useState<string>("");
+>>>>>>> aab6a3c (WIP: update chat route and related files)
   const {
     state,
     loaded,
@@ -108,18 +153,6 @@ export function ChatTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importedShareRef = useRef(false);
-
-  const {
-    loading,
-    stopRequested,
-    queuedMessages,
-    queueComposerMessage,
-    removeQueuedMessage,
-    stopCurrentGeneration,
-  } = useChatTransport({
-    activeWorkspaceId: activeWorkspace.id,
-    activeChatId: activeChat.id,
-    message,
     mode,
     file,
     setMessage,
@@ -509,7 +542,14 @@ export function ChatTab() {
     setTimeout(() => setCopied(null), 2000);
   }, [activeChat]);
 
+<<<<<<< HEAD
   // ...existing code...
+=======
+  const allTags = useMemo(() => getAllTags(conversations), [conversations]);
+
+  // Tag filter UI
+  // Tag assignment UI for current conversation
+>>>>>>> aab6a3c (WIP: update chat route and related files)
   return (
     <>
       <ConversationsSidebar

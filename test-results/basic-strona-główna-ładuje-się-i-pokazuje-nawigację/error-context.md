@@ -32,7 +32,7 @@ Call log:
   - main [ref=e2]:
     - generic [ref=e3]:
       - generic [ref=e4]:
-        - generic [ref=e5]: assistantx Cloud
+  - generic [ref=e5]: assistantx Cloud
         - heading "Sign in to sync your workspaces across devices." [level=1] [ref=e6]
         - paragraph [ref=e7]: Your chats, models, pinned memory, exports, and workspace settings now persist in Supabase. Use a magic link to sign in securely without managing passwords in this app.
         - generic [ref=e8]:

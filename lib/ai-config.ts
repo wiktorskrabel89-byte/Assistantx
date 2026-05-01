@@ -61,7 +61,10 @@ export const CHAT_MODELS: ModelOption[] = [
     label: "Claude Opus 4.7",
     description: "Latest premium Claude model for chat and code.",
   },
+<<<<<<< HEAD
+=======
   {
+>>>>>>> aab6a3c (WIP: update chat route and related files)
     id: "google/gemini-3-flash-preview",
     label: "Gemini 3 Flash",
     description: "Fast general-purpose chat.",
@@ -71,9 +74,9 @@ export const CHAT_MODELS: ModelOption[] = [
 export const CODE_MODELS: ModelOption[] = [
   // Only include models referenced in RECOMMENDED_CODING_MODELS or as free fallbacks
   {
-    id: "nvidia/nemotron-3-super-120b-a12b:free",
-    label: "Nemotron 3 Super 120B (Free)",
-    description: "NVIDIA's top free code and chat model.",
+    id: "nvidia/nemotron-3-super:free",
+    label: "Nemotron 3 Super (Free)",
+    description: "NVIDIA's best free code model.",
   },
   {
     id: "qwen/qwen3-235b-a22b:free",
@@ -94,6 +97,11 @@ export const CODE_MODELS: ModelOption[] = [
     id: "anthropic/claude-opus-4.6",
     label: "Claude Opus 4.6",
     description: "Premium code and analysis model.",
+  },
+  {
+    id: "anthropic/claude-opus-4.7",
+    label: "Claude Opus 4.7",
+    description: "Latest premium Claude model for code and analysis.",
   },
   {
     id: "anthropic/claude-opus-4.7",

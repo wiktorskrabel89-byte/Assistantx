@@ -87,7 +87,7 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         <div className="space-y-1.5">
-                {APP_NAVIGATION_ITEMS.map((item) => {
+          {APP_NAVIGATION_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             const itemClassName = isActive

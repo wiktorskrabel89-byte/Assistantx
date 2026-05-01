@@ -156,20 +156,35 @@ export function ChatComposer({
 
         {showThinkingEffort && (
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-xs opacity-70">Reasoning depth:</span>
+            <label htmlFor="thinking-effort" className="text-xs font-medium text-slate-500 dark:text-slate-400">Thinking Effort:</label>
             <select
-              className="rounded-md border px-2 py-1 text-xs dark:bg-slate-900 dark:text-slate-100"
+              id="thinking-effort"
               value={thinkingEffort}
-              onChange={(e) => setThinkingEffort(e.target.value)}
+              onChange={e => setThinkingEffort(e.target.value)}
+              className="rounded border px-2 py-1 text-xs dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="Low">Low</option>
               <option value="Medium">Medium</option>
               <option value="High">High</option>
+              <option value="Xhigh">Xhigh</option>
+            </select>
+            >
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+<<<<<<< HEAD
             </select>
           </div>
         )}
 
         <div className="flex items-end gap-2">
+=======
+              <option value="Xhigh">Xhigh</option>
+            </select>
+          </div>
+        )}
+        <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${dark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"}`}>
+>>>>>>> aab6a3c (WIP: update chat route and related files)
           <button
             onClick={() => fileInputRef.current?.click()}
             className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
