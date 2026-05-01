@@ -1,5 +1,122 @@
-<!-- Dodaj do index.html w desktop -->
-<div id="chat" style="height:300px;overflow:auto;border:1px solid #ccc;margin-bottom:8px;padding:8px;"></div>
-<input id="input" type="text" placeholder="Wpisz wiadomość..." style="width:70%;padding:4px;" />
-<button id="send">Wyślij</button>
-<script src="ChatAI.js"></script>
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Jarvis Desktop Chat</title>
+	<style>
+		:root {
+			color-scheme: light;
+			--text: #0f172a;
+			--muted: #475569;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			margin: 0;
+			min-height: 100vh;
+			font-family: "Segoe UI", sans-serif;
+			color: var(--text);
+			background:
+				radial-gradient(circle at 12% 14%, rgba(14, 165, 233, 0.16), transparent 34%),
+				radial-gradient(circle at 88% 82%, rgba(251, 146, 60, 0.14), transparent 36%),
+				linear-gradient(140deg, #f8fafc, #e2e8f0 48%, #dbeafe);
+			padding: 24px;
+		}
+
+		.shell {
+			max-width: 860px;
+			margin: 0 auto;
+			border: 1px solid rgba(125, 211, 252, 0.55);
+			border-radius: 18px;
+			background: rgba(255, 255, 255, 0.9);
+			box-shadow: 0 24px 80px -28px rgba(14, 116, 144, 0.25);
+			backdrop-filter: blur(8px);
+			padding: 18px;
+			display: grid;
+			gap: 12px;
+		}
+
+		.badge {
+			width: fit-content;
+			border-radius: 999px;
+			border: 1px solid rgba(56, 189, 248, 0.45);
+			background: rgba(3, 105, 161, 0.08);
+			color: #075985;
+			font-size: 12px;
+			font-weight: 700;
+			letter-spacing: 0.1em;
+			text-transform: uppercase;
+			padding: 6px 10px;
+		}
+
+		p {
+			margin: 0;
+			color: var(--muted);
+			line-height: 1.5;
+		}
+
+		#chat {
+			min-height: 320px;
+			max-height: 420px;
+			overflow: auto;
+			border-radius: 14px;
+			border: 1px solid rgba(148, 163, 184, 0.35);
+			background: rgba(255, 255, 255, 0.86);
+			padding: 10px;
+			display: grid;
+			gap: 8px;
+		}
+
+		#chat > div {
+			border-radius: 10px;
+			border: 1px solid rgba(148, 163, 184, 0.3);
+			background: rgba(255, 255, 255, 0.92);
+			padding: 10px;
+			color: #1e293b;
+			font-size: 14px;
+		}
+
+		.composer {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			gap: 10px;
+		}
+
+		#input {
+			width: 100%;
+			border-radius: 12px;
+			border: 1px solid rgba(148, 163, 184, 0.35);
+			background: rgba(255, 255, 255, 0.86);
+			color: var(--text);
+			padding: 12px 14px;
+			outline: none;
+		}
+
+		#send {
+			border: 0;
+			border-radius: 12px;
+			padding: 12px 14px;
+			cursor: pointer;
+			color: #ffffff;
+			background: linear-gradient(135deg, #0369a1 0%, #0891b2 100%);
+			font-weight: 700;
+		}
+	</style>
+</head>
+<body>
+	<main class="shell">
+		<span class="badge">Jarvis Chat</span>
+		<p>Lekki interfejs czatu do szybkich testow komunikacji z backendem Jarvis.</p>
+		<div id="chat"></div>
+		<div class="composer">
+			<input id="input" type="text" placeholder="Wpisz wiadomosc..." />
+			<button id="send" type="button">Wyslij</button>
+		</div>
+	</main>
+	<script src="ChatAI.js"></script>
+</body>
+</html>

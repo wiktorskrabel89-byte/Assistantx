@@ -47,7 +47,7 @@ export function ChatHeader({
   const toolButtonClassName = `hidden h-10 w-10 items-center justify-center rounded-xl border lg:flex ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`;
 
   return (
-    <div className="border-b border-slate-200 bg-white/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/90">
+    <div className="border-b border-slate-200 bg-white/85 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
@@ -56,7 +56,7 @@ export function ChatHeader({
           >
             <Menu className="h-4 w-4" />
           </button>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-500 text-white shadow-sm">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 text-white shadow-sm">
             <AssistantIcon className="h-5 w-5" />
           </div>
           <div className="min-w-0">

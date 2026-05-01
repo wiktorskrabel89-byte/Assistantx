@@ -54,7 +54,7 @@ export function ConversationsSidebar({
                 onCreateChat();
                 onClose();
               }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:from-sky-800 hover:to-cyan-700"
             >
               <Plus className="h-4 w-4" />
               New chat
@@ -94,7 +94,7 @@ export function ConversationsSidebar({
                         chat.id === activeChatId
                           ? dark
                             ? "bg-slate-800 text-white"
-                            : "bg-blue-50 text-slate-900"
+                            : "bg-sky-50 text-slate-900"
                           : dark
                             ? "text-slate-300 hover:bg-slate-800/80"
                             : "text-slate-700 hover:bg-slate-50"
@@ -112,7 +112,7 @@ export function ConversationsSidebar({
                               event.stopPropagation();
                               onRenameChat(chat.id);
                             }}
-                            className="text-[11px] text-slate-400 hover:text-blue-500"
+                            className="text-[11px] text-slate-400 hover:text-sky-600"
                           >
                             Rename
                           </span>
