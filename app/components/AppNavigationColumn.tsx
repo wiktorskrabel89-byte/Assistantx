@@ -15,6 +15,7 @@ import {
   SquareTerminal,
   type LucideIcon,
 } from "lucide-react";
+import { LogoIcon } from "./LogoIcon";
 
 
 export type AppNavigationTab =
@@ -71,11 +72,7 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
       <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
         <div className="rounded-2xl bg-gradient-to-br from-red-700 via-red-600 to-red-500 px-4 py-4 text-white shadow-sm">
           <div className="flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-7 w-7 flex-shrink-0">
-              <rect width="32" height="32" rx="6" fill="white" fillOpacity="0.2"/>
-              <line x1="8" y1="8" x2="24" y2="24" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
-              <line x1="24" y1="8" x2="8" y2="24" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
-            </svg>
+            <LogoIcon className="h-7 w-7 flex-shrink-0" transparent />
             <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
           </div>
           <div className="mt-1 text-xs text-white/90">Powered by AI</div>

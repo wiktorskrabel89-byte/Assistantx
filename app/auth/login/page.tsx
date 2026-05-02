@@ -13,6 +13,7 @@ import {
   readOAuthErrorFromLocation,
   rememberPendingOAuthProvider,
 } from "@/lib/oauth-client";
+import { LogoIcon } from "@/app/components/LogoIcon";
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
 
@@ -192,11 +193,7 @@ export default function LoginPage() {
         <section className="rounded-3xl border border-red-200/60 bg-white/92 p-6 shadow-[0_24px_80px_-28px_rgba(185,28,28,0.45)] backdrop-blur sm:p-8">
           <div className="mb-6">
             <div className="mb-4 flex items-center gap-3">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-10 w-10 flex-shrink-0">
-                <rect width="32" height="32" rx="6" fill="#dc2626"/>
-                <line x1="8" y1="8" x2="24" y2="24" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
-                <line x1="24" y1="8" x2="8" y2="24" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
-              </svg>
+              <LogoIcon className="h-10 w-10 flex-shrink-0" />
               <span className="text-xl font-bold tracking-tight text-slate-900">AssistantX</span>
             </div>
             <div className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-red-700">
