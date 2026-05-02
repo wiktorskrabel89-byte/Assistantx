@@ -41,6 +41,7 @@ import type {
   StyleMode,
 } from "../../lib/chat-types";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
+import { PREMIUM_PLAN } from "@/lib/ai-config";
 
 export function ChatTab() {
   const {
@@ -59,6 +60,7 @@ export function ChatTab() {
     setPreferredModelId,
     setCostMode,
     setIsPremium,
+    incrementPremiumRequests,
     createChatAction,
     renameChat,
     deleteChat,
@@ -160,6 +162,11 @@ export function ChatTab() {
     const text = message.trim();
     if (!text && !file) return;
 
+    // Block premium users who have exhausted their monthly request quota
+    if (state.isPremium && state.premiumRequestsUsed >= PREMIUM_PLAN.premiumRequestsPerMonth) {
+      return;
+    }
+
     setQueuedMessages((prev) => [
       ...prev,
       {
@@ -175,10 +182,15 @@ export function ChatTab() {
       },
     ]);
 
+    // Count each sent message against the premium request quota
+    if (state.isPremium) {
+      incrementPremiumRequests();
+    }
+
     setMessage("");
     setFile(null);
     setFilePreview(null);
-  }, [activeChat.id, activeWorkspace.id, file, filePreview, message, mode]);
+  }, [activeChat.id, activeWorkspace.id, file, filePreview, incrementPremiumRequests, message, mode, state.isPremium, state.premiumRequestsUsed]);
 
   const removeQueuedMessage = useCallback((queueId: string) => {
     setQueuedMessages((prev) => prev.filter((item) => item.id !== queueId));
@@ -675,6 +687,7 @@ export function ChatTab() {
             onQueueMessage={queueComposerMessage}
             onRemoveQueuedMessage={removeQueuedMessage}
             selectedModel={activeWorkspace.settings.preferredModelId ?? "openai/gpt-5.4"}
+            premiumLimitReached={state.isPremium && state.premiumRequestsUsed >= PREMIUM_PLAN.premiumRequestsPerMonth}
           />
         </section>
       </main>

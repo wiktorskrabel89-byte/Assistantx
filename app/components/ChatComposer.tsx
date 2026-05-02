@@ -24,6 +24,7 @@ export type ChatComposerProps = {
   onQueueMessage: (thinkingEffort: number) => void;
   onRemoveQueuedMessage: (queueId: string) => void;
   selectedModel: string;
+  premiumLimitReached?: boolean;
 };
 
 // Supported models for reasoning depth
@@ -53,6 +54,7 @@ export function ChatComposer({
   onQueueMessage,
   onRemoveQueuedMessage,
   selectedModel,
+  premiumLimitReached = false,
 }: ChatComposerProps) {
   // Auto-resize textarea
   const resizeComposer = useCallback(() => {
@@ -76,6 +78,11 @@ export function ChatComposer({
   return (
     <div className="border-t border-slate-200 bg-white/85 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
       <div className="mx-auto max-w-5xl space-y-2">
+        {premiumLimitReached ? (
+          <div className={`rounded-xl border px-4 py-2.5 text-xs font-medium ${dark ? "border-amber-800/50 bg-amber-950/30 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+            You have used all 300 premium requests for this month. Your quota will reset next month.
+          </div>
+        ) : null}
         {file ? (
           <div className="flex flex-wrap gap-2">
             <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
@@ -185,6 +192,7 @@ export function ChatComposer({
             id="chat-message"
             name="chatMessage"
             value={message}
+            disabled={premiumLimitReached}
             onChange={(event) => {
               onMessageChange(event.target.value);
               resizeComposer();
@@ -200,7 +208,7 @@ export function ChatComposer({
             }}
             placeholder="Wiadomosc... (Enter to send)"
             rows={1}
-            className={`flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm focus:outline-none ${dark ? "text-slate-100 placeholder-slate-500" : "text-slate-900 placeholder-slate-400"}`}
+            className={`flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${dark ? "text-slate-100 placeholder-slate-500" : "text-slate-900 placeholder-slate-400"}`}
             style={{ minHeight: 44, maxHeight: 180 }}
           />
 
@@ -231,10 +239,10 @@ export function ChatComposer({
               else if (thinkingEffort === "High") effortNum = 3;
               onQueueMessage(showThinkingEffort ? effortNum : 2);
             }}
-            disabled={!message.trim() && !file}
+            disabled={premiumLimitReached || (!message.trim() && !file)}
             className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 text-white transition-all hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
-            title={loading ? "Add to queue" : "Send message"}
-            aria-label={loading ? "Add to queue" : "Send message"}
+            title={premiumLimitReached ? "Premium request limit reached" : loading ? "Add to queue" : "Send message"}
+            aria-label={premiumLimitReached ? "Premium request limit reached" : loading ? "Add to queue" : "Send message"}
           >
             {loading ? <Plus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
           </button>

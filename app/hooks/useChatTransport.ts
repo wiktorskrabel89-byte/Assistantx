@@ -85,6 +85,7 @@ type UseChatTransportArgs = {
   stateRef: RefObject<StoredState>;
   updateChat: (workspaceId: string, chatId: string, updater: (chat: ChatThread) => ChatThread) => void;
   updateLastMessage: (workspaceId: string, chatId: string, updater: (message: ChatEntry) => ChatEntry) => void;
+  incrementPremiumRequests?: () => void;
 };
 
 export function useChatTransport({
@@ -101,6 +102,7 @@ export function useChatTransport({
   stateRef,
   updateChat,
   updateLastMessage,
+  incrementPremiumRequests,
 }: UseChatTransportArgs) {
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -400,6 +402,11 @@ export function useChatTransport({
         }),
       });
 
+      // Count this against the premium request quota (only for premium users)
+      if (stateRef.current.isPremium) {
+        incrementPremiumRequests?.();
+      }
+
       await consumeStream(response, workspaceId, chatId);
     } catch (error) {
       if (isAbortLikeError(error)) return;
@@ -420,7 +427,7 @@ export function useChatTransport({
         activeRequestTargetRef.current = null;
       }
     }
-  }, [consumeStream, stateRef, updateChat, updateLastMessage]);
+  }, [consumeStream, incrementPremiumRequests, stateRef, updateChat, updateLastMessage]);
 
   useEffect(() => {
     if (processingQueueRef.current || queuedMessages.length === 0) return;
