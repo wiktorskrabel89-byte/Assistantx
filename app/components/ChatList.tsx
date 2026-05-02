@@ -61,7 +61,7 @@ export const ChatList = memo(function ChatList({
   assistantIcon: AssistantIcon,
 }: ChatListProps) {
   const quickStarters: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
-    { label: "Generuj Kod", hint: "Kompletne rozwiazania", prompt: "Napisz mi kompletny przyklad kodu dla: ", mode: "code", icon: Code2 },
+    { label: "Generuj Kod", hint: "Kompletne rozwiązania", prompt: "Napisz mi kompletny przykład kodu dla: ", mode: "code", icon: Code2 },
     { label: "Zadanie", hint: "Daj AI zadanie", prompt: "Pomoz mi z zadaniem kodowania: ", mode: "chat", icon: ClipboardCheck },
     { label: "Kalendarz", hint: "AI tworzy wydarzenia", prompt: "Stworz wydarzenie w kalendarzu dla: ", mode: "chat", icon: CalendarDays },
     { label: "Email", hint: "AI pisze maile", prompt: "Napisz profesjonalnego maila dotyczacego: ", mode: "chat", icon: Mail },

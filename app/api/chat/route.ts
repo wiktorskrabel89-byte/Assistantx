@@ -20,8 +20,6 @@ import {
   getFreePlanFallback,
   filterModelsByCostMode,
   getCheaperAlternative,
-  TOP_FREE_CODE_MODELS,
-  TOP_FREE_CHAT_MODELS,
 } from "@/lib/ai-config";
 
 async function getAuthUserId(req: Request): Promise<string | null> {

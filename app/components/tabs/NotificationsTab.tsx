@@ -72,7 +72,7 @@ export function NotificationsTab({ dark }: { dark: boolean }) {
             className="mt-6 inline-flex items-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700"
             onClick={sendTestNotification}
           >
-            Wyslij testowe powiadomienie push
+            Wyślij testowe powiadomienie push
           </button>
         </div>
 

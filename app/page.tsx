@@ -2,6 +2,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
+import { ClinicalTab } from "./components/tabs/ClinicalTab";
 import {
   AILearningTab,
   CodebaseTab,
@@ -23,6 +24,8 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
   switch (activeTab) {
     case "chat":
       return <ChatTab />;
+    case "clinical":
+      return <ClinicalTab />;
     case "sandbox":
       return <SandboxTab dark={state.dark} />;
     case "learning":
