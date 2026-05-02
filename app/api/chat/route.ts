@@ -244,7 +244,14 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 
+import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
+
 export const POST = async (req: Request) => {
+  // Rate limit: 30 chat requests per minute per user/IP
+  const rlKey = getRateLimitKey(req, "chat");
+  const rl = checkRateLimit(rlKey, 30, 60_000);
+  if (!rl.allowed) return rateLimitedResponse(rl.retryAfterMs);
+
   // Fetch GPT and Claude latest model IDs in a single (cached) request
   const latestModels = await fetchLatestModelIds(["openai/gpt-", "anthropic/claude-"]);
   const latestGpt = latestModels["openai/gpt-"];

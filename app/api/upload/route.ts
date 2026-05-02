@@ -46,7 +46,14 @@ async function extractDocumentText(file: File, bytes: ArrayBuffer): Promise<stri
 
   return "";
 }
+import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
+
 export async function POST(req: Request) {
+  // Rate limit: 10 upload/analysis requests per minute per user/IP
+  const rlKey = getRateLimitKey(req, "upload");
+  const rl = checkRateLimit(rlKey, 10, 60_000);
+  if (!rl.allowed) return rateLimitedResponse(rl.retryAfterMs);
+
   const encoder = new TextEncoder();
 
   try {
