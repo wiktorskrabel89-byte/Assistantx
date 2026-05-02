@@ -91,7 +91,7 @@ export async function POST(req: Request) {
               "X-Title": "AssistantX",
             },
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash-preview",
+              model: "google/gemini-2.5-flash",
               stream: true,
               messages: [
                 {

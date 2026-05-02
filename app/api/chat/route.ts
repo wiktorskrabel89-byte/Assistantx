@@ -6,10 +6,7 @@ function getSupabase() {
   // For now, return createClient() directly for compatibility.
   return createClient();
 }
-import {
-  fetchLatestModelId,
-} from "../openrouter/models";
-import { fetchAllModels } from "../openrouter/fetchAllModels";
+import { fetchLatestModelIds, getCachedModels } from "../openrouter/modelCache";
 import {
   CHAT_MODELS,
   CODE_MODELS,
@@ -25,6 +22,7 @@ import {
   FREE_CODING_MODEL,
   FREE_CHAT_MODEL,
 } from "@/lib/ai-config";
+import { isCodeRequest, isImageRequest } from "@/lib/detect";
 
 async function getAuthUserId(req: Request): Promise<string | null> {
   try {
@@ -119,28 +117,6 @@ const LANGUAGE_NAMES: Record<string, string> = {
   ar: "Arabic",
 };
 
-function isCodeRequest(message: string): boolean {
-  const text = message.trim();
-  if (!text) return false;
-
-  if (/```/.test(text)) return true;
-  if (/<\/?[a-z][^>]*>/i.test(text)) return true;
-  if (/\b(function|class|interface|type|const|let|var|import|export|npm|yarn|pnpm|sql|regex|api|endpoint|typescript|javascript|python|java|c\+\+|c#|golang|rust|debug|bug|refactor|algorithm)\b/i.test(text)) return true;
-  if (/\b(write|generate|create|build|fix|optimize|review|explain)\b.{0,30}\b(code|script|query|function|component)\b/i.test(text)) return true;
-  if (/^[\s\w]*[{}()[\];=<>/\\]{2,}[\s\w]*$/.test(text)) return true;
-
-  return false;
-}
-
-function isImageRequest(message: string): boolean {
-  const text = message.trim().toLowerCase();
-  if (!text) return false;
-
-  return /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/.test(text)
-    || /^\s*\/image\b/.test(text)
-    || /\bimage of\b/.test(text)
-    || /\bplease.*\b(image|picture|photo)\b/.test(text);
-}
 
 const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> = [
   {
@@ -267,10 +243,12 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
+
 export const POST = async (req: Request) => {
-  // Dynamically fetch latest GPT and Claude models at request time (local to avoid cross-request mutation)
-  const latestGpt = await fetchLatestModelId("openai/gpt-");
-  const latestClaude = await fetchLatestModelId("anthropic/claude-");
+  // Fetch GPT and Claude latest model IDs in a single (cached) request
+  const latestModels = await fetchLatestModelIds(["openai/gpt-", "anthropic/claude-"]);
+  const latestGpt = latestModels["openai/gpt-"];
+  const latestClaude = latestModels["anthropic/claude-"];
   const CODE_MODEL = latestGpt ?? FREE_CODING_MODEL;
   const CHAT_MODEL = latestClaude ?? FREE_CHAT_MODEL;
 
@@ -299,7 +277,7 @@ export const POST = async (req: Request) => {
   // Fetch all Claude models and add any new ones to allowedModels
   let allowedModelsFinal = allowedModels;
   try {
-    const allModels = await fetchAllModels();
+    const allModels = await getCachedModels();
     const claudeModels = allModels.filter((m) => m.id.startsWith("anthropic/claude-"));
     if (Array.isArray(allowedModels)) {
       const allowedSet = new Set(allowedModels);
