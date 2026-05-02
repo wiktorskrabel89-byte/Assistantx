@@ -42,6 +42,21 @@ export const CHAT_MODELS: ModelOption[] = [
     description: "Best free open model for chat and reasoning.",
   },
   {
+    id: "openai/gpt-oss-120b:free",
+    label: "GPT OSS 120B (Free)",
+    description: "Free OpenAI open-source 120B model.",
+  },
+  {
+    id: "z-ai/glm-4.5-air:free",
+    label: "GLM 4.5 Air (Free)",
+    description: "Free lightweight GLM chat model.",
+  },
+  {
+    id: "minimax/minimax-m2.5:free",
+    label: "MiniMax M2.5 (Free)",
+    description: "Free MiniMax general-purpose model.",
+  },
+  {
     id: "google/gemini-2.0-flash-exp:free",
     label: "Gemini 2.0 Flash (Free)",
     description: "Fast free chat model.",
@@ -76,6 +91,16 @@ export const CODE_MODELS: ModelOption[] = [
     description: "NVIDIA's best free code model.",
   },
   {
+    id: "openai/gpt-oss-120b:free",
+    label: "GPT OSS 120B (Free)",
+    description: "Free OpenAI open-source 120B coding model.",
+  },
+  {
+    id: "minimax/minimax-m2.5:free",
+    label: "MiniMax M2.5 (Free)",
+    description: "Free MiniMax model for code tasks.",
+  },
+  {
     id: "qwen/qwen3-235b-a22b:free",
     label: "Qwen 3 235B (Free)",
     description: "Large open model for code tasks.",
@@ -94,11 +119,6 @@ export const CODE_MODELS: ModelOption[] = [
     id: "anthropic/claude-opus-4.6",
     label: "Claude Opus 4.6",
     description: "Premium code and analysis model.",
-  },
-  {
-    id: "anthropic/claude-opus-4.7",
-    label: "Claude Opus 4.7",
-    description: "Latest premium Claude model for code and analysis.",
   },
   {
     id: "anthropic/claude-opus-4.7",
@@ -192,10 +212,10 @@ export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
-  { id: "coding-qwen3-235b-free", label: "Qwen 3 235B (Free)", modelId: "qwen/qwen3-235b-a22b:free", costTier: "free" },
-  { id: "coding-mistral-small-3.1-free", label: "Mistral Small 3.1 (Free)", modelId: "mistralai/mistral-small-3.1-24b-instruct:free", costTier: "free" },
-  { id: "coding-llama-4-scout-free", label: "Llama 4 Scout (Free)", modelId: "meta-llama/llama-4-scout:free", costTier: "free" },
-  // Locked/paid models below, as in screenshot
+  { id: "coding-nemotron-super-free", label: "Nemotron 3 Super (Free)", modelId: "nvidia/nemotron-3-super-120b-a12b:free", costTier: "free" },
+  { id: "coding-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
+  { id: "coding-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
+  // Locked/paid models below
   { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6", costTier: "premium" },
   { id: "coding-claude-opus-4.7", label: "Claude Opus 4.7", modelId: "anthropic/claude-opus-4.7", costTier: "premium" },
   { id: "coding-gpt-5.4", label: "GPT-5.4", modelId: "openai/gpt-5.4", costTier: "premium" },
@@ -205,8 +225,10 @@ export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
 
 export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
   { id: "chat-llama-3.3-free", label: "Llama 3.3 70B (Free)", modelId: "meta-llama/llama-3.3-70b-instruct:free", costTier: "free" },
-  { id: "chat-gemini-2-flash-free", label: "Gemini 2.0 Flash (Free)", modelId: "google/gemini-2.0-flash-exp:free", costTier: "free" },
-  // Locked/paid models below, as in screenshot
+  { id: "chat-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
+  { id: "chat-glm-4.5-air-free", label: "GLM 4.5 Air (Free)", modelId: "z-ai/glm-4.5-air:free", costTier: "free" },
+  { id: "chat-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
+  // Locked/paid models below
   { id: "chat-gpt-5.1", label: "GPT-5.1", modelId: "openai/gpt-5.1", costTier: "standard" },
   { id: "chat-claude-sonnet", label: "Claude Sonnet 4.5", modelId: "anthropic/claude-sonnet-4.5", costTier: "standard" },
   { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview", costTier: "cheap" },
@@ -215,7 +237,7 @@ export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
 export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
 export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.1";
 
-export const FREE_CODING_MODEL = "nvidia/nemotron-3-super:free";
+export const FREE_CODING_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 /**
@@ -224,13 +246,16 @@ export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
  */
 export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
-  // "deepseek/deepseek-r1:free": "free", // removed unavailable model
   "nvidia/nemotron-3-super:free": "free",
+  "nvidia/nemotron-3-super-120b-a12b:free": "free",
   "meta-llama/llama-3.3-70b-instruct:free": "free",
   "meta-llama/llama-4-scout:free": "free",
   "google/gemini-2.0-flash-exp:free": "free",
   "mistralai/mistral-small-3.1-24b-instruct:free": "free",
   "qwen/qwen3-235b-a22b:free": "free",
+  "openai/gpt-oss-120b:free": "free",
+  "minimax/minimax-m2.5:free": "free",
+  "z-ai/glm-4.5-air:free": "free",
   // Cheap models — fast, low cost per token
   "google/gemini-2.5-flash-lite": "cheap",
   "google/gemini-3-flash-preview": "cheap",
@@ -349,16 +374,18 @@ export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): stri
 /**
  * Returns the appropriate fallback model for a free-plan user.
  */
-// Top 3 free models for chat and coding
+// Top free models for chat and coding
 export const TOP_FREE_CHAT_MODELS = [
-  "meta-llama/llama-3-70b-instruct:free",
-  "deepseek-ai/deepseek-coder:free",
-  "mistralai/mixtral-8x22b-instruct:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "openai/gpt-oss-120b:free",
+  "z-ai/glm-4.5-air:free",
+  "minimax/minimax-m2.5:free",
 ];
 export const TOP_FREE_CODE_MODELS = [
-  "deepseek-ai/deepseek-coder:free",
-  "meta-llama/llama-3-70b-instruct:free",
-  "mistralai/mixtral-8x22b-instruct:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "openai/gpt-oss-120b:free",
+  "minimax/minimax-m2.5:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
 ];
 
 /**
