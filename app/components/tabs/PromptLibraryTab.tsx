@@ -9,7 +9,7 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
       dark={dark}
       icon={LibraryBig}
       title="Prompt Library"
-      description="Przegladaj i zarzadzaj szablonami promptów."
+      description="Przeglądaj i zarządzaj szablonami promptów."
     />
   );
 }

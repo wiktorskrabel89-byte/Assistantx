@@ -36,7 +36,7 @@ export function SettingsTab() {
           Ustawienia profilu
         </div>
         <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-900">Edit Profile</h2>
-        <p className="mt-2 text-sm leading-7 text-slate-600">Zarzadzaj profilem i informacjami widocznymi w przestrzeni AssistantX.</p>
+        <p className="mt-2 text-sm leading-7 text-slate-600">Zarządzaj profilem i informacjami widocznymi w przestrzeni AssistantX.</p>
         <div className="mt-6">
           <UserProfileEditor profile={mockProfile} onSave={handleSave} />
         </div>
