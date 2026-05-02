@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import type { KeyboardEvent } from "react";
 import { Send, Bot, User, Mail } from "lucide-react";
 
 interface Message {
@@ -25,12 +26,15 @@ export default function SupportPage() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [messageCount, setMessageCount] = useState(1);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-scroll whenever a new message bubble is appended (user or assistant placeholder).
+  // messageCount is incremented once per send — not on every streaming token.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messageCount]);
 
   async function sendMessage() {
     const text = input.trim();
@@ -38,6 +42,7 @@ export default function SupportPage() {
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInput("");
     setLoading(true);
+    setMessageCount((n) => n + 1);
 
     const history = messages
       .reduce<Array<{ user: string; ai: string }>>((acc, msg, i, arr) => {
@@ -62,6 +67,11 @@ export default function SupportPage() {
         }),
       });
 
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`Request failed (${res.status}): ${errText || res.statusText}`);
+      }
+
       if (!res.body) throw new Error("No response body");
 
       const reader = res.body.getReader();
@@ -70,11 +80,14 @@ export default function SupportPage() {
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
       let done = false;
+      let buf = "";
       while (!done) {
         const { value, done: doneReading } = await reader.read();
         done = doneReading;
-        const chunk = decoder.decode(value, { stream: !done });
-        const lines = chunk.split("\n");
+        buf += decoder.decode(value, { stream: !done });
+        const lines = buf.split("\n");
+        // Keep the last (potentially partial) line in the buffer
+        buf = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const data = line.slice(6).trim();
@@ -108,16 +121,26 @@ export default function SupportPage() {
       }
     } catch (err) {
       console.error("Support chat error:", err);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Sorry, there was an error. Please try again." },
-      ]);
+      // Update the existing assistant placeholder if one was already appended,
+      // otherwise add a new message.
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant" && last.content === "") {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: "Sorry, there was an error. Please try again.",
+          };
+          return updated;
+        }
+        return [...prev, { role: "assistant", content: "Sorry, there was an error. Please try again." }];
+      });
     }
 
     setLoading(false);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -145,7 +168,7 @@ export default function SupportPage() {
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      <main className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         <div className="max-w-3xl mx-auto space-y-4">
           {messages.map((msg, i) => (
             <div
@@ -172,7 +195,7 @@ export default function SupportPage() {
           ))}
           <div ref={bottomRef} />
         </div>
-      </div>
+      </main>
 
       {/* Input */}
       <div className="border-t border-gray-800 bg-gray-900 px-4 py-4">
@@ -190,6 +213,7 @@ export default function SupportPage() {
           <button
             onClick={sendMessage}
             disabled={loading || !input.trim()}
+            aria-label="Send message"
             className="flex items-center justify-center w-11 h-11 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
           >
             <Send size={18} />
