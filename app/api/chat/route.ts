@@ -20,6 +20,10 @@ import {
   getFreePlanFallback,
   filterModelsByCostMode,
   getCheaperAlternative,
+  TOP_FREE_CODE_MODELS,
+  TOP_FREE_CHAT_MODELS,
+  FREE_CODING_MODEL,
+  FREE_CHAT_MODEL,
 } from "@/lib/ai-config";
 
 async function getAuthUserId(req: Request): Promise<string | null> {
@@ -74,28 +78,13 @@ async function ensureConversation(conversationId: string, userId: string | null)
 }
 
 
-// Define free model arrays for compatibility with logic below
-
-// Free coding models: Nemotron 3 Super, GPT OSS 120B, MiniMax M2.5, plus Llama 3.3 as fallback
-const FREE_CODING_MODELS = [
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "openai/gpt-oss-120b:free",
-  "minimax/minimax-m2.5:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
-];
-// Free chat models: Llama 3.3, GPT OSS 120B, GLM 4.5 Air, MiniMax M2.5
-const FREE_CHAT_MODELS = [
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "openai/gpt-oss-120b:free",
-  "z-ai/glm-4.5-air:free",
-  "minimax/minimax-m2.5:free",
-];
-// Set NVIDIA as default coding model and Llama as default chat model
-let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-let CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+// Use shared free model lists from lib/ai-config to avoid drift
+const FREE_CODING_MODELS = TOP_FREE_CODE_MODELS;
+const FREE_CHAT_MODELS = TOP_FREE_CHAT_MODELS;
+// Default coding/chat models derived from shared config
+let CODE_MODEL = FREE_CODING_MODEL;
+let CHAT_MODEL = FREE_CHAT_MODEL;
 const SEARCH_MODEL = "perplexity/sonar";
-const FREE_CODE_MODEL = FREE_CODING_MODELS[0];
-const FREE_CHAT_MODEL = FREE_CHAT_MODELS[0];
 
 function isCreditsError(status: number, body: string): boolean {
   return (
@@ -367,7 +356,7 @@ export const POST = async (req: Request) => {
   const fallbackModel = rawMode === "search"
     ? SEARCH_MODEL
     : inferredCodeRequest
-      ? FREE_CODE_MODEL
+      ? FREE_CODING_MODEL
       : FREE_CHAT_MODEL;
 
 
@@ -655,7 +644,7 @@ export const POST = async (req: Request) => {
             if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
               throw new Error(`OpenRouter error ${status}: ${err}`);
             }
-            const freeModel = inferredCodeRequest ? FREE_CODE_MODEL : FREE_CHAT_MODEL;
+            const freeModel = inferredCodeRequest ? FREE_CODING_MODEL : FREE_CHAT_MODEL;
             const selectedFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
             fallbackReason = shouldCreditsFallback
               ? `${routeReason}. Insufficient credits detected, switched to free model.`

@@ -86,7 +86,7 @@ export const CHAT_MODELS: ModelOption[] = [
 export const CODE_MODELS: ModelOption[] = [
   // Only include models referenced in RECOMMENDED_CODING_MODELS or as free fallbacks
   {
-    id: "nvidia/nemotron-3-super:free",
+    id: "nvidia/nemotron-3-super-120b-a12b:free",
     label: "Nemotron 3 Super (Free)",
     description: "NVIDIA's best free code model.",
   },

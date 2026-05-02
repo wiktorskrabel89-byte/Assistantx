@@ -2,26 +2,18 @@
 
 import { Edit2, FileUp, LibraryBig, Plus, Save, Trash2, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type PromptTemplate = {
-  id: string;
-  name: string;
-  content: string;
-  createdAt: number;
-};
+import { useWorkspaceState } from "@/app/hooks/useWorkspaceState";
+import { PromptTemplate } from "@/app/lib/chat-types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function uid(): string {
-  return Math.random().toString(36).slice(2, 10);
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function PromptLibraryTab({ dark }: { dark: boolean }) {
-  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const { activeWorkspace, createPromptTemplate, updatePromptTemplate, deletePromptTemplate } =
+    useWorkspaceState();
+  const templates: PromptTemplate[] = activeWorkspace.settings.promptTemplates;
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -52,50 +44,45 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
 
   const saveNew = useCallback(() => {
     if (!newContent.trim()) return;
-    setTemplates((prev) => [
-      ...prev,
-      {
-        id: uid(),
-        name: newName.trim() || "Szablon bez nazwy",
-        content: newContent,
-        createdAt: Date.now(),
-      },
-    ]);
+    createPromptTemplate({
+      label: newName.trim() || "Szablon bez nazwy",
+      text: newContent,
+      mode: "chat",
+    });
     setIsCreating(false);
     setNewName("");
     setNewContent("");
-  }, [newName, newContent]);
+  }, [newName, newContent, createPromptTemplate]);
 
   // ── Start editing an existing template ──────────────────────────────────
 
   const startEdit = useCallback((t: PromptTemplate) => {
     setEditingId(t.id);
-    setEditName(t.name);
-    setEditContent(t.content);
+    setEditName(t.label);
+    setEditContent(t.text);
   }, []);
 
   // ── Save edits ───────────────────────────────────────────────────────────
 
   const saveEdit = useCallback(() => {
     if (!editingId) return;
-    setTemplates((prev) =>
-      prev.map((t) =>
-        t.id === editingId
-          ? { ...t, name: editName.trim() || t.name, content: editContent }
-          : t,
-      ),
-    );
+    const current = templates.find((t) => t.id === editingId);
+    updatePromptTemplate(editingId, {
+      label: editName.trim() || current?.label || editingId,
+      text: editContent,
+      mode: current?.mode ?? "chat",
+    });
     setEditingId(null);
-  }, [editingId, editName, editContent]);
+  }, [editingId, editName, editContent, templates, updatePromptTemplate]);
 
   // ── Delete ───────────────────────────────────────────────────────────────
 
-  const deleteTemplate = useCallback(
+  const deleteTemplateById = useCallback(
     (id: string) => {
-      setTemplates((prev) => prev.filter((t) => t.id !== id));
+      deletePromptTemplate(id);
       if (editingId === id) setEditingId(null);
     },
-    [editingId],
+    [editingId, deletePromptTemplate],
   );
 
   // ─── Styles ───────────────────────────────────────────────────────────────
@@ -221,14 +208,14 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
                     dark ? "text-slate-200" : "text-slate-800"
                   }`}
                 >
-                  {t.name}
+                  {t.label}
                 </p>
                 <p
                   className={`mt-0.5 line-clamp-2 text-xs ${
                     dark ? "text-slate-400" : "text-slate-500"
                   }`}
                 >
-                  {t.content}
+                  {t.text}
                 </p>
               </div>
               <span
@@ -237,12 +224,12 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
                 tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
-                  deleteTemplate(t.id);
+                  deleteTemplateById(t.id);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.stopPropagation();
-                    deleteTemplate(t.id);
+                    deleteTemplateById(t.id);
                   }
                 }}
                 className={`mt-0.5 flex-shrink-0 cursor-pointer opacity-0 transition-opacity group-hover:opacity-100 ${
@@ -346,7 +333,7 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
                 <button
                   type="button"
                   onClick={() => {
-                    deleteTemplate(editingId);
+                    deleteTemplateById(editingId);
                     setEditingId(null);
                   }}
                   className={btnDanger}
