@@ -5,15 +5,16 @@ type OpenRouterModel = {
 };
 
 type OpenRouterModelsResponse = {
-  models?: OpenRouterModel[];
+  // OpenRouter returns { data: [...] }, not { models: [...] }
+  data?: OpenRouterModel[];
 };
 
 export async function fetchLatestModelId(prefix: string): Promise<string | null> {
   try {
     const res = await fetch('https://openrouter.ai/api/v1/models');
     if (!res.ok) return null;
-    const data = (await res.json()) as OpenRouterModelsResponse;
-    const models = data.models || [];
+    const json = (await res.json()) as OpenRouterModelsResponse;
+    const models = Array.isArray(json.data) ? json.data : [];
     // Filter by prefix and sort by version (assumes version at end, e.g., gpt-5.4, gpt-5.5)
     const filtered = models.filter((m) => m.id.startsWith(prefix));
     if (filtered.length === 0) return null;

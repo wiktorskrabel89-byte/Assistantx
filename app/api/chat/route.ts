@@ -78,9 +78,7 @@ async function ensureConversation(conversationId: string, userId: string | null)
 }
 
 
-// Default coding/chat models derived from shared config
-let CODE_MODEL = FREE_CODING_MODEL;
-let CHAT_MODEL = FREE_CHAT_MODEL;
+// Default search model (constant — never needs dynamic update)
 const SEARCH_MODEL = "perplexity/sonar";
 
 function isCreditsError(status: number, body: string): boolean {
@@ -270,11 +268,11 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export const POST = async (req: Request) => {
-  // Dynamically fetch latest GPT and Claude models at runtime
+  // Dynamically fetch latest GPT and Claude models at request time (local to avoid cross-request mutation)
   const latestGpt = await fetchLatestModelId("openai/gpt-");
-  if (latestGpt) CODE_MODEL = latestGpt;
   const latestClaude = await fetchLatestModelId("anthropic/claude-");
-  if (latestClaude) CHAT_MODEL = latestClaude;
+  const CODE_MODEL = latestGpt ?? FREE_CODING_MODEL;
+  const CHAT_MODEL = latestClaude ?? FREE_CHAT_MODEL;
 
   const requestSignal = req.signal;
   const {
@@ -305,14 +303,14 @@ export const POST = async (req: Request) => {
     const claudeModels = allModels.filter((m) => m.id.startsWith("anthropic/claude-"));
     if (Array.isArray(allowedModels)) {
       const allowedSet = new Set(allowedModels);
-      for (const model of claudeModels) {
-        if (!allowedSet.has(model.id)) {
-          allowedModels.push(model.id);
-        }
-      }
-      allowedModelsFinal = allowedModels;
+      const newClaudeIds = claudeModels
+        .filter((model) => !allowedSet.has(model.id))
+        .map((model) => model.id);
+      allowedModelsFinal = newClaudeIds.length > 0 ? [...allowedModels, ...newClaudeIds] : allowedModels;
     }
-  } catch {}
+  } catch {
+    // fetchAllModels failure is non-fatal; proceed with the original allowedModels
+  }
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
@@ -372,7 +370,7 @@ export const POST = async (req: Request) => {
   }
 
   // Expose TOP_FREE_CODE_MODELS and TOP_FREE_CHAT_MODELS in API response for UI
-  const isSearchMode = rawMode === "search" || (!usingAutoRouter && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
+  const isSearchMode = rawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(message);

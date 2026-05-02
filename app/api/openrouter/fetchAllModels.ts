@@ -6,7 +6,8 @@ type OpenRouterModel = {
 };
 
 type OpenRouterModelsResponse = {
-  models?: OpenRouterModel[];
+  // OpenRouter returns { data: [...] }, not { models: [...] }
+  data?: OpenRouterModel[];
 };
 
 export async function fetchAllModels(): Promise<OpenRouterModel[]> {
@@ -16,11 +17,11 @@ export async function fetchAllModels(): Promise<OpenRouterModel[]> {
       console.error('fetchAllModels: Response not ok', res.status, res.statusText);
       return [];
     }
-    const data = (await res.json()) as OpenRouterModelsResponse;
-    if (!data.models) {
-      console.error('fetchAllModels: No models in response', data);
+    const json = (await res.json()) as OpenRouterModelsResponse;
+    if (!Array.isArray(json.data)) {
+      console.error('fetchAllModels: Unexpected response shape', json);
     }
-    return data.models || [];
+    return Array.isArray(json.data) ? json.data : [];
   } catch (err) {
     console.error('fetchAllModels: Error fetching models', err);
     return [];
