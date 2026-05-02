@@ -90,7 +90,8 @@ export default function SupportPage() {
               });
             }
           } catch {
-            // ignore malformed SSE lines
+            // ignore non-JSON SSE lines (status/model metadata events)
+            if (process.env.NODE_ENV === "development") console.debug("SSE parse skip:", data);
           }
         }
       }
@@ -105,7 +106,8 @@ export default function SupportPage() {
           return updated;
         });
       }
-    } catch {
+    } catch (err) {
+      console.error("Support chat error:", err);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Sorry, there was an error. Please try again." },
@@ -168,16 +170,6 @@ export default function SupportPage() {
               </div>
             </div>
           ))}
-          {loading && messages[messages.length - 1]?.role !== "assistant" && (
-            <div className="flex gap-3">
-              <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-blue-600">
-                <Bot size={16} />
-              </div>
-              <div className="bg-gray-800 px-4 py-3 rounded-2xl rounded-tl-sm text-gray-400 text-sm">
-                Typing…
-              </div>
-            </div>
-          )}
           <div ref={bottomRef} />
         </div>
       </div>
