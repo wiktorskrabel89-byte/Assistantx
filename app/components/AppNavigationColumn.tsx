@@ -13,12 +13,14 @@ import {
   Settings2,
   Share2,
   SquareTerminal,
+  Stethoscope,
   type LucideIcon,
 } from "lucide-react";
 
 
 export type AppNavigationTab =
   | "chat"
+  | "clinical"
   | "sandbox"
   | "learning"
   | "projects"
@@ -46,6 +48,7 @@ type AppNavigationItem = {
 const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
   { id: "jarvis", label: "Jarvis", icon: BrainCircuit },
   { id: "chat", label: "Chat", icon: MessageSquareText },
+  { id: "clinical", label: "Clinical", icon: Stethoscope },
   { id: "sandbox", label: "Sandbox", icon: SquareTerminal },
   { id: "learning", label: "Learning", icon: BookOpen },
   { id: "projects", label: "Projekty", icon: FolderKanban },
