@@ -162,36 +162,44 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.28),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.22),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] px-5 py-8 text-slate-900 sm:px-8 sm:py-10">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_12%_14%,rgba(220,38,38,0.22),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(185,28,28,0.18),transparent_36%),linear-gradient(140deg,#f8fafc,#f1f0f0_48%,#fee2e2)] px-5 py-8 text-slate-900 sm:px-8 sm:py-10">
       <div className="mx-auto grid min-h-[86vh] w-full max-w-6xl items-center gap-10 lg:grid-cols-[1.1fr,0.9fr]">
         <section className="hidden lg:block">
-          <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800 shadow-sm backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-sky-500 to-amber-400" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-red-300/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-red-800 shadow-sm backdrop-blur">
+            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-red-600 to-red-400" />
             AssistantX Workspace
           </div>
           <h1 className="mt-6 max-w-xl text-5xl font-semibold leading-tight tracking-tight text-slate-900">
             Build faster with
-            <span className="block bg-gradient-to-r from-sky-700 via-cyan-600 to-amber-500 bg-clip-text text-transparent">AssistantX Cloud</span>
+            <span className="block bg-gradient-to-r from-red-700 via-red-600 to-red-500 bg-clip-text text-transparent">AssistantX Cloud</span>
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-700">
             Resume your sessions, memory, and tools with one login. Designed for focused work with a clean, reliable auth flow.
           </p>
 
           <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-sky-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
+            <div className="rounded-2xl border border-red-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
               <div className="text-sm font-semibold text-slate-900">Persistent sessions</div>
               <p className="mt-2 text-sm leading-6 text-slate-600">Workspace state and chat history are tied to your account, not only one browser tab.</p>
             </div>
-            <div className="rounded-2xl border border-amber-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
+            <div className="rounded-2xl border border-red-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
               <div className="text-sm font-semibold text-slate-900">Secure login flow</div>
               <p className="mt-2 text-sm leading-6 text-slate-600">Use OAuth or a one-time magic link. No local password management needed.</p>
             </div>
           </div>
         </section>
 
-        <section className="rounded-3xl border border-sky-200/60 bg-white/92 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.45)] backdrop-blur sm:p-8">
+        <section className="rounded-3xl border border-red-200/60 bg-white/92 p-6 shadow-[0_24px_80px_-28px_rgba(185,28,28,0.45)] backdrop-blur sm:p-8">
           <div className="mb-6">
-            <div className="inline-flex items-center rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-sky-700">
+            <div className="mb-4 flex items-center gap-3">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-10 w-10 flex-shrink-0">
+                <rect width="32" height="32" rx="6" fill="#dc2626"/>
+                <line x1="8" y1="8" x2="24" y2="24" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
+                <line x1="24" y1="8" x2="8" y2="24" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
+              </svg>
+              <span className="text-xl font-bold tracking-tight text-slate-900">AssistantX</span>
+            </div>
+            <div className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-red-700">
               Sign in
             </div>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Access AssistantX</h2>
@@ -203,7 +211,7 @@ export default function LoginPage() {
               type="button"
               onClick={() => void handleOAuth("google")}
               disabled={oauthLoading !== null || submitState === "submitting"}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:bg-sky-50/50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-red-300 hover:bg-red-50/50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {oauthLoading === "google" ? "Redirecting to Google..." : "Continue with Google"}
             </button>
@@ -211,21 +219,21 @@ export default function LoginPage() {
               type="button"
               onClick={() => void handleOAuth("github")}
               disabled={oauthLoading !== null || submitState === "submitting"}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-amber-300 hover:bg-amber-50/60 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-red-300 hover:bg-red-50/60 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {oauthLoading === "github" ? "Redirecting to GitHub..." : "Continue with GitHub"}
             </button>
           </div>
 
           {oauthLoading && (
-            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50/70 px-4 py-3 text-xs leading-5 text-slate-700">
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50/70 px-4 py-3 text-xs leading-5 text-slate-700">
               <div>
                 Back from {getProviderLabel(oauthLoading)} without finishing sign-in? Reset this attempt and choose another method.
               </div>
               <button
                 type="button"
                 onClick={() => recoverFromInterruptedOAuth(oauthLoading)}
-                className="mt-3 rounded-lg border border-sky-300 px-3 py-2 font-medium text-sky-800 transition hover:bg-white"
+                className="mt-3 rounded-lg border border-red-300 px-3 py-2 font-medium text-red-800 transition hover:bg-white"
               >
                 Use another sign-in method
               </button>
@@ -249,20 +257,20 @@ export default function LoginPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-400 focus:ring-2 focus:ring-red-100"
               />
             </label>
 
             <button
               type="submit"
               disabled={submitState === "submitting" || oauthLoading !== null}
-              className="w-full rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-3 text-sm font-semibold text-white transition hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-xl bg-gradient-to-r from-red-700 to-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:from-red-800 hover:to-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitState === "submitting" ? "Sending link..." : "Send magic link"}
             </button>
           </form>
 
-          <div className={`mt-4 min-h-6 text-sm ${submitState === "error" || authError ? "text-rose-600" : "text-cyan-700"}`}>
+          <div className={`mt-4 min-h-6 text-sm ${submitState === "error" || authError ? "text-rose-600" : "text-red-700"}`}>
             {feedback || authError}
           </div>
 

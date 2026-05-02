@@ -50,7 +50,7 @@ export default function RootLayout({
     >
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#2563eb" />
+        <meta name="theme-color" content="#dc2626" />
       </head>
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>

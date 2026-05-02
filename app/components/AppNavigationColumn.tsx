@@ -61,16 +61,23 @@ const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
 export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigationColumnProps) {
   const shellClassName = dark
     ? "border-slate-800 bg-slate-900 text-slate-100"
-    : "border-sky-200/60 bg-white/92 text-slate-900 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.28)]";
+    : "border-red-200/60 bg-white/92 text-slate-900 shadow-[0_24px_80px_-28px_rgba(185,28,28,0.28)]";
   const searchClassName = dark
     ? "border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500"
-    : "border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100";
+    : "border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-red-300 focus:ring-2 focus:ring-red-100";
 
   return (
     <aside className={`hidden min-h-0 overflow-hidden rounded-[26px] border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
       <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-        <div className="rounded-2xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 px-4 py-4 text-white shadow-sm">
-          <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
+        <div className="rounded-2xl bg-gradient-to-br from-red-700 via-red-600 to-red-500 px-4 py-4 text-white shadow-sm">
+          <div className="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-7 w-7 flex-shrink-0">
+              <rect width="32" height="32" rx="6" fill="white" fillOpacity="0.2"/>
+              <line x1="8" y1="8" x2="24" y2="24" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
+              <line x1="24" y1="8" x2="8" y2="24" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
+            </svg>
+            <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
+          </div>
           <div className="mt-1 text-xs text-white/90">Powered by AI</div>
         </div>
 
@@ -93,10 +100,10 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
             const itemClassName = isActive
               ? dark
                 ? "bg-slate-800 text-white"
-                : "bg-gradient-to-r from-sky-700 to-cyan-600 text-white shadow-sm"
+                : "bg-gradient-to-r from-red-700 to-red-600 text-white shadow-sm"
               : dark
                 ? "text-slate-300 hover:bg-slate-800/80"
-                : "text-slate-700 hover:bg-sky-50";
+                : "text-slate-700 hover:bg-red-50";
 
             return (
               <div key={item.id}>
@@ -111,8 +118,8 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
                 </button>
                 {item.id === "jarvis" && (
                   <div className="ml-10 mt-1 flex flex-col gap-1 text-xs">
-                    <a href="/downloads/jarvis-windows.exe" download className="text-sky-600 hover:underline">Pobierz Jarvis Windows</a>
-                    <a href="/downloads/jarvis-android.apk" download className="text-sky-600 hover:underline">Pobierz Jarvis Android</a>
+                    <a href="/downloads/jarvis-windows.exe" download className="text-red-600 hover:underline">Pobierz Jarvis Windows</a>
+                    <a href="/downloads/jarvis-android.apk" download className="text-red-600 hover:underline">Pobierz Jarvis Android</a>
                   </div>
                 )}
               </div>
