@@ -78,9 +78,6 @@ async function ensureConversation(conversationId: string, userId: string | null)
 }
 
 
-// Use shared free model lists from lib/ai-config to avoid drift
-const FREE_CODING_MODELS = TOP_FREE_CODE_MODELS;
-const FREE_CHAT_MODELS = TOP_FREE_CHAT_MODELS;
 // Default coding/chat models derived from shared config
 let CODE_MODEL = FREE_CODING_MODEL;
 let CHAT_MODEL = FREE_CHAT_MODEL;
@@ -368,13 +365,13 @@ export const POST = async (req: Request) => {
     : costControlled.modelId;
 
   // If user requests a free model for coding/chatting, allow selection
-  if (!modelId && rawMode === "code" && FREE_CODING_MODELS.length > 0) {
+  if (!modelId && rawMode === "code" && TOP_FREE_CODE_MODELS.length > 0) {
     selectedModel = CODE_MODEL;
-  } else if (!modelId && rawMode === "chat" && FREE_CHAT_MODELS.length > 0) {
+  } else if (!modelId && rawMode === "chat" && TOP_FREE_CHAT_MODELS.length > 0) {
     selectedModel = CHAT_MODEL;
   }
 
-  // Optionally: expose FREE_CODING_MODELS and FREE_CHAT_MODELS in API response for UI
+  // Expose TOP_FREE_CODE_MODELS and TOP_FREE_CHAT_MODELS in API response for UI
   const isSearchMode = rawMode === "search" || (!usingAutoRouter && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");

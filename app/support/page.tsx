@@ -30,7 +30,8 @@ export default function SupportPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Only auto-scroll when a new message is appended, not on every token update.
+  // Auto-scroll whenever a new message bubble is appended (user or assistant placeholder).
+  // messageCount is incremented once per send — not on every streaming token.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageCount]);
@@ -41,6 +42,7 @@ export default function SupportPage() {
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInput("");
     setLoading(true);
+    setMessageCount((n) => n + 1);
 
     const history = messages
       .reduce<Array<{ user: string; ai: string }>>((acc, msg, i, arr) => {
@@ -76,7 +78,6 @@ export default function SupportPage() {
       const decoder = new TextDecoder();
       let reply = "";
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-      setMessageCount((n) => n + 1);
 
       let done = false;
       let buf = "";

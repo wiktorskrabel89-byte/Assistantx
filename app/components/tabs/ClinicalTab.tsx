@@ -179,7 +179,7 @@ function generateId(): string {
 // ─── FrameworkEditor sub-component ───────────────────────────────────────────
 
 type FrameworkEditorProps = {
-  labels: (typeof CLINICAL_LABELS)["en"];
+  labels: (typeof CLINICAL_LABELS)[keyof typeof CLINICAL_LABELS];
   initial?: ClinicalFramework;
   onSave: (f: Omit<ClinicalFramework, "id" | "isCustom">) => void;
   onCancel: () => void;
