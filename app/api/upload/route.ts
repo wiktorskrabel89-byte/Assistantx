@@ -4,7 +4,7 @@ import { PDFParse } from "pdf-parse";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 
 const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "json", "ts", "tsx", "js", "jsx", "py", "html", "css", "sql", "xml", "yml", "yaml"]);
 
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      return Response.json({ error: "File too large. Maximum allowed size is 20 MB." }, { status: 413 });
+      return Response.json({ error: "File too large. Maximum allowed size is 100 MB." }, { status: 413 });
     }
 
     const bytes = await file.arrayBuffer();
