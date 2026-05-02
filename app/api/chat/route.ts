@@ -78,20 +78,19 @@ async function ensureConversation(conversationId: string, userId: string | null)
 
 // Define free model arrays for compatibility with logic below
 
-// Explicitly include NVIDIA and Llama models in free arrays
+// Free coding models: Nemotron 3 Super, GPT OSS 120B, MiniMax M2.5, plus Llama 3.3 as fallback
 const FREE_CODING_MODELS = [
   "nvidia/nemotron-3-super-120b-a12b:free",
+  "openai/gpt-oss-120b:free",
+  "minimax/minimax-m2.5:free",
   "meta-llama/llama-3.3-70b-instruct:free",
-  ...TOP_FREE_CODE_MODELS.filter(
-    (id) => id !== "nvidia/nemotron-3-super-120b-a12b:free" && id !== "meta-llama/llama-3.3-70b-instruct:free"
-  ),
 ];
+// Free chat models: Llama 3.3, GPT OSS 120B, GLM 4.5 Air, MiniMax M2.5
 const FREE_CHAT_MODELS = [
-  "nvidia/nemotron-3-super-120b-a12b:free",
   "meta-llama/llama-3.3-70b-instruct:free",
-  ...TOP_FREE_CHAT_MODELS.filter(
-    (id) => id !== "nvidia/nemotron-3-super-120b-a12b:free" && id !== "meta-llama/llama-3.3-70b-instruct:free"
-  ),
+  "openai/gpt-oss-120b:free",
+  "z-ai/glm-4.5-air:free",
+  "minimax/minimax-m2.5:free",
 ];
 // Set NVIDIA as default coding model and Llama as default chat model
 let CODE_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
@@ -275,6 +274,9 @@ const MODEL_LABELS: Record<string, string> = {
   "openai/gpt-5.2": "GPT-5.2",
   "openai/gpt-5.2-pro": "GPT-5.2 Pro",
   "openai/gpt-oss-120b": "GPT OSS 120B",
+  "openai/gpt-oss-120b:free": "GPT OSS 120B (Free)",
+  "minimax/minimax-m2.5:free": "MiniMax M2.5 (Free)",
+  "z-ai/glm-4.5-air:free": "GLM 4.5 Air (Free)",
   "x-ai/grok-4": "Grok 4",
   "x-ai/grok-3": "Grok 3",
   "x-ai/grok-3-mini": "Grok 3 Mini",
@@ -524,7 +526,9 @@ export const POST = async (req: Request) => {
     "deepseek/deepseek-v3.2",
     "moonshotai/kimi-k2-thinking",
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "minimax/minimax-m2.5",
+    "openai/gpt-oss-120b:free",
+    "minimax/minimax-m2.5:free",
+    "z-ai/glm-4.5-air:free",
     "perplexity/sonar",
     // Add more as needed
   ];
