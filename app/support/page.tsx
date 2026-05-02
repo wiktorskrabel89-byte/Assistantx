@@ -212,7 +212,7 @@ export default function SupportPage() {
           <button
             onClick={sendMessage}
             disabled={loading || !input.trim()}
-            aria-label="Wyślij wiadomość"
+            aria-label="Send message"
             className="flex items-center justify-center w-11 h-11 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
           >
             <Send size={18} />
