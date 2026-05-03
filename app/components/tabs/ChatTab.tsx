@@ -650,6 +650,7 @@ export function ChatTab() {
                 visible={loading || stopRequested}
                 status={stopRequested ? "Stopping response..." : latestEntry?.status}
                 routeReason={latestEntry?.routeReason}
+                partialResponseLength={loading ? (latestEntry?.ai?.length ?? 0) : 0}
               />
             </div>
           </div>

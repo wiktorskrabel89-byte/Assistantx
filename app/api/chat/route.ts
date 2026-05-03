@@ -18,10 +18,10 @@ import {
   getFreePlanFallback,
   filterModelsByCostMode,
   getCheaperAlternative,
-  TOP_FREE_CODE_MODELS,
-  TOP_FREE_CHAT_MODELS,
   FREE_CODING_MODEL,
   FREE_CHAT_MODEL,
+  REASONING_MODEL_IDS,
+  getModelMaxTokens,
 } from "@/lib/ai-config";
 import { isCodeRequest, isImageRequest } from "@/lib/detect";
 
@@ -35,6 +35,31 @@ async function getAuthUserId(req: Request): Promise<string | null> {
     return data.user?.id ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Reads the user's plan from their workspace_states record in Supabase.
+ * Falls back to the client-supplied plan if the server lookup fails.
+ */
+async function getServerSideUserPlan(userId: string | null, clientPlan: UserPlan): Promise<UserPlan> {
+  if (!userId) return clientPlan;
+  try {
+    const supabase = await getSupabase();
+    const { data } = await supabase
+      .from("workspace_states")
+      .select("state_json")
+      .eq("user_id", userId)
+      .single();
+    if (!data?.state_json) return clientPlan;
+    const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
+    const rawPlan = (data.state_json as Record<string, unknown>).userPlan;
+    if (typeof rawPlan === "string" && VALID_USER_PLANS.includes(rawPlan as UserPlan)) {
+      return rawPlan as UserPlan;
+    }
+    return clientPlan;
+  } catch {
+    return clientPlan;
   }
 }
 
@@ -301,7 +326,11 @@ export const POST = async (req: Request) => {
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
   const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
-  const userPlan: UserPlan = VALID_USER_PLANS.includes(rawUserPlan) ? rawUserPlan : "free";
+  const clientPlan: UserPlan = VALID_USER_PLANS.includes(rawUserPlan) ? rawUserPlan : "free";
+
+  // Verify the user's plan server-side from Supabase instead of trusting the client
+  const authUserId = await getAuthUserId(req);
+  const userPlan = await getServerSideUserPlan(authUserId, clientPlan);
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
@@ -343,18 +372,9 @@ export const POST = async (req: Request) => {
       ? FREE_CODING_MODEL
       : FREE_CHAT_MODEL;
 
-
-
-  // Allow user to choose from free models for coding/chatting
-
-  let selectedModel = isAutoRouted
+  const selectedModel = isAutoRouted
     ? "openrouter/auto"
     : costControlled.modelId;
-
-  // If user requests a free model for coding/chatting, allow selection
-  if (!modelId && (rawMode === "code" || rawMode === "chat")) {
-    selectedModel = inferredCodeRequest ? TOP_FREE_CODE_MODELS[0] : TOP_FREE_CHAT_MODELS[0];
-  }
 
   // Expose TOP_FREE_CODE_MODELS and TOP_FREE_CHAT_MODELS in API response for UI
   const isSearchMode = rawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
@@ -453,7 +473,7 @@ export const POST = async (req: Request) => {
   // Build history: use Supabase memory if conversationId provided, else fall back to client history
   let historyMessages: Array<{ role: string; content: string }> = [];
   if (conversationId) {
-    await ensureConversation(conversationId, await getAuthUserId(req));
+    await ensureConversation(conversationId, authUserId);
     await saveMessage(conversationId, "user", message);
     const [summaries, memMessages] = await Promise.all([
       getMemorySummaries(conversationId),
@@ -477,35 +497,10 @@ export const POST = async (req: Request) => {
   }
 
 
-  // List of models that support reasoning depth (thinkingEffort)
-  const REASONING_MODELS = [
-    "openai/gpt-5.4",
-    "openai/gpt-5.1",
-    "openai/gpt-5.2",
-    "openai/gpt-5.2-pro",
-    "openai/gpt-5-mini",
-    "openai/gpt-5-nano",
-    "openai/gpt-5",
-    "openai/gpt-oss-120b",
-    "google/gemini-3-flash-preview",
-    "google/gemini-3-pro-preview",
-    "google/gemini-2.0-flash-exp:free",
-    "google/gemini-2.5-flash-lite",
-    "deepseek/deepseek-r1",
-    "deepseek/deepseek-v3.2",
-    "moonshotai/kimi-k2-thinking",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "openai/gpt-oss-120b:free",
-    "minimax/minimax-m2.5:free",
-    "z-ai/glm-4.5-air:free",
-    "perplexity/sonar",
-    // Add more as needed
-  ];
-
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
     stream: true,
-    max_tokens: 4096,
+    max_tokens: getModelMaxTokens(selectedModel),
     messages: [
       { role: "system", content: systemPrompt },
       ...historyMessages,
@@ -514,7 +509,7 @@ export const POST = async (req: Request) => {
   };
 
   // Only send reasoning_level if supported and provided
-  if (thinkingEffort && REASONING_MODELS.some((id) => selectedModel.includes(id.split("/").pop()!))) {
+  if (thinkingEffort && REASONING_MODEL_IDS.some((id) => selectedModel.includes(id.split("/").pop()!))) {
     // OpenRouter, Gemini, DeepSeek, etc. use 'reasoning_level' or 'thinking_effort'
     requestBody.reasoning_level = thinkingEffort;
   }

@@ -9,7 +9,7 @@ export function ProjectsTab({ dark }: { dark: boolean }) {
       dark={dark}
       icon={FolderKanban}
       title="Projekty"
-      description="Zarzadzaj projektami i plikami w jednym miejscu."
+      description="Zarządzaj projektami i plikami w jednym miejscu."
     />
   );
 }

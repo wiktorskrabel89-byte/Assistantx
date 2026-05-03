@@ -1,32 +1,65 @@
 "use client";
 
-
-import UserProfileEditor, { UserProfile } from "../UserProfileEditor";
+import { useEffect, useState } from "react";
+import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 
-// TODO: Replace mockProfile with real user data from Supabase or session. This is a temporary mock for UI only.
-const mockProfile: UserProfile = {
-  avatarUrl: "",
-  displayName: "Your Name",
-  email: "user@example.com",
-  bio: "",
-};
+type SaveStatus = "idle" | "saving" | "success" | "error";
 
 export function SettingsTab() {
-  async function handleSave(profile: UserProfile) {
+  const [profile, setProfile] = useState<UserProfile>({
+    avatarUrl: "",
+    displayName: "",
+    email: "",
+    bio: "",
+  });
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  // Load real user data from Supabase on mount
+  useEffect(() => {
     const supabase = createClient();
-    // Example: update user profile in Supabase
-    const { error } = await supabase.from("profiles").upsert({
-      avatar_url: profile.avatarUrl,
-      display_name: profile.displayName,
-      email: profile.email,
-      bio: profile.bio,
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      setProfile({
+        email: user.email ?? "",
+        displayName:
+          (user.user_metadata?.display_name as string | undefined) ??
+          (user.user_metadata?.full_name as string | undefined) ??
+          "",
+        avatarUrl: (user.user_metadata?.avatar_url as string | undefined) ?? "",
+        bio: (user.user_metadata?.bio as string | undefined) ?? "",
+      });
     });
-    if (error) {
-      alert("Failed to save profile: " + error.message);
-    } else {
-      alert("Profile saved!");
+  }, []);
+
+  async function handleSave(updatedProfile: UserProfile) {
+    setSaveStatus("saving");
+    setErrorMessage("");
+    const supabase = createClient();
+    // Update auth user_metadata (display_name, bio)
+    const { error: metaError } = await supabase.auth.updateUser({
+      data: {
+        display_name: updatedProfile.displayName,
+        bio: updatedProfile.bio,
+        avatar_url: updatedProfile.avatarUrl,
+      },
+    });
+    if (metaError) {
+      setErrorMessage(metaError.message);
+      setSaveStatus("error");
+      return;
     }
+    // Also persist to the profiles table if it exists (best-effort)
+    await supabase.from("profiles").upsert({
+      avatar_url: updatedProfile.avatarUrl,
+      display_name: updatedProfile.displayName,
+      email: updatedProfile.email,
+      bio: updatedProfile.bio,
+    });
+    setProfile(updatedProfile);
+    setSaveStatus("success");
+    setTimeout(() => setSaveStatus("idle"), 3000);
   }
 
   return (
@@ -37,8 +70,20 @@ export function SettingsTab() {
         </div>
         <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-900">Edit Profile</h2>
         <p className="mt-2 text-sm leading-7 text-slate-600">Zarządzaj profilem i informacjami widocznymi w przestrzeni AssistantX.</p>
+
+        {saveStatus === "success" && (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
+            Profil zapisany pomyślnie.
+          </div>
+        )}
+        {saveStatus === "error" && (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700">
+            Błąd: {errorMessage || "Nie udało się zapisać profilu."}
+          </div>
+        )}
+
         <div className="mt-6">
-          <UserProfileEditor profile={mockProfile} onSave={handleSave} />
+          <UserProfileEditor profile={profile} onSave={(p) => { void handleSave(p); }} />
         </div>
       </div>
     </section>
