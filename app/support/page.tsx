@@ -30,8 +30,9 @@ export default function SupportPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll whenever a new message bubble is appended (user or assistant placeholder).
-  // messageCount is incremented once per send — not on every streaming token.
+  // Auto-scroll whenever a new message bubble is appended (user send or assistant placeholder).
+  // messageCount is incremented twice per send: once when the user bubble is appended,
+  // and again when the assistant placeholder is appended — not on every streaming token.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageCount]);
@@ -78,6 +79,7 @@ export default function SupportPage() {
       const decoder = new TextDecoder();
       let reply = "";
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      setMessageCount((n) => n + 1);
 
       let done = false;
       let buf = "";
@@ -104,6 +106,26 @@ export default function SupportPage() {
             }
           } catch {
             // ignore non-JSON SSE lines (status/model metadata events)
+            if (process.env.NODE_ENV === "development") console.debug("SSE parse skip:", data);
+          }
+        }
+      }
+
+      // Process any remaining buffered data after the stream closes without a trailing newline
+      if (buf.startsWith("data: ")) {
+        const data = buf.slice(6).trim();
+        if (data && data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data);
+            if (typeof parsed.token === "string") {
+              reply += parsed.token;
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: reply };
+                return updated;
+              });
+            }
+          } catch {
             if (process.env.NODE_ENV === "development") console.debug("SSE parse skip:", data);
           }
         }
