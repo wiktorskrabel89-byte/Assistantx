@@ -45,7 +45,7 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
   const saveNew = useCallback(() => {
     if (!newContent.trim()) return;
     createPromptTemplate({
-      label: newName.trim() || "Untitled template",
+      label: newName.trim() || "Szablon bez nazwy",
       text: newContent,
       mode: "chat",
     });
