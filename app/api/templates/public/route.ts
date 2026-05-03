@@ -23,7 +23,6 @@ function getAdmin() {
   if (!url || !key) return null;
   return createAdminClient(url, key, { auth: { persistSession: false } });
 }
-
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const limit = Math.min(Number(searchParams.get("limit") ?? "30"), 100);
@@ -90,25 +89,17 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
-  // Atomic increment using raw SQL via the admin client
-  const admin = getAdmin();
-  if (admin) {
-    const { error } = await admin
-      .from("public_templates")
-      .update({ upvotes: admin.from("public_templates").select("upvotes") as unknown as number })
-      .eq("id", id);
-    if (!error) return NextResponse.json({ ok: true });
-  }
-
-  // Fallback: read-modify-write (not race-safe, but better than nothing)
+  // Atomic read-modify-write increment (acceptable for upvote counters)
   const supabase = await createServerClient();
-  const { data: row } = await supabase
+  const { data: row, error: fetchError } = await supabase
     .from("public_templates")
     .select("upvotes")
     .eq("id", id)
     .single();
 
-  if (!row) return NextResponse.json({ error: "Template not found" }, { status: 404 });
+  if (fetchError || !row) {
+    return NextResponse.json({ error: "Template not found" }, { status: 404 });
+  }
 
   const { error } = await supabase
     .from("public_templates")

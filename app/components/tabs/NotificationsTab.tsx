@@ -29,7 +29,7 @@ const KIND_BORDER: Record<NotificationKind, { dark: string; light: string }> = {
 };
 
 function toNotificationKind(kind: string): NotificationKind {
-  if (kind === "warning" || kind === "success") return kind;
+  if (kind === "info" || kind === "warning" || kind === "success") return kind;
   return "info";
 }
 

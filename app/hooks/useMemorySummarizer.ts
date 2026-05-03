@@ -44,12 +44,12 @@ export function useMemorySummarizer({
     const nextThreshold = lastCount + 20;
     if (count < nextThreshold || isSummarizingRef.current) return;
 
-    // The block to summarize: messages[lastCount .. lastCount + 19]
-    const block = messages.slice(lastCount, lastCount + 20).filter((m) => m.ai);
+    // The block to summarize: messages[lastCount .. lastCount + 19] (only completed turns)
+    const block = messages.slice(lastCount, lastCount + 20).filter((m) => m.ai.trim().length > 0);
     if (block.length === 0) return;
 
     isSummarizingRef.current = true;
-    lastSummarizedCountRef.current.set(key, lastCount + block.length);
+    lastSummarizedCountRef.current.set(key, lastCount + 20);
 
     const payload = block.map((m) => ({ user: m.user, ai: m.ai }));
 
@@ -72,6 +72,10 @@ export function useMemorySummarizer({
       .finally(() => {
         isSummarizingRef.current = false;
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only re-run when the message count changes. Other deps (workspaceId, chatId,
+    // memoryEnabled, memoryNotes) are accessed via stable refs or are intentionally
+    // not re-triggers: workspaceId/chatId are tracked via the Map key; memoryNotes
+    // is read at call-time and does not need to restart the threshold watch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 }

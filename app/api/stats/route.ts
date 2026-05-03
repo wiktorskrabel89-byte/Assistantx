@@ -42,15 +42,15 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Run aggregation queries in parallel
-  const [messagesResult, conversationsResult, workspaceResult] = await Promise.all([
-    // Total messages and tokens
+  // Total messages filtered by the user's conversations to avoid leaking other users' data
+  const [conversationIdsResult, conversationsResult, workspaceResult] = await Promise.all([
+    // Fetch conversation IDs owned by this user first, then count their messages
     supabase
-      .from("messages")
-      .select("id, token_count, role")
-      .eq("role", "user"),
+      .from("conversations")
+      .select("id")
+      .eq("user_id", userId),
 
-    // Total conversations
+    // Total conversations (count only)
     supabase
       .from("conversations")
       .select("id", { count: "exact", head: true })
@@ -64,7 +64,20 @@ export async function GET(req: NextRequest) {
       .single(),
   ]);
 
-  const messages = messagesResult.data ?? [];
+  const conversationIds = (conversationIdsResult.data ?? []).map(
+    (c: { id: string }) => c.id
+  );
+
+  // Fetch messages only for this user's conversations
+  const messagesResult2 = conversationIds.length > 0
+    ? await supabase
+        .from("messages")
+        .select("id, token_count")
+        .in("conversation_id", conversationIds)
+        .eq("role", "user")
+    : { data: [] };
+
+  const messages = messagesResult2.data ?? [];
 
   // Aggregate token count for user messages that belong to this user's conversations
   const totalMessages = messages.length;
