@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as { customerId?: string; returnUrl?: string };
     customerId = body.customerId;
-    if (typeof body.returnUrl === "string" && body.returnUrl) {
+    // Only accept returnUrl values that belong to the same origin to prevent open-redirect
+    if (typeof body.returnUrl === "string" && body.returnUrl.startsWith(req.nextUrl.origin)) {
       returnUrl = body.returnUrl;
     }
   } catch {

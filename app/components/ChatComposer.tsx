@@ -7,11 +7,54 @@ import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
 import { REASONING_MODEL_IDS } from "@/lib/ai-config";
 
-// Extend the global Window type for the webkit-prefixed Speech API
+// Minimal type stubs for the Web Speech API (not yet in TypeScript's lib.dom.d.ts)
 declare global {
+  interface SpeechRecognitionEventMap {
+    result: Event;
+    end: Event;
+    error: Event;
+  }
+
+  interface SpeechRecognitionResultItem {
+    transcript: string;
+  }
+
+  interface SpeechRecognitionResult {
+    readonly isFinal: boolean;
+    readonly length: number;
+    item(index: number): SpeechRecognitionResultItem;
+    [index: number]: SpeechRecognitionResultItem;
+  }
+
+  interface SpeechRecognitionResultList {
+    readonly length: number;
+    item(index: number): SpeechRecognitionResult;
+    [index: number]: SpeechRecognitionResult;
+  }
+
+  interface SpeechRecognitionEvent extends Event {
+    readonly resultIndex: number;
+    readonly results: SpeechRecognitionResultList;
+  }
+
+  interface SpeechRecognition extends EventTarget {
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    onresult: ((event: SpeechRecognitionEvent) => void) | null;
+    onend: (() => void) | null;
+    onerror: (() => void) | null;
+    start(): void;
+    stop(): void;
+  }
+
+  interface SpeechRecognitionConstructor {
+    new(): SpeechRecognition;
+  }
+
   interface Window {
-    SpeechRecognition?: typeof SpeechRecognition;
-    webkitSpeechRecognition?: typeof SpeechRecognition;
+    SpeechRecognition: SpeechRecognitionConstructor | undefined;
+    webkitSpeechRecognition: SpeechRecognitionConstructor | undefined;
   }
 }
 
@@ -94,11 +137,13 @@ export function ChatComposer({
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "pl-PL,en-US";
+    // Use the browser's preferred language so the recogniser picks the right model
+    recognition.lang = navigator.language || "en-US";
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0].transcript)
-        .join("");
+      let transcript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
       onMessageChange(transcript);
     };
     recognition.onend = () => setMicActive(false);

@@ -500,6 +500,9 @@ export const POST = async (req: Request) => {
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
     stream: true,
+    // When isAutoRouted, selectedModel is "openrouter/auto" which isn't in MODEL_MAX_TOKENS;
+    // getModelMaxTokens falls back to DEFAULT_MAX_TOKENS (4096), which is acceptable since
+    // the auto-router selects the actual model and applies its own limits.
     max_tokens: getModelMaxTokens(selectedModel),
     messages: [
       { role: "system", content: systemPrompt },
