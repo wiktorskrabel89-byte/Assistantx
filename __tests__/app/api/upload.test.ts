@@ -6,6 +6,23 @@ import { POST } from "@/app/api/upload/route";
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+// Mock Supabase so the auth check in the upload route resolves with a user
+jest.mock("@/lib/server", () => ({
+  createClient: jest.fn().mockResolvedValue({
+    auth: {
+      getUser: jest.fn().mockResolvedValue({
+        data: { user: { id: "test-user-id", email: "test@example.com" } },
+      }),
+    },
+  }),
+}));
+
+jest.mock("@/lib/rateLimit", () => ({
+  checkRateLimit: jest.fn().mockReturnValue({ allowed: true, retryAfterMs: 0 }),
+  getRateLimitKey: jest.fn().mockReturnValue("test-key"),
+  rateLimitedResponse: jest.fn(),
+}));
+
 // Helper to create a streaming response with SSE data lines
 function makeSseResponse(lines: string[]) {
   const body = lines.join("\n") + "\n";

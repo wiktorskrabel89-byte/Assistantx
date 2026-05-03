@@ -1,8 +1,6 @@
-// WARNING: This endpoint is not secure for premium verification.
-// Anyone can visit the success URL and appear as premium.
-// You must implement a Stripe webhook to verify payment server-side before granting premium access.
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { createClient } from "@/lib/server";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
@@ -22,6 +20,14 @@ const PLAN_CONFIG = {
 export async function POST(req: NextRequest) {
   if (!stripeSecretKey) {
     return NextResponse.json({ error: "Stripe secret key not set" }, { status: 500 });
+  }
+
+  // Require authentication so we can attach the user ID to the Stripe session.
+  // The webhook uses this ID to grant the plan without relying on the success URL.
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
   const stripe = new Stripe(stripeSecretKey);
@@ -54,7 +60,16 @@ export async function POST(req: NextRequest) {
         quantity: 1,
       },
     ],
-    success_url: `${req.nextUrl.origin}/?plan=${encodeURIComponent(config.successParam)}`,
+    // Embed the user ID and plan so the webhook can grant access server-side
+    // without relying on the success URL (which would be trivially bypassable).
+    metadata: {
+      userId: user.id,
+      plan,
+    },
+    customer_email: user.email,
+    // The success URL is a neutral confirmation page; plan activation is handled
+    // exclusively by the Stripe webhook (/api/stripe/webhook).
+    success_url: `${req.nextUrl.origin}/?checkout_success=1`,
     cancel_url: `${req.nextUrl.origin}/pricing?cancelled=1`,
   });
 

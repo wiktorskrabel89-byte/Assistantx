@@ -1,9 +1,53 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+/**
+ * Builds a per-request Content-Security-Policy header value.
+ *
+ * The nonce is included in script-src so modern browsers enforce it and
+ * silently ignore the 'unsafe-inline' fallback that is kept only for
+ * compatibility with older user-agents.  'unsafe-eval' is only permitted
+ * in development (required by Next.js webpack HMR).
+ */
+function buildCsp(nonce: string): string {
+  const isDev = process.env.NODE_ENV === 'development'
+  const directives = [
+    "default-src 'self'",
+    // 'unsafe-inline' is overridden by the nonce in browsers that support it;
+    // kept as a fallback.  'unsafe-eval' only in dev for HMR.
+    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://assistantx.pl`,
+    "style-src 'self' 'unsafe-inline'",
+    // Restrict images to HTTPS + safe data URIs; avoid the broad wildcard '*'
+    "img-src 'self' blob: data: https:",
+    // Allow Google Fonts as well as self-hosted fonts
+    "font-src 'self' https://fonts.gstatic.com",
+    // API and WebSocket connections are allowed to any origin (LLM providers etc.)
+    "connect-src *",
+    // No iframes at all
+    "frame-src 'none'",
+    // Block this page from being embedded in any frame (CSP equivalent of X-Frame-Options: DENY)
+    "frame-ancestors 'none'",
+    // No Flash / other plugins
+    "object-src 'none'",
+    // Prevent base-tag hijacking
+    "base-uri 'self'",
+    // Limit form submissions to same origin
+    "form-action 'self'",
+  ]
+  return directives.join('; ')
+}
+
 export async function updateSession(request: NextRequest) {
+  // Generate a cryptographically random nonce for this request
+  const nonce = btoa(crypto.randomUUID())
+  const csp = buildCsp(nonce)
+
+  // Propagate the nonce to server components via a request header
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-nonce', nonce)
+
   let supabaseResponse = NextResponse.next({
-    request,
+    request: { headers: requestHeaders },
   })
 
   // With Fluid compute, don't put this client in a global environment
@@ -18,8 +62,10 @@ export async function updateSession(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          // Re-create the response so Supabase can control cookie settings,
+          // but preserve the nonce-carrying request headers.
           supabaseResponse = NextResponse.next({
-            request,
+            request: { headers: requestHeaders },
           })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -66,6 +112,10 @@ export async function updateSession(request: NextRequest) {
   //    return myNewResponse
   // If this is not done, you may be causing the browser and server to go out
   // of sync and terminate the user's session prematurely!
+
+  // Attach the per-request CSP (set after cookies are finalised so the header
+  // is always present on the actual response that gets returned).
+  supabaseResponse.headers.set('Content-Security-Policy', csp)
 
   return supabaseResponse
 }

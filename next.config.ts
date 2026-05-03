@@ -78,21 +78,26 @@ const nextConfig = {
   ],
   headers: async () => [
     {
+      // Security headers for all responses
       source: '/(.*)',
       headers: [
-        {
-          key: 'Content-Security-Policy',
-          value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://assistantx.pl; style-src 'self' 'unsafe-inline'; img-src * blob: data:; font-src 'self'; connect-src *; frame-src 'self';"
-        },
+        // Prevent clickjacking (belt-and-suspenders alongside frame-ancestors in CSP)
+        { key: 'X-Frame-Options', value: 'DENY' },
+        // Prevent MIME-type sniffing
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        // Limit Referer leakage to cross-origin requests
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        // Disable browser features not needed by this app
+        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
+        // Enforce HTTPS for 2 years, include subdomains, request preload
+        { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
       ],
     },
     {
+      // Long-lived immutable cache for hashed Next.js static assets
       source: '/_next/static/:path*',
       headers: [
-        {
-          key: 'Cache-Control',
-          value: 'public, max-age=31536000, immutable',
-        },
+        { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
       ],
     },
   ],
