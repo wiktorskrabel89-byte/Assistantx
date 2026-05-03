@@ -352,10 +352,8 @@ export const POST = async (req: Request) => {
     : costControlled.modelId;
 
   // If user requests a free model for coding/chatting, allow selection
-  if (!modelId && rawMode === "code" && TOP_FREE_CODE_MODELS.length > 0) {
-    selectedModel = TOP_FREE_CODE_MODELS[0];
-  } else if (!modelId && rawMode === "chat" && TOP_FREE_CHAT_MODELS.length > 0) {
-    selectedModel = TOP_FREE_CHAT_MODELS[0];
+  if (!modelId && (rawMode === "code" || rawMode === "chat")) {
+    selectedModel = inferredCodeRequest ? TOP_FREE_CODE_MODELS[0] : TOP_FREE_CHAT_MODELS[0];
   }
 
   // Expose TOP_FREE_CODE_MODELS and TOP_FREE_CHAT_MODELS in API response for UI

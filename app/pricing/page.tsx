@@ -5,12 +5,28 @@ import { useRouter } from "next/navigation";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 
 async function startCheckout(plan: "pro" | "pro+") {
-  const res = await fetch("/api/stripe/checkout", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ plan }),
-  });
-  const data = await res.json() as { url?: string };
+  let res: Response;
+  try {
+    res = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan }),
+    });
+  } catch {
+    alert("Failed to start checkout. Please try again later.");
+    return;
+  }
+  if (!res.ok) {
+    alert("Failed to start checkout. Please try again later.");
+    return;
+  }
+  let data: { url?: string };
+  try {
+    data = await res.json() as { url?: string };
+  } catch {
+    alert("Failed to start checkout. Please try again later.");
+    return;
+  }
   if (data.url) {
     window.location.href = data.url;
   } else {
