@@ -435,7 +435,7 @@ describe("upgradeState", () => {
     expect(upgraded.workspaces[0].chats).toHaveLength(1);
   });
 
-  it("migrates old isPremium:true to userPlan:'premium'", () => {
+  it("migrates old isPremium:true to userPlan:'pro+'", () => {
     const legacyState = {
       workspaces: [
         {
@@ -455,12 +455,36 @@ describe("upgradeState", () => {
     };
 
     const upgraded = upgradeState(legacyState as unknown as StoredState)!;
-    expect(upgraded.userPlan).toBe("premium");
+    expect(upgraded.userPlan).toBe("pro+");
     expect(upgraded.premiumRequestsUsed).toBe(42);
   });
 
-  it("preserves starter userPlan through upgrade", () => {
-    const state: StoredState = {
+  it("migrates old userPlan:'premium' to 'pro+'", () => {
+    const legacyState = {
+      workspaces: [
+        {
+          id: "ws1",
+          name: "Test",
+          chats: [{ id: "ch1", title: "Chat", messages: [], createdAt: 1, updatedAt: 1 }],
+          activeChatId: "ch1",
+          settings: createSettings(),
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceId: "ws1",
+      dark: false,
+      userPlan: "premium",
+      premiumRequestsUsed: 50,
+    };
+
+    const upgraded = upgradeState(legacyState as unknown as StoredState)!;
+    expect(upgraded.userPlan).toBe("pro+");
+    expect(upgraded.premiumRequestsUsed).toBe(50);
+  });
+
+  it("migrates old userPlan:'starter' to 'pro'", () => {
+    const legacyState = {
       workspaces: [
         {
           id: "ws1",
@@ -478,8 +502,56 @@ describe("upgradeState", () => {
       premiumRequestsUsed: 10,
     };
 
-    const upgraded = upgradeState(state)!;
-    expect(upgraded.userPlan).toBe("starter");
+    const upgraded = upgradeState(legacyState as unknown as StoredState)!;
+    expect(upgraded.userPlan).toBe("pro");
     expect(upgraded.premiumRequestsUsed).toBe(10);
+  });
+
+  it("preserves pro userPlan through upgrade", () => {
+    const state: StoredState = {
+      workspaces: [
+        {
+          id: "ws1",
+          name: "Test",
+          chats: [{ id: "ch1", title: "Chat", messages: [], createdAt: 1, updatedAt: 1 }],
+          activeChatId: "ch1",
+          settings: createSettings(),
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceId: "ws1",
+      dark: false,
+      userPlan: "pro",
+      premiumRequestsUsed: 10,
+    };
+
+    const upgraded = upgradeState(state)!;
+    expect(upgraded.userPlan).toBe("pro");
+    expect(upgraded.premiumRequestsUsed).toBe(10);
+  });
+
+  it("preserves pro+ userPlan through upgrade", () => {
+    const state: StoredState = {
+      workspaces: [
+        {
+          id: "ws1",
+          name: "Test",
+          chats: [{ id: "ch1", title: "Chat", messages: [], createdAt: 1, updatedAt: 1 }],
+          activeChatId: "ch1",
+          settings: createSettings(),
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceId: "ws1",
+      dark: false,
+      userPlan: "pro+",
+      premiumRequestsUsed: 200,
+    };
+
+    const upgraded = upgradeState(state)!;
+    expect(upgraded.userPlan).toBe("pro+");
+    expect(upgraded.premiumRequestsUsed).toBe(200);
   });
 });

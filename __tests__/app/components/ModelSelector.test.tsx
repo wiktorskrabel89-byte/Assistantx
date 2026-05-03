@@ -80,14 +80,34 @@ describe("ModelSelector", () => {
     expect(screen.queryByRole("button", { name: /Auto/i })).not.toBeInTheDocument();
   });
 
-  it("shows Premium badge when isPremium is true", async () => {
+  it("shows Pro badge when isPremium is true and isProPlus is false", async () => {
     await expandSelector({ isPremium: true });
-    expect(screen.getByText("Premium")).toBeInTheDocument();
+    expect(screen.getByText("Pro")).toBeInTheDocument();
+    expect(screen.queryByText("Pro+")).not.toBeInTheDocument();
   });
 
-  it("hides Premium badge when isPremium is false", async () => {
+  it("shows Pro+ badge when isPremium and isProPlus are true", async () => {
+    const onSelectModel = jest.fn();
+    render(
+      <ModelSelector
+        dark={false}
+        preferredModelId={null}
+        isPremium={true}
+        isProPlus={true}
+        onSelectModel={onSelectModel}
+      />
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Pokaż wybór modelu" }));
+    });
+    expect(screen.getByText("Pro+")).toBeInTheDocument();
+    expect(screen.queryByText("Pro")).not.toBeInTheDocument();
+  });
+
+  it("hides plan badge when isPremium is false", async () => {
     await expandSelector({ isPremium: false });
-    expect(screen.queryByText("Premium")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pro")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pro+")).not.toBeInTheDocument();
   });
 
   it("locked models are disabled and do not call onSelectModel", async () => {

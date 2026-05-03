@@ -1,6 +1,6 @@
 export type CostTier = "free" | "cheap" | "standard" | "premium";
 export type CostMode = "thrifty" | "balanced" | "performance";
-export type UserPlan = "free" | "starter" | "premium";
+export type UserPlan = "free" | "pro" | "pro+";
 
 export type PremiumPlanInfo = {
   priceUsd: number;
@@ -9,19 +9,32 @@ export type PremiumPlanInfo = {
   description: string;
 };
 
-export const STARTER_PLAN: PremiumPlanInfo = {
-  priceUsd: 5,
-  unlimitedChats: true,
-  premiumRequestsPerMonth: 100,
-  description: "Unlimited chats, 100 premium requests/month, access to all models.",
-};
-
-export const PREMIUM_PLAN: PremiumPlanInfo = {
+/** Pro plan — $10/month, 300 premium requests, all models except Pro+-exclusive. */
+export const PRO_PLAN: PremiumPlanInfo = {
   priceUsd: 10,
   unlimitedChats: true,
   premiumRequestsPerMonth: 300,
   description: "Unlimited chats, 300 premium requests/month, access to all models.",
 };
+
+/** Pro+ plan — $30/month, 1500 premium requests (5× Pro), all models including Claude Opus 4.7. */
+export const PRO_PLUS_PLAN: PremiumPlanInfo = {
+  priceUsd: 30,
+  unlimitedChats: true,
+  premiumRequestsPerMonth: 1500,
+  description: "Unlimited chats, 1500 premium requests/month, all models including Claude Opus 4.7.",
+};
+
+/** Models that require Pro+ and are not accessible on the free or Pro plans. */
+export const PRO_PLUS_ONLY_MODELS: string[] = [
+  "anthropic/claude-opus-4.7",
+];
+
+// Legacy aliases for backward compatibility during migration
+/** @deprecated Use PRO_PLAN */
+export const STARTER_PLAN = PRO_PLAN;
+/** @deprecated Use PRO_PLUS_PLAN */
+export const PREMIUM_PLAN = PRO_PLUS_PLAN;
 
 export type ModelOption = {
   id: string;
@@ -363,17 +376,26 @@ export const FREE_PLAN_MODELS: string[] = Object.entries(MODEL_COST_TIERS)
   .filter(([, tier]) => tier === "free")
   .map(([id]) => id);
 
-/** Returns true if the given model requires a premium plan. */
+/** Returns true if the given model requires a paid plan (not free). */
 export function isModelPremiumOnly(modelId: string): boolean {
   return !FREE_PLAN_MODELS.includes(modelId);
 }
 
+/** Returns true if the given model requires Pro+ (not available on free or Pro). */
+export function isModelProPlusOnly(modelId: string): boolean {
+  return PRO_PLUS_ONLY_MODELS.includes(modelId);
+}
+
 /**
  * Filters a list of model IDs to only those accessible to the user's plan.
- * Premium users get all models; free users only get :free models.
+ * Pro+ users get all models; Pro users get all except Pro+-only; free users only get :free models.
  */
 export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): string[] {
-  if (userPlan === "premium" || userPlan === "starter") return modelIds;
+  if (userPlan === "pro+") return modelIds;
+  if (userPlan === "pro") {
+    const filtered = modelIds.filter((id) => !isModelProPlusOnly(id));
+    return filtered.length > 0 ? filtered : modelIds.filter((id) => !isModelPremiumOnly(id));
+  }
   const filtered = modelIds.filter((id) => !isModelPremiumOnly(id));
   return filtered.length > 0 ? filtered : [FREE_CHAT_MODEL];
 }

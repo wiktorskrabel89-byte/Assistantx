@@ -14,6 +14,7 @@ import {
   UserPlan,
   filterModelsByPlan,
   isModelPremiumOnly,
+  isModelProPlusOnly,
   getFreePlanFallback,
   filterModelsByCostMode,
   getCheaperAlternative,
@@ -299,21 +300,24 @@ export const POST = async (req: Request) => {
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
-  const VALID_USER_PLANS: UserPlan[] = ["free", "starter", "premium"];
+  const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
   const userPlan: UserPlan = VALID_USER_PLANS.includes(rawUserPlan) ? rawUserPlan : "free";
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
 
-  // Apply plan-based model filtering: free users can only use :free models
+  // Apply plan-based model filtering: free users only see :free models, pro users cannot use pro+-only models
   const planFilteredAllowedModels = Array.isArray(allowedModelsFinal)
     ? filterModelsByPlan(allowedModelsFinal, userPlan)
     : allowedModelsFinal;
 
-  // If user manually selected a non-free model but is on free plan, override to free fallback
-  const planEnforcedModelId = modelId && userPlan === "free" && isModelPremiumOnly(modelId)
-    ? getFreePlanFallback(inferredCodeRequest)
-    : modelId;
+  // If user manually selected a model they don't have access to, override to an appropriate fallback
+  const planEnforcedModelId = (() => {
+    if (!modelId) return modelId;
+    if (userPlan === "free" && isModelPremiumOnly(modelId)) return getFreePlanFallback(inferredCodeRequest);
+    if (userPlan === "pro" && isModelProPlusOnly(modelId)) return getFreePlanFallback(inferredCodeRequest);
+    return modelId;
+  })();
 
   // Apply cost control: filter the allowed models list to respect the user's cost mode
   const costFilteredModels = usingAutoRouter(planFilteredAllowedModels, planEnforcedModelId, inferredImageRequest)

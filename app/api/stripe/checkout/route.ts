@@ -4,19 +4,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-// You must set STRIPE_SECRET_KEY in your environment variables
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
 const PLAN_CONFIG = {
-  starter: {
-    name: "Starter Pack Subscription",
-    unitAmount: 500, // $5.00
-    successParam: "starter",
-  },
-  premium: {
-    name: "Premium Plan Subscription",
+  pro: {
+    name: "Pro Plan Subscription",
     unitAmount: 1000, // $10.00
-    successParam: "premium",
+    successParam: "pro",
+  },
+  "pro+": {
+    name: "Pro+ Plan Subscription",
+    unitAmount: 3000, // $30.00
+    successParam: "pro+",
   },
 } as const;
 
@@ -27,14 +26,14 @@ export async function POST(req: NextRequest) {
 
   const stripe = new Stripe(stripeSecretKey);
 
-  let plan: "starter" | "premium" = "premium";
+  let plan: "pro" | "pro+" = "pro";
   try {
     const body = await req.json();
-    if (body.plan === "starter" || body.plan === "premium") {
+    if (body.plan === "pro" || body.plan === "pro+") {
       plan = body.plan;
     }
   } catch {
-    // default to premium if body parsing fails
+    // default to pro if body parsing fails
   }
 
   const config = PLAN_CONFIG[plan];
@@ -55,8 +54,8 @@ export async function POST(req: NextRequest) {
         quantity: 1,
       },
     ],
-    success_url: `${req.nextUrl.origin}/?premium=${config.successParam}`,
-    cancel_url: `${req.nextUrl.origin}/?premium=cancel`,
+    success_url: `${req.nextUrl.origin}/?plan=${config.successParam}`,
+    cancel_url: `${req.nextUrl.origin}/pricing?cancelled=1`,
   });
 
   return NextResponse.json({ url: session.url });

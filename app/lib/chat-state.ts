@@ -349,13 +349,20 @@ export function upgradeState(value: StoredState | null): StoredState | null {
     : workspaces[0].id;
 
   const raw = value as Record<string, unknown>;
-  const VALID_USER_PLANS: UserPlan[] = ["free", "starter", "premium"];
-  // Migrate old `isPremium: boolean` field if present
+  const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
+  // Migrate legacy plan values
   let userPlan: UserPlan = "free";
-  if (VALID_USER_PLANS.includes(raw.userPlan as UserPlan)) {
-    userPlan = raw.userPlan as UserPlan;
-  } else if (raw.isPremium === true) {
-    userPlan = "premium";
+  const rawPlan = raw.userPlan as string | undefined;
+  if (rawPlan === "pro" || rawPlan === "pro+") {
+    userPlan = rawPlan;
+  } else if (rawPlan === "premium" || raw.isPremium === true) {
+    // old "premium" maps to new "pro+"
+    userPlan = "pro+";
+  } else if (rawPlan === "starter") {
+    // old "starter" maps to new "pro"
+    userPlan = "pro";
+  } else if (VALID_USER_PLANS.includes(rawPlan as UserPlan)) {
+    userPlan = rawPlan as UserPlan;
   }
 
   return {

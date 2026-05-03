@@ -41,7 +41,7 @@ import type {
   StyleMode,
 } from "../../lib/chat-types";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
-import { PREMIUM_PLAN, STARTER_PLAN } from "@/lib/ai-config";
+import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 
 export function ChatTab() {
   const {
@@ -163,10 +163,10 @@ export function ChatTab() {
     if (!text && !file) return;
 
     // Block paid users who have exhausted their monthly request quota
-    const planLimit = state.userPlan === "starter"
-      ? STARTER_PLAN.premiumRequestsPerMonth
-      : state.userPlan === "premium"
-        ? PREMIUM_PLAN.premiumRequestsPerMonth
+    const planLimit = state.userPlan === "pro"
+      ? PRO_PLAN.premiumRequestsPerMonth
+      : state.userPlan === "pro+"
+        ? PRO_PLUS_PLAN.premiumRequestsPerMonth
         : null;
     if (planLimit !== null && state.premiumRequestsUsed >= planLimit) {
       return;
@@ -187,8 +187,8 @@ export function ChatTab() {
       },
     ]);
 
-    // Count each sent message against the plan request quota (starter and premium)
-    if (state.userPlan === "starter" || state.userPlan === "premium") {
+    // Count each sent message against the plan request quota (pro and pro+)
+    if (state.userPlan === "pro" || state.userPlan === "pro+") {
       incrementPremiumRequests();
     }
 
@@ -659,6 +659,7 @@ export function ChatTab() {
                 dark={state.dark}
                 preferredModelId={activeWorkspace.settings.preferredModelId ?? null}
                 isPremium={state.userPlan !== "free"}
+                isProPlus={state.userPlan === "pro+"}
                 onSelectModel={setPreferredModelId}
               />
               <div className={`hidden sm:block h-5 w-px ${state.dark ? "bg-slate-700" : "bg-slate-200"}`} />
@@ -693,18 +694,18 @@ export function ChatTab() {
             onRemoveQueuedMessage={removeQueuedMessage}
             selectedModel={activeWorkspace.settings.preferredModelId ?? "openai/gpt-5.4"}
             premiumLimitReached={(() => {
-              const limit = state.userPlan === "starter"
-                ? STARTER_PLAN.premiumRequestsPerMonth
-                : state.userPlan === "premium"
-                  ? PREMIUM_PLAN.premiumRequestsPerMonth
+              const limit = state.userPlan === "pro"
+                ? PRO_PLAN.premiumRequestsPerMonth
+                : state.userPlan === "pro+"
+                  ? PRO_PLUS_PLAN.premiumRequestsPerMonth
                   : null;
               return limit !== null && state.premiumRequestsUsed >= limit;
             })()}
             planRequestLimit={
-              state.userPlan === "starter"
-                ? STARTER_PLAN.premiumRequestsPerMonth
-                : state.userPlan === "premium"
-                  ? PREMIUM_PLAN.premiumRequestsPerMonth
+              state.userPlan === "pro"
+                ? PRO_PLAN.premiumRequestsPerMonth
+                : state.userPlan === "pro+"
+                  ? PRO_PLUS_PLAN.premiumRequestsPerMonth
                   : undefined
             }
           />
