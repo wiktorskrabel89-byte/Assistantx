@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import type { CostMode } from "@/lib/ai-config";
+import type { CostMode, UserPlan } from "@/lib/ai-config";
 
 export type Mode = "auto" | "code" | "chat" | "search" | "image" | "upload";
 export type StyleMode = "concise" | "detailed" | "step-by-step";
@@ -79,7 +79,7 @@ export type StoredState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   dark: boolean;
-  isPremium: boolean;
+  userPlan: UserPlan;
   premiumRequestsUsed: number;
 };
 

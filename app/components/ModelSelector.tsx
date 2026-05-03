@@ -3,6 +3,7 @@
 import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchAllModels } from "../api/openrouter/fetchAllModels";
+import { PRO_PLUS_ONLY_MODELS } from "@/lib/ai-config";
 
 type OpenRouterModel = {
   id: string;
@@ -14,10 +15,11 @@ type ModelSelectorProps = {
   preferredModelId: string | null;
   isPremium: boolean;
   onSelectModel: (modelId: string | null) => void;
+  isProPlus?: boolean;
 };
 
 
-export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel }: ModelSelectorProps) {
+export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [allModels, setAllModels] = useState<OpenRouterModel[]>([]);
   const isAuto = preferredModelId === null;
@@ -72,7 +74,7 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
           {isPremium && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-500">
               <Crown className="h-3 w-3" />
-              Premium
+              {isProPlus ? "Pro+" : "Pro"}
             </span>
           )}
 
@@ -81,17 +83,25 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
             All Models
           </span>
           {allModels.map((model) => {
-            const locked = Boolean(!isPremium && (model.id.includes("opus") || model.description?.toLowerCase().includes("premium")));
+            // Claude Opus 4.7 requires Pro+
+            const requiresProPlus = PRO_PLUS_ONLY_MODELS.includes(model.id);
+            const locked = requiresProPlus
+              ? !isProPlus
+              : Boolean(!isPremium && (model.id.includes("opus") || model.description?.toLowerCase().includes("premium")));
+            const lockReason = requiresProPlus
+              ? `Pro+ plan required for ${model.id}`
+              : `Premium plan required for ${model.id}`;
             return (
               <button
                 key={model.id}
                 onClick={() => !locked && onSelectModel(model.id)}
                 className={`${pillBase} ${locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
-                title={locked ? `Premium plan required for ${model.id}` : `Use ${model.id}`}
+                title={locked ? lockReason : `Use ${model.id}`}
                 disabled={locked}
               >
                 {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
                 {model.id}
+                {requiresProPlus && <Crown className="h-3 w-3 text-purple-400" aria-label="Pro+ exclusive" />}
                 {model.description ? <span className="ml-1 text-xs text-slate-400">{model.description}</span> : null}
               </button>
             );

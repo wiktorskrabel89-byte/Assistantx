@@ -1,8 +1,14 @@
 export const maxDuration = 60;
 
 import OpenAI from "openai";
+import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
+  // Rate limit: 10 image generation requests per minute per user/IP
+  const rlKey = getRateLimitKey(req, "image");
+  const rl = checkRateLimit(rlKey, 10, 60_000);
+  if (!rl.allowed) return rateLimitedResponse(rl.retryAfterMs);
+
   try {
     const { prompt } = await req.json();
     // Try OpenAI DALL-E 3 if API key is present, otherwise fallback to Pollinations.ai

@@ -6,10 +6,7 @@ function getSupabase() {
   // For now, return createClient() directly for compatibility.
   return createClient();
 }
-import {
-  fetchLatestModelId,
-} from "../openrouter/models";
-import { fetchAllModels } from "../openrouter/fetchAllModels";
+import { fetchLatestModelIds, getCachedModels } from "../openrouter/modelCache";
 import {
   CHAT_MODELS,
   CODE_MODELS,
@@ -17,6 +14,7 @@ import {
   UserPlan,
   filterModelsByPlan,
   isModelPremiumOnly,
+  isModelProPlusOnly,
   getFreePlanFallback,
   filterModelsByCostMode,
   getCheaperAlternative,
@@ -25,6 +23,7 @@ import {
   FREE_CODING_MODEL,
   FREE_CHAT_MODEL,
 } from "@/lib/ai-config";
+import { isCodeRequest, isImageRequest } from "@/lib/detect";
 
 async function getAuthUserId(req: Request): Promise<string | null> {
   try {
@@ -78,9 +77,7 @@ async function ensureConversation(conversationId: string, userId: string | null)
 }
 
 
-// Default coding/chat models derived from shared config
-let CODE_MODEL = FREE_CODING_MODEL;
-let CHAT_MODEL = FREE_CHAT_MODEL;
+// Default search model (constant — never needs dynamic update)
 const SEARCH_MODEL = "perplexity/sonar";
 
 function isCreditsError(status: number, body: string): boolean {
@@ -121,28 +118,6 @@ const LANGUAGE_NAMES: Record<string, string> = {
   ar: "Arabic",
 };
 
-function isCodeRequest(message: string): boolean {
-  const text = message.trim();
-  if (!text) return false;
-
-  if (/```/.test(text)) return true;
-  if (/<\/?[a-z][^>]*>/i.test(text)) return true;
-  if (/\b(function|class|interface|type|const|let|var|import|export|npm|yarn|pnpm|sql|regex|api|endpoint|typescript|javascript|python|java|c\+\+|c#|golang|rust|debug|bug|refactor|algorithm)\b/i.test(text)) return true;
-  if (/\b(write|generate|create|build|fix|optimize|review|explain)\b.{0,30}\b(code|script|query|function|component)\b/i.test(text)) return true;
-  if (/^[\s\w]*[{}()[\];=<>/\\]{2,}[\s\w]*$/.test(text)) return true;
-
-  return false;
-}
-
-function isImageRequest(message: string): boolean {
-  const text = message.trim().toLowerCase();
-  if (!text) return false;
-
-  return /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/.test(text)
-    || /^\s*\/image\b/.test(text)
-    || /\bimage of\b/.test(text)
-    || /\bplease.*\b(image|picture|photo)\b/.test(text);
-}
 
 const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> = [
   {
@@ -269,12 +244,21 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
+
+import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
+
 export const POST = async (req: Request) => {
-  // Dynamically fetch latest GPT and Claude models at runtime
-  const latestGpt = await fetchLatestModelId("openai/gpt-");
-  if (latestGpt) CODE_MODEL = latestGpt;
-  const latestClaude = await fetchLatestModelId("anthropic/claude-");
-  if (latestClaude) CHAT_MODEL = latestClaude;
+  // Rate limit: 30 chat requests per minute per user/IP
+  const rlKey = getRateLimitKey(req, "chat");
+  const rl = checkRateLimit(rlKey, 30, 60_000);
+  if (!rl.allowed) return rateLimitedResponse(rl.retryAfterMs);
+
+  // Fetch GPT and Claude latest model IDs in a single (cached) request
+  const latestModels = await fetchLatestModelIds(["openai/gpt-", "anthropic/claude-"]);
+  const latestGpt = latestModels["openai/gpt-"];
+  const latestClaude = latestModels["anthropic/claude-"];
+  const CODE_MODEL = latestGpt ?? FREE_CODING_MODEL;
+  const CHAT_MODEL = latestClaude ?? FREE_CHAT_MODEL;
 
   const requestSignal = req.signal;
   const {
@@ -301,36 +285,39 @@ export const POST = async (req: Request) => {
   // Fetch all Claude models and add any new ones to allowedModels
   let allowedModelsFinal = allowedModels;
   try {
-    const allModels = await fetchAllModels();
+    const allModels = await getCachedModels();
     const claudeModels = allModels.filter((m) => m.id.startsWith("anthropic/claude-"));
     if (Array.isArray(allowedModels)) {
       const allowedSet = new Set(allowedModels);
-      for (const model of claudeModels) {
-        if (!allowedSet.has(model.id)) {
-          allowedModels.push(model.id);
-        }
-      }
-      allowedModelsFinal = allowedModels;
+      const newClaudeIds = claudeModels
+        .filter((model) => !allowedSet.has(model.id))
+        .map((model) => model.id);
+      allowedModelsFinal = newClaudeIds.length > 0 ? [...allowedModels, ...newClaudeIds] : allowedModels;
     }
-  } catch {}
+  } catch {
+    // fetchAllModels failure is non-fatal; proceed with the original allowedModels
+  }
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
-  const VALID_USER_PLANS: UserPlan[] = ["free", "premium"];
+  const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
   const userPlan: UserPlan = VALID_USER_PLANS.includes(rawUserPlan) ? rawUserPlan : "free";
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
 
-  // Apply plan-based model filtering: free users can only use :free models
+  // Apply plan-based model filtering: free users only see :free models, pro users cannot use pro+-only models
   const planFilteredAllowedModels = Array.isArray(allowedModelsFinal)
     ? filterModelsByPlan(allowedModelsFinal, userPlan)
     : allowedModelsFinal;
 
-  // If user manually selected a non-free model but is on free plan, override to free fallback
-  const planEnforcedModelId = modelId && userPlan === "free" && isModelPremiumOnly(modelId)
-    ? getFreePlanFallback(inferredCodeRequest)
-    : modelId;
+  // If user manually selected a model they don't have access to, override to an appropriate fallback
+  const planEnforcedModelId = (() => {
+    if (!modelId) return modelId;
+    if (userPlan === "free" && isModelPremiumOnly(modelId)) return getFreePlanFallback(inferredCodeRequest);
+    if (userPlan === "pro" && isModelProPlusOnly(modelId)) return getFreePlanFallback(inferredCodeRequest);
+    return modelId;
+  })();
 
   // Apply cost control: filter the allowed models list to respect the user's cost mode
   const costFilteredModels = usingAutoRouter(planFilteredAllowedModels, planEnforcedModelId, inferredImageRequest)
@@ -372,7 +359,7 @@ export const POST = async (req: Request) => {
   }
 
   // Expose TOP_FREE_CODE_MODELS and TOP_FREE_CHAT_MODELS in API response for UI
-  const isSearchMode = rawMode === "search" || (!usingAutoRouter && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
+  const isSearchMode = rawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(message);

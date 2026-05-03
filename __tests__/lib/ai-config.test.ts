@@ -18,6 +18,11 @@ import {
   MODEL_COST_TIERS,
   FREE_CODING_MODEL,
   FREE_CHAT_MODEL,
+  filterModelsByPlan,
+  PRO_PLAN,
+  PRO_PLUS_PLAN,
+  PRO_PLUS_ONLY_MODELS,
+  isModelProPlusOnly,
 } from "@/lib/ai-config";
 
 const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.:+-]+$/;
@@ -235,5 +240,76 @@ describe("cost control system", () => {
     it("FREE_CHAT_MODEL is mapped as free tier", () => {
       expect(getModelCostTier(FREE_CHAT_MODEL)).toBe("free");
     });
+  });
+});
+
+describe("plan configuration", () => {
+  it("PRO_PLAN has fewer requests than PRO_PLUS_PLAN", () => {
+    expect(PRO_PLAN.premiumRequestsPerMonth).toBeLessThan(PRO_PLUS_PLAN.premiumRequestsPerMonth);
+  });
+
+  it("PRO_PLAN costs less than PRO_PLUS_PLAN", () => {
+    expect(PRO_PLAN.priceUsd).toBeLessThan(PRO_PLUS_PLAN.priceUsd);
+  });
+
+  it("PRO_PLAN has positive values", () => {
+    expect(PRO_PLAN.priceUsd).toBeGreaterThan(0);
+    expect(PRO_PLAN.premiumRequestsPerMonth).toBeGreaterThan(0);
+  });
+
+  it("PRO_PLAN is $10/month with 300 requests", () => {
+    expect(PRO_PLAN.priceUsd).toBe(10);
+    expect(PRO_PLAN.premiumRequestsPerMonth).toBe(300);
+  });
+
+  it("PRO_PLUS_PLAN is $30/month with 1500 requests (5x Pro)", () => {
+    expect(PRO_PLUS_PLAN.priceUsd).toBe(30);
+    expect(PRO_PLUS_PLAN.premiumRequestsPerMonth).toBe(PRO_PLAN.premiumRequestsPerMonth * 5);
+  });
+
+  it("PRO_PLUS_ONLY_MODELS includes claude-opus-4.7", () => {
+    expect(PRO_PLUS_ONLY_MODELS).toContain("anthropic/claude-opus-4.7");
+  });
+
+  it("isModelProPlusOnly returns true for claude-opus-4.7", () => {
+    expect(isModelProPlusOnly("anthropic/claude-opus-4.7")).toBe(true);
+  });
+
+  it("isModelProPlusOnly returns false for other models", () => {
+    expect(isModelProPlusOnly("anthropic/claude-opus-4.6")).toBe(false);
+    expect(isModelProPlusOnly("openai/gpt-5.4")).toBe(false);
+  });
+});
+
+describe("filterModelsByPlan", () => {
+  const models = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "openai/gpt-5.4",
+    "anthropic/claude-opus-4.5",
+    "anthropic/claude-opus-4.7",
+  ];
+
+  it("free plan returns only :free models", () => {
+    const result = filterModelsByPlan(models, "free");
+    expect(result.every((id) => id.endsWith(":free"))).toBe(true);
+  });
+
+  it("pro plan returns all models except pro+-only ones", () => {
+    const result = filterModelsByPlan(models, "pro");
+    expect(result).not.toContain("anthropic/claude-opus-4.7");
+    expect(result).toContain("openai/gpt-5.4");
+    expect(result).toContain("meta-llama/llama-3.3-70b-instruct:free");
+  });
+
+  it("pro+ plan returns all models including pro+-only ones", () => {
+    const result = filterModelsByPlan(models, "pro+");
+    expect(result).toEqual(models);
+    expect(result).toContain("anthropic/claude-opus-4.7");
+  });
+
+  it("free plan with no free models falls back to FREE_CHAT_MODEL", () => {
+    const premiumOnly = ["openai/gpt-5.4", "anthropic/claude-opus-4.5"];
+    const result = filterModelsByPlan(premiumOnly, "free");
+    expect(result).toEqual([FREE_CHAT_MODEL]);
   });
 });

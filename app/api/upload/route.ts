@@ -4,6 +4,8 @@ import { PDFParse } from "pdf-parse";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
+
 const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "json", "ts", "tsx", "js", "jsx", "py", "html", "css", "sql", "xml", "yml", "yaml"]);
 
 function getExtension(name: string) {
@@ -28,11 +30,11 @@ async function extractDocumentText(file: File, bytes: ArrayBuffer): Promise<stri
   if (mimeType === "application/zip" || extension === "zip") {
     const zip = await JSZip.loadAsync(bytes);
     const parts: string[] = [];
-    for (const [path, zipFile] of Object.entries(zip.files)) {
-      if (zipFile.dir) continue;
+    for (const [path, zipEntry] of Object.entries(zip.files) as [string, JSZip.JSZipObject][]) {
+      if (zipEntry.dir) continue;
       const fileExt = getExtension(path);
       if (!TEXT_EXTENSIONS.has(fileExt)) continue;
-      const content = await zipFile.async("string");
+      const content = await zipEntry.async("string");
       parts.push(`// File: ${path}\n${content.trim()}`);
     }
     return parts.join("\n\n---\n\n").slice(0, 30000);
@@ -44,7 +46,14 @@ async function extractDocumentText(file: File, bytes: ArrayBuffer): Promise<stri
 
   return "";
 }
+import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
+
 export async function POST(req: Request) {
+  // Rate limit: 10 upload/analysis requests per minute per user/IP
+  const rlKey = getRateLimitKey(req, "upload");
+  const rl = checkRateLimit(rlKey, 10, 60_000);
+  if (!rl.allowed) return rateLimitedResponse(rl.retryAfterMs);
+
   const encoder = new TextEncoder();
 
   try {
@@ -54,6 +63,10 @@ export async function POST(req: Request) {
 
     if (!file) {
       return Response.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return Response.json({ error: "File too large. Maximum allowed size is 100 MB." }, { status: 413 });
     }
 
     const bytes = await file.arrayBuffer();
@@ -85,7 +98,7 @@ export async function POST(req: Request) {
               "X-Title": "AssistantX",
             },
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash-preview",
+              model: "google/gemini-2.5-flash",
               stream: true,
               messages: [
                 {

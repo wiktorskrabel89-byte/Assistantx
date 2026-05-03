@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
 import { ClinicalTab } from "./components/tabs/ClinicalTab";
@@ -54,10 +54,6 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
 }
 
 function HomeContent() {
-  useEffect(() => {
-    console.log("SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-    console.log("SUPABASE_PUBLISHABLE_KEY:", process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  }, []);
   const { state } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
 
@@ -74,8 +70,7 @@ function HomeContent() {
   const isChatTab = activeAppTab === "chat";
 
   return (
-    <>
-      <div className={`min-h-screen transition-colors duration-300 ${bg}`}>
+    <div className={`min-h-screen transition-colors duration-300 ${bg}`}>
         <div className="mx-auto flex min-h-screen max-w-[1680px] gap-3 px-3 py-3">
           <AppNavigationColumn dark={state.dark} activeTab={activeAppTab} onSelectTab={handleSelectAppTab} />
 
@@ -87,8 +82,7 @@ function HomeContent() {
             </main>
           )}
         </div>
-      </div>
-    </>
+    </div>
   );
 }
 

@@ -41,6 +41,7 @@ import type {
   StyleMode,
 } from "../../lib/chat-types";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
+import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 
 export function ChatTab() {
   const {
@@ -58,7 +59,8 @@ export function ChatTab() {
     setWorkspaceMode,
     setPreferredModelId,
     setCostMode,
-    setIsPremium,
+    setUserPlan,
+    incrementPremiumRequests,
     createChatAction,
     renameChat,
     deleteChat,
@@ -160,6 +162,16 @@ export function ChatTab() {
     const text = message.trim();
     if (!text && !file) return;
 
+    // Block paid users who have exhausted their monthly request quota
+    const planLimit = state.userPlan === "pro"
+      ? PRO_PLAN.premiumRequestsPerMonth
+      : state.userPlan === "pro+"
+        ? PRO_PLUS_PLAN.premiumRequestsPerMonth
+        : null;
+    if (planLimit !== null && state.premiumRequestsUsed >= planLimit) {
+      return;
+    }
+
     setQueuedMessages((prev) => [
       ...prev,
       {
@@ -175,10 +187,15 @@ export function ChatTab() {
       },
     ]);
 
+    // Count each sent message against the plan request quota (pro and pro+)
+    if (state.userPlan === "pro" || state.userPlan === "pro+") {
+      incrementPremiumRequests();
+    }
+
     setMessage("");
     setFile(null);
     setFilePreview(null);
-  }, [activeChat.id, activeWorkspace.id, file, filePreview, message, mode]);
+  }, [activeChat.id, activeWorkspace.id, file, filePreview, incrementPremiumRequests, message, mode, state.userPlan, state.premiumRequestsUsed]);
 
   const removeQueuedMessage = useCallback((queueId: string) => {
     setQueuedMessages((prev) => prev.filter((item) => item.id !== queueId));
@@ -563,9 +580,9 @@ export function ChatTab() {
             <div className="mx-auto flex h-full max-w-5xl flex-col">
               <PremiumPlanBanner
                 dark={state.dark}
-                isPremium={state.isPremium}
+                userPlan={state.userPlan}
                 premiumRequestsUsed={state.premiumRequestsUsed}
-                onTogglePremium={() => setIsPremium(!state.isPremium)}
+                onSetUserPlan={setUserPlan}
               />
 
               <GoogleIntegrationBanner
@@ -641,7 +658,8 @@ export function ChatTab() {
               <ModelSelector
                 dark={state.dark}
                 preferredModelId={activeWorkspace.settings.preferredModelId ?? null}
-                isPremium={state.isPremium}
+                isPremium={state.userPlan !== "free"}
+                isProPlus={state.userPlan === "pro+"}
                 onSelectModel={setPreferredModelId}
               />
               <div className={`hidden sm:block h-5 w-px ${state.dark ? "bg-slate-700" : "bg-slate-200"}`} />
@@ -675,6 +693,21 @@ export function ChatTab() {
             onQueueMessage={queueComposerMessage}
             onRemoveQueuedMessage={removeQueuedMessage}
             selectedModel={activeWorkspace.settings.preferredModelId ?? "openai/gpt-5.4"}
+            premiumLimitReached={(() => {
+              const limit = state.userPlan === "pro"
+                ? PRO_PLAN.premiumRequestsPerMonth
+                : state.userPlan === "pro+"
+                  ? PRO_PLUS_PLAN.premiumRequestsPerMonth
+                  : null;
+              return limit !== null && state.premiumRequestsUsed >= limit;
+            })()}
+            planRequestLimit={
+              state.userPlan === "pro"
+                ? PRO_PLAN.premiumRequestsPerMonth
+                : state.userPlan === "pro+"
+                  ? PRO_PLUS_PLAN.premiumRequestsPerMonth
+                  : undefined
+            }
           />
         </section>
       </main>

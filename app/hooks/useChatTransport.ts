@@ -5,6 +5,7 @@ import { createClient } from "@/lib/client";
 import { BUILT_IN_AGENTS, createId, createMessage, deriveTitle, getAllowedModels, NEW_CHAT_TITLE } from "../lib/chat-state";
 import { type ActiveRequestTarget, type ChatStreamChunk, isAbortLikeError } from "../lib/chat-transport";
 import type { ChatEntry, ChatThread, Mode, QueuedMessage, StoredState } from "../lib/chat-types";
+import { isImageRequest } from "@/lib/detect";
 
 const PROGRAMMING_LANGUAGE_HINTS: Array<{ name: string; patterns: RegExp[]; extensions: string[] }> = [
   { name: "TypeScript", patterns: [/\btypescript\b/i, /\btsx?\b/i, /react|next\.js/i], extensions: ["ts", "tsx"] },
@@ -17,16 +18,6 @@ const PROGRAMMING_LANGUAGE_HINTS: Array<{ name: string; patterns: RegExp[]; exte
   { name: "Go", patterns: [/\bgolang\b/i, /\bgo\b/i], extensions: ["go"] },
   { name: "Rust", patterns: [/\brust\b/i, /cargo/i], extensions: ["rs"] },
 ];
-
-function isImageRequest(message: string) {
-  const text = message.trim().toLowerCase();
-  if (!text) return false;
-
-  return /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/.test(text)
-    || /^\s*\/image\b/.test(text)
-    || /\bimage of\b/.test(text)
-    || /\bplease.*\b(image|picture|photo)\b/.test(text);
-}
 
 function getFileExtension(name?: string | null) {
   if (!name) return "";
@@ -404,7 +395,7 @@ export function useChatTransport({
           interactionProfile,
           addInternetContext: queuedMessage.mode === "search",
           costMode: activeSettings.costMode,
-          userPlan: stateRef.current.isPremium ? "premium" : "free",
+          userPlan: stateRef.current.userPlan,
           thinkingEffort: queuedMessage.thinkingEffort,
         }),
       });
