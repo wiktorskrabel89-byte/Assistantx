@@ -25,9 +25,16 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as { customerId?: string; returnUrl?: string };
     customerId = body.customerId;
-    // Only accept returnUrl values that belong to the same origin to prevent open-redirect
-    if (typeof body.returnUrl === "string" && body.returnUrl.startsWith(req.nextUrl.origin)) {
-      returnUrl = body.returnUrl;
+    // Validate returnUrl using proper URL parsing to prevent open-redirect attacks
+    if (typeof body.returnUrl === "string") {
+      try {
+        const parsed = new URL(body.returnUrl);
+        if (parsed.origin === req.nextUrl.origin) {
+          returnUrl = body.returnUrl;
+        }
+      } catch {
+        // Malformed URL — keep the default returnUrl
+      }
     }
   } catch {
     // Use defaults if body parsing fails
