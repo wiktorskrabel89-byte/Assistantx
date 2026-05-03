@@ -350,7 +350,7 @@ describe("upgradeState", () => {
   });
 
   it("returns null for state with no workspaces", () => {
-    expect(upgradeState({ workspaces: [], activeWorkspaceId: "", dark: false, isPremium: false, premiumRequestsUsed: 0 })).toBeNull();
+    expect(upgradeState({ workspaces: [], activeWorkspaceId: "", dark: false, userPlan: "free", premiumRequestsUsed: 0 })).toBeNull();
   });
 
   it("upgrades a valid minimal state", () => {
@@ -376,7 +376,7 @@ describe("upgradeState", () => {
       ],
       activeWorkspaceId: "ws1",
       dark: true,
-      isPremium: false,
+      userPlan: "free",
       premiumRequestsUsed: 0,
     };
 
@@ -404,7 +404,7 @@ describe("upgradeState", () => {
       ],
       activeWorkspaceId: "ws1",
       dark: false,
-      isPremium: false,
+      userPlan: "free",
       premiumRequestsUsed: 0,
     };
 
@@ -427,11 +427,59 @@ describe("upgradeState", () => {
       ],
       activeWorkspaceId: "ws1",
       dark: false,
-      isPremium: false,
+      userPlan: "free",
       premiumRequestsUsed: 0,
     };
 
     const upgraded = upgradeState(state)!;
     expect(upgraded.workspaces[0].chats).toHaveLength(1);
+  });
+
+  it("migrates old isPremium:true to userPlan:'premium'", () => {
+    const legacyState = {
+      workspaces: [
+        {
+          id: "ws1",
+          name: "Test",
+          chats: [{ id: "ch1", title: "Chat", messages: [], createdAt: 1, updatedAt: 1 }],
+          activeChatId: "ch1",
+          settings: createSettings(),
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceId: "ws1",
+      dark: false,
+      isPremium: true,
+      premiumRequestsUsed: 42,
+    };
+
+    const upgraded = upgradeState(legacyState as unknown as StoredState)!;
+    expect(upgraded.userPlan).toBe("premium");
+    expect(upgraded.premiumRequestsUsed).toBe(42);
+  });
+
+  it("preserves starter userPlan through upgrade", () => {
+    const state: StoredState = {
+      workspaces: [
+        {
+          id: "ws1",
+          name: "Test",
+          chats: [{ id: "ch1", title: "Chat", messages: [], createdAt: 1, updatedAt: 1 }],
+          activeChatId: "ch1",
+          settings: createSettings(),
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceId: "ws1",
+      dark: false,
+      userPlan: "starter",
+      premiumRequestsUsed: 10,
+    };
+
+    const upgraded = upgradeState(state)!;
+    expect(upgraded.userPlan).toBe("starter");
+    expect(upgraded.premiumRequestsUsed).toBe(10);
   });
 });

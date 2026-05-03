@@ -18,6 +18,9 @@ import {
   MODEL_COST_TIERS,
   FREE_CODING_MODEL,
   FREE_CHAT_MODEL,
+  filterModelsByPlan,
+  STARTER_PLAN,
+  PREMIUM_PLAN,
 } from "@/lib/ai-config";
 
 const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.:+-]+$/;
@@ -235,5 +238,49 @@ describe("cost control system", () => {
     it("FREE_CHAT_MODEL is mapped as free tier", () => {
       expect(getModelCostTier(FREE_CHAT_MODEL)).toBe("free");
     });
+  });
+});
+
+describe("plan configuration", () => {
+  it("STARTER_PLAN has fewer requests than PREMIUM_PLAN", () => {
+    expect(STARTER_PLAN.premiumRequestsPerMonth).toBeLessThan(PREMIUM_PLAN.premiumRequestsPerMonth);
+  });
+
+  it("STARTER_PLAN costs less than PREMIUM_PLAN", () => {
+    expect(STARTER_PLAN.priceUsd).toBeLessThan(PREMIUM_PLAN.priceUsd);
+  });
+
+  it("STARTER_PLAN has positive values", () => {
+    expect(STARTER_PLAN.priceUsd).toBeGreaterThan(0);
+    expect(STARTER_PLAN.premiumRequestsPerMonth).toBeGreaterThan(0);
+  });
+});
+
+describe("filterModelsByPlan", () => {
+  const models = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "openai/gpt-5.4",
+    "anthropic/claude-opus-4.5",
+  ];
+
+  it("free plan returns only :free models", () => {
+    const result = filterModelsByPlan(models, "free");
+    expect(result.every((id) => id.endsWith(":free"))).toBe(true);
+  });
+
+  it("starter plan returns all models", () => {
+    const result = filterModelsByPlan(models, "starter");
+    expect(result).toEqual(models);
+  });
+
+  it("premium plan returns all models", () => {
+    const result = filterModelsByPlan(models, "premium");
+    expect(result).toEqual(models);
+  });
+
+  it("free plan with no free models falls back to FREE_CHAT_MODEL", () => {
+    const premiumOnly = ["openai/gpt-5.4", "anthropic/claude-opus-4.5"];
+    const result = filterModelsByPlan(premiumOnly, "free");
+    expect(result).toEqual([FREE_CHAT_MODEL]);
   });
 });

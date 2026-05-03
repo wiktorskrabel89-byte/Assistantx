@@ -26,6 +26,7 @@ import type {
   StyleMode,
   Workspace,
 } from "../lib/chat-types";
+import type { UserPlan } from "@/lib/ai-config";
 
 export function useWorkspaceState() {
   const [state, setState] = useState<StoredState>(createDefaultState());
@@ -302,8 +303,8 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
-  const setIsPremium = useCallback((isPremium: boolean) => {
-    setState((prev) => ({ ...prev, isPremium }));
+  const setUserPlan = useCallback((userPlan: UserPlan) => {
+    setState((prev) => ({ ...prev, userPlan }));
   }, []);
 
   const incrementPremiumRequests = useCallback(() => {
@@ -512,7 +513,7 @@ export function useWorkspaceState() {
     setLanguageLock,
     setPreferredModelId,
     setCostMode,
-    setIsPremium,
+    setUserPlan,
     incrementPremiumRequests,
     setMemoryEnabled,
     setMemoryNotes,

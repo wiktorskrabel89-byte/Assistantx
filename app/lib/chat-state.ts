@@ -7,7 +7,7 @@ import {
   RECOMMENDED_CODING_MODELS,
   SEARCH_MODELS,
 } from "@/lib/ai-config";
-import type { CostMode, ModelPreset } from "@/lib/ai-config";
+import type { CostMode, ModelPreset, UserPlan } from "@/lib/ai-config";
 import type {
   Artifact,
   BuiltInAgent,
@@ -189,7 +189,7 @@ export function createDefaultState(): StoredState {
     workspaces: [workspace],
     activeWorkspaceId: workspace.id,
     dark: false,
-    isPremium: false,
+    userPlan: "free",
     premiumRequestsUsed: 0,
   };
 }
@@ -348,13 +348,23 @@ export function upgradeState(value: StoredState | null): StoredState | null {
     ? value.activeWorkspaceId
     : workspaces[0].id;
 
+  const raw = value as Record<string, unknown>;
+  const VALID_USER_PLANS: UserPlan[] = ["free", "starter", "premium"];
+  // Migrate old `isPremium: boolean` field if present
+  let userPlan: UserPlan = "free";
+  if (VALID_USER_PLANS.includes(raw.userPlan as UserPlan)) {
+    userPlan = raw.userPlan as UserPlan;
+  } else if (raw.isPremium === true) {
+    userPlan = "premium";
+  }
+
   return {
     workspaces,
     activeWorkspaceId,
-    dark: Boolean(value.dark),
-    isPremium: Boolean((value as Record<string, unknown>).isPremium),
-    premiumRequestsUsed: typeof (value as Record<string, unknown>).premiumRequestsUsed === "number"
-      ? (value as Record<string, unknown>).premiumRequestsUsed as number
+    dark: Boolean(raw.dark),
+    userPlan,
+    premiumRequestsUsed: typeof raw.premiumRequestsUsed === "number"
+      ? raw.premiumRequestsUsed
       : 0,
   };
 }

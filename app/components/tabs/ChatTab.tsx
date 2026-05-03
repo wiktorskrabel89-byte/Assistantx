@@ -41,7 +41,7 @@ import type {
   StyleMode,
 } from "../../lib/chat-types";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
-import { PREMIUM_PLAN } from "@/lib/ai-config";
+import { PREMIUM_PLAN, STARTER_PLAN } from "@/lib/ai-config";
 
 export function ChatTab() {
   const {
@@ -59,7 +59,7 @@ export function ChatTab() {
     setWorkspaceMode,
     setPreferredModelId,
     setCostMode,
-    setIsPremium,
+    setUserPlan,
     incrementPremiumRequests,
     createChatAction,
     renameChat,
@@ -162,8 +162,13 @@ export function ChatTab() {
     const text = message.trim();
     if (!text && !file) return;
 
-    // Block premium users who have exhausted their monthly request quota
-    if (state.isPremium && state.premiumRequestsUsed >= PREMIUM_PLAN.premiumRequestsPerMonth) {
+    // Block paid users who have exhausted their monthly request quota
+    const planLimit = state.userPlan === "starter"
+      ? STARTER_PLAN.premiumRequestsPerMonth
+      : state.userPlan === "premium"
+        ? PREMIUM_PLAN.premiumRequestsPerMonth
+        : null;
+    if (planLimit !== null && state.premiumRequestsUsed >= planLimit) {
       return;
     }
 
@@ -182,15 +187,15 @@ export function ChatTab() {
       },
     ]);
 
-    // Count each sent message against the premium request quota
-    if (state.isPremium) {
+    // Count each sent message against the plan request quota (starter and premium)
+    if (state.userPlan === "starter" || state.userPlan === "premium") {
       incrementPremiumRequests();
     }
 
     setMessage("");
     setFile(null);
     setFilePreview(null);
-  }, [activeChat.id, activeWorkspace.id, file, filePreview, incrementPremiumRequests, message, mode, state.isPremium, state.premiumRequestsUsed]);
+  }, [activeChat.id, activeWorkspace.id, file, filePreview, incrementPremiumRequests, message, mode, state.userPlan, state.premiumRequestsUsed]);
 
   const removeQueuedMessage = useCallback((queueId: string) => {
     setQueuedMessages((prev) => prev.filter((item) => item.id !== queueId));
@@ -575,9 +580,9 @@ export function ChatTab() {
             <div className="mx-auto flex h-full max-w-5xl flex-col">
               <PremiumPlanBanner
                 dark={state.dark}
-                isPremium={state.isPremium}
+                userPlan={state.userPlan}
                 premiumRequestsUsed={state.premiumRequestsUsed}
-                onTogglePremium={() => setIsPremium(!state.isPremium)}
+                onSetUserPlan={setUserPlan}
               />
 
               <GoogleIntegrationBanner
@@ -653,7 +658,7 @@ export function ChatTab() {
               <ModelSelector
                 dark={state.dark}
                 preferredModelId={activeWorkspace.settings.preferredModelId ?? null}
-                isPremium={state.isPremium}
+                isPremium={state.userPlan !== "free"}
                 onSelectModel={setPreferredModelId}
               />
               <div className={`hidden sm:block h-5 w-px ${state.dark ? "bg-slate-700" : "bg-slate-200"}`} />
@@ -687,7 +692,21 @@ export function ChatTab() {
             onQueueMessage={queueComposerMessage}
             onRemoveQueuedMessage={removeQueuedMessage}
             selectedModel={activeWorkspace.settings.preferredModelId ?? "openai/gpt-5.4"}
-            premiumLimitReached={state.isPremium && state.premiumRequestsUsed >= PREMIUM_PLAN.premiumRequestsPerMonth}
+            premiumLimitReached={(() => {
+              const limit = state.userPlan === "starter"
+                ? STARTER_PLAN.premiumRequestsPerMonth
+                : state.userPlan === "premium"
+                  ? PREMIUM_PLAN.premiumRequestsPerMonth
+                  : null;
+              return limit !== null && state.premiumRequestsUsed >= limit;
+            })()}
+            planRequestLimit={
+              state.userPlan === "starter"
+                ? STARTER_PLAN.premiumRequestsPerMonth
+                : state.userPlan === "premium"
+                  ? PREMIUM_PLAN.premiumRequestsPerMonth
+                  : undefined
+            }
           />
         </section>
       </main>

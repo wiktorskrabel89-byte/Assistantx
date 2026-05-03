@@ -299,7 +299,7 @@ export const POST = async (req: Request) => {
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
   const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
-  const VALID_USER_PLANS: UserPlan[] = ["free", "premium"];
+  const VALID_USER_PLANS: UserPlan[] = ["free", "starter", "premium"];
   const userPlan: UserPlan = VALID_USER_PLANS.includes(rawUserPlan) ? rawUserPlan : "free";
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);

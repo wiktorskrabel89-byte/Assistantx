@@ -1,12 +1,19 @@
 export type CostTier = "free" | "cheap" | "standard" | "premium";
 export type CostMode = "thrifty" | "balanced" | "performance";
-export type UserPlan = "free" | "premium";
+export type UserPlan = "free" | "starter" | "premium";
 
 export type PremiumPlanInfo = {
   priceUsd: number;
   unlimitedChats: boolean;
   premiumRequestsPerMonth: number;
   description: string;
+};
+
+export const STARTER_PLAN: PremiumPlanInfo = {
+  priceUsd: 5,
+  unlimitedChats: true,
+  premiumRequestsPerMonth: 100,
+  description: "Unlimited chats, 100 premium requests/month, access to all models.",
 };
 
 export const PREMIUM_PLAN: PremiumPlanInfo = {
@@ -366,7 +373,7 @@ export function isModelPremiumOnly(modelId: string): boolean {
  * Premium users get all models; free users only get :free models.
  */
 export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): string[] {
-  if (userPlan === "premium") return modelIds;
+  if (userPlan === "premium" || userPlan === "starter") return modelIds;
   const filtered = modelIds.filter((id) => !isModelPremiumOnly(id));
   return filtered.length > 0 ? filtered : [FREE_CHAT_MODEL];
 }

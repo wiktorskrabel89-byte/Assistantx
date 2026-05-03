@@ -85,7 +85,6 @@ type UseChatTransportArgs = {
   stateRef: RefObject<StoredState>;
   updateChat: (workspaceId: string, chatId: string, updater: (chat: ChatThread) => ChatThread) => void;
   updateLastMessage: (workspaceId: string, chatId: string, updater: (message: ChatEntry) => ChatEntry) => void;
-  incrementPremiumRequests?: () => void;
 };
 
 export function useChatTransport({
@@ -102,7 +101,6 @@ export function useChatTransport({
   stateRef,
   updateChat,
   updateLastMessage,
-  incrementPremiumRequests,
 }: UseChatTransportArgs) {
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -397,15 +395,10 @@ export function useChatTransport({
           interactionProfile,
           addInternetContext: queuedMessage.mode === "search",
           costMode: activeSettings.costMode,
-          userPlan: stateRef.current.isPremium ? "premium" : "free",
+          userPlan: stateRef.current.userPlan,
           thinkingEffort: queuedMessage.thinkingEffort,
         }),
       });
-
-      // Count this against the premium request quota (only for premium users)
-      if (stateRef.current.isPremium) {
-        incrementPremiumRequests?.();
-      }
 
       await consumeStream(response, workspaceId, chatId);
     } catch (error) {
@@ -427,7 +420,7 @@ export function useChatTransport({
         activeRequestTargetRef.current = null;
       }
     }
-  }, [consumeStream, incrementPremiumRequests, stateRef, updateChat, updateLastMessage]);
+  }, [consumeStream, stateRef, updateChat, updateLastMessage]);
 
   useEffect(() => {
     if (processingQueueRef.current || queuedMessages.length === 0) return;

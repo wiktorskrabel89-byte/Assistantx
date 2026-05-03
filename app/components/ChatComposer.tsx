@@ -25,6 +25,7 @@ export type ChatComposerProps = {
   onRemoveQueuedMessage: (queueId: string) => void;
   selectedModel: string;
   premiumLimitReached?: boolean;
+  planRequestLimit?: number;
 };
 
 // Supported models for reasoning depth
@@ -55,6 +56,7 @@ export function ChatComposer({
   onRemoveQueuedMessage,
   selectedModel,
   premiumLimitReached = false,
+  planRequestLimit,
 }: ChatComposerProps) {
   // Auto-resize textarea
   const resizeComposer = useCallback(() => {
@@ -80,7 +82,7 @@ export function ChatComposer({
       <div className="mx-auto max-w-5xl space-y-2">
         {premiumLimitReached ? (
           <div className={`rounded-xl border px-4 py-2.5 text-xs font-medium ${dark ? "border-amber-800/50 bg-amber-950/30 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-            You have used all 300 premium requests for this month. Your quota will reset next month.
+            You have used all {planRequestLimit ?? "your"} premium requests for this month. Your quota will reset next month.
           </div>
         ) : null}
         {file ? (
