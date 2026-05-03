@@ -105,7 +105,7 @@ describe("detectLanguage", () => {
   });
 });
 
-describe("POST /api/chat — no-modelId free-model override", () => {
+describe("POST /api/chat — free-model fallback behavior", () => {
   let POST: (req: Request) => Promise<Response>;
 
   beforeAll(async () => {
@@ -137,7 +137,8 @@ describe("POST /api/chat — no-modelId free-model override", () => {
     expect(res.status).toBe(200);
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).toBe(TOP_FREE_CHAT_MODELS[0]);
+    // After removing the forced override, the route picks from TOP_FREE_CHAT_MODELS (random)
+    expect(TOP_FREE_CHAT_MODELS).toContain(calledBody.model);
   });
 
   it("selects a free code model when rawMode=code", async () => {
@@ -153,7 +154,8 @@ describe("POST /api/chat — no-modelId free-model override", () => {
     expect(res.status).toBe(200);
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).toBe(TOP_FREE_CODE_MODELS[0]);
+    // After removing the forced override, the route picks from TOP_FREE_CODE_MODELS (random)
+    expect(TOP_FREE_CODE_MODELS).toContain(calledBody.model);
   });
 
   it("uses a code free model when rawMode=chat but message is code-focused", async () => {
@@ -170,6 +172,7 @@ describe("POST /api/chat — no-modelId free-model override", () => {
     expect(res.status).toBe(200);
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).toBe(TOP_FREE_CODE_MODELS[0]);
+    // Code-focused message → picks from TOP_FREE_CODE_MODELS (random)
+    expect(TOP_FREE_CODE_MODELS).toContain(calledBody.model);
   });
 });

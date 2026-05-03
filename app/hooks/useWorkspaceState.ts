@@ -52,7 +52,8 @@ export function useWorkspaceState() {
 
     return activeWorkspace.chats.filter((chat) => {
       const latest = chat.messages[chat.messages.length - 1];
-      const haystack = `${chat.title} ${latest?.user ?? ""} ${latest?.ai ?? ""}`.toLowerCase();
+      const tagStr = (chat.tags ?? []).join(" ");
+      const haystack = `${chat.title} ${tagStr} ${latest?.user ?? ""} ${latest?.ai ?? ""}`.toLowerCase();
       return haystack.includes(query);
     });
   }, [activeWorkspace.chats, chatSearch]);
@@ -243,6 +244,10 @@ export function useWorkspaceState() {
     if (!title) return;
     updateChat(activeWorkspace.id, chatId, (chat) => ({ ...chat, title }));
   }, [activeWorkspace.chats, activeWorkspace.id, updateChat]);
+
+  const setChatTags = useCallback((chatId: string, tags: string[]) => {
+    updateChat(activeWorkspace.id, chatId, (chat) => ({ ...chat, tags }));
+  }, [activeWorkspace.id, updateChat]);
 
   const deleteChat = useCallback((chatId: string) => {
     if (!window.confirm("Delete this chat?")) return;
@@ -507,6 +512,7 @@ export function useWorkspaceState() {
     deleteWorkspace,
     createChatAction,
     renameChat,
+    setChatTags,
     deleteChat,
     clearActiveChat,
     setStyleMode,

@@ -117,7 +117,7 @@ describe("recommended model presets", () => {
 describe("cost control system", () => {
   describe("getModelCostTier", () => {
     it("returns free for free models", () => {
-      expect(getModelCostTier("nvidia/nemotron-3-super:free")).toBe("free");
+      expect(getModelCostTier("nvidia/nemotron-3-super-120b-a12b:free")).toBe("free");
       expect(getModelCostTier("meta-llama/llama-3.3-70b-instruct:free")).toBe("free");
     });
 

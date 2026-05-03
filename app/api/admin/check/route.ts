@@ -1,0 +1,32 @@
+import { createClient } from "@/lib/server";
+
+/**
+ * GET /api/admin/check
+ * Returns { isAdmin: boolean } based on the authenticated user's app_metadata.
+ * The `role` field in app_metadata is set via the Supabase dashboard or management API;
+ * it cannot be modified by the client, making this a secure server-side check.
+ */
+export async function GET(req: Request) {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return Response.json({ isAdmin: false });
+    }
+
+    const token = authHeader.slice(7);
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data.user) {
+      return Response.json({ isAdmin: false });
+    }
+
+    const appMetadata = data.user.app_metadata ?? {};
+    // Admins have app_metadata.role === "admin" (set in Supabase dashboard)
+    const isAdmin = appMetadata.role === "admin";
+
+    return Response.json({ isAdmin });
+  } catch {
+    return Response.json({ isAdmin: false });
+  }
+}

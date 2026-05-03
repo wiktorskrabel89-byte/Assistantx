@@ -2,7 +2,7 @@
 
 import { Edit2, FileUp, LibraryBig, Plus, Save, Trash2, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { useWorkspaceState } from "@/app/hooks/useWorkspaceState";
+import { useWorkspace } from "@/app/providers/WorkspaceProvider";
 import { PromptTemplate } from "@/app/lib/chat-types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -11,7 +11,7 @@ import { PromptTemplate } from "@/app/lib/chat-types";
 
 export function PromptLibraryTab({ dark }: { dark: boolean }) {
   const { activeWorkspace, createPromptTemplate, updatePromptTemplate, deletePromptTemplate } =
-    useWorkspaceState();
+    useWorkspace();
   const templates: PromptTemplate[] = activeWorkspace.settings.promptTemplates;
 
   const [editingId, setEditingId] = useState<string | null>(null);

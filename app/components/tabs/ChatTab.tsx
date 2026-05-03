@@ -63,6 +63,7 @@ export function ChatTab() {
     incrementPremiumRequests,
     createChatAction,
     renameChat,
+    setChatTags,
     deleteChat,
     clearActiveChat,
     createPromptTemplate,
@@ -137,7 +138,8 @@ export function ChatTab() {
 
     return conversations.filter((chat) => {
       const latest = chat.messages[chat.messages.length - 1];
-      const haystack = `${chat.title} ${latest?.user ?? ""} ${latest?.ai ?? ""}`.toLowerCase();
+      const tagStr = (chat.tags ?? []).join(" ");
+      const haystack = `${chat.title} ${tagStr} ${latest?.user ?? ""} ${latest?.ai ?? ""}`.toLowerCase();
       return haystack.includes(query);
     });
   }, [chatSearch, conversations]);
@@ -239,6 +241,20 @@ export function ChatTab() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [sidebarOpen]);
+
+  // Global keyboard shortcut: Cmd/Ctrl+K → new chat
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key === "k") {
+        event.preventDefault();
+        createChatAction();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [createChatAction]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -552,6 +568,7 @@ export function ChatTab() {
         onSelectChat={(chatId) => setActiveChatId(activeWorkspace.id, chatId)}
         onRenameChat={renameChat}
         onDeleteChat={deleteChat}
+        onSetChatTags={setChatTags}
       />
 
       <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
@@ -650,6 +667,7 @@ export function ChatTab() {
                 visible={loading || stopRequested}
                 status={stopRequested ? "Stopping response..." : latestEntry?.status}
                 routeReason={latestEntry?.routeReason}
+                partialResponseLength={loading ? (latestEntry?.ai?.length ?? 0) : 0}
               />
             </div>
           </div>

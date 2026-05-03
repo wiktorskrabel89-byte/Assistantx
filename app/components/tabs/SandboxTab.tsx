@@ -10,7 +10,7 @@ export function SandboxTab({ dark }: { dark: boolean }) {
       dark={dark}
       icon={SquareTerminal}
       title="Sandbox"
-      description="Uruchamiaj i testuj kod w izolowanym srodowisku."
+      description="Uruchamiaj i testuj kod w izolowanym środowisku."
     />
   );
 }

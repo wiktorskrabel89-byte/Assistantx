@@ -1,10 +1,62 @@
 "use client";
 
-import { Eye, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
-import { useState } from "react";
-import { useCallback, useLayoutEffect, type RefObject } from "react";
+import { Eye, Mic, MicOff, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useLayoutEffect, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
+import { REASONING_MODEL_IDS } from "@/lib/ai-config";
+
+// Minimal type stubs for the Web Speech API (not yet in TypeScript's lib.dom.d.ts)
+declare global {
+  interface SpeechRecognitionEventMap {
+    result: Event;
+    end: Event;
+    error: Event;
+  }
+
+  interface SpeechRecognitionResultItem {
+    transcript: string;
+  }
+
+  interface SpeechRecognitionResult {
+    readonly isFinal: boolean;
+    readonly length: number;
+    item(index: number): SpeechRecognitionResultItem;
+    [index: number]: SpeechRecognitionResultItem;
+  }
+
+  interface SpeechRecognitionResultList {
+    readonly length: number;
+    item(index: number): SpeechRecognitionResult;
+    [index: number]: SpeechRecognitionResult;
+  }
+
+  interface SpeechRecognitionEvent extends Event {
+    readonly resultIndex: number;
+    readonly results: SpeechRecognitionResultList;
+  }
+
+  interface SpeechRecognition extends EventTarget {
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    onresult: ((event: SpeechRecognitionEvent) => void) | null;
+    onend: (() => void) | null;
+    onerror: (() => void) | null;
+    start(): void;
+    stop(): void;
+  }
+
+  interface SpeechRecognitionConstructor {
+    new(): SpeechRecognition;
+  }
+
+  interface Window {
+    SpeechRecognition: SpeechRecognitionConstructor | undefined;
+    webkitSpeechRecognition: SpeechRecognitionConstructor | undefined;
+  }
+}
 
 export type ChatComposerProps = {
   dark: boolean;
@@ -27,15 +79,6 @@ export type ChatComposerProps = {
   premiumLimitReached?: boolean;
   planRequestLimit?: number;
 };
-
-// Supported models for reasoning depth
-const REASONING_MODELS = [
-  "openai/gpt-5.4",
-  "google/gemini-3-flash-preview",
-  "google/gemini-3-pro-preview",
-  "deepseek/deepseek-r1",
-  "moonshotai/kimi-k2-thinking",
-];
 
 export function ChatComposer({
   dark,
@@ -75,7 +118,61 @@ export function ChatComposer({
   // Reasoning depth state
   const [thinkingEffort, setThinkingEffort] = useState("Medium");
 
-  const showThinkingEffort = REASONING_MODELS.some((id) => selectedModel.includes(id.split("/").pop()!));
+  const showThinkingEffort = REASONING_MODEL_IDS.some((id) => selectedModel.includes(id.split("/").pop()!));
+
+  // ── Voice input ────────────────────────────────────────────────────────────
+  const [micActive, setMicActive] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const hasSpeechRecognition = typeof window !== "undefined" &&
+    (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+
+  const toggleMic = useCallback(() => {
+    if (micActive) {
+      recognitionRef.current?.stop();
+      setMicActive(false);
+      return;
+    }
+    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    // Use the browser's preferred language so the recogniser picks the right model
+    recognition.lang = navigator.language || "en-US";
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let transcript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      onMessageChange(transcript);
+    };
+    recognition.onend = () => setMicActive(false);
+    recognition.onerror = () => setMicActive(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setMicActive(true);
+  }, [micActive, onMessageChange]);
+
+  // Stop mic when component unmounts
+  useEffect(() => {
+    return () => { recognitionRef.current?.stop(); };
+  }, []);
+
+  // ── Clipboard paste for images ─────────────────────────────────────────────
+  const handlePaste = useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        const blob = item.getAsFile();
+        if (blob) {
+          onSelectFile(blob);
+          event.preventDefault();
+          return;
+        }
+      }
+    }
+  }, [onSelectFile]);
 
   return (
     <div className="border-t border-slate-200 bg-white/85 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
@@ -189,6 +286,25 @@ export function ChatComposer({
             <Paperclip className="h-4 w-4" />
           </button>
 
+          {hasSpeechRecognition && (
+            <button
+              onClick={toggleMic}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border transition-colors ${
+                micActive
+                  ? dark
+                    ? "border-red-800 bg-red-950/40 text-red-300"
+                    : "border-red-200 bg-red-50 text-red-600"
+                  : dark
+                    ? "border-slate-700 bg-slate-900 text-slate-200"
+                    : "border-slate-200 bg-white text-slate-600"
+              }`}
+              title={micActive ? "Stop recording" : "Start voice input"}
+              aria-label={micActive ? "Stop recording" : "Start voice input"}
+            >
+              {micActive ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </button>
+          )}
+
           <textarea
             ref={inputRef}
             id="chat-message"
@@ -208,7 +324,8 @@ export function ChatComposer({
                 onQueueMessage(effortNum);
               }
             }}
-            placeholder="Wiadomosc... (Enter to send)"
+            onPaste={handlePaste}
+            placeholder="Wiadomość... (Enter to send)"
             rows={1}
             className={`flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${dark ? "text-slate-100 placeholder-slate-500" : "text-slate-900 placeholder-slate-400"}`}
             style={{ minHeight: 44, maxHeight: 180 }}

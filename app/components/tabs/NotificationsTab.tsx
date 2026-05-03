@@ -1,18 +1,97 @@
 "use client";
 
-import { Bell } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle, Info } from "lucide-react";
+import { useMemo, useState } from "react";
+import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
+import { useWorkspace } from "../../providers/WorkspaceProvider";
 
-import { useState } from "react";
+type NotificationKind = "info" | "warning" | "success";
 
-type Notification = {
-  id: number;
+type SystemNotification = {
+  id: string;
+  kind: NotificationKind;
   title: string;
   body: string;
   date: string;
 };
 
+const KIND_ICON: Record<NotificationKind, React.ReactNode> = {
+  info: <Info className="h-4 w-4 text-sky-500" />,
+  warning: <AlertTriangle className="h-4 w-4 text-amber-500" />,
+  success: <CheckCircle className="h-4 w-4 text-emerald-500" />,
+};
+
+const KIND_BORDER: Record<NotificationKind, { dark: string; light: string }> = {
+  info: { dark: "border-sky-900/50 bg-sky-950/30", light: "border-sky-200 bg-sky-50" },
+  warning: { dark: "border-amber-900/50 bg-amber-950/30", light: "border-amber-200 bg-amber-50" },
+  success: { dark: "border-emerald-900/50 bg-emerald-950/30", light: "border-emerald-200 bg-emerald-50" },
+};
+
 export function NotificationsTab({ dark }: { dark: boolean }) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const { state } = useWorkspace();
+  const [manualNotifications, setManualNotifications] = useState<SystemNotification[]>([]);
+
+  // Derive system event notifications from live workspace state
+  const systemNotifications = useMemo<SystemNotification[]>(() => {
+    const events: SystemNotification[] = [];
+    const plan = state.userPlan;
+    const used = state.premiumRequestsUsed;
+
+    if (plan === "pro") {
+      const limit = PRO_PLAN.premiumRequestsPerMonth;
+      const pct = used / limit;
+      if (used >= limit) {
+        events.push({
+          id: "plan-limit-reached",
+          kind: "warning",
+          title: "Limit zapytań osiągnięty",
+          body: `Wykorzystałeś wszystkie ${limit} zapytań w planie Pro. Limit odnowi się na początku następnego miesiąca lub przejdź na plan Pro+.`,
+          date: new Date().toLocaleString(),
+        });
+      } else if (pct >= 0.8) {
+        events.push({
+          id: "plan-limit-warning",
+          kind: "warning",
+          title: "Zbliżasz się do limitu zapytań",
+          body: `Wykorzystałeś ${used} z ${limit} zapytań w planie Pro (${Math.round(pct * 100)}%).`,
+          date: new Date().toLocaleString(),
+        });
+      }
+    } else if (plan === "pro+") {
+      const limit = PRO_PLUS_PLAN.premiumRequestsPerMonth;
+      const pct = used / limit;
+      if (used >= limit) {
+        events.push({
+          id: "plan-limit-reached",
+          kind: "warning",
+          title: "Limit zapytań osiągnięty",
+          body: `Wykorzystałeś wszystkie ${limit} zapytań w planie Pro+. Limit odnowi się na początku następnego miesiąca.`,
+          date: new Date().toLocaleString(),
+        });
+      } else if (pct >= 0.8) {
+        events.push({
+          id: "plan-limit-warning",
+          kind: "warning",
+          title: "Zbliżasz się do limitu zapytań",
+          body: `Wykorzystałeś ${used} z ${limit} zapytań w planie Pro+ (${Math.round(pct * 100)}%).`,
+          date: new Date().toLocaleString(),
+        });
+      }
+    } else {
+      events.push({
+        id: "free-plan-info",
+        kind: "info",
+        title: "Korzystasz z planu Free",
+        body: "Przejdź na plan Pro lub Pro+, aby uzyskać dostęp do zaawansowanych modeli AI i wyższych limitów zapytań.",
+        date: new Date().toLocaleString(),
+      });
+    }
+
+    return events;
+  }, [state.userPlan, state.premiumRequestsUsed]);
+
+  const allNotifications = [...systemNotifications, ...manualNotifications];
+
   const sendTestNotification = async () => {
     if ("serviceWorker" in navigator) {
       const reg = await navigator.serviceWorker.getRegistration("/push-sw.js");
@@ -21,14 +100,12 @@ export function NotificationsTab({ dark }: { dark: boolean }) {
           body: "To jest przykładowe powiadomienie push.",
           icon: "/icon-192.png",
         });
-      } else {
-        alert("Brak zarejestrowanego service workera push.");
       }
     }
-    // Add to local notification list
-    setNotifications((prev) => [
+    setManualNotifications((prev) => [
       {
-        id: Date.now(),
+        id: `manual-${Date.now()}`,
+        kind: "info",
         title: "Testowa notyfikacja",
         body: "To jest przykładowe powiadomienie push.",
         date: new Date().toLocaleString(),
@@ -36,6 +113,7 @@ export function NotificationsTab({ dark }: { dark: boolean }) {
       ...prev,
     ]);
   };
+
   return (
     <section
       className={`h-full min-h-0 overflow-auto p-4 sm:p-6 lg:p-8 ${
@@ -58,14 +136,14 @@ export function NotificationsTab({ dark }: { dark: boolean }) {
             }`}
           >
             <Bell className="h-3.5 w-3.5" />
-            Center powiadomien
+            Center powiadomień
           </div>
 
           <h2 className={`mt-5 text-2xl font-semibold tracking-tight ${dark ? "text-slate-100" : "text-slate-900"}`}>
-            Powiadomienia i aktywnosc
+            Powiadomienia i aktywność
           </h2>
           <p className={`mt-2 max-w-2xl text-sm leading-7 ${dark ? "text-slate-300" : "text-slate-600"}`}>
-            Testuj push notyfikacje i przegladaj ostatnie zdarzenia w jednym miejscu.
+            Przeglądaj zdarzenia systemowe i testuj powiadomienia push w jednym miejscu.
           </p>
 
           <button
@@ -82,22 +160,25 @@ export function NotificationsTab({ dark }: { dark: boolean }) {
           }`}
         >
           <h3 className={`mb-3 text-base font-semibold ${dark ? "text-slate-100" : "text-slate-900"}`}>
-            Ostatnie powiadomienia
+            Ostatnie zdarzenia
           </h3>
-          {notifications.length === 0 ? (
-            <div className={`${dark ? "text-slate-400" : "text-slate-500"}`}>Brak powiadomien.</div>
+          {allNotifications.length === 0 ? (
+            <div className={`text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>Brak powiadomień.</div>
           ) : (
             <ul className="space-y-3">
-              {notifications.map((n) => (
+              {allNotifications.map((n) => (
                 <li
                   key={n.id}
-                  className={`rounded-xl border p-3 ${
-                    dark ? "border-slate-800 bg-slate-900/70" : "border-slate-200 bg-white"
+                  className={`flex gap-3 rounded-xl border p-3 ${
+                    dark ? KIND_BORDER[n.kind].dark : KIND_BORDER[n.kind].light
                   }`}
                 >
-                  <div className={`font-semibold ${dark ? "text-slate-100" : "text-slate-900"}`}>{n.title}</div>
-                  <div className={`text-sm ${dark ? "text-slate-300" : "text-slate-600"}`}>{n.body}</div>
-                  <div className={`mt-1 text-xs ${dark ? "text-slate-500" : "text-slate-400"}`}>{n.date}</div>
+                  <div className="mt-0.5 flex-shrink-0">{KIND_ICON[n.kind]}</div>
+                  <div className="min-w-0">
+                    <div className={`font-semibold ${dark ? "text-slate-100" : "text-slate-900"}`}>{n.title}</div>
+                    <div className={`mt-0.5 text-sm ${dark ? "text-slate-300" : "text-slate-600"}`}>{n.body}</div>
+                    <div className={`mt-1 text-xs ${dark ? "text-slate-500" : "text-slate-400"}`}>{n.date}</div>
+                  </div>
                 </li>
               ))}
             </ul>

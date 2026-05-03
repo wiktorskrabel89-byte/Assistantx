@@ -1,6 +1,7 @@
 "use client";
 
-import { Crown, Sparkles, ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { Crown, Sparkles, ArrowRight, ExternalLink } from "lucide-react";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 import type { UserPlan } from "@/lib/ai-config";
 
@@ -11,9 +12,25 @@ type PremiumPlanBannerProps = {
   onSetUserPlan: (plan: UserPlan) => void;
 };
 
-export function PremiumPlanBanner({ dark, userPlan, premiumRequestsUsed, onSetUserPlan }: PremiumPlanBannerProps) {
+export function PremiumPlanBanner({ dark, userPlan, premiumRequestsUsed }: PremiumPlanBannerProps) {
   const planInfo = userPlan === "pro+" ? PRO_PLUS_PLAN : userPlan === "pro" ? PRO_PLAN : null;
   const remaining = planInfo ? Math.max(0, planInfo.premiumRequestsPerMonth - premiumRequestsUsed) : 0;
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  const openBillingPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/stripe/billing-portal", { method: "POST" });
+      const data = await res.json() as { url?: string; error?: string };
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch {
+      window.location.href = "/pricing";
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   if (userPlan === "pro" || userPlan === "pro+") {
     const label = userPlan === "pro+" ? "Pro+ Active" : "Pro Active";
@@ -47,10 +64,16 @@ export function PremiumPlanBanner({ dark, userPlan, premiumRequestsUsed, onSetUs
           </span>
         </div>
         <button
-          onClick={() => onSetUserPlan("free")}
-          className={`mt-3 w-full rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${dark ? "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}
+          onClick={() => void openBillingPortal()}
+          disabled={portalLoading}
+          className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-60 ${dark ? "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}
         >
-          Manage subscription
+          {portalLoading ? "Opening portal..." : (
+            <>
+              Manage subscription
+              <ExternalLink className="h-3 w-3" />
+            </>
+          )}
         </button>
       </div>
     );

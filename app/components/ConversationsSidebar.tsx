@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Tag, X } from "lucide-react";
+import { useState } from "react";
 import { stripMarkdown } from "../lib/chat-state";
 import type { ChatThread } from "../lib/chat-types";
 
@@ -19,6 +20,7 @@ type ConversationsSidebarProps = {
   onSelectChat: (chatId: string) => void;
   onRenameChat: (chatId: string) => void;
   onDeleteChat: (chatId: string) => void;
+  onSetChatTags: (chatId: string, tags: string[]) => void;
 };
 
 export function ConversationsSidebar({
@@ -36,7 +38,25 @@ export function ConversationsSidebar({
   onSelectChat,
   onRenameChat,
   onDeleteChat,
+  onSetChatTags,
 }: ConversationsSidebarProps) {
+  const [editingTagsChatId, setEditingTagsChatId] = useState<string | null>(null);
+  const [tagInput, setTagInput] = useState("");
+
+  const handleAddTag = (chat: ChatThread) => {
+    const tag = tagInput.trim();
+    if (!tag) return;
+    const existing = chat.tags ?? [];
+    if (!existing.includes(tag)) {
+      onSetChatTags(chat.id, [...existing, tag]);
+    }
+    setTagInput("");
+  };
+
+  const handleRemoveTag = (chat: ChatThread, tag: string) => {
+    onSetChatTags(chat.id, (chat.tags ?? []).filter((t) => t !== tag));
+  };
+
   return (
     <>
       <button
@@ -83,51 +103,110 @@ export function ConversationsSidebar({
               <div className="space-y-1">
                 {chats.map((chat) => {
                   const latest = chat.messages[chat.messages.length - 1];
+                  const isTagging = editingTagsChatId === chat.id;
                   return (
-                    <button
-                      key={chat.id}
-                      onClick={() => {
-                        onSelectChat(chat.id);
-                        onClose();
-                      }}
-                      className={`group w-full rounded-2xl px-3 py-3 text-left transition-colors ${
-                        chat.id === activeChatId
-                          ? dark
-                            ? "bg-slate-800 text-white"
-                            : "bg-sky-50 text-slate-900"
-                          : dark
-                            ? "text-slate-300 hover:bg-slate-800/80"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold">{chat.title}</div>
-                          <div className="mt-1 text-xs text-slate-400">{chat.messages.length} messages</div>
-                          {latest?.user ? <div className="mt-2 truncate text-xs text-slate-400">{stripMarkdown(latest.user)}</div> : null}
+                    <div key={chat.id}>
+                      <button
+                        onClick={() => {
+                          onSelectChat(chat.id);
+                          onClose();
+                        }}
+                        className={`group w-full rounded-2xl px-3 py-3 text-left transition-colors ${
+                          chat.id === activeChatId
+                            ? dark
+                              ? "bg-slate-800 text-white"
+                              : "bg-sky-50 text-slate-900"
+                            : dark
+                              ? "text-slate-300 hover:bg-slate-800/80"
+                              : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold">{chat.title}</div>
+                            <div className="mt-1 text-xs text-slate-400">{chat.messages.length} messages</div>
+                            {latest?.user ? <div className="mt-2 truncate text-xs text-slate-400">{stripMarkdown(latest.user)}</div> : null}
+                            {(chat.tags ?? []).length > 0 ? (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {(chat.tags ?? []).map((tag) => (
+                                  <span
+                                    key={tag}
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveTag(chat, tag); }}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); handleRemoveTag(chat, tag); } }}
+                                    aria-label={`Remove tag ${tag}`}
+                                    className={`inline-flex cursor-pointer items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                                      dark ? "bg-sky-900/60 text-sky-300 hover:bg-red-900/50 hover:text-red-300" : "bg-sky-100 text-sky-700 hover:bg-red-100 hover:text-red-600"
+                                    }`}
+                                  >
+                                    #{tag}
+                                    <X className="h-2.5 w-2.5" />
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="hidden gap-2 opacity-0 transition-opacity group-hover:flex group-hover:opacity-100">
+                            <span
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onRenameChat(chat.id);
+                              }}
+                              className="text-[11px] text-slate-400 hover:text-sky-600"
+                            >
+                              Rename
+                            </span>
+                            <span
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setEditingTagsChatId(isTagging ? null : chat.id);
+                                setTagInput("");
+                              }}
+                              className="text-[11px] text-slate-400 hover:text-sky-600"
+                              title="Add tag"
+                            >
+                              Tag
+                            </span>
+                            <span
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDeleteChat(chat.id);
+                              }}
+                              className="text-[11px] text-slate-400 hover:text-red-500"
+                            >
+                              Delete
+                            </span>
+                          </div>
                         </div>
-                        <div className="hidden gap-2 opacity-0 transition-opacity group-hover:flex group-hover:opacity-100">
-                          <span
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onRenameChat(chat.id);
+                      </button>
+
+                      {isTagging ? (
+                        <div
+                          className={`mx-1 mb-1 flex gap-1 rounded-xl border px-2 py-1.5 ${dark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Tag className="mt-1 h-3 w-3 flex-shrink-0 text-slate-400" />
+                          <input
+                            autoFocus
+                            value={tagInput}
+                            onChange={(e) => setTagInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { handleAddTag(chat); }
+                              if (e.key === "Escape") { setEditingTagsChatId(null); }
                             }}
-                            className="text-[11px] text-slate-400 hover:text-sky-600"
+                            placeholder="Add tag, Enter to confirm"
+                            className={`flex-1 bg-transparent text-xs focus:outline-none ${dark ? "text-slate-200 placeholder-slate-500" : "text-slate-800 placeholder-slate-400"}`}
+                          />
+                          <button
+                            onClick={() => handleAddTag(chat)}
+                            className="text-[10px] font-semibold text-sky-600 hover:text-sky-700"
                           >
-                            Rename
-                          </span>
-                          <span
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onDeleteChat(chat.id);
-                            }}
-                            className="text-[11px] text-slate-400 hover:text-red-500"
-                          >
-                            Delete
-                          </span>
+                            Add
+                          </button>
                         </div>
-                      </div>
-                    </button>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>

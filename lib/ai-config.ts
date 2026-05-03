@@ -266,7 +266,6 @@ export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
  */
 export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
-  "nvidia/nemotron-3-super:free": "free",
   "nvidia/nemotron-3-super-120b-a12b:free": "free",
   "meta-llama/llama-3.3-70b-instruct:free": "free",
   "meta-llama/llama-4-scout:free": "free",
@@ -418,6 +417,65 @@ export const TOP_FREE_CODE_MODELS = [
   "minimax/minimax-m2.5:free",
   "meta-llama/llama-3.3-70b-instruct:free",
 ];
+
+/**
+ * Model IDs that support configurable reasoning depth / thinking effort.
+ * Used by the composer UI to show the "Thinking Effort" selector and by the
+ * chat route to decide whether to send the `reasoning_level` parameter.
+ */
+export const REASONING_MODEL_IDS: string[] = [
+  "openai/gpt-5.4",
+  "openai/gpt-5.1",
+  "openai/gpt-5.2",
+  "openai/gpt-5.2-pro",
+  "openai/gpt-5-mini",
+  "openai/gpt-5-nano",
+  "openai/gpt-5",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-120b:free",
+  "google/gemini-3-flash-preview",
+  "google/gemini-3-pro-preview",
+  "google/gemini-2.0-flash-exp:free",
+  "google/gemini-2.5-flash-lite",
+  "deepseek/deepseek-r1",
+  "deepseek/deepseek-v3.2",
+  "moonshotai/kimi-k2-thinking",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "minimax/minimax-m2.5:free",
+  "z-ai/glm-4.5-air:free",
+  "perplexity/sonar",
+];
+
+/**
+ * Per-model max_tokens overrides.
+ * Models not listed fall back to the DEFAULT_MAX_TOKENS value.
+ */
+export const DEFAULT_MAX_TOKENS = 4096;
+
+export const MODEL_MAX_TOKENS: Record<string, number> = {
+  // Frontier models support very long outputs
+  "anthropic/claude-opus-4.7": 8192,
+  "anthropic/claude-opus-4.6": 8192,
+  "anthropic/claude-opus-4.5": 8192,
+  "anthropic/claude-sonnet-4.5": 8192,
+  "openai/gpt-5.4": 8192,
+  "openai/gpt-5.5": 8192,
+  "openai/gpt-5.2": 8192,
+  "openai/gpt-5.2-pro": 8192,
+  "openai/gpt-5.1": 8192,
+  "openai/gpt-5": 8192,
+  "google/gemini-3-pro-preview": 8192,
+  "google/gemini-3-flash-preview": 8192,
+  // Standard models
+  "deepseek/deepseek-r1": 8192,
+  "deepseek/deepseek-v3.2": 8192,
+  "moonshotai/kimi-k2-thinking": 8192,
+};
+
+/** Returns the max_tokens value for a given model ID. */
+export function getModelMaxTokens(modelId: string): number {
+  return MODEL_MAX_TOKENS[modelId] ?? DEFAULT_MAX_TOKENS;
+}
 
 /**
  * Returns a random model from the list if available, otherwise falls back to the best single model.
