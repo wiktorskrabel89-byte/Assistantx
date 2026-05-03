@@ -22,6 +22,7 @@ type AIMessageProps = {
   onResponseAction: (action: ResponseAction, text: string) => void;
   onCreateFollowUp: (prompt: string) => void;
   onFeedbackChange: (value: MessageFeedback | null) => void;
+  onFork?: () => void;
 };
 
 export function AIMessage({
@@ -38,6 +39,7 @@ export function AIMessage({
   onResponseAction,
   onCreateFollowUp,
   onFeedbackChange,
+  onFork,
 }: AIMessageProps) {
   let codeBlockIndex = 0;
   const responseCopyId = `${entry.id}-response`;
@@ -162,6 +164,11 @@ export function AIMessage({
               <button onClick={() => onResponseAction("commit", entry.ai)} className="hover:text-blue-400">
                 Commit msg
               </button>
+              {onFork ? (
+                <button onClick={onFork} title="Fork conversation at this message" className="hover:text-emerald-400">
+                  Fork
+                </button>
+              ) : null}
             </>
           ) : null}
         </div>

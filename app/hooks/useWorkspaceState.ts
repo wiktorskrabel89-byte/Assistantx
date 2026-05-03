@@ -488,6 +488,41 @@ export function useWorkspaceState() {
     }));
   }, []);
 
+  /**
+   * Creates a new chat containing all messages up to and including
+   * `messageIndex` from the active chat, then switches to it.
+   * The forked chat is prefixed with "Branched from: " in its title.
+   */
+  const forkChatAtMessage = useCallback((messageIndex: number) => {
+    const snapshot = stateRef.current;
+    const workspace = snapshot.workspaces.find((w) => w.id === snapshot.activeWorkspaceId) ?? snapshot.workspaces[0];
+    const chat = workspace.chats.find((c) => c.id === workspace.activeChatId) ?? workspace.chats[0];
+    const messagesToFork = chat.messages.slice(0, messageIndex + 1);
+    const forkedTitle = `Branched from: ${chat.title}`;
+    const now = Date.now();
+    const forkedChat: ChatThread = {
+      ...createChat(forkedTitle),
+      title: forkedTitle,
+      messages: messagesToFork,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setState((prev) => ({
+      ...prev,
+      workspaces: prev.workspaces.map((w) => (
+        w.id !== prev.activeWorkspaceId
+          ? w
+          : {
+              ...w,
+              chats: [forkedChat, ...w.chats],
+              activeChatId: forkedChat.id,
+              updatedAt: now,
+            }
+      )),
+    }));
+  }, [stateRef]);
+
   return {
     state,
     setState,
@@ -532,6 +567,7 @@ export function useWorkspaceState() {
     deleteCustomAgent,
     selectActiveAgent,
     importSharedChat,
+    forkChatAtMessage,
     activeCustomAgent,
     activeBuiltInAgent,
     assistantName,

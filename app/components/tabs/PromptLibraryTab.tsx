@@ -1,11 +1,22 @@
 "use client";
 
-import { Edit2, FileUp, LibraryBig, Plus, Save, Trash2, X } from "lucide-react";
+import { Edit2, FileUp, Globe, LibraryBig, Plus, Save, ThumbsUp, Trash2, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
 import { PromptTemplate } from "@/app/lib/chat-types";
+import { createClient } from "@/lib/client";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type PublicTemplate = {
+  id: string;
+  display_name: string;
+  label: string;
+  content: string;
+  mode: string;
+  upvotes: number;
+  created_at: string;
+};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -22,6 +33,102 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
   const [newContent, setNewContent] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Community feed state ─────────────────────────────────────────────────
+  const [view, setView] = useState<"mine" | "community">("mine");
+  const [communityTemplates, setCommunityTemplates] = useState<PublicTemplate[]>([]);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [upvotedIds, setUpvotedIds] = useState<Set<string>>(new Set());
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+
+  const loadCommunity = useCallback(() => {
+    setCommunityLoading(true);
+    void fetch("/api/templates/public?limit=30")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { templates: PublicTemplate[] } | null) => {
+        if (data) setCommunityTemplates(data.templates);
+      })
+      .catch(() => null)
+      .finally(() => setCommunityLoading(false));
+  }, []);
+
+  const handleViewChange = useCallback((next: "mine" | "community") => {
+    setView(next);
+    if (next === "community" && communityTemplates.length === 0) {
+      loadCommunity();
+    }
+  }, [communityTemplates.length, loadCommunity]);
+
+  const handleUpvote = useCallback(async (id: string) => {
+    if (upvotedIds.has(id)) return;
+    setUpvotedIds((prev) => new Set([...prev, id]));
+    setCommunityTemplates((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, upvotes: t.upvotes + 1 } : t))
+    );
+    try {
+      await fetch("/api/templates/public", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+    } catch {
+      // Revert optimistic update on error
+      setUpvotedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setCommunityTemplates((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, upvotes: Math.max(0, t.upvotes - 1) } : t))
+      );
+    }
+  }, [upvotedIds]);
+
+  const importCommunityTemplate = useCallback((t: PublicTemplate) => {
+    createPromptTemplate({
+      label: t.label,
+      text: t.content,
+      mode: t.mode,
+    });
+  }, [createPromptTemplate]);
+
+  const publishTemplate = useCallback(async (t: PromptTemplate) => {
+    setPublishingId(t.id);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        alert("Musisz być zalogowany, aby opublikować szablon.");
+        return;
+      }
+      const displayName = session.user?.email?.split("@")[0] ?? "Anonymous";
+      const res = await fetch("/api/templates/public", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          label: t.label,
+          content: t.text,
+          mode: t.mode,
+          displayName,
+        }),
+      });
+      if (res.ok) {
+        alert("Szablon opublikowany!");
+        // Refresh community feed if visible
+        if (view === "community") void loadCommunity();
+      } else {
+        const err = await res.json() as { error?: string };
+        alert(`Błąd: ${err.error ?? "Nie udało się opublikować."}`);
+      }
+    } catch {
+      alert("Błąd sieci. Spróbuj ponownie.");
+    } finally {
+      setPublishingId(null);
+    }
+  }, [view, loadCommunity]);
+
   // ── File upload → extract template ───────────────────────────────────────
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,7 +143,6 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
       setNewContent(text);
     };
     reader.readAsText(file, "utf-8");
-    // Reset so the same file can be re-uploaded
     e.target.value = "";
   }, []);
 
@@ -138,255 +244,367 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,.md,.markdown,.prompt,.text"
-            className="hidden"
-            onChange={handleFileUpload}
-            aria-label="Wgraj plik szablonu"
-          />
-          {/* Upload button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className={btnGhost}
-            title="Wgraj szablon z pliku"
-          >
-            <FileUp className="mr-1.5 inline h-4 w-4" />
-            Wgraj plik
-          </button>
-          {/* New blank template */}
-          <button
-            type="button"
-            onClick={() => {
-              setIsCreating(true);
-              setNewName("");
-              setNewContent("");
-            }}
-            className={btnPrimary}
-          >
-            <Plus className="mr-1 inline h-4 w-4" />
-            Nowy szablon
-          </button>
+          {/* View toggle */}
+          <div className={`flex rounded-xl border overflow-hidden text-sm ${dark ? "border-sky-800/50" : "border-sky-200"}`}>
+            <button
+              type="button"
+              onClick={() => handleViewChange("mine")}
+              className={`px-3 py-1.5 transition-colors ${view === "mine" ? (dark ? "bg-sky-900/60 text-sky-200" : "bg-sky-50 text-sky-700") : (dark ? "text-slate-400 hover:bg-sky-900/30" : "text-slate-500 hover:bg-sky-50/50")}`}
+            >
+              Moje
+            </button>
+            <button
+              type="button"
+              onClick={() => handleViewChange("community")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${view === "community" ? (dark ? "bg-sky-900/60 text-sky-200" : "bg-sky-50 text-sky-700") : (dark ? "text-slate-400 hover:bg-sky-900/30" : "text-slate-500 hover:bg-sky-50/50")}`}
+            >
+              <Globe className="h-3.5 w-3.5" />
+              Społeczność
+            </button>
+          </div>
+
+          {view === "mine" && (
+            <>
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.md,.markdown,.prompt,.text"
+                className="hidden"
+                onChange={handleFileUpload}
+                aria-label="Wgraj plik szablonu"
+              />
+              {/* Upload button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={btnGhost}
+                title="Wgraj szablon z pliku"
+              >
+                <FileUp className="mr-1.5 inline h-4 w-4" />
+                Wgraj plik
+              </button>
+              {/* New blank template */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreating(true);
+                  setNewName("");
+                  setNewContent("");
+                }}
+                className={btnPrimary}
+              >
+                <Plus className="mr-1 inline h-4 w-4" />
+                Nowy szablon
+              </button>
+            </>
+          )}
+
+          {view === "community" && (
+            <button type="button" onClick={loadCommunity} className={btnGhost}>
+              Odśwież
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Body: sidebar + editor */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Template list */}
-        <div
-          className={`flex w-72 flex-shrink-0 flex-col overflow-y-auto border-r ${
-            dark ? "border-sky-900/50" : "border-sky-200/60"
-          }`}
-        >
-          {templates.length === 0 && !isCreating && (
-            <div
-              className={`flex flex-col items-center justify-center gap-3 px-6 py-16 text-center ${
-                dark ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
-              <FileUp className="h-8 w-8 opacity-40" />
-              <p className="text-sm">
-                Wgraj plik lub utwórz nowy szablon, aby zacząć.
-              </p>
-            </div>
-          )}
-          {templates.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => startEdit(t)}
-              className={`group flex items-start gap-2 border-b px-4 py-3 text-left transition-colors ${
-                dark ? "border-sky-900/40 hover:bg-sky-900/30" : "border-sky-100 hover:bg-sky-50"
-              } ${editingId === t.id ? (dark ? "bg-sky-900/40" : "bg-sky-50") : ""}`}
-            >
-              <div className="min-w-0 flex-1">
-                <p
-                  className={`truncate text-sm font-medium ${
-                    dark ? "text-slate-200" : "text-slate-800"
-                  }`}
-                >
-                  {t.label}
-                </p>
-                <p
-                  className={`mt-0.5 line-clamp-2 text-xs ${
-                    dark ? "text-slate-400" : "text-slate-500"
-                  }`}
-                >
-                  {t.text}
-                </p>
-              </div>
-              <span
-                role="button"
-                aria-label="Usuń szablon"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteTemplateById(t.id);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.stopPropagation();
-                    deleteTemplateById(t.id);
-                  }
-                }}
-                className={`mt-0.5 flex-shrink-0 cursor-pointer opacity-0 transition-opacity group-hover:opacity-100 ${
-                  dark ? "text-red-400 hover:text-red-300" : "text-red-400 hover:text-red-600"
+      {/* Body */}
+      {view === "mine" ? (
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* Template list */}
+          <div
+            className={`flex w-72 flex-shrink-0 flex-col overflow-y-auto border-r ${
+              dark ? "border-sky-900/50" : "border-sky-200/60"
+            }`}
+          >
+            {templates.length === 0 && !isCreating && (
+              <div
+                className={`flex flex-col items-center justify-center gap-3 px-6 py-16 text-center ${
+                  dark ? "text-slate-400" : "text-slate-500"
                 }`}
               >
-                <Trash2 className="h-3.5 w-3.5" />
-              </span>
-            </button>
-          ))}
-        </div>
+                <FileUp className="h-8 w-8 opacity-40" />
+                <p className="text-sm">
+                  Wgraj plik lub utwórz nowy szablon, aby zacząć.
+                </p>
+              </div>
+            )}
+            {templates.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => startEdit(t)}
+                className={`group flex items-start gap-2 border-b px-4 py-3 text-left transition-colors ${
+                  dark ? "border-sky-900/40 hover:bg-sky-900/30" : "border-sky-100 hover:bg-sky-50"
+                } ${editingId === t.id ? (dark ? "bg-sky-900/40" : "bg-sky-50") : ""}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={`truncate text-sm font-medium ${
+                      dark ? "text-slate-200" : "text-slate-800"
+                    }`}
+                  >
+                    {t.label}
+                  </p>
+                  <p
+                    className={`mt-0.5 line-clamp-2 text-xs ${
+                      dark ? "text-slate-400" : "text-slate-500"
+                    }`}
+                  >
+                    {t.text}
+                  </p>
+                </div>
+                <div className="mt-0.5 flex flex-shrink-0 gap-1">
+                  {/* Publish to community */}
+                  <span
+                    role="button"
+                    aria-label="Opublikuj w społeczności"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void publishTemplate(t);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        void publishTemplate(t);
+                      }
+                    }}
+                    className={`cursor-pointer opacity-0 transition-opacity group-hover:opacity-100 ${
+                      publishingId === t.id ? "opacity-60" : ""
+                    } ${dark ? "text-sky-400 hover:text-sky-200" : "text-sky-500 hover:text-sky-700"}`}
+                    title="Opublikuj w społeczności"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                  </span>
+                  {/* Delete */}
+                  <span
+                    role="button"
+                    aria-label="Usuń szablon"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteTemplateById(t.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        deleteTemplateById(t.id);
+                      }
+                    }}
+                    className={`cursor-pointer opacity-0 transition-opacity group-hover:opacity-100 ${
+                      dark ? "text-red-400 hover:text-red-300" : "text-red-400 hover:text-red-600"
+                    }`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
 
-        {/* Editor pane */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* ── Create new ── */}
-          {isCreating && (
-            <div className="flex flex-col gap-4 overflow-y-auto p-6">
-              <div className="flex items-center justify-between">
-                <h2 className={headingClass}>Nowy szablon</h2>
-                <button
-                  type="button"
-                  onClick={() => setIsCreating(false)}
-                  className={closeBtn}
-                  aria-label="Zamknij"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div>
-                <label className={labelClass}>Nazwa szablonu</label>
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="np. Analiza kodu"
-                  className={`w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cardInput}`}
-                />
-              </div>
-              <div className="flex flex-1 flex-col">
-                <label className={labelClass}>Treść szablonu</label>
-                <textarea
-                  rows={14}
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                  placeholder="Wpisz treść szablonu lub wgraj plik..."
-                  className={`w-full resize-none rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cardInput}`}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setIsCreating(false)} className={btnGhost}>
-                  Anuluj
-                </button>
-                <button
-                  type="button"
-                  onClick={saveNew}
-                  disabled={!newContent.trim()}
-                  className={btnPrimary}
-                >
-                  <Save className="mr-1 inline h-4 w-4" />
-                  Zapisz
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Edit existing ── */}
-          {!isCreating && editingId && (
-            <div className="flex flex-col gap-4 overflow-y-auto p-6">
-              <div className="flex items-center justify-between">
-                <h2 className={`flex items-center gap-1.5 ${headingClass}`}>
-                  <Edit2 className="h-3.5 w-3.5" /> Edytuj szablon
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setEditingId(null)}
-                  className={closeBtn}
-                  aria-label="Zamknij"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div>
-                <label className={labelClass}>Nazwa szablonu</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className={`w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cardInput}`}
-                />
-              </div>
-              <div className="flex flex-1 flex-col">
-                <label className={labelClass}>Treść szablonu</label>
-                <textarea
-                  rows={14}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className={`w-full resize-none rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cardInput}`}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => {
-                    deleteTemplateById(editingId);
-                    setEditingId(null);
-                  }}
-                  className={btnDanger}
-                >
-                  <Trash2 className="mr-1 inline h-3.5 w-3.5" />
-                  Usuń
-                </button>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setEditingId(null)} className={btnGhost}>
+          {/* Editor pane */}
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            {/* ── Create new ── */}
+            {isCreating && (
+              <div className="flex flex-col gap-4 overflow-y-auto p-6">
+                <div className="flex items-center justify-between">
+                  <h2 className={headingClass}>Nowy szablon</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreating(false)}
+                    className={closeBtn}
+                    aria-label="Zamknij"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div>
+                  <label className={labelClass}>Nazwa szablonu</label>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="np. Analiza kodu"
+                    className={`w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cardInput}`}
+                  />
+                </div>
+                <div className="flex flex-1 flex-col">
+                  <label className={labelClass}>Treść szablonu</label>
+                  <textarea
+                    rows={14}
+                    value={newContent}
+                    onChange={(e) => setNewContent(e.target.value)}
+                    placeholder="Wpisz treść szablonu lub wgraj plik..."
+                    className={`w-full resize-none rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cardInput}`}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setIsCreating(false)} className={btnGhost}>
                     Anuluj
                   </button>
-                  <button type="button" onClick={saveEdit} className={btnPrimary}>
+                  <button
+                    type="button"
+                    onClick={saveNew}
+                    disabled={!newContent.trim()}
+                    className={btnPrimary}
+                  >
                     <Save className="mr-1 inline h-4 w-4" />
-                    Zapisz zmiany
+                    Zapisz
                   </button>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* ── Empty state ── */}
-          {!isCreating && !editingId && (
-            <div
-              className={`flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center ${
-                dark ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
+            {/* ── Edit existing ── */}
+            {!isCreating && editingId && (
+              <div className="flex flex-col gap-4 overflow-y-auto p-6">
+                <div className="flex items-center justify-between">
+                  <h2 className={`flex items-center gap-1.5 ${headingClass}`}>
+                    <Edit2 className="h-3.5 w-3.5" /> Edytuj szablon
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(null)}
+                    className={closeBtn}
+                    aria-label="Zamknij"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div>
+                  <label className={labelClass}>Nazwa szablonu</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className={`w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cardInput}`}
+                  />
+                </div>
+                <div className="flex flex-1 flex-col">
+                  <label className={labelClass}>Treść szablonu</label>
+                  <textarea
+                    rows={14}
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className={`w-full resize-none rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cardInput}`}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteTemplateById(editingId);
+                      setEditingId(null);
+                    }}
+                    className={btnDanger}
+                  >
+                    <Trash2 className="mr-1 inline h-3.5 w-3.5" />
+                    Usuń
+                  </button>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setEditingId(null)} className={btnGhost}>
+                      Anuluj
+                    </button>
+                    <button type="button" onClick={saveEdit} className={btnPrimary}>
+                      <Save className="mr-1 inline h-4 w-4" />
+                      Zapisz zmiany
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Empty state ── */}
+            {!isCreating && !editingId && (
               <div
-                className={`flex h-16 w-16 items-center justify-center rounded-2xl border shadow-lg ${
-                  dark
-                    ? "border-sky-900/70 bg-sky-950/55 text-sky-300"
-                    : "border-sky-200/80 bg-white/85 text-sky-600"
+                className={`flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center ${
+                  dark ? "text-slate-400" : "text-slate-500"
                 }`}
               >
-                <LibraryBig className="h-7 w-7" />
-              </div>
-              <div>
-                <p
-                  className={`text-base font-semibold ${
-                    dark ? "text-slate-200" : "text-slate-700"
+                <div
+                  className={`flex h-16 w-16 items-center justify-center rounded-2xl border shadow-lg ${
+                    dark
+                      ? "border-sky-900/70 bg-sky-950/55 text-sky-300"
+                      : "border-sky-200/80 bg-white/85 text-sky-600"
                   }`}
                 >
-                  Wybierz szablon do edycji
-                </p>
-                <p className="mt-1 text-sm">
-                  Możesz też wgrać plik — jego treść zostanie załadowana jako nowy szablon, który
-                  możesz edytować.
-                </p>
+                  <LibraryBig className="h-7 w-7" />
+                </div>
+                <div>
+                  <p
+                    className={`text-base font-semibold ${
+                      dark ? "text-slate-200" : "text-slate-700"
+                    }`}
+                  >
+                    Wybierz szablon do edycji
+                  </p>
+                  <p className="mt-1 text-sm">
+                    Możesz też wgrać plik — jego treść zostanie załadowana jako nowy szablon, który
+                    możesz edytować.
+                  </p>
+                </div>
               </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* ── Community feed ── */
+        <div className="flex-1 overflow-y-auto p-6">
+          {communityLoading ? (
+            <div className={`text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>Ładowanie szablonów…</div>
+          ) : communityTemplates.length === 0 ? (
+            <div className={`text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>
+              Brak opublikowanych szablonów. Bądź pierwszy!
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {communityTemplates.map((t) => (
+                <div
+                  key={t.id}
+                  className={`flex flex-col gap-3 rounded-2xl border p-4 ${
+                    dark ? "border-sky-900/50 bg-slate-950/60" : "border-sky-200/60 bg-white/85 shadow-sm"
+                  }`}
+                >
+                  <div>
+                    <p className={`truncate text-sm font-semibold ${dark ? "text-slate-100" : "text-slate-900"}`}>
+                      {t.label}
+                    </p>
+                    <p className={`mt-0.5 text-[11px] ${dark ? "text-slate-500" : "text-slate-400"}`}>
+                      przez {t.display_name}
+                    </p>
+                    <p className={`mt-2 line-clamp-3 text-xs ${dark ? "text-slate-400" : "text-slate-600"}`}>
+                      {t.content}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 mt-auto">
+                    <button
+                      type="button"
+                      onClick={() => void handleUpvote(t.id)}
+                      disabled={upvotedIds.has(t.id)}
+                      className={`flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs transition-colors ${
+                        upvotedIds.has(t.id)
+                          ? dark ? "bg-sky-900/50 text-sky-300" : "bg-sky-50 text-sky-600"
+                          : dark ? "border border-sky-800/50 text-slate-300 hover:bg-sky-900/30" : "border border-sky-200 text-slate-600 hover:bg-sky-50"
+                      }`}
+                    >
+                      <ThumbsUp className="h-3 w-3" />
+                      {t.upvotes}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => importCommunityTemplate(t)}
+                      className="ml-auto rounded-xl bg-sky-600 px-3 py-1 text-xs font-medium text-white hover:bg-sky-700 transition-colors"
+                    >
+                      Importuj
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
-      </div>
+      )}
     </section>
   );
 }

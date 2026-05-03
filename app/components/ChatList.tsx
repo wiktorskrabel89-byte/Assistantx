@@ -28,6 +28,7 @@ export type ChatListProps = {
   onCreateFollowUp: (prompt: string) => void;
   onSetFeedback: (messageId: string, value: MessageFeedback | null) => void;
   onQuickStart: (text: string, mode?: Mode) => void;
+  onFork?: (messageIndex: number) => void;
   assistantName: string;
   assistantDescription: string;
   assistantIcon: LucideIcon;
@@ -56,6 +57,7 @@ export const ChatList = memo(function ChatList({
   onCreateFollowUp,
   onSetFeedback,
   onQuickStart,
+  onFork,
   assistantName,
   assistantDescription,
   assistantIcon: AssistantIcon,
@@ -174,6 +176,7 @@ export const ChatList = memo(function ChatList({
             onResponseAction={onResponseAction}
             onCreateFollowUp={onCreateFollowUp}
             onFeedbackChange={(value) => onSetFeedback(entry.id, value)}
+            onFork={onFork ? () => onFork(index) : undefined}
           />
         </div>
       ))}

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BarChart2,
   Bell,
   BookOpen,
   BrainCircuit,
@@ -30,6 +31,7 @@ export type AppNavigationTab =
   | "knowledge-export"
   | "settings"
   | "notifications"
+  | "stats"
   | "ai-learning"
   | "jarvis";
 
@@ -37,6 +39,7 @@ type AppNavigationColumnProps = {
   dark: boolean;
   activeTab: AppNavigationTab;
   onSelectTab: (tab: AppNavigationTab) => void;
+  notificationUnread?: number;
 };
 
 type AppNavigationItem = {
@@ -56,12 +59,13 @@ const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
   { id: "scripts", label: "Scripts", icon: CodeXml },
   { id: "prompt-library", label: "Prompt Library", icon: LibraryBig },
   { id: "knowledge-export", label: "Knowledge Export", icon: Share2 },
+  { id: "stats", label: "Statystyki", icon: BarChart2 },
   { id: "settings", label: "Ustawienia", icon: Settings2 },
   { id: "notifications", label: "Powiadomienia", icon: Bell },
   { id: "ai-learning", label: "AI Learning", icon: BrainCircuit },
 ];
 
-export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigationColumnProps) {
+export function AppNavigationColumn({ dark, activeTab, onSelectTab, notificationUnread = 0 }: AppNavigationColumnProps) {
   const shellClassName = dark
     ? "border-slate-800 bg-slate-900 text-slate-100"
     : "border-sky-200/60 bg-white/92 text-slate-900 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.28)]";
@@ -107,10 +111,15 @@ export function AppNavigationColumn({ dark, activeTab, onSelectTab }: AppNavigat
                   type="button"
                   onClick={() => onSelectTab(item.id)}
                   aria-current={isActive ? "page" : undefined}
-                  className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ease-out ${itemClassName}`}
+                  className={`relative flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ease-out ${itemClassName}`}
                 >
                   <Icon className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
                   <span className="truncate">{item.label}</span>
+                  {item.id === "notifications" && notificationUnread > 0 && (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                      {notificationUnread > 99 ? "99+" : notificationUnread}
+                    </span>
+                  )}
                 </button>
                 {item.id === "jarvis" && (
                   <div className="ml-10 mt-1 flex flex-col gap-1 text-xs">

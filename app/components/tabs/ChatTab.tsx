@@ -41,6 +41,7 @@ import type {
   StyleMode,
 } from "../../lib/chat-types";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
+import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 
 export function ChatTab() {
@@ -74,6 +75,8 @@ export function ChatTab() {
     deleteCustomAgent,
     selectActiveAgent,
     importSharedChat,
+    forkChatAtMessage,
+    setMemoryNotes,
     assistantName,
     assistantDescription,
     activeAgentId,
@@ -159,6 +162,21 @@ export function ChatTab() {
   const stopCurrentGeneration = useCallback(() => {
     // Streaming cancel wiring is not currently available in this tab state slice.
   }, []);
+
+  // Fork conversation at a specific message index
+  const handleFork = useCallback((messageIndex: number) => {
+    forkChatAtMessage(messageIndex);
+  }, [forkChatAtMessage]);
+
+  // Auto-summarize older messages into workspace memory notes
+  useMemorySummarizer({
+    workspaceId: activeWorkspace.id,
+    chatId: activeChat.id,
+    messages: activeChat.messages,
+    memoryEnabled: activeWorkspace.settings.memoryEnabled,
+    memoryNotes: activeWorkspace.settings.memoryNotes,
+    setMemoryNotes,
+  });
 
   const queueComposerMessage = useCallback((thinkingEffort: number) => {
     const text = message.trim();
@@ -652,6 +670,7 @@ export function ChatTab() {
                   onResponseAction={applyResponseAction}
                   onCreateFollowUp={createFollowUp}
                   onSetFeedback={setMessageFeedback}
+                  onFork={handleFork}
                   onQuickStart={(text, nextMode) => {
                     if (nextMode) setWorkspaceMode(nextMode);
                     setComposerText(text);

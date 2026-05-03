@@ -14,11 +14,19 @@ import {
   SandboxTab,
   ScriptsTab,
   SettingsTab,
+  StatsTab,
 } from "./components/tabs";
 import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
+import { useNotifications } from "./hooks/useNotifications";
 
-function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
+function TabContent({
+  activeTab,
+  notificationsHook,
+}: {
+  activeTab: AppNavigationTab;
+  notificationsHook: ReturnType<typeof useNotifications>;
+}) {
   const { state } = useWorkspace();
 
   switch (activeTab) {
@@ -42,8 +50,10 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
       return <KnowledgeExportTab dark={state.dark} />;
     case "settings":
       return <SettingsTab />;
+    case "stats":
+      return <StatsTab dark={state.dark} />;
     case "notifications":
-      return <NotificationsTab dark={state.dark} />;
+      return <NotificationsTab dark={state.dark} notificationsHook={notificationsHook} />;
     case "ai-learning":
       return <AILearningTab />;
     case "jarvis":
@@ -56,10 +66,15 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
 function HomeContent() {
   const { state } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
+  const notificationsHook = useNotifications();
 
   const handleSelectAppTab = useCallback((tab: AppNavigationTab) => {
     setActiveAppTab(tab);
-  }, []);
+    // Mark all notifications as read when user opens the notifications tab
+    if (tab === "notifications" && notificationsHook.unreadCount > 0) {
+      void notificationsHook.markAllRead();
+    }
+  }, [notificationsHook]);
 
   const bg = state.dark
     ? "bg-slate-950 text-slate-100"
@@ -72,13 +87,18 @@ function HomeContent() {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${bg}`}>
         <div className="mx-auto flex min-h-screen max-w-[1680px] gap-3 px-3 py-3">
-          <AppNavigationColumn dark={state.dark} activeTab={activeAppTab} onSelectTab={handleSelectAppTab} />
+          <AppNavigationColumn
+            dark={state.dark}
+            activeTab={activeAppTab}
+            onSelectTab={handleSelectAppTab}
+            notificationUnread={notificationsHook.unreadCount}
+          />
 
           {isChatTab ? (
-            <TabContent key={activeAppTab} activeTab={activeAppTab} />
+            <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} />
           ) : (
             <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
-              <TabContent key={activeAppTab} activeTab={activeAppTab} />
+              <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} />
             </main>
           )}
         </div>
