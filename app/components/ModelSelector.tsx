@@ -90,7 +90,7 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
               : Boolean(!isPremium && (model.id.includes("opus") || model.description?.toLowerCase().includes("premium")));
             const lockReason = requiresProPlus
               ? `Pro+ plan required for ${model.id}`
-              : `Premium plan required for ${model.id}`;
+              : `Pro plan required for ${model.id}`;
             return (
               <button
                 key={model.id}

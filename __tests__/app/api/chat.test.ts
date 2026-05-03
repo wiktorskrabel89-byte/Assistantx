@@ -2,6 +2,33 @@
  * @jest-environment node
  */
 import { detectLanguage } from "@/app/api/chat/route";
+import { TOP_FREE_CHAT_MODELS, TOP_FREE_CODE_MODELS } from "@/lib/ai-config";
+
+// Mock external dependencies so POST can be tested without live services
+jest.mock("@/lib/server", () => ({
+  createClient: jest.fn().mockResolvedValue({
+    auth: { getUser: jest.fn().mockResolvedValue({ data: { user: null } }) },
+    from: jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      order: jest.fn().mockResolvedValue({ data: [] }),
+      insert: jest.fn().mockResolvedValue({ error: null }),
+      upsert: jest.fn().mockResolvedValue({ error: null }),
+    }),
+    rpc: jest.fn().mockResolvedValue({ data: [] }),
+  }),
+}));
+
+jest.mock("@/app/api/openrouter/modelCache", () => ({
+  fetchLatestModelIds: jest.fn().mockResolvedValue({}),
+  getCachedModels: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock("@/lib/rateLimit", () => ({
+  checkRateLimit: jest.fn().mockReturnValue({ allowed: true, retryAfterMs: 0 }),
+  getRateLimitKey: jest.fn().mockReturnValue("test-key"),
+  rateLimitedResponse: jest.fn(),
+}));
 
 describe("detectLanguage", () => {
   it("returns null for text shorter than 2 characters", () => {
@@ -75,5 +102,74 @@ describe("detectLanguage", () => {
     expect(result).toHaveProperty("name");
     expect(typeof result?.lang).toBe("string");
     expect(typeof result?.name).toBe("string");
+  });
+});
+
+describe("POST /api/chat — no-modelId free-model override", () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("selects a free chat model when rawMode=chat and message is conversational", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello!" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({ message: "Hello, how are you?", mode: "chat" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).toBe(TOP_FREE_CHAT_MODELS[0]);
+  });
+
+  it("selects a free code model when rawMode=code", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "code!" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({ message: "Write a Python function", mode: "code" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).toBe(TOP_FREE_CODE_MODELS[0]);
+  });
+
+  it("uses a code free model when rawMode=chat but message is code-focused", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "code!" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    // This message should trigger inferredCodeRequest = true via isCodeRequest()
+    const req = makeRequest({ message: "Debug this function: def foo(): pass", mode: "chat" });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).toBe(TOP_FREE_CODE_MODELS[0]);
   });
 });

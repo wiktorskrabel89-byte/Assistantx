@@ -41,7 +41,7 @@ import type {
   StyleMode,
 } from "../../lib/chat-types";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
-import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
+import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 
 export function ChatTab() {
   const {
@@ -187,15 +187,16 @@ export function ChatTab() {
       },
     ]);
 
-    // Count each sent message against the plan request quota (pro and pro+)
-    if (state.userPlan === "pro" || state.userPlan === "pro+") {
+    // Count each sent message against the plan request quota only when a premium model is selected
+    const selectedModelId = activeWorkspace.settings.preferredModelId;
+    if ((state.userPlan === "pro" || state.userPlan === "pro+") && selectedModelId && isModelPremiumOnly(selectedModelId)) {
       incrementPremiumRequests();
     }
 
     setMessage("");
     setFile(null);
     setFilePreview(null);
-  }, [activeChat.id, activeWorkspace.id, file, filePreview, incrementPremiumRequests, message, mode, state.userPlan, state.premiumRequestsUsed]);
+  }, [activeChat.id, activeWorkspace.id, activeWorkspace.settings.preferredModelId, file, filePreview, incrementPremiumRequests, message, mode, state.userPlan, state.premiumRequestsUsed]);
 
   const removeQueuedMessage = useCallback((queueId: string) => {
     setQueuedMessages((prev) => prev.filter((item) => item.id !== queueId));

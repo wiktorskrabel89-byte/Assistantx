@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
         quantity: 1,
       },
     ],
-    success_url: `${req.nextUrl.origin}/?plan=${config.successParam}`,
+    success_url: `${req.nextUrl.origin}/?plan=${encodeURIComponent(config.successParam)}`,
     cancel_url: `${req.nextUrl.origin}/pricing?cancelled=1`,
   });
 

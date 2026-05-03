@@ -394,7 +394,9 @@ export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): stri
   if (userPlan === "pro+") return modelIds;
   if (userPlan === "pro") {
     const filtered = modelIds.filter((id) => !isModelProPlusOnly(id));
-    return filtered.length > 0 ? filtered : modelIds.filter((id) => !isModelPremiumOnly(id));
+    if (filtered.length > 0) return filtered;
+    const freeFallback = modelIds.filter((id) => !isModelPremiumOnly(id));
+    return freeFallback.length > 0 ? freeFallback : [FREE_CHAT_MODEL];
   }
   const filtered = modelIds.filter((id) => !isModelPremiumOnly(id));
   return filtered.length > 0 ? filtered : [FREE_CHAT_MODEL];
