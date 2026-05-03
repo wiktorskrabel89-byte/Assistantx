@@ -106,7 +106,9 @@ async function ensureConversation(conversationId: string, userId: string | null)
     .maybeSingle();
 
   if (existing && existing.user_id && existing.user_id !== userId) {
-    throw Object.assign(new Error("Unauthorized: conversation belongs to another user"), { status: 403 });
+    const err = new Error("Unauthorized: conversation belongs to another user") as Error & { status: number };
+    err.status = 403;
+    throw err;
   }
 
   await supabase.from("conversations").upsert(

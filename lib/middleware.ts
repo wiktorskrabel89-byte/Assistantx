@@ -38,8 +38,12 @@ function buildCsp(nonce: string): string {
 }
 
 export async function updateSession(request: NextRequest) {
-  // Generate a cryptographically random nonce for this request
-  const nonce = btoa(crypto.randomUUID())
+  // Generate a cryptographically strong nonce using raw random bytes.
+  // crypto.getRandomValues() fills a Uint8Array with random bytes which is
+  // then base64-encoded — providing much more entropy than a UUID string.
+  const nonceBytes = new Uint8Array(16)
+  crypto.getRandomValues(nonceBytes)
+  const nonce = btoa(String.fromCharCode(...nonceBytes))
   const csp = buildCsp(nonce)
 
   // Propagate the nonce to server components via a request header

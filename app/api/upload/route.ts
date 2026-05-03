@@ -7,8 +7,8 @@ export const maxDuration = 60;
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 
-// SVG is intentionally excluded: it may contain <script> elements and is not
-// useful for document-level text extraction.
+// SVG is intentionally omitted from TEXT_EXTENSIONS: SVG files can embed
+// <script> tags and should not be treated as safe plain text for extraction.
 const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "json", "ts", "tsx", "js", "jsx", "py", "html", "css", "sql", "xml", "yml", "yaml"]);
 
 function getExtension(name: string) {

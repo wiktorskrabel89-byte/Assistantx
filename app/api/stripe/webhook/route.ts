@@ -21,7 +21,10 @@ import type { UserPlan } from "@/lib/ai-config";
 
 export const runtime = "nodejs"; // required for Stripe signature verification
 
-const VALID_PLANS: ReadonlySet<string> = new Set(["free", "pro", "pro+"]);
+// Plans that a paid checkout session can legitimately grant.
+// "free" is excluded because it is the default and should not be upgradeable
+// via a Stripe checkout (downgrade to free happens only via subscription deletion).
+const GRANTABLE_PAID_PLANS: ReadonlySet<string> = new Set(["pro", "pro+"]);
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -130,7 +133,7 @@ export async function POST(req: NextRequest) {
         if (session.payment_status !== "paid") break;
 
         const plan = session.metadata?.plan;
-        if (!plan || !VALID_PLANS.has(plan) || plan === "free") {
+        if (!plan || !GRANTABLE_PAID_PLANS.has(plan)) {
           console.error("[stripe/webhook] checkout.session.completed: invalid plan in metadata", plan);
           break;
         }
