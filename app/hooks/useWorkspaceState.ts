@@ -316,6 +316,14 @@ export function useWorkspaceState() {
     setState((prev) => ({ ...prev, premiumRequestsUsed: prev.premiumRequestsUsed + 1 }));
   }, []);
 
+  const setAppMode = useCallback((appMode: import("../lib/chat-types").AppMode) => {
+    setState((prev) => ({ ...prev, appMode }));
+  }, []);
+
+  const setHiddenTabs = useCallback((hiddenTabs: string[]) => {
+    setState((prev) => ({ ...prev, hiddenTabs }));
+  }, []);
+
   const setMemoryEnabled = useCallback((memoryEnabled: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -556,6 +564,8 @@ export function useWorkspaceState() {
     setCostMode,
     setUserPlan,
     incrementPremiumRequests,
+    setAppMode,
+    setHiddenTabs,
     setMemoryEnabled,
     setMemoryNotes,
     clearMemoryNotes,

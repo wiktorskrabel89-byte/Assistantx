@@ -191,6 +191,8 @@ export function createDefaultState(): StoredState {
     dark: false,
     userPlan: "free",
     premiumRequestsUsed: 0,
+    appMode: "ai-chat",
+    hiddenTabs: [],
   };
 }
 
@@ -373,5 +375,7 @@ export function upgradeState(value: StoredState | null): StoredState | null {
     premiumRequestsUsed: typeof raw.premiumRequestsUsed === "number"
       ? raw.premiumRequestsUsed
       : 0,
+    appMode: (raw.appMode === "ai-chat" || raw.appMode === "ai-code") ? raw.appMode : "ai-chat",
+    hiddenTabs: Array.isArray(raw.hiddenTabs) ? raw.hiddenTabs as string[] : [],
   };
 }
