@@ -320,8 +320,8 @@ export function useWorkspaceState() {
     setState((prev) => ({ ...prev, appMode }));
   }, []);
 
-  const setHiddenTabs = useCallback((hiddenTabs: string[]) => {
-    setState((prev) => ({ ...prev, hiddenTabs }));
+  const setPinnedAddOns = useCallback((pinnedAddOns: string[]) => {
+    setState((prev) => ({ ...prev, pinnedAddOns }));
   }, []);
 
   const setMemoryEnabled = useCallback((memoryEnabled: boolean) => {
@@ -565,7 +565,7 @@ export function useWorkspaceState() {
     setUserPlan,
     incrementPremiumRequests,
     setAppMode,
-    setHiddenTabs,
+    setPinnedAddOns,
     setMemoryEnabled,
     setMemoryNotes,
     clearMemoryNotes,

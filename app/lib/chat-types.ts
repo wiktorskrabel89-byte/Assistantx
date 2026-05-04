@@ -84,7 +84,7 @@ export type StoredState = {
   userPlan: UserPlan;
   premiumRequestsUsed: number;
   appMode: AppMode;
-  hiddenTabs: string[];
+  pinnedAddOns: string[];
 };
 
 export type Artifact = {

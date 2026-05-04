@@ -192,7 +192,7 @@ export function createDefaultState(): StoredState {
     userPlan: "free",
     premiumRequestsUsed: 0,
     appMode: "ai-chat",
-    hiddenTabs: [],
+    pinnedAddOns: [],
   };
 }
 
@@ -376,6 +376,6 @@ export function upgradeState(value: StoredState | null): StoredState | null {
       ? raw.premiumRequestsUsed
       : 0,
     appMode: (raw.appMode === "ai-chat" || raw.appMode === "ai-code") ? raw.appMode : "ai-chat",
-    hiddenTabs: Array.isArray(raw.hiddenTabs) ? raw.hiddenTabs as string[] : [],
+    pinnedAddOns: Array.isArray(raw.pinnedAddOns) ? raw.pinnedAddOns as string[] : [],
   };
 }

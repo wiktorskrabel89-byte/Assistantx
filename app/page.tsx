@@ -69,14 +69,14 @@ function TabContent({
 }
 
 function HomeContent() {
-  const { state, setAppMode, setHiddenTabs, userEmail } = useWorkspace();
+  const { state, setAppMode, setPinnedAddOns, userEmail } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
   const notificationsHook = useNotifications();
   const [isAdmin, setIsAdmin] = useState(false);
   const adminCheckedRef = useRef(false);
 
   const appMode: AppMode = state.appMode ?? "ai-chat";
-  const hiddenTabs: string[] = state.hiddenTabs ?? [];
+  const pinnedAddOns: string[] = state.pinnedAddOns ?? [];
 
   // Check admin status once on mount
   useEffect(() => {
@@ -125,8 +125,8 @@ function HomeContent() {
             notificationUnread={notificationsHook.unreadCount}
             appMode={appMode}
             onSetAppMode={setAppMode}
-            hiddenTabs={hiddenTabs}
-            onSetHiddenTabs={setHiddenTabs}
+            pinnedAddOns={pinnedAddOns}
+            onSetPinnedAddOns={setPinnedAddOns}
             userEmail={userEmail}
             isAdmin={isAdmin}
           />

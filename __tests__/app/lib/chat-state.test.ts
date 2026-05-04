@@ -350,7 +350,7 @@ describe("upgradeState", () => {
   });
 
   it("returns null for state with no workspaces", () => {
-    expect(upgradeState({ workspaces: [], activeWorkspaceId: "", dark: false, userPlan: "free", premiumRequestsUsed: 0, appMode: "ai-chat", hiddenTabs: [] })).toBeNull();
+    expect(upgradeState({ workspaces: [], activeWorkspaceId: "", dark: false, userPlan: "free", premiumRequestsUsed: 0, appMode: "ai-chat", pinnedAddOns: [] })).toBeNull();
   });
 
   it("upgrades a valid minimal state", () => {
@@ -379,7 +379,7 @@ describe("upgradeState", () => {
       userPlan: "free",
       premiumRequestsUsed: 0,
       appMode: "ai-chat",
-      hiddenTabs: [],
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
@@ -408,7 +408,7 @@ describe("upgradeState", () => {
       userPlan: "free",
       premiumRequestsUsed: 0,
       appMode: "ai-chat",
-      hiddenTabs: [],
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
@@ -433,7 +433,7 @@ describe("upgradeState", () => {
       userPlan: "free",
       premiumRequestsUsed: 0,
       appMode: "ai-chat",
-      hiddenTabs: [],
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
@@ -530,7 +530,7 @@ describe("upgradeState", () => {
       userPlan: "pro",
       premiumRequestsUsed: 10,
       appMode: "ai-chat",
-      hiddenTabs: [],
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
@@ -556,7 +556,7 @@ describe("upgradeState", () => {
       userPlan: "pro+",
       premiumRequestsUsed: 200,
       appMode: "ai-chat",
-      hiddenTabs: [],
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
