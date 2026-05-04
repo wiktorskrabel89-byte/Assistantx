@@ -20,10 +20,16 @@ export function PremiumPlanBanner({ dark, userPlan, premiumRequestsUsed }: Premi
   const openBillingPortal = async () => {
     setPortalLoading(true);
     try {
-      const res = await fetch("/api/stripe/billing-portal", { method: "POST" });
+      const res = await fetch("/api/stripe/billing-portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: window.location.href }),
+      });
       const data = await res.json() as { url?: string; error?: string };
-      if (data.url) {
+      if (res.ok && data.url) {
         window.location.href = data.url;
+      } else {
+        window.location.href = "/pricing";
       }
     } catch {
       window.location.href = "/pricing";

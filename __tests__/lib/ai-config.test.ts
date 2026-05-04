@@ -23,6 +23,8 @@ import {
   PRO_PLUS_PLAN,
   PRO_PLUS_ONLY_MODELS,
   isModelProPlusOnly,
+  TOP_PRO_FALLBACK_MODELS,
+  TOP_PRO_PLUS_FALLBACK_MODELS,
 } from "@/lib/ai-config";
 
 const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.:+-]+$/;
@@ -311,5 +313,42 @@ describe("filterModelsByPlan", () => {
     const premiumOnly = ["openai/gpt-5.4", "anthropic/claude-opus-4.5"];
     const result = filterModelsByPlan(premiumOnly, "free");
     expect(result).toEqual([FREE_CHAT_MODEL]);
+  });
+
+  it("pro plan with only pro+-only models falls back to TOP_PRO_FALLBACK_MODELS", () => {
+    const proPlus = ["anthropic/claude-opus-4.7"];
+    const result = filterModelsByPlan(proPlus, "pro");
+    // All models are pro+-only → use the best premium models accessible to Pro
+    expect(result).toEqual(TOP_PRO_FALLBACK_MODELS);
+    expect(result).not.toContain("anthropic/claude-opus-4.7");
+    // Fallback models must all be non-pro+-only premium models
+    expect(result.every((id) => !isModelProPlusOnly(id))).toBe(true);
+  });
+
+  it("pro plan with only pro+-only models and a free model still returns non-pro+-only models", () => {
+    const mixed = ["anthropic/claude-opus-4.7", "meta-llama/llama-3.3-70b-instruct:free"];
+    const result = filterModelsByPlan(mixed, "pro");
+    // After filtering out pro+-only, free model remains — no fallback needed
+    expect(result).toContain("meta-llama/llama-3.3-70b-instruct:free");
+    expect(result).not.toContain("anthropic/claude-opus-4.7");
+  });
+
+  it("pro+ plan with empty model list falls back to TOP_PRO_PLUS_FALLBACK_MODELS", () => {
+    const result = filterModelsByPlan([], "pro+");
+    expect(result).toEqual(TOP_PRO_PLUS_FALLBACK_MODELS);
+    expect(result.length).toBe(2);
+    // Must include the Pro+-exclusive flagship
+    expect(result).toContain("anthropic/claude-opus-4.7");
+  });
+
+  it("TOP_PRO_FALLBACK_MODELS has exactly 2 models and none are pro+-only", () => {
+    expect(TOP_PRO_FALLBACK_MODELS).toHaveLength(2);
+    expect(TOP_PRO_FALLBACK_MODELS.every((id) => !isModelProPlusOnly(id))).toBe(true);
+  });
+
+  it("TOP_PRO_PLUS_FALLBACK_MODELS has exactly 2 models", () => {
+    expect(TOP_PRO_PLUS_FALLBACK_MODELS).toHaveLength(2);
+    // Pro+ fallback includes the exclusive flagship model
+    expect(TOP_PRO_PLUS_FALLBACK_MODELS).toContain("anthropic/claude-opus-4.7");
   });
 });

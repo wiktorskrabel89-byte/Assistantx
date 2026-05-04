@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, Mic, MicOff, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useLayoutEffect, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
@@ -123,8 +123,13 @@ export function ChatComposer({
   // ── Voice input ────────────────────────────────────────────────────────────
   const [micActive, setMicActive] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const hasSpeechRecognition = typeof window !== "undefined" &&
-    (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+  // useSyncExternalStore returns false on the server (prevents SSR hydration mismatch)
+  // and the actual browser capability value on the client.
+  const hasSpeechRecognition = useSyncExternalStore(
+    () => () => {},
+    () => !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    () => false
+  );
 
   const toggleMic = useCallback(() => {
     if (micActive) {

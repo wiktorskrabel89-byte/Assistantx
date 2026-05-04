@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { createClient } from "@/lib/server";
 
 /**
  * POST /api/stripe/billing-portal
@@ -7,11 +8,11 @@ import Stripe from "stripe";
  * Creates a Stripe Customer Portal session for the authenticated user.
  * Requires STRIPE_SECRET_KEY to be set.
  *
- * Body: { customerId?: string; returnUrl?: string }
+ * Body: { returnUrl?: string }
  *
- * Note: A customerId is required to open the portal. This should be stored
- * in your database when a Stripe Checkout session completes (via webhook).
- * If no customerId is available, the response includes a redirect to /pricing.
+ * The Stripe customer ID is looked up server-side from the authenticated user's
+ * app_metadata (set by webhook). Client-supplied customer IDs are ignored to
+ * prevent account-takeover attacks.
  */
 export async function POST(req: NextRequest) {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -19,12 +20,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Stripe secret key not configured" }, { status: 500 });
   }
 
-  let customerId: string | undefined;
+  // Authenticate the caller server-side
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Look up the Stripe customer ID from trusted server-side metadata (set by Stripe webhook)
+  const customerId = (user.app_metadata?.stripe_customer_id as string | undefined) ??
+    (user.user_metadata?.stripe_customer_id as string | undefined);
+
   let returnUrl: string = `${req.nextUrl.origin}/`;
 
   try {
-    const body = await req.json() as { customerId?: string; returnUrl?: string };
-    customerId = body.customerId;
+    const body = await req.json() as { returnUrl?: string };
     // Validate returnUrl using proper URL parsing to prevent open-redirect attacks
     if (typeof body.returnUrl === "string") {
       try {

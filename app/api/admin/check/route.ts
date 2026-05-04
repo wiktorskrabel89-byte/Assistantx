@@ -7,10 +7,11 @@ import { createClient } from "@/lib/server";
  * it cannot be modified by the client, making this a secure server-side check.
  */
 export async function GET(req: Request) {
+  const noStore = { headers: { "Cache-Control": "no-store", "Vary": "Authorization" } };
   try {
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return Response.json({ isAdmin: false });
+      return Response.json({ isAdmin: false }, { status: 401, ...noStore });
     }
 
     const token = authHeader.slice(7);
@@ -18,15 +19,15 @@ export async function GET(req: Request) {
     const { data, error } = await supabase.auth.getUser(token);
 
     if (error || !data.user) {
-      return Response.json({ isAdmin: false });
+      return Response.json({ isAdmin: false }, { status: 403, ...noStore });
     }
 
     const appMetadata = data.user.app_metadata ?? {};
     // Admins have app_metadata.role === "admin" (set in Supabase dashboard)
     const isAdmin = appMetadata.role === "admin";
 
-    return Response.json({ isAdmin });
+    return Response.json({ isAdmin }, noStore);
   } catch {
-    return Response.json({ isAdmin: false });
+    return Response.json({ isAdmin: false }, { status: 500, ...noStore });
   }
 }

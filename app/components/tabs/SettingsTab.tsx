@@ -95,12 +95,18 @@ export function SettingsTab() {
       setSaveStatus("error");
       return;
     }
-    await supabase.from("profiles").upsert({
+    // Upsert profile data — check for errors and surface them to the user
+    const { error: upsertError } = await supabase.from("profiles").upsert({
       avatar_url: updatedProfile.avatarUrl,
       display_name: updatedProfile.displayName,
       email: updatedProfile.email,
       bio: updatedProfile.bio,
     });
+    if (upsertError) {
+      setErrorMessage(upsertError.message);
+      setSaveStatus("error");
+      return;
+    }
     setProfile(updatedProfile);
     setSaveStatus("success");
     setTimeout(() => setSaveStatus("idle"), 3000);

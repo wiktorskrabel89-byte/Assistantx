@@ -37,7 +37,7 @@ export default function UserProfileEditor({ profile, onSave }: UserProfileProps)
       </label>
       <label>
         Email
-        <input id="profile-email" name="email" value={form.email} onChange={handleChange} className="input" required type="email" />
+        <input id="profile-email" name="email" value={form.email} readOnly disabled className="input opacity-60 cursor-not-allowed" type="email" />
       </label>
       <label>
         Bio
