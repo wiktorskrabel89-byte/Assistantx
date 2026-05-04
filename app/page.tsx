@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
 import { ClinicalTab } from "./components/tabs/ClinicalTab";
@@ -19,6 +19,13 @@ import {
 import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
+import type { AppMode } from "./lib/chat-types";
+
+// Tabs that are only available in AI Code mode
+const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
+  "sandbox", "codebase", "scripts", "projects", "prompt-library",
+  "learning", "stats", "ai-learning", "jarvis", "clinical", "knowledge-export",
+];
 
 function TabContent({
   activeTab,
@@ -64,13 +71,22 @@ function TabContent({
 }
 
 function HomeContent() {
-  const { state } = useWorkspace();
+  const { state, setAppMode, setHiddenTabs } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
   const notificationsHook = useNotifications();
 
+  const appMode: AppMode = state.appMode ?? "ai-chat";
+  const hiddenTabs: string[] = state.hiddenTabs ?? [];
+
+  // Guard: if mode switches to AI Chat and current tab is code-only, reset to "chat"
+  useEffect(() => {
+    if (appMode === "ai-chat" && AI_CODE_ONLY_TABS.includes(activeAppTab)) {
+      setActiveAppTab("chat");
+    }
+  }, [appMode, activeAppTab]);
+
   const handleSelectAppTab = useCallback((tab: AppNavigationTab) => {
     setActiveAppTab(tab);
-    // Mark all notifications as read when user opens the notifications tab
     if (tab === "notifications" && notificationsHook.unreadCount > 0) {
       void notificationsHook.markAllRead();
     }
@@ -92,6 +108,10 @@ function HomeContent() {
             activeTab={activeAppTab}
             onSelectTab={handleSelectAppTab}
             notificationUnread={notificationsHook.unreadCount}
+            appMode={appMode}
+            onSetAppMode={setAppMode}
+            hiddenTabs={hiddenTabs}
+            onSetHiddenTabs={setHiddenTabs}
           />
 
           {isChatTab ? (
