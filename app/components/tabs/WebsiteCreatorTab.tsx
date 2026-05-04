@@ -567,7 +567,7 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
     if (!editor) return;
     const selection = editor.getSelection();
     const model = editor.getModel();
-    const selectedText = selection && !selection.isEmpty() ? (model?.getValueInRange(selection) ?? "") : "";
+    const selectedText = (selection && model && !selection.isEmpty()) ? model.getValueInRange(selection) : "";
     const targetCode = selectedText.trim() || html;
     const prompt = selectedText.trim()
       ? `Popraw i ulepsz poniższy fragment kodu HTML. Odpowiedz TYLKO ulepszoną wersją tego fragmentu — bez żadnych wyjaśnień ani bloków markdown:\n\n${targetCode}`
@@ -683,7 +683,7 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
 
   function addPage() {
     const id = `page-${Date.now()}`;
-    const name = `strona-${pages.length + 2}.html`;
+    const name = `page-${pages.length + 2}.html`;
     const newPage: Page = { id, name, html: `<h1>${name}</h1>\n<p>Treść strony...</p>` };
     setPages((p) => [...p, newPage]);
     switchPage(id);
