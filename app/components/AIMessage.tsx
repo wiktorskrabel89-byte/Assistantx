@@ -14,10 +14,10 @@ type Citation = { index: number; url: string };
 function parseCitations(text: string): { cleanText: string; citations: Citation[] } {
   const citationRegex = /^\[(\d+)\]:\s*(https?:\/\/\S+)/gm;
   const citations: Citation[] = [];
-  let match: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
-  while ((match = citationRegex.exec(text)) !== null) {
+  let match = citationRegex.exec(text);
+  while (match !== null) {
     citations.push({ index: parseInt(match[1], 10), url: match[2] });
+    match = citationRegex.exec(text);
   }
   const cleanText = citations.length > 0
     ? text.replace(/\n?\[\d+\]:\s*https?:\/\/\S+/g, "").trim()

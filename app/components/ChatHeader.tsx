@@ -153,5 +153,3 @@ export function ChatHeader({
     </div>
   );
 }
-
-

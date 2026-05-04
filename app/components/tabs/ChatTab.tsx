@@ -623,7 +623,12 @@ export function ChatTab() {
             userPlan: state.userPlan,
           }),
         });
-        if (!res.ok || !res.body) return "Error fetching response.";
+        if (!res.body) return "Error: empty response body.";
+        if (!res.ok) {
+          let detail = "";
+          try { detail = (await res.json() as { error?: string }).error ?? ""; } catch { /* ignore */ }
+          return `Error ${res.status}: ${detail || res.statusText || "request failed"}`;
+        }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let result = "";
@@ -645,9 +650,9 @@ export function ChatTab() {
             }
           }
         }
-        return result || "No response.";
-      } catch {
-        return "Error fetching response.";
+        return result || "No response content returned.";
+      } catch (err) {
+        return `Network error: ${err instanceof Error ? err.message : "unknown error"}`;
       }
     };
 
