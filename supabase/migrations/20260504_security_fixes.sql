@@ -49,7 +49,7 @@ $$;
 -- template.  Runs as the function owner (superuser / postgres role) so it can
 -- bypass RLS and perform a single atomic UPDATE, avoiding the
 -- read-then-write race condition in the old route handler.
-create or replace function public.increment_template_upvotes(template_id uuid)
+create or replace function public.increment_template_upvotes(p_template_id uuid)
 returns void
 language sql
 security definer
@@ -57,7 +57,7 @@ set search_path = public
 as $$
   update public_templates
      set upvotes = upvotes + 1
-   where id = template_id;
+   where id = p_template_id;
 $$;
 
 -- Grant execute to authenticated and anon roles so the API route can call it.

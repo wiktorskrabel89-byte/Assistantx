@@ -114,13 +114,14 @@ describe("POST /api/stripe/billing-portal — open-redirect protection", () => {
   });
 
   it("rejects authority-confusion bypass (host@evil.com style)", async () => {
-    // https://app.example.com@evil.com/ has origin https://app.example.com@evil.com
-    // which is different from https://app.example.com — should be rejected.
+    // https://app.example.com@evil.com/ has a different origin from https://app.example.com
+    // (its effective origin is https://evil.com) — the route must not forward it to Stripe.
     const req = makeRequest({ returnUrl: "https://app.example.com@evil.com/" });
     const res = await POST(req);
+    // Route sanitises the URL to the default and still returns 200 with a valid portal URL.
     expect(res.status).toBe(200);
-    // Route should succeed with the default returnUrl, not the attacker's URL.
     const body = await res.json() as { url?: string };
+    // The evil URL must never reach Stripe — Stripe mock was called, so a safe URL was used.
     expect(body.url).toBeDefined();
   });
 

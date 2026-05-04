@@ -106,7 +106,7 @@ async function resolveUserId(
   const supabase = getSupabaseAdmin();
   const { data: byCustomer } = await supabase
     .rpc("get_user_id_by_stripe_customer", { p_customer_id: customerId });
-  if (byCustomer) return byCustomer as string;
+  if (typeof byCustomer === "string" && byCustomer) return byCustomer;
 
   // Last-resort fallback: look up customer email from Stripe then match by email.
   // This is only reached for legacy accounts that predate customer-ID storage.

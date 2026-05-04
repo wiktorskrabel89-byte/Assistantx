@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createClient as createAdminClient, createClient as createBearerClient } from "@supabase/supabase-js";
 
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -77,10 +77,9 @@ export async function POST(req: NextRequest) {
   if (admin) {
     client = admin;
   } else {
-    const { createClient: createSupabaseJsClient } = await import("@supabase/supabase-js");
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
-    client = createSupabaseJsClient(url, anonKey, {
+    client = createBearerClient(url, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false },
     });
@@ -112,7 +111,7 @@ export async function PATCH(req: NextRequest) {
   // that existed in the previous SELECT → UPDATE pattern.
   const admin = getAdmin();
   const client = admin ?? (await createServerClient());
-  const { error } = await client.rpc("increment_template_upvotes", { template_id: id });
+  const { error } = await client.rpc("increment_template_upvotes", { p_template_id: id });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
