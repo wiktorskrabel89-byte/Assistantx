@@ -1,0 +1,47 @@
+# Run both services with:  docker compose up --build
+# Pass secrets via a .env file or shell environment — never commit secrets.
+#
+# Required env vars:
+#   NEXT_PUBLIC_SUPABASE_URL              (public, baked into Next.js bundle)
+#   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  (public, baked into Next.js bundle)
+#   OPENROUTER_API_KEY                    (runtime secret for Next.js)
+#   OPENAI_API_KEY                        (runtime secret for FastAPI)
+#   ANTHROPIC_API_KEY                     (runtime secret for FastAPI)
+#
+# Optional:
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, etc.
+
+services:
+  fastapi:
+    build:
+      context: ./ai agent
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # Allow requests from the Next.js container (internal) and the browser (localhost:3000).
+      # Extend this list if your domain differs in production.
+      CORS_ORIGINS: "http://localhost:3000,http://nextjs:3000"
+
+  nextjs:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      # FastAPI is reachable from Next.js server-side code at http://fastapi:8000
+      AI_AGENT_URL: "http://fastapi:8000"
+    depends_on:
+      - fastapi
