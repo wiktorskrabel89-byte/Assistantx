@@ -54,6 +54,11 @@ export default function SupportPage() {
         return acc;
       }, []);
 
+    // Track synchronously whether the assistant placeholder bubble was appended so that
+    // the catch block can decide whether to trigger auto-scroll without relying on a
+    // variable mutated inside a setMessages updater (which React may execute later).
+    let assistantPlaceholderAppended = false;
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -79,6 +84,7 @@ export default function SupportPage() {
       const decoder = new TextDecoder();
       let reply = "";
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      assistantPlaceholderAppended = true;
       setMessageCount((n) => n + 1);
 
       let done = false;
@@ -145,7 +151,6 @@ export default function SupportPage() {
       console.error("Support chat error:", err);
       // Update the existing assistant placeholder if one was already appended,
       // otherwise add a new message and trigger auto-scroll.
-      let needsScrollIncrement = false;
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.content === "") {
@@ -156,10 +161,9 @@ export default function SupportPage() {
           };
           return updated;
         }
-        needsScrollIncrement = true;
         return [...prev, { role: "assistant", content: "Sorry, there was an error. Please try again." }];
       });
-      if (needsScrollIncrement) {
+      if (!assistantPlaceholderAppended) {
         setMessageCount((n) => n + 1);
       }
     }

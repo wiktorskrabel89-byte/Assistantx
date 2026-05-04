@@ -27,9 +27,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Look up the Stripe customer ID from trusted server-side metadata (set by Stripe webhook)
-  const customerId = (user.app_metadata?.stripe_customer_id as string | undefined) ??
-    (user.user_metadata?.stripe_customer_id as string | undefined);
+  // Look up the Stripe customer ID from trusted server-side metadata (set by Stripe webhook).
+  // user_metadata is user-controlled and must not be used as a fallback — only app_metadata is safe.
+  const customerId = user.app_metadata?.stripe_customer_id as string | undefined;
 
   let returnUrl: string = `${req.nextUrl.origin}/`;
 

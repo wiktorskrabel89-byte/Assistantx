@@ -270,7 +270,8 @@ export function ChatTab() {
       const mod = event.metaKey || event.ctrlKey;
       if (mod && event.key.toLowerCase() === "k") {
         // Don't fire when the user is typing in an input, textarea, or contenteditable
-        const target = event.target as HTMLElement;
+        if (!(event.target instanceof HTMLElement)) return;
+        const target = event.target;
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
         event.preventDefault();
