@@ -84,12 +84,14 @@ export function getRateLimitKey(req: Request, prefix: string): string {
   const realIp = req.headers.get("x-real-ip")?.trim();
   if (realIp) return `${prefix}:ip:${realIp}`;
 
-  // x-forwarded-for is a comma-separated list; the *last* entry is appended
-  // by the nearest trusted proxy and is safe to use for rate limiting.
+  // x-forwarded-for is a comma-separated list; the *first* entry is the
+  // original client IP (when the header is set/overwritten by a trusted
+  // upstream proxy such as Vercel or Cloudflare).  The platform-specific
+  // header is preferred when available (e.g. x-real-ip above), but if only
+  // x-forwarded-for is present, take the leftmost public IP.
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
-    const ips = forwarded.split(",");
-    const trustedIp = ips[ips.length - 1].trim();
+    const trustedIp = forwarded.split(",")[0].trim();
     if (trustedIp) return `${prefix}:ip:${trustedIp}`;
   }
 

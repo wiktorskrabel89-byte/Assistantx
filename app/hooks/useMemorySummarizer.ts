@@ -32,6 +32,10 @@ export function useMemorySummarizer({
   // Track the last message count that triggered a summarization per chat.
   const lastSummarizedCountRef = useRef<Map<string, number>>(new Map());
   const isSummarizingRef = useRef(false);
+  // Keep a ref to the latest memoryNotes so the async fetch callback
+  // always appends to the most-current value (avoids stale-closure overwrites).
+  const memoryNotesRef = useRef(memoryNotes);
+  memoryNotesRef.current = memoryNotes;
 
   useEffect(() => {
     if (!memoryEnabled) return;
@@ -62,8 +66,9 @@ export function useMemorySummarizer({
       .then((data: { summary?: string } | null) => {
         const summary = data?.summary?.trim();
         if (summary) {
-          const separator = memoryNotes.trim() ? "\n" : "";
-          setMemoryNotes(memoryNotes.trim() + separator + summary);
+          const latest = memoryNotesRef.current.trim();
+          const separator = latest ? "\n" : "";
+          setMemoryNotes(latest + separator + summary);
         }
       })
       .catch(() => {

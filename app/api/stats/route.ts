@@ -42,13 +42,11 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Total messages filtered by the user's conversations to avoid leaking other users' data
-  const [conversationIdsResult, conversationsResult, workspaceResult] = await Promise.all([
-    // Fetch conversation IDs owned by this user first, then count their messages
-    supabase
-      .from("conversations")
-      .select("id")
-      .eq("user_id", userId),
+  // Use a single aggregating RPC to avoid fetching all conversation IDs into
+  // application memory and then issuing an unbounded IN() query.  The function
+  // joins messages → conversations server-side and returns aggregated counts.
+  const [statsResult, conversationsResult, workspaceResult] = await Promise.all([
+    supabase.rpc("get_user_message_stats", { p_user_id: userId }),
 
     // Total conversations (count only)
     supabase
@@ -64,27 +62,11 @@ export async function GET(req: NextRequest) {
       .single(),
   ]);
 
-  const conversationIds = (conversationIdsResult.data ?? []).map(
-    (c: { id: string }) => c.id
-  );
+  const statsRow = (statsResult.data as { total_messages: number; total_tokens: number } | null) ??
+    { total_messages: 0, total_tokens: 0 };
 
-  // Fetch messages only for this user's conversations
-  const messagesResult2 = conversationIds.length > 0
-    ? await supabase
-        .from("messages")
-        .select("id, token_count")
-        .in("conversation_id", conversationIds)
-        .eq("role", "user")
-    : { data: [] };
-
-  const messages = messagesResult2.data ?? [];
-
-  // Aggregate token count for user messages that belong to this user's conversations
-  const totalMessages = messages.length;
-  const totalTokens = messages.reduce(
-    (sum: number, m: { token_count?: number | null }) => sum + (m.token_count ?? 0),
-    0
-  );
+  const totalMessages = statsRow.total_messages ?? 0;
+  const totalTokens = statsRow.total_tokens ?? 0;
 
   const totalConversations = conversationsResult.count ?? 0;
 
