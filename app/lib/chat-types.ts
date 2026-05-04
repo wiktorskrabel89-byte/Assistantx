@@ -64,6 +64,8 @@ export type WorkspaceSettings = {
   languageLock: string;
   preferredModelId: string | null;
   costMode: CostMode;
+  systemPrompt: string;
+  enabledTools: string[];
 };
 
 export type Workspace = {

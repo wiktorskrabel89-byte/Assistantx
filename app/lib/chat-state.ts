@@ -155,6 +155,8 @@ export function createSettings(): WorkspaceSettings {
     languageLock: "auto",
     preferredModelId: null,
     costMode: "balanced",
+    systemPrompt: "",
+    enabledTools: [],
   };
 }
 

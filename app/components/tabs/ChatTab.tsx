@@ -14,12 +14,17 @@ import { CostModeSelector } from "../CostModeSelector";
 import { CustomAgentManager } from "../CustomAgentManager";
 import { GitHubPanel } from "../GitHubPanel";
 import { GoogleIntegrationBanner } from "../GoogleIntegrationBanner";
+import { ModelComparePanel } from "../ModelComparePanel";
+import type { ComparisonResults } from "../ModelComparePanel";
 import { ModelSelector } from "../ModelSelector";
 import { PremiumPlanBanner } from "../PremiumPlanBanner";
+import { PromptChainPanel } from "../PromptChainPanel";
 import { PromptManager } from "../PromptManager";
 import { PullToRefresh } from "../PullToRefresh";
 import { ShareConversationDialog } from "../ShareConversationDialog";
 import { ThinkingIndicator } from "../ThinkingIndicator";
+import { UsageDashboard } from "../UsageDashboard";
+import { WorkspaceToolsPanel } from "../WorkspaceToolsPanel";
 import { useWorkspaceQueries } from "../../hooks/useWorkspaceQueries";
 import {
   buildChatSessionItems,
@@ -77,6 +82,8 @@ export function ChatTab() {
     importSharedChat,
     forkChatAtMessage,
     setMemoryNotes,
+    setSystemPrompt,
+    setEnabledTools,
     assistantName,
     assistantDescription,
     activeAgentId,
@@ -99,6 +106,11 @@ export function ChatTab() {
   const [promptManagerOpen, setPromptManagerOpen] = useState(false);
   const [customAgentManagerOpen, setCustomAgentManagerOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(false);
+  const [promptChainOpen, setPromptChainOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [comparisonResults, setComparisonResults] = useState<ComparisonResults>(null);
+  const [usageDashboardOpen, setUsageDashboardOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
@@ -589,6 +601,81 @@ export function ChatTab() {
     setTimeout(() => setCopied(null), 2000);
   }, [activeChat]);
 
+  const runModelComparison = useCallback(async (modelA: string, modelB: string, prompt: string) => {
+    setComparisonResults({
+      modelA: { model: modelA, response: "", loading: true },
+      modelB: { model: modelB, response: "", loading: true },
+    });
+
+    const fetchModel = async (modelId: string): Promise<string> => {
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: prompt,
+            mode: "chat",
+            allowedModels: [modelId],
+            history: [],
+            conversationId: null,
+            style: "concise",
+            costMode: "performance",
+            userPlan: state.userPlan,
+          }),
+        });
+        if (!res.body) return "Error: empty response body.";
+        if (!res.ok) {
+          let detail = "";
+          try { detail = (await res.json() as { error?: string }).error ?? ""; } catch { /* ignore */ }
+          return `Error ${res.status}: ${detail || res.statusText || "request failed"}`;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let result = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split("\n")) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const jsonStr = trimmed.slice(5).trim();
+            if (jsonStr === "[DONE]") break;
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const delta = parsed?.choices?.[0]?.delta?.content ?? "";
+              if (typeof delta === "string") result += delta;
+            } catch {
+              // ignore malformed SSE chunks
+            }
+          }
+        }
+        return result || "No response content returned.";
+      } catch (err) {
+        return `Network error: ${err instanceof Error ? err.message : "unknown error"}`;
+      }
+    };
+
+    const [responseA, responseB] = await Promise.all([
+      fetchModel(modelA),
+      fetchModel(modelB),
+    ]);
+
+    setComparisonResults({
+      modelA: { model: modelA, response: responseA, loading: false },
+      modelB: { model: modelB, response: responseB, loading: false },
+    });
+  }, [state.userPlan]);
+
+  const runPromptChain = useCallback((steps: string[]) => {
+    if (steps.length === 0) return;
+    // Build a single message that asks the AI to work through each step in sequence
+    const chainedText = steps.length === 1
+      ? steps[0]
+      : `Please work through the following steps in sequence, showing results for each:\n\n${steps.map((s, i) => `Step ${i + 1}: ${s}`).join("\n\n")}`;
+    setComposerText(chainedText);
+  }, [setComposerText]);
+
   return (
     <>
       <ConversationsSidebar
@@ -600,6 +687,7 @@ export function ChatTab() {
         chatSearch={chatSearch}
         chats={filteredConversations}
         activeChatId={currentConversationId}
+        systemPrompt={activeWorkspace.settings.systemPrompt ?? ""}
         onClose={() => setSidebarOpen(false)}
         onSearchChange={setChatSearch}
         onCreateChat={createChatAction}
@@ -607,6 +695,7 @@ export function ChatTab() {
         onRenameChat={renameChat}
         onDeleteChat={deleteChat}
         onSetChatTags={setChatTags}
+        onSetSystemPrompt={setSystemPrompt}
       />
 
       <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
@@ -630,6 +719,10 @@ export function ChatTab() {
             onOpenShare={() => setShareDialogOpen(true)}
             onOpenPrompts={() => setPromptManagerOpen(true)}
             onCreateChat={createChatAction}
+            onOpenWorkspaceTools={() => setWorkspaceToolsOpen((prev) => !prev)}
+            onOpenPromptChain={() => setPromptChainOpen((prev) => !prev)}
+            onOpenCompare={() => setCompareOpen((prev) => !prev)}
+            onOpenUsage={() => setUsageDashboardOpen((prev) => !prev)}
           />
 
           <div className={`min-h-0 flex-1 px-3 py-4 transition-colors duration-200 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
@@ -880,6 +973,37 @@ export function ChatTab() {
         onImportFile={handleImportedFile}
         onCopyVsCodePrompt={() => void copyVsCodePrompt()}
         onDownloadVsCodeBundle={downloadVsCodeBundle}
+      />
+      <WorkspaceToolsPanel
+        open={workspaceToolsOpen}
+        dark={state.dark}
+        enabledTools={activeWorkspace.settings.enabledTools ?? []}
+        onToggleTool={setEnabledTools}
+        onClose={() => setWorkspaceToolsOpen(false)}
+      />
+
+      <PromptChainPanel
+        open={promptChainOpen}
+        dark={state.dark}
+        onClose={() => setPromptChainOpen(false)}
+        onRunChain={runPromptChain}
+      />
+
+      <ModelComparePanel
+        open={compareOpen}
+        dark={state.dark}
+        comparisonResults={comparisonResults}
+        onClose={() => setCompareOpen(false)}
+        onRunComparison={(a, b, p) => void runModelComparison(a, b, p)}
+      />
+
+      <UsageDashboard
+        open={usageDashboardOpen}
+        dark={state.dark}
+        userPlan={state.userPlan}
+        premiumRequestsUsed={state.premiumRequestsUsed}
+        workspaces={state.workspaces}
+        onClose={() => setUsageDashboardOpen(false)}
       />
     </>
   );

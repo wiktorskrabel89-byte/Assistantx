@@ -393,10 +393,12 @@ export function useChatTransport({
           languageLock: activeSettings.languageLock,
           preferredProgrammingLanguage,
           interactionProfile,
-          addInternetContext: queuedMessage.mode === "search",
+          addInternetContext: queuedMessage.mode === "search" || (activeSettings.enabledTools ?? []).includes("web_search"),
           costMode: activeSettings.costMode,
           userPlan: stateRef.current.userPlan,
           thinkingEffort: queuedMessage.thinkingEffort,
+          systemPrompt: activeSettings.systemPrompt ?? "",
+          enabledTools: activeSettings.enabledTools ?? [],
         }),
       });
 

@@ -1,12 +1,37 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { CodeReviewPanel } from "./CodeReviewPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { ChatEntry, MessageFeedback, ResponseAction } from "../lib/chat-types";
+
+// ── Inline citations ────────────────────────────────────────────────────────
+type Citation = { index: number; url: string };
+
+function parseCitations(text: string): { cleanText: string; citations: Citation[] } {
+  const citationRegex = /^\[(\d+)\]:\s*(https?:\/\/\S+)/gm;
+  const citations: Citation[] = [];
+  let match = citationRegex.exec(text);
+  while (match !== null) {
+    citations.push({ index: parseInt(match[1], 10), url: match[2] });
+    match = citationRegex.exec(text);
+  }
+  const cleanText = citations.length > 0
+    ? text.replace(/\n?\[\d+\]:\s*https?:\/\/\S+/g, "").trim()
+    : text;
+  return { cleanText, citations };
+}
+
+// ── TTS helpers (useSyncExternalStore) ─────────────────────────────────────
+function getTtsSupportSnapshot() {
+  return typeof window !== "undefined" && "speechSynthesis" in window;
+}
+function subscribeTtsSupport() {
+  return () => { /* TTS support does not change at runtime */ };
+}
 
 type AIMessageProps = {
   entry: ChatEntry;
@@ -47,6 +72,10 @@ export function AIMessage({
 }: AIMessageProps) {
   let codeBlockIndex = 0;
   const responseCopyId = `${entry.id}-response`;
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const ttsSupported = useSyncExternalStore(subscribeTtsSupport, getTtsSupportSnapshot, () => false);
+
   const codeBlocks = useMemo(() => {
     const matches = Array.from(entry.ai.matchAll(/```([\w-]+)?\n([\s\S]*?)```/g));
     return matches.map((match) => ({
@@ -54,6 +83,28 @@ export function AIMessage({
       code: match[2].trim(),
     })).filter((block) => block.code.length > 0);
   }, [entry.ai]);
+
+  const { cleanText, citations } = useMemo(() => {
+    const isSearchResponse = typeof entry.model === "string" && (entry.model.includes("perplexity") || entry.model.includes("sonar"));
+    if (!isSearchResponse) return { cleanText: entry.ai, citations: [] as Citation[] };
+    return parseCitations(entry.ai);
+  }, [entry.ai, entry.model]);
+
+  const handleSpeak = () => {
+    if (!ttsSupported) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleStopSpeaking = () => {
+    if (!ttsSupported) return;
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
 
   return (
     <div className="flex justify-start">
@@ -142,9 +193,31 @@ export function AIMessage({
                   },
                 }}
               >
-                {entry.ai}
+                {cleanText}
               </ReactMarkdown>
             )}
+
+            {/* Inline citations — shown for search responses that include footnotes */}
+            {citations.length > 0 && !isStreaming ? (
+              <div className={`mt-3 border-t pt-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+                <div className={`mb-1 text-[11px] font-semibold uppercase tracking-wide ${dark ? "text-slate-500" : "text-slate-400"}`}>Sources</div>
+                <ol className="space-y-0.5">
+                  {citations.map((c) => (
+                    <li key={c.index} className="flex items-start gap-1.5 text-xs">
+                      <span className={`flex-shrink-0 font-medium ${dark ? "text-slate-400" : "text-slate-500"}`}>[{c.index}]</span>
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-sky-500 hover:underline"
+                      >
+                        {c.url}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -156,6 +229,17 @@ export function AIMessage({
               <button onClick={() => onCopyText(entry.ai, responseCopyId)} className="hover:text-blue-400">
                 {copied === responseCopyId ? "Copied" : "Copy"}
               </button>
+              {ttsSupported ? (
+                isSpeaking ? (
+                  <button onClick={handleStopSpeaking} className="hover:text-amber-400" title="Stop speaking" aria-label="Stop speaking">
+                    Stop
+                  </button>
+                ) : (
+                  <button onClick={handleSpeak} className="hover:text-blue-400" title="Read aloud" aria-label="Read response aloud">
+                    Speak
+                  </button>
+                )
+              ) : null}
               <button onClick={() => onResponseAction("summarize", entry.ai)} className="hover:text-blue-400">
                 Summarize
               </button>

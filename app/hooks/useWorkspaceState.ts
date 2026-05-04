@@ -338,6 +338,20 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setSystemPrompt = useCallback((systemPrompt: string) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, systemPrompt },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setEnabledTools = useCallback((enabledTools: string[]) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, enabledTools },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const clearMemoryNotes = useCallback(() => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -568,6 +582,8 @@ export function useWorkspaceState() {
     setPinnedAddOns,
     setMemoryEnabled,
     setMemoryNotes,
+    setSystemPrompt,
+    setEnabledTools,
     clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,
