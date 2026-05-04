@@ -323,8 +323,9 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
       } else {
         setDeployLogs((prev) => [...prev, "✓ Plik index.html przesłany.", `✓ URL podglądu: ${data.previewUrl ?? "—"}`, "Wdrożenie zakończone."]);
         if (data.previewUrl) {
-          setActiveProject((p) => p ? { ...p, live_url: data.previewUrl!, status: "live" } : p);
-          setProjects((ps) => ps.map((x) => x.id === activeProject.id ? { ...x, live_url: data.previewUrl!, status: "live" } : x));
+          const previewUrl = data.previewUrl;
+          setActiveProject((p) => p ? { ...p, live_url: previewUrl, status: "live" } : p);
+          setProjects((ps) => ps.map((x) => x.id === activeProject.id ? { ...x, live_url: previewUrl, status: "live" } : x));
         }
       }
     } catch (e) {
@@ -349,8 +350,9 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
       });
       const data = await res.json() as { liveUrl?: string; error?: string };
       if (data.liveUrl) {
-        setDomainResult(data.liveUrl);
-        setActiveProject((p) => p ? { ...p, live_url: data.liveUrl! } : p);
+        const liveUrl = data.liveUrl;
+        setDomainResult(liveUrl);
+        setActiveProject((p) => p ? { ...p, live_url: liveUrl } : p);
       } else {
         setDomainResult(`Błąd: ${data.error ?? "Nieznany błąd"}`);
       }
@@ -382,7 +384,7 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
           const parsed = JSON.parse(jsonMatch[0]) as { html?: string; css?: string; js?: string };
           if (parsed.html !== undefined) setHtml(parsed.html);
           if (parsed.css !== undefined) setCss(parsed.css);
-          if (parsed.js !== undefined) setJs(parsed.js ?? "");
+          if (parsed.js !== undefined) setJs(parsed.js);
         } catch { /* show raw response */ }
       }
     } catch (e) {

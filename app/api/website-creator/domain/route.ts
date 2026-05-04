@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
       type: "CNAME",
       name: fullDomain,
       content: cnameTarget,
-      ttl: 1,    // auto
+      // TTL 1 = "automatic" in Cloudflare's API (the actual TTL is managed by Cloudflare)
+      ttl: 1,
       proxied: true,
     };
 

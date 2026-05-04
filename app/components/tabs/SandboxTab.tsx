@@ -404,7 +404,9 @@ export function SandboxTab({ dark }: { dark: boolean }) {
                     <button type="button"
                       onClick={() => {
                         const payload = JSON.stringify({ html, css, js });
-                        const encoded = btoa(encodeURIComponent(payload).replace(/%([0-9A-F]{2})/g, (_, p) => String.fromCharCode(parseInt(p, 16))));
+                        // Encode UTF-8 bytes via TextEncoder so non-ASCII characters survive btoa()
+                        const bytes = new TextEncoder().encode(payload);
+                        const encoded = btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(""));
                         void navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?sandbox=${encoded}`);
                       }}
                       title="Kopiuj link do sandboxa" aria-label="Kopiuj link do sandboxa" className={sec}>

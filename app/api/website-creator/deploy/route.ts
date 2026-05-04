@@ -45,7 +45,11 @@ export async function POST(req: NextRequest) {
 
   // ── Simulated mode (no Northflank keys configured) ──────────────────────────
   if (!apiKey || !projectId) {
-    // Return a data-URL "preview" so the UI can show something without keys
+    // Return a data-URL so the UI can show a preview without real keys.
+    // Security note: the data-URL is displayed inside a sandboxed iframe
+    // (sandbox="allow-scripts") in the client, which prevents cross-origin access
+    // and limits XSS impact to the isolated sandbox context. No user data is
+    // persisted server-side in this simulated path.
     const encoded = Buffer.from(indexHtml).toString("base64");
     const dataUrl = `data:text/html;base64,${encoded}`;
     return Response.json({
