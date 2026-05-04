@@ -221,4 +221,141 @@ describe("POST /api/upload", () => {
     const textPart = userContent.find((c) => c.type === "text");
     expect(textPart?.text).toBe("What do you see in this image?");
   });
+
+  it("returns 401 when the user is not authenticated", async () => {
+    const { createClient } = jest.requireMock("@/lib/server") as {
+      createClient: jest.Mock;
+    };
+    createClient.mockResolvedValueOnce({
+      auth: {
+        getUser: jest.fn().mockResolvedValue({ data: { user: null } }),
+      },
+    });
+
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body: new FormData(),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("Authentication required");
+  });
+
+  it("returns 413 when the uploaded file exceeds the 100 MB size limit", async () => {
+    // Override the request's formData() to return a FormData whose File
+    // reports a size over the 100 MB limit without allocating that memory.
+    const file = new File(["tiny"], "large.png", { type: "image/png" });
+    Object.defineProperty(file, "size", { value: 101 * 1024 * 1024, configurable: true });
+
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("message", "What is this?");
+
+    const req = new Request("http://localhost/api/upload", { method: "POST" });
+    Object.defineProperty(req, "formData", {
+      value: jest.fn().mockResolvedValue(fd),
+      configurable: true,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as { error: string };
+    expect(body.error.toLowerCase()).toContain("too large");
+  });
+
+  it("returns 429 when the rate limit is exceeded", async () => {
+    const rateLimit = jest.requireMock("@/lib/rateLimit") as {
+      checkRateLimit: jest.Mock;
+      rateLimitedResponse: jest.Mock;
+    };
+    rateLimit.checkRateLimit.mockReturnValueOnce({ allowed: false, retryAfterMs: 5_000 });
+    rateLimit.rateLimitedResponse.mockReturnValueOnce(
+      new Response(JSON.stringify({ error: "Too many requests." }), { status: 429 })
+    );
+
+    const file = new File(["data"], "test.png", { type: "image/png" });
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(429);
+  });
+
+  it("streams an error token when an unsupported binary file is uploaded", async () => {
+    const file = new File([new Uint8Array([0x00, 0x01, 0x02])], "binary.bin", {
+      type: "application/octet-stream",
+    });
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("message", "What is this?");
+
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const res = await POST(req);
+    const events = await readSseEvents(res);
+    const errorEvent = events.find(
+      (e) => typeof e.token === "string" && (e.token as string).toLowerCase().includes("unsupported")
+    );
+    expect(errorEvent).toBeDefined();
+  });
+
+  it("processes a plain text file and emits the document model label", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Summary: test content." } }] })}`,
+        "data: [DONE]",
+      ])
+    );
+
+    const file = new File(["This is the document content."], "readme.txt", { type: "text/plain" });
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("message", "Summarize");
+
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const res = await POST(req);
+    const events = await readSseEvents(res);
+    expect(events.some((e) => e.model === "Gemini 2.5 Flash (Document)")).toBe(true);
+    const tokens = events.filter((e) => "token" in e).map((e) => e.token);
+    expect(tokens).toContain("Summary: test content.");
+  });
+
+  it("processes a TypeScript source file as a text document", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Code looks good." } }] })}`,
+        "data: [DONE]",
+      ])
+    );
+
+    const tsCode = "export function add(a: number, b: number): number { return a + b; }";
+    const file = new File([tsCode], "utils.ts", { type: "text/typescript" });
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("message", "Review this code");
+
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const res = await POST(req);
+    const events = await readSseEvents(res);
+    expect(events.some((e) => e.model === "Gemini 2.5 Flash (Document)")).toBe(true);
+  });
 });
