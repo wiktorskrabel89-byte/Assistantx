@@ -5,9 +5,9 @@ import {
   BookOpen,
   BrainCircuit,
   Check,
-  CodeXml,
   Database,
   FolderKanban,
+  Globe2,
   Grid2x2,
   LibraryBig,
   MessageSquareText,
@@ -30,13 +30,13 @@ export type AppNavigationTab =
   | "learning"
   | "projects"
   | "codebase"
-  | "scripts"
   | "prompt-library"
   | "knowledge-export"
   | "settings"
   | "notifications"
   | "ai-learning"
-  | "jarvis";
+  | "jarvis"
+  | "website-creator";
 
 type AppNavigationColumnProps = {
   dark: boolean;
@@ -70,6 +70,7 @@ const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen,     color: "from-sky-500 to-blue-600" },
   { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig,   color: "from-pink-500 to-rose-600" },
   { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2,       color: "from-indigo-500 to-violet-600" },
+  { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2,  color: "from-orange-500 to-amber-600" },
   { id: "ai-learning",      label: "AI Learning",     description: "Trenuj modele AI",      icon: BrainCircuit, color: "from-fuchsia-500 to-pink-600", adminOnly: true },
 ];
 
@@ -78,7 +79,6 @@ const CORE_CODE_TABS: { id: AppNavigationTab; label: string; icon: LucideIcon }[
   { id: "sandbox",  label: "Sandbox",  icon: SquareTerminal },
   { id: "projects", label: "Projekty", icon: FolderKanban },
   { id: "codebase", label: "Codebase", icon: Database },
-  { id: "scripts",  label: "Scripts",  icon: CodeXml },
 ];
 
 const ADD_ON_IDS = new Set(ADD_ON_ITEMS.map((a) => a.id));

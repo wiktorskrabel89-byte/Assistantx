@@ -12,9 +12,9 @@ import {
   ProjectsTab,
   PromptLibraryTab,
   SandboxTab,
-  ScriptsTab,
   SettingsTab,
 } from "./components/tabs";
+import { WebsiteCreatorTab } from "./components/tabs/WebsiteCreatorTab";
 import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
@@ -23,7 +23,7 @@ import type { AppMode } from "./lib/chat-types";
 
 // Tabs that are only available in AI Code mode (resets to "chat" if mode switches)
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
-  "sandbox", "codebase", "scripts", "projects",
+  "sandbox", "codebase", "projects",
 ];
 
 function TabContent({
@@ -48,8 +48,8 @@ function TabContent({
       return <ProjectsTab dark={state.dark} />;
     case "codebase":
       return <CodebaseTab dark={state.dark} />;
-    case "scripts":
-      return <ScriptsTab dark={state.dark} />;
+    case "website-creator":
+      return <WebsiteCreatorTab dark={state.dark} />;
     case "prompt-library":
       return <PromptLibraryTab dark={state.dark} />;
     case "knowledge-export":
