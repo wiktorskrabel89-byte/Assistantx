@@ -27,6 +27,7 @@ export type ChatListProps = {
   onResponseAction: (action: ResponseAction, text: string) => void;
   onCreateFollowUp: (prompt: string) => void;
   onSetFeedback: (messageId: string, value: MessageFeedback | null) => void;
+  onSetReviewText: (messageId: string, text: string) => void;
   onQuickStart: (text: string, mode?: Mode) => void;
   onFork?: (messageIndex: number) => void;
   assistantName: string;
@@ -56,6 +57,7 @@ export const ChatList = memo(function ChatList({
   onResponseAction,
   onCreateFollowUp,
   onSetFeedback,
+  onSetReviewText,
   onQuickStart,
   onFork,
   assistantName,
@@ -170,12 +172,14 @@ export const ChatList = memo(function ChatList({
             copied={copied}
             isStreaming={loading && index === chat.length - 1}
             reasoningOpen={openReasoning.has(entry.id)}
-            feedback={entry.feedback}
+            rating={entry.feedback}
+            reviewText={entry.reviewText}
             onCopyText={onCopyText}
             onToggleReasoning={onToggleReasoning}
             onResponseAction={onResponseAction}
             onCreateFollowUp={onCreateFollowUp}
-            onFeedbackChange={(value) => onSetFeedback(entry.id, value)}
+            onRatingChange={(value) => onSetFeedback(entry.id, value)}
+            onReviewTextChange={(text) => onSetReviewText(entry.id, text)}
             onFork={onFork ? () => onFork(index) : undefined}
           />
         </div>

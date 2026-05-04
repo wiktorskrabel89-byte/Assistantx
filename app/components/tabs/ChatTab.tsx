@@ -333,6 +333,17 @@ export function ChatTab() {
     });
   }, [activeChat.messages, currentConversationId, workspaceQueries.updateConversationMutation]);
 
+  const setMessageReviewText = useCallback((messageId: string, reviewText: string) => {
+    workspaceQueries.updateConversationMutation.mutate({
+      chatId: currentConversationId,
+      patch: {
+        messages: activeChat.messages.map((entry) => (
+          entry.id === messageId ? { ...entry, reviewText: reviewText || undefined } : entry
+        )),
+      },
+    });
+  }, [activeChat.messages, currentConversationId, workspaceQueries.updateConversationMutation]);
+
   const toggleReasoning = useCallback((id: string) => {
     setOpenReasoning((prev) => {
       const next = new Set(prev);
@@ -492,7 +503,7 @@ export function ChatTab() {
     }
 
     if (feedbacks.length > 0) {
-      sections.push("", "## Feedback", `- Rated assistant replies: ${feedbacks.length}`);
+      sections.push("", "## Recenzje", `- Ocenione odpowiedzi asystenta: ${feedbacks.length}`);
     }
 
     if (conversationKnowledge) {
@@ -569,6 +580,7 @@ export function ChatTab() {
         reasoning: entry.reasoning,
         routeReason: entry.routeReason,
         feedback: entry.feedback,
+        reviewText: entry.reviewText,
       })),
     };
     const share = `${window.location.origin}${window.location.pathname}?share=${encodeURIComponent(toBase64(JSON.stringify(payload)))}`;
@@ -678,6 +690,7 @@ export function ChatTab() {
                   onResponseAction={applyResponseAction}
                   onCreateFollowUp={createFollowUp}
                   onSetFeedback={setMessageFeedback}
+                  onSetReviewText={setMessageReviewText}
                   onFork={handleFork}
                   onQuickStart={(text, nextMode) => {
                     if (nextMode) setWorkspaceMode(nextMode);
