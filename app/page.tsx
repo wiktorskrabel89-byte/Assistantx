@@ -23,8 +23,7 @@ import type { AppMode } from "./lib/chat-types";
 
 // Tabs that are only available in AI Code mode (resets to "chat" if mode switches)
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
-  "sandbox", "codebase", "scripts", "projects", "prompt-library",
-  "learning", "ai-learning", "jarvis", "clinical", "knowledge-export",
+  "sandbox", "codebase", "scripts", "projects",
 ];
 
 function TabContent({

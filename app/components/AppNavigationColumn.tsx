@@ -115,7 +115,6 @@ export function AppNavigationColumn({
   /** Eligible add-ons for this user / mode */
   const eligibleAddOns = ADD_ON_ITEMS.filter((item) => {
     if (item.adminOnly && !isAdmin) return false;
-    if (appMode !== "ai-code" && item.id !== "jarvis") return false;
     if (appsSearch.trim() !== "" &&
       !item.label.toLowerCase().includes(appsSearch.toLowerCase()) &&
       !item.description.toLowerCase().includes(appsSearch.toLowerCase())) return false;
