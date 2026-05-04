@@ -1,5 +1,6 @@
 "use client";
 
+import type { OnMount } from "@monaco-editor/react";
 import dynamic from "next/dynamic";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
@@ -29,6 +30,8 @@ export type SandboxEditorProps = {
   label?: string;
   /** Label text colour (CSS colour string) */
   labelColor?: string;
+  /** Called once the Monaco editor instance mounts — use to access selection APIs */
+  onEditorMount?: OnMount;
 };
 
 export function SandboxEditor({
@@ -40,6 +43,7 @@ export function SandboxEditor({
   readOnly = false,
   label,
   labelColor,
+  onEditorMount,
 }: SandboxEditorProps) {
   const [copied, setCopied] = useState(false);
 
@@ -77,6 +81,7 @@ export function SandboxEditor({
           language={language}
           value={value}
           onChange={(v) => onChange?.(v ?? "")}
+          onMount={onEditorMount}
           theme={dark ? "vs-dark" : "light"}
           options={{
             fontSize: 13,

@@ -109,11 +109,11 @@ async function streamChatRequest(
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function SandboxTab({ dark }: { dark: boolean }) {
+export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?: { html: string; css: string; js: string } }) {
   const [sandboxMode, setSandboxMode] = useState<SandboxMode>("html-css-js");
-  const [html, setHtml] = useState(INITIAL_HTML);
-  const [css, setCss] = useState(INITIAL_CSS);
-  const [js, setJs] = useState(INITIAL_JS);
+  const [html, setHtml] = useState(initialCode?.html ?? INITIAL_HTML);
+  const [css, setCss] = useState(initialCode?.css ?? INITIAL_CSS);
+  const [js, setJs] = useState(initialCode?.js ?? INITIAL_JS);
   const [singleCode, setSingleCode] = useState("");
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showLangDropdown, setShowLangDropdown] = useState(false);

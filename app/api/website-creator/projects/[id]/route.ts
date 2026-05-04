@@ -52,7 +52,7 @@ export async function PATCH(
 
   // Only allow updating safe fields — updated_at is handled automatically by the DB trigger
   const allowed: Record<string, unknown> = {};
-  const patchableFields = ["name", "html", "css", "js", "status", "live_url", "northflank_service_id", "cloudflare_record_id"] as const;
+  const patchableFields = ["name", "html", "css", "js", "pages", "status", "live_url", "preview_url", "northflank_service_id", "cloudflare_record_id"] as const;
   for (const field of patchableFields) {
     if (field in body) allowed[field] = body[field];
   }

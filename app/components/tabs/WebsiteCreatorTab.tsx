@@ -7,16 +7,24 @@ import {
   ChevronRight,
   Clock,
   ExternalLink,
+  Eye,
+  File,
+  FilePlus,
   Globe2,
+  History,
+  LayoutGrid,
   Loader2,
+  Plus,
   PlusCircle,
   RefreshCw,
   Rocket,
   Sparkles,
   Terminal,
   Trash2,
+  Wand2,
   X,
 } from "lucide-react";
+import type { OnMount } from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -28,15 +36,20 @@ import { createClient } from "@/lib/client";
 
 type ProjectStatus = "draft" | "deploying" | "live" | "error";
 
+type Page = { id: string; name: string; html: string };
+type Snapshot = { id: string; label?: string; created_at: string };
+
 type Project = {
   id: string;
   name: string;
   html: string;
   css: string;
   js: string;
+  pages: Page[];
   northflank_service_id: string | null;
   cloudflare_record_id: string | null;
   live_url: string | null;
+  preview_url: string | null;
   status: ProjectStatus;
   created_at: string;
   updated_at: string;
@@ -93,6 +106,53 @@ const TEMPLATES: Template[] = [
     html: `<div class="layout"><aside class="sidebar"><h2>Panel</h2><nav><a href="#">Przegląd</a><a href="#">Analityka</a><a href="#">Użytkownicy</a><a href="#">Ustawienia</a></nav></aside><main class="main"><h1>Przegląd</h1><div class="cards"><div class="card"><div class="card-num">1 234</div><div class="card-label">Użytkownicy</div></div><div class="card"><div class="card-num">56 789 zł</div><div class="card-label">Przychód</div></div><div class="card"><div class="card-num">98.5%</div><div class="card-label">Dostępność</div></div></div></main></div>`,
     css: `*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui;background:#f1f5f9}.layout{display:flex;min-height:100vh}.sidebar{width:220px;background:#1e293b;color:#e2e8f0;padding:24px 16px;flex-shrink:0}.sidebar h2{font-size:1rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:20px}.sidebar nav a{display:block;padding:10px 12px;border-radius:8px;color:#cbd5e1;text-decoration:none;font-size:.875rem;margin-bottom:4px;transition:background .15s}.sidebar nav a:hover{background:#334155;color:white}.main{flex:1;padding:32px}.main h1{font-size:1.5rem;font-weight:700;color:#1e293b;margin-bottom:24px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:white;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.07)}.card-num{font-size:2rem;font-weight:700;color:#1e293b}.card-label{font-size:.875rem;color:#64748b;margin-top:4px}`,
     js: "",
+  },
+];
+
+// ─── Reusable component snippets for the component library ────────────────────
+
+const COMPONENT_SNIPPETS = [
+  {
+    id: "nav",
+    label: "Nawigacja",
+    html: `<nav class="navbar">\n  <span class="logo">Brand</span>\n  <ul>\n    <li><a href="#">Strona główna</a></li>\n    <li><a href="#">O nas</a></li>\n    <li><a href="#">Kontakt</a></li>\n  </ul>\n</nav>`,
+    css: `.navbar{display:flex;justify-content:space-between;align-items:center;padding:16px 32px;background:#1e293b;color:#e2e8f0}.navbar .logo{font-weight:700;font-size:1.25rem;color:#fff}.navbar ul{display:flex;gap:20px;list-style:none;margin:0;padding:0}.navbar a{color:#94a3b8;text-decoration:none;font-size:.875rem;transition:color .15s}.navbar a:hover{color:#fff}`,
+  },
+  {
+    id: "hero",
+    label: "Sekcja hero",
+    html: `<section class="hero">\n  <h1>Witaj w naszej aplikacji</h1>\n  <p>Krótki opis oferty i wartości dla użytkownika.</p>\n  <a href="#" class="btn-hero">Zacznij teraz</a>\n</section>`,
+    css: `.hero{text-align:center;padding:100px 40px;background:linear-gradient(135deg,#0f172a,#1e3a8a)}.hero h1{font-size:2.5rem;font-weight:800;color:#fff;margin-bottom:16px}.hero p{font-size:1.125rem;color:#93c5fd;max-width:520px;margin:0 auto 32px}.btn-hero{display:inline-block;padding:14px 32px;background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:600}`,
+  },
+  {
+    id: "cards",
+    label: "Karty z ikonami",
+    html: `<section class="cards-section">\n  <div class="cards">\n    <div class="card"><div class="card-icon">⚡</div><h3>Szybkość</h3><p>Błyskawiczna wydajność.</p></div>\n    <div class="card"><div class="card-icon">🔒</div><h3>Bezpieczeństwo</h3><p>Twoje dane są chronione.</p></div>\n    <div class="card"><div class="card-icon">🎯</div><h3>Precyzja</h3><p>Dokładne wyniki.</p></div>\n  </div>\n</section>`,
+    css: `.cards-section{padding:60px 40px;background:#f8fafc}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:960px;margin:0 auto}.card{background:#fff;border-radius:16px;padding:32px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.06)}.card-icon{font-size:2rem;margin-bottom:16px}.card h3{font-size:1.125rem;font-weight:700;color:#1e293b;margin-bottom:8px}.card p{font-size:.875rem;color:#64748b;line-height:1.6}`,
+  },
+  {
+    id: "cta",
+    label: "Wezwanie do działania",
+    html: `<section class="cta-section">\n  <h2>Zacznij bezpłatnie już dziś</h2>\n  <p>Dołącz do tysięcy zadowolonych użytkowników.</p>\n  <div class="cta-form">\n    <input type="email" placeholder="Twój adres e-mail">\n    <button>Dołącz</button>\n  </div>\n</section>`,
+    css: `.cta-section{text-align:center;padding:80px 40px;background:linear-gradient(135deg,#3b82f6,#8b5cf6)}.cta-section h2{font-size:2rem;font-weight:800;color:#fff;margin-bottom:12px}.cta-section p{color:#e0e7ff;margin-bottom:32px}.cta-form{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.cta-form input{padding:12px 16px;border:none;border-radius:10px;font-size:1rem;width:280px;outline:none}.cta-form button{padding:12px 28px;background:#fff;color:#3b82f6;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer}`,
+  },
+  {
+    id: "testimonial",
+    label: "Opinia klienta",
+    html: `<section class="testimonial">\n  <blockquote>"Ten produkt całkowicie zmienił sposób, w jaki pracuję!"</blockquote>\n  <div class="author">\n    <div class="avatar">JK</div>\n    <div><strong>Jan Kowalski</strong><span>CEO, Przykładowa Firma</span></div>\n  </div>\n</section>`,
+    css: `.testimonial{padding:60px 40px;text-align:center;background:#fff}.testimonial blockquote{font-size:1.25rem;font-style:italic;color:#334155;max-width:600px;margin:0 auto 24px;line-height:1.7}.author{display:flex;align-items:center;justify-content:center;gap:12px}.avatar{width:44px;height:44px;border-radius:50%;background:#3b82f6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.875rem}.author strong{display:block;color:#1e293b;font-size:.875rem}.author span{font-size:.75rem;color:#94a3b8;display:block}`,
+  },
+  {
+    id: "footer",
+    label: "Stopka",
+    html: `<footer class="footer">\n  <div class="footer-cols">\n    <div><h4>Firma</h4><a href="#">O nas</a><a href="#">Kariera</a></div>\n    <div><h4>Produkt</h4><a href="#">Funkcje</a><a href="#">Cennik</a></div>\n    <div><h4>Wsparcie</h4><a href="#">Pomoc</a><a href="#">Kontakt</a></div>\n  </div>\n  <p class="copy">© 2026 MojaFirma. Wszelkie prawa zastrzeżone.</p>\n</footer>`,
+    css: `.footer{background:#0f172a;color:#94a3b8;padding:48px 40px 24px}.footer-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;max-width:960px;margin:0 auto 32px}.footer h4{color:#e2e8f0;font-size:.875rem;font-weight:600;margin-bottom:12px}.footer a{display:block;font-size:.8125rem;color:#94a3b8;text-decoration:none;margin-bottom:8px}.footer a:hover{color:#fff}.copy{text-align:center;font-size:.75rem;border-top:1px solid #1e293b;padding-top:24px;max-width:960px;margin:0 auto}`,
+  },
+  {
+    id: "pricing",
+    label: "Cennik",
+    html: `<section class="pricing">\n  <h2>Wybierz swój plan</h2>\n  <div class="plans">\n    <div class="plan"><h3>Starter</h3><div class="price">0 zł<span>/mies.</span></div><ul><li>5 projektów</li><li>1 GB przestrzeni</li></ul><a href="#" class="btn-plan">Zacznij</a></div>\n    <div class="plan featured"><h3>Pro</h3><div class="price">49 zł<span>/mies.</span></div><ul><li>Nieograniczone projekty</li><li>10 GB przestrzeni</li></ul><a href="#" class="btn-plan">Wybierz Pro</a></div>\n  </div>\n</section>`,
+    css: `.pricing{padding:60px 40px;background:#f8fafc;text-align:center}.pricing h2{font-size:1.75rem;font-weight:800;color:#1e293b;margin-bottom:40px}.plans{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;max-width:600px;margin:0 auto}.plan{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:32px}.plan.featured{border-color:#3b82f6;box-shadow:0 4px 24px rgba(59,130,246,.2)}.plan h3{font-size:1rem;font-weight:700;color:#475569;margin-bottom:16px}.price{font-size:2rem;font-weight:800;color:#1e293b;margin-bottom:20px}.price span{font-size:.875rem;color:#94a3b8}.plan ul{list-style:none;padding:0;margin:0 0 24px;text-align:left}.plan li{padding:6px 0;font-size:.875rem;color:#475569;border-bottom:1px solid #f1f5f9}.btn-plan{display:block;padding:10px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:.875rem}`,
   },
 ];
 
@@ -158,7 +218,7 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
+export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; onOpenInSandbox?: (html: string, css: string, js: string) => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(false);
@@ -172,20 +232,44 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
   const [js, setJs] = useState(TEMPLATES[0].js);
   const [previewDoc, setPreviewDoc] = useState(() => buildPreview(TEMPLATES[0].html, TEMPLATES[0].css, TEMPLATES[0].js));
 
+  // Multi-page support
+  const [pages, setPages] = useState<Page[]>([]);
+  const [activePageId, setActivePageId] = useState<string | null>(null);
+  // Ref to preserve the main page html when a sub-page is active
+  const mainHtmlRef = useRef(TEMPLATES[0].html);
+
   // Right panel
-  const [rightTab, setRightTab] = useState<"preview" | "logs" | "ai">("preview");
+  const [rightTab, setRightTab] = useState<"preview" | "logs" | "ai" | "history">("preview");
   const [deployLogs, setDeployLogs] = useState<string[]>([]);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState("");
   const [subdomainInput, setSubdomainInput] = useState("");
   const [domainLoading, setDomainLoading] = useState(false);
   const [domainResult, setDomainResult] = useState("");
+  // Separate staging URL from the live (Cloudflare) URL
+  const [previewDeployUrl, setPreviewDeployUrl] = useState<string | null>(null);
 
   // AI
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const aiAbortRef = useRef<AbortController | null>(null);
+
+  // HTML editor Monaco instance for selection-based AI
+  type MonacoEditorInstance = Parameters<OnMount>[0];
+  const htmlEditorRef = useRef<MonacoEditorInstance | null>(null);
+
+  // Component library panel
+  const [showComponentPanel, setShowComponentPanel] = useState(false);
+
+  // Version history
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [loadingSnapshots, setLoadingSnapshots] = useState(false);
+
+  // Auto-save status
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autoSaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Preview debounce
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,6 +280,37 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
     }, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [html, css, js]);
+
+  // Auto-save: debounce 3 s whenever code changes for a persisted project
+  useEffect(() => {
+    if (!activeProject || activeProject.id.startsWith("local-")) return;
+    if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
+    setSaveStatus("idle");
+    autoSaveDebounceRef.current = setTimeout(async () => {
+      setSaveStatus("saving");
+      try {
+        const token = await getAuthToken();
+        if (!token) { setSaveStatus("error"); return; }
+        const htmlToSave = activePageId === null ? html : mainHtmlRef.current;
+        const pagesToSave = activePageId !== null
+          ? pages.map((pg) => pg.id === activePageId ? { ...pg, html } : pg)
+          : pages;
+        const res = await fetch(`/api/website-creator/projects/${activeProject.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ html: htmlToSave, css, js, pages: pagesToSave }),
+        });
+        setSaveStatus(res.ok ? "saved" : "error");
+      } catch {
+        setSaveStatus("error");
+      } finally {
+        if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+        saveStatusTimerRef.current = setTimeout(() => setSaveStatus("idle"), 3000);
+      }
+    }, 3000);
+    return () => { if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [html, css, js, pages, activeProject, activePageId]);
 
   // Load projects on mount
   useEffect(() => {
@@ -232,10 +347,14 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
     try {
       const token = await getAuthToken();
       if (!token) return;
+      const htmlToSave = activePageId === null ? html : mainHtmlRef.current;
+      const pagesToSave = activePageId !== null
+        ? pages.map((pg) => pg.id === activePageId ? { ...pg, html } : pg)
+        : pages;
       await fetch(`/api/website-creator/projects/${activeProject.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ html, css, js, name: activeProject.name }),
+        body: JSON.stringify({ html: htmlToSave, css, js, pages: pagesToSave, name: activeProject.name }),
       });
       await loadProjects();
     } catch { /* ignore */ }
@@ -253,9 +372,11 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
           html: template.html,
           css: template.css,
           js: template.js,
+          pages: [],
           northflank_service_id: null,
           cloudflare_record_id: null,
           live_url: null,
+          preview_url: null,
           status: "draft",
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -282,9 +403,15 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
     setHtml(p.html);
     setCss(p.css);
     setJs(p.js);
+    setPages(p.pages ?? []);
+    setActivePageId(null);
+    mainHtmlRef.current = p.html;
     setDeployLogs([]);
     setDeployError("");
     setDomainResult("");
+    setPreviewDeployUrl(p.preview_url ?? null);
+    setSaveStatus("idle");
+    setSnapshots([]);
   }
 
   async function deleteProject(p: Project) {
@@ -321,11 +448,23 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
         setDeployError(data.error ?? "Wdrożenie nie powiodło się.");
         setDeployLogs((prev) => [...prev, `✗ ${data.error ?? "Nieznany błąd"}`]);
       } else {
-        setDeployLogs((prev) => [...prev, "✓ Plik index.html przesłany.", `✓ URL podglądu: ${data.previewUrl ?? "—"}`, "Wdrożenie zakończone."]);
+        setDeployLogs((prev) => [...prev, "✓ Plik index.html przesłany.", `✓ URL podglądu: ${data.previewUrl ?? "—"}`, "Wdrożenie zakończone. Przypisz domenę, by opublikować."]);
         if (data.previewUrl) {
-          const previewUrl = data.previewUrl;
-          setActiveProject((p) => p ? { ...p, live_url: previewUrl, status: "live" } : p);
-          setProjects((ps) => ps.map((x) => x.id === activeProject.id ? { ...x, live_url: previewUrl, status: "live" } : x));
+          const stagingUrl = data.previewUrl;
+          setPreviewDeployUrl(stagingUrl);
+          // Store preview_url in DB without marking as "live" yet
+          setActiveProject((p) => p ? { ...p, preview_url: stagingUrl, status: "deploying" } : p);
+          setProjects((ps) => ps.map((x) => x.id === activeProject.id ? { ...x, preview_url: stagingUrl, status: "deploying" } : x));
+          const token = await getAuthToken();
+          if (token && !activeProject.id.startsWith("local-")) {
+            void fetch(`/api/website-creator/projects/${activeProject.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ preview_url: stagingUrl, status: "deploying" }),
+            });
+          }
+          // Auto-save a snapshot on every deploy
+          void saveSnapshot("Przed wdrożeniem");
         }
       }
     } catch (e) {
@@ -343,16 +482,26 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
     setDomainResult("");
     try {
       const token = await getAuthToken();
+      // Use the staging preview URL as the target (falls back to live_url for backwards compat)
+      const targetUrl = previewDeployUrl ?? activeProject?.preview_url ?? activeProject?.live_url;
       const res = await fetch("/api/website-creator/domain", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ projectId: activeProject?.id, subdomain: subdomainInput.trim(), targetUrl: activeProject?.live_url }),
+        body: JSON.stringify({ projectId: activeProject?.id, subdomain: subdomainInput.trim(), targetUrl }),
       });
       const data = await res.json() as { liveUrl?: string; error?: string };
       if (data.liveUrl) {
         const liveUrl = data.liveUrl;
         setDomainResult(liveUrl);
-        setActiveProject((p) => p ? { ...p, live_url: liveUrl } : p);
+        setActiveProject((p) => p ? { ...p, live_url: liveUrl, status: "live" } : p);
+        setProjects((ps) => ps.map((x) => x.id === activeProject?.id ? { ...x, live_url: liveUrl, status: "live" } : x));
+        if (token && activeProject && !activeProject.id.startsWith("local-")) {
+          void fetch(`/api/website-creator/projects/${activeProject.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ live_url: liveUrl, status: "live" }),
+          });
+        }
       } else {
         setDomainResult(`Błąd: ${data.error ?? "Nieznany błąd"}`);
       }
@@ -410,6 +559,149 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
     } finally {
       setAiLoading(false);
     }
+  }
+
+  // ── AI: improve selected HTML fragment ───────────────────────────────────────
+  async function improveSelection() {
+    const editor = htmlEditorRef.current;
+    if (!editor) return;
+    const selection = editor.getSelection();
+    const model = editor.getModel();
+    const selectedText = selection && !selection.isEmpty() ? (model?.getValueInRange(selection) ?? "") : "";
+    const targetCode = selectedText.trim() || html;
+    const prompt = selectedText.trim()
+      ? `Popraw i ulepsz poniższy fragment kodu HTML. Odpowiedz TYLKO ulepszoną wersją tego fragmentu — bez żadnych wyjaśnień ani bloków markdown:\n\n${targetCode}`
+      : `Popraw i ulepsz poniższy kod HTML. Odpowiedz TYLKO ulepszonym kodem HTML — bez wyjaśnień:\n\n${targetCode}`;
+    setRightTab("ai");
+    aiAbortRef.current?.abort();
+    aiAbortRef.current = new AbortController();
+    setAiResponse("");
+    setAiLoading(true);
+    let full = "";
+    try {
+      await streamChat(prompt, aiAbortRef.current.signal, (t) => { full += t; setAiResponse(full); });
+      // If there was a real selection, apply the result back into the editor
+      if (selectedText.trim() && selection && model) {
+        const improved = full.trim();
+        if (improved) {
+          editor.executeEdits("ai-improve", [{ range: selection, text: improved }]);
+        }
+      }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setAiResponse("Błąd.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  // ── Version snapshots ─────────────────────────────────────────────────────────
+  async function loadSnapshots() {
+    if (!activeProject || activeProject.id.startsWith("local-")) return;
+    setLoadingSnapshots(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(`/api/website-creator/snapshots?projectId=${activeProject.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as { snapshots: Snapshot[] };
+        setSnapshots(data.snapshots ?? []);
+      }
+    } catch { /* ignore */ } finally {
+      setLoadingSnapshots(false);
+    }
+  }
+
+  async function saveSnapshot(label?: string) {
+    if (!activeProject || activeProject.id.startsWith("local-")) return;
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const htmlToSave = activePageId === null ? html : mainHtmlRef.current;
+      const pagesToSave = activePageId !== null
+        ? pages.map((pg) => pg.id === activePageId ? { ...pg, html } : pg)
+        : pages;
+      await fetch("/api/website-creator/snapshots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ projectId: activeProject.id, html: htmlToSave, css, js, pages: pagesToSave, label }),
+      });
+      if (rightTab === "history") await loadSnapshots();
+    } catch { /* ignore */ }
+  }
+
+  async function restoreSnapshot(snapshotId: string) {
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(`/api/website-creator/snapshots/${snapshotId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as { snapshot: { html: string; css: string; js: string; pages: Page[] } };
+        const { snapshot } = data;
+        setHtml(snapshot.html);
+        setCss(snapshot.css);
+        setJs(snapshot.js);
+        setPages(snapshot.pages ?? []);
+        setActivePageId(null);
+        mainHtmlRef.current = snapshot.html;
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function deleteSnapshot(snapshotId: string) {
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      await fetch(`/api/website-creator/snapshots/${snapshotId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setSnapshots((prev) => prev.filter((s) => s.id !== snapshotId));
+    } catch { /* ignore */ }
+  }
+
+  // ── Multi-page management ─────────────────────────────────────────────────────
+  function switchPage(pageId: string | null) {
+    if (pageId === activePageId) return;
+    // Save current page html before switching
+    if (activePageId === null) {
+      mainHtmlRef.current = html;
+    } else {
+      setPages((prev) => prev.map((pg) => pg.id === activePageId ? { ...pg, html } : pg));
+    }
+    setActivePageId(pageId);
+    if (pageId === null) {
+      setHtml(mainHtmlRef.current);
+    } else {
+      const page = pages.find((p) => p.id === pageId);
+      if (page) setHtml(page.html);
+    }
+  }
+
+  function addPage() {
+    const id = `page-${Date.now()}`;
+    const name = `strona-${pages.length + 2}.html`;
+    const newPage: Page = { id, name, html: `<h1>${name}</h1>\n<p>Treść strony...</p>` };
+    setPages((p) => [...p, newPage]);
+    switchPage(id);
+  }
+
+  function deletePage(pageId: string) {
+    setPages((p) => p.filter((pg) => pg.id !== pageId));
+    if (activePageId === pageId) {
+      setActivePageId(null);
+      setHtml(mainHtmlRef.current);
+    }
+  }
+
+  // ── Component snippet insertion ───────────────────────────────────────────────
+  function insertSnippet(snippet: typeof COMPONENT_SNIPPETS[0]) {
+    setHtml((prev) => prev + "\n\n" + snippet.html);
+    setCss((prev) => prev + "\n\n" + snippet.css);
+    setShowComponentPanel(false);
   }
 
   // Styling
@@ -485,7 +777,7 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
       <div className="flex min-h-0 flex-1 flex-col border-r" style={{ borderColor: dark2 ? "#334155" : "#e2e8f0" }}>
         {/* Project overview card */}
         {activeProject ? (
-          <div className={`flex flex-shrink-0 items-center gap-3 border-b px-4 py-2.5 ${dark2 ? "border-slate-700 bg-slate-900/60" : "border-slate-200 bg-white"}`}>
+          <div className={`flex flex-shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2.5 ${dark2 ? "border-slate-700 bg-slate-900/60" : "border-slate-200 bg-white"}`}>
             {editingName ? (
               <input autoFocus value={nameInput} onChange={(e) => setNameInput(e.target.value)}
                 onBlur={async () => {
@@ -516,17 +808,40 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
             <StatusBadge status={activeProject.status} />
             {activeProject.live_url && (
               <a href={activeProject.live_url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[10px] text-sky-400 hover:underline">
+                className="flex items-center gap-1 text-[10px] text-emerald-400 hover:underline">
                 <ExternalLink className="h-3 w-3" />
-                <span className="max-w-[120px] truncate">{activeProject.live_url}</span>
+                <span className="max-w-[100px] truncate">Live</span>
               </a>
+            )}
+            {/* Auto-save indicator */}
+            {saveStatus !== "idle" && (
+              <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                saveStatus === "saving" ? (dark2 ? "bg-slate-700 text-slate-400" : "bg-slate-100 text-slate-500") :
+                saveStatus === "saved"  ? (dark2 ? "bg-emerald-900/40 text-emerald-400" : "bg-emerald-50 text-emerald-600") :
+                (dark2 ? "bg-red-900/40 text-red-400" : "bg-red-50 text-red-500")
+              }`}>
+                {saveStatus === "saving" && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+                {saveStatus === "saved" && <CheckCircle2 className="h-2.5 w-2.5" />}
+                {saveStatus === "saving" ? "Zapisywanie…" : saveStatus === "saved" ? "Zapisano" : "Błąd zapisu"}
+              </span>
             )}
             <div className="flex-1" />
             <span className={`hidden items-center gap-1 text-[10px] sm:flex ${dark2 ? "text-slate-500" : "text-slate-400"}`}>
               <Clock className="h-3 w-3" />
               {new Date(activeProject.updated_at).toLocaleString("pl-PL")}
             </span>
-            <button type="button" onClick={() => void saveActiveProject()} className={sec}>Zapisz</button>
+            {onOpenInSandbox && (
+              <button type="button"
+                onClick={() => onOpenInSandbox(html, css, js)}
+                title="Otwórz w Sandboxie" aria-label="Otwórz w Sandboxie"
+                className={sec}>
+                <Eye className="h-3.5 w-3.5 text-sky-400" />
+                <span className="hidden sm:inline">Sandbox</span>
+              </button>
+            )}
+            <button type="button" onClick={() => void saveActiveProject()} className={sec}>
+              Zapisz
+            </button>
             <button type="button" onClick={() => void deployProject()} disabled={deploying} className={`${pri} disabled:opacity-50`}>
               {deploying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
               {deploying ? "Wdrażanie..." : "Wdróż"}
@@ -550,16 +865,78 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
             placeholder="Opisz stronę do wygenerowania... (np. strona portfolio dla fotografa)"
             className={`flex-1 bg-transparent text-xs outline-none ${dark2 ? "text-slate-300 placeholder-slate-600" : "text-slate-700 placeholder-slate-400"}`}
           />
+          <button type="button" onClick={() => void improveSelection()}
+            title="Ulepsz zaznaczony fragment HTML" aria-label="Ulepsz zaznaczony fragment HTML"
+            className={`${sec} text-xs px-2 py-1`}>
+            <Wand2 className="h-3 w-3 text-violet-400" /><span className="hidden md:inline">Ulepsz</span>
+          </button>
+          <button type="button" onClick={() => setShowComponentPanel((v) => !v)}
+            title="Biblioteka komponentów" aria-label="Biblioteka komponentów"
+            className={`${sec} text-xs px-2 py-1`}>
+            <LayoutGrid className="h-3 w-3 text-emerald-400" /><span className="hidden md:inline">Komponenty</span>
+          </button>
           <button type="button" onClick={() => { if (aiPrompt.trim()) { void generateCode(aiPrompt); setAiPrompt(""); } }}
             disabled={aiLoading || !aiPrompt.trim()} className={`${pri} disabled:opacity-40 text-xs px-2.5 py-1.5`}>
             {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Sparkles className="h-3.5 w-3.5" />Generuj</>}
           </button>
         </div>
 
+        {/* Component library panel */}
+        {showComponentPanel && (
+          <div className={`flex-shrink-0 border-b max-h-52 overflow-y-auto ${dark2 ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-slate-50"}`}>
+            <div className={`flex items-center justify-between px-4 py-2 text-[10px] font-semibold uppercase tracking-wide ${dark2 ? "text-slate-500" : "text-slate-400"}`}>
+              <span className="flex items-center gap-1.5"><LayoutGrid className="h-3 w-3" />Biblioteka komponentów</span>
+              <button type="button" onClick={() => setShowComponentPanel(false)} title="Zamknij" aria-label="Zamknij"
+                className={dark2 ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-700"}>
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 px-4 pb-3 md:grid-cols-3 lg:grid-cols-4">
+              {COMPONENT_SNIPPETS.map((snippet) => (
+                <button key={snippet.id} type="button" onClick={() => insertSnippet(snippet)}
+                  className={`flex flex-col items-start rounded-xl border p-3 text-left text-xs transition-all ${dark2 ? "border-slate-700 bg-slate-800 hover:border-emerald-500/60 hover:bg-slate-700" : "border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50/50"}`}>
+                  <span className={`font-semibold ${dark2 ? "text-slate-200" : "text-slate-800"}`}>{snippet.label}</span>
+                  <span className={`mt-0.5 text-[10px] ${dark2 ? "text-slate-500" : "text-slate-400"}`}>HTML + CSS</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Multi-page tab bar */}
+        {activeProject && (
+          <div className={`flex flex-shrink-0 items-center gap-1 border-b px-3 py-1 overflow-x-auto ${dark2 ? "border-slate-700 bg-slate-900/30" : "border-slate-100 bg-slate-50/60"}`}>
+            {/* Main page tab */}
+            <button type="button" onClick={() => switchPage(null)}
+              className={`flex flex-shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${activePageId === null ? (dark2 ? "bg-slate-700 text-white" : "bg-orange-100 text-orange-700") : (dark2 ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700")}`}>
+              <File className="h-3 w-3" />index.html
+            </button>
+            {/* Additional pages */}
+            {pages.map((page) => (
+              <div key={page.id} className="group relative flex flex-shrink-0 items-center">
+                <button type="button" onClick={() => switchPage(page.id)}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${activePageId === page.id ? (dark2 ? "bg-slate-700 text-white" : "bg-orange-100 text-orange-700") : (dark2 ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700")}`}>
+                  <File className="h-3 w-3" />{page.name}
+                </button>
+                <button type="button" onClick={() => deletePage(page.id)}
+                  title="Usuń stronę" aria-label="Usuń stronę"
+                  className={`ml-0.5 hidden rounded p-0.5 group-hover:flex ${dark2 ? "text-slate-500 hover:text-red-400" : "text-slate-400 hover:text-red-500"}`}>
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={addPage} title="Dodaj stronę" aria-label="Dodaj stronę"
+              className={`ml-1 flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition-colors ${dark2 ? "text-slate-500 hover:bg-slate-800 hover:text-emerald-400" : "text-slate-400 hover:bg-slate-100 hover:text-emerald-600"}`}>
+              <FilePlus className="h-3 w-3" /><span className="hidden sm:inline">Dodaj stronę</span>
+            </button>
+          </div>
+        )}
+
         {/* Three editors */}
         <div className="flex min-h-0 flex-1 flex-col divide-y divide-slate-700/60">
           <div className="min-h-0 flex-1">
-            <SandboxEditor language="html" value={html} onChange={setHtml} dark={dark2} height="100%" label="HTML" labelColor="#60a5fa" />
+            <SandboxEditor language="html" value={html} onChange={setHtml} dark={dark2} height="100%" label="HTML" labelColor="#60a5fa"
+              onEditorMount={(editor) => { htmlEditorRef.current = editor; }} />
           </div>
           <div className="min-h-0 flex-1">
             <SandboxEditor language="css" value={css} onChange={setCss} dark={dark2} height="100%" label="CSS" labelColor="#f97316" />
@@ -574,12 +951,15 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
       <div className={`flex w-96 flex-shrink-0 flex-col ${dark2 ? "bg-slate-900" : "bg-white"}`}>
         {/* Tabs */}
         <div className={`flex flex-shrink-0 border-b ${dark2 ? "border-slate-700" : "border-slate-200"}`}>
-          {(["preview", "logs", "ai"] as const).map((t) => {
-            const labels = { preview: "Podgląd", logs: "Logi", ai: "AI" };
-            const icons = { preview: Globe2, logs: Terminal, ai: Bot };
+          {(["preview", "logs", "ai", "history"] as const).map((t) => {
+            const labels = { preview: "Podgląd", logs: "Logi", ai: "AI", history: "Historia" };
+            const icons = { preview: Globe2, logs: Terminal, ai: Bot, history: History };
             const Icon = icons[t];
             return (
-              <button key={t} type="button" onClick={() => setRightTab(t)}
+              <button key={t} type="button" onClick={() => {
+                setRightTab(t);
+                if (t === "history" && snapshots.length === 0) void loadSnapshots();
+              }}
                 className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${rightTab === t ? (dark2 ? "border-b-2 border-orange-400 text-orange-400" : "border-b-2 border-orange-500 text-orange-600") : (dark2 ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-700")}`}>
                 <Icon className="h-3.5 w-3.5" />{labels[t]}
               </button>
@@ -591,6 +971,19 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
         {rightTab === "preview" && (
           <div className="flex min-h-0 flex-1 flex-col">
             <iframe srcDoc={previewDoc} title="Podgląd strony" className="min-h-0 flex-1 w-full border-none bg-white" sandbox="allow-scripts" />
+            {/* Staging URL (after deploy, before domain) */}
+            {previewDeployUrl && !activeProject?.live_url && (
+              <div className={`flex flex-shrink-0 items-center gap-2 border-t px-3 py-2 text-xs ${dark2 ? "border-slate-700 text-slate-400" : "border-slate-200 text-slate-500"}`}>
+                <Eye className="h-3.5 w-3.5 text-amber-400" />
+                <span className={`text-[10px] font-medium ${dark2 ? "text-amber-400" : "text-amber-600"}`}>Podgląd wdrożenia:</span>
+                <a href={previewDeployUrl} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-sky-400 hover:underline text-[10px]">
+                  {previewDeployUrl}
+                </a>
+                <button type="button" onClick={() => void navigator.clipboard.writeText(previewDeployUrl)}
+                  title="Kopiuj URL podglądu" aria-label="Kopiuj URL podglądu" className={sec}>Kopiuj</button>
+              </div>
+            )}
+            {/* Live URL (after domain assignment) */}
             {activeProject?.live_url && (
               <div className={`flex flex-shrink-0 items-center gap-2 border-t px-3 py-2 text-xs ${dark2 ? "border-slate-700 text-slate-400" : "border-slate-200 text-slate-500"}`}>
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
@@ -690,6 +1083,67 @@ export function WebsiteCreatorTab({ dark }: { dark: boolean }) {
                 <button type="button" onClick={() => aiAbortRef.current?.abort()} className={sec}>
                   <X className="h-3.5 w-3.5" />Stop
                 </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* History pane */}
+        {rightTab === "history" && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className={`flex flex-shrink-0 items-center justify-between border-b px-3 py-2 ${dark2 ? "border-slate-700" : "border-slate-200"}`}>
+              <span className={`text-xs font-semibold ${dark2 ? "text-slate-300" : "text-slate-700"}`}>Historia wersji</span>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => void saveSnapshot()}
+                  title="Zapisz snapshot" aria-label="Zapisz snapshot"
+                  className={`${sec} text-[10px] px-2 py-1`}>
+                  <Plus className="h-3 w-3" />Snapshot
+                </button>
+                <button type="button" onClick={() => void loadSnapshots()}
+                  title="Odśwież" aria-label="Odśwież"
+                  className={`rounded-lg p-1 ${dark2 ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800"}`}>
+                  <RefreshCw className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              {loadingSnapshots ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className={`h-5 w-5 animate-spin ${dark2 ? "text-slate-600" : "text-slate-400"}`} />
+                </div>
+              ) : snapshots.length === 0 ? (
+                <div className={`flex flex-col items-center gap-2 py-8 text-center text-xs ${dark2 ? "text-slate-600" : "text-slate-400"}`}>
+                  <History className="h-8 w-8 opacity-30" />
+                  <p>Brak zapisanych wersji.<br />Snapshotty są tworzone automatycznie przy wdrożeniu.</p>
+                  {activeProject && !activeProject.id.startsWith("local-") && (
+                    <button type="button" onClick={() => void saveSnapshot()} className={`mt-1 ${sec}`}>
+                      <Plus className="h-3 w-3" />Zapisz teraz
+                    </button>
+                  )}
+                </div>
+              ) : (
+                snapshots.map((snap) => (
+                  <div key={snap.id} className={`flex items-center gap-2 rounded-xl border p-2 mb-1.5 ${dark2 ? "border-slate-700 bg-slate-800/60" : "border-slate-200 bg-white"}`}>
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-xs font-medium ${dark2 ? "text-slate-200" : "text-slate-800"}`}>
+                        {snap.label ?? "Snapshot"}
+                      </div>
+                      <div className={`text-[10px] ${dark2 ? "text-slate-500" : "text-slate-400"}`}>
+                        {new Date(snap.created_at).toLocaleString("pl-PL")}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => void restoreSnapshot(snap.id)}
+                      title="Przywróć" aria-label="Przywróć"
+                      className={`${sec} text-[10px] px-2 py-1`}>
+                      Przywróć
+                    </button>
+                    <button type="button" onClick={() => void deleteSnapshot(snap.id)}
+                      title="Usuń snapshot" aria-label="Usuń snapshot"
+                      className={`rounded-lg p-1 ${dark2 ? "text-slate-500 hover:text-red-400" : "text-slate-400 hover:text-red-500"}`}>
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))
               )}
             </div>
           </div>
