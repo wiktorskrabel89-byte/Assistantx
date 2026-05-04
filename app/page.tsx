@@ -115,8 +115,8 @@ function HomeContent() {
   const isChatTab = activeAppTab === "chat";
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${bg}`}>
-        <div className="mx-auto flex min-h-screen max-w-[1680px] gap-3 px-3 py-3">
+    <div className={`h-screen overflow-hidden transition-colors duration-300 ${bg}`}>
+        <div className="mx-auto flex h-full max-w-[1680px] gap-3 px-3 py-3">
           <AppNavigationColumn
             dark={state.dark}
             activeTab={activeAppTab}
