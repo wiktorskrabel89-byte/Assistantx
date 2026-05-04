@@ -8,12 +8,13 @@ import {
   CodeXml,
   Database,
   FolderKanban,
+  Grid2x2,
   LibraryBig,
   MessageSquareText,
   PlugZap,
+  Search,
   Settings2,
   Share2,
-  SlidersHorizontal,
   SquareTerminal,
   Stethoscope,
   X,
@@ -48,34 +49,39 @@ type AppNavigationColumnProps = {
   onSetAppMode: (mode: AppMode) => void;
   hiddenTabs: string[];
   onSetHiddenTabs: (tabs: string[]) => void;
+  /** User email for avatar initials */
+  userEmail?: string | null;
 };
 
-type AppNavigationItem = {
+type AddOnItem = {
   id: AppNavigationTab;
   label: string;
+  description: string;
   icon: LucideIcon;
-  /** Which modes show this tab by default (before user customisation) */
-  modes: AppMode[];
-  /** Whether it can ever be hidden by the user (Chat is always pinned) */
-  pinned?: boolean;
+  color: string;
 };
 
-const APP_NAVIGATION_ITEMS: AppNavigationItem[] = [
-  { id: "jarvis",           label: "Jarvis",          icon: BrainCircuit,     modes: ["ai-code"] },
-  { id: "chat",             label: "Chat",             icon: MessageSquareText, modes: ["ai-chat", "ai-code"], pinned: true },
-  { id: "clinical",         label: "Clinical",         icon: Stethoscope,      modes: ["ai-code"] },
-  { id: "sandbox",          label: "Sandbox",          icon: SquareTerminal,   modes: ["ai-code"] },
-  { id: "learning",         label: "Learning",         icon: BookOpen,         modes: ["ai-code"] },
-  { id: "projects",         label: "Projekty",         icon: FolderKanban,     modes: ["ai-code"] },
-  { id: "codebase",         label: "Codebase",         icon: Database,         modes: ["ai-code"] },
-  { id: "scripts",          label: "Scripts",          icon: CodeXml,          modes: ["ai-code"] },
-  { id: "prompt-library",   label: "Prompt Library",   icon: LibraryBig,       modes: ["ai-code"] },
-  { id: "knowledge-export", label: "Knowledge Export", icon: Share2,           modes: ["ai-code"] },
-  { id: "stats",            label: "Statystyki",       icon: BarChart2,        modes: ["ai-code"] },
-  { id: "settings",         label: "Ustawienia",       icon: Settings2,        modes: ["ai-chat", "ai-code"] },
-  { id: "notifications",    label: "Powiadomienia",    icon: Bell,             modes: ["ai-chat", "ai-code"] },
-  { id: "ai-learning",      label: "AI Learning",      icon: BrainCircuit,     modes: ["ai-code"] },
+const ADD_ON_ITEMS: AddOnItem[] = [
+  { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",        icon: BrainCircuit,  color: "from-violet-500 to-purple-600" },
+  { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",        icon: Stethoscope,   color: "from-emerald-500 to-teal-600" },
+  { id: "sandbox",          label: "Sandbox",         description: "Środowisko testowe",         icon: SquareTerminal, color: "from-slate-500 to-slate-700" },
+  { id: "learning",         label: "Learning",        description: "Materiały do nauki",         icon: BookOpen,      color: "from-sky-500 to-blue-600" },
+  { id: "projects",         label: "Projekty",        description: "Zarządzaj projektami",       icon: FolderKanban,  color: "from-amber-500 to-orange-600" },
+  { id: "codebase",         label: "Codebase",        description: "Przeglądaj kod",             icon: Database,      color: "from-cyan-500 to-sky-600" },
+  { id: "scripts",          label: "Scripts",         description: "Automatyzacja skryptów",     icon: CodeXml,       color: "from-lime-500 to-green-600" },
+  { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",        icon: LibraryBig,    color: "from-pink-500 to-rose-600" },
+  { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",         icon: Share2,        color: "from-indigo-500 to-violet-600" },
+  { id: "stats",            label: "Statystyki",      description: "Analizy i wykresy",          icon: BarChart2,     color: "from-orange-500 to-amber-600" },
+  { id: "ai-learning",      label: "AI Learning",     description: "Trenuj modele AI",           icon: BrainCircuit,  color: "from-fuchsia-500 to-pink-600" },
 ];
+
+function getInitials(email: string | null | undefined): string {
+  if (!email) return "?";
+  const local = email.split("@")[0];
+  const parts = local.split(/[._-]/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return local.slice(0, 2).toUpperCase();
+}
 
 export function AppNavigationColumn({
   dark,
@@ -86,33 +92,34 @@ export function AppNavigationColumn({
   onSetAppMode,
   hiddenTabs,
   onSetHiddenTabs,
+  userEmail,
 }: AppNavigationColumnProps) {
-  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [appsOpen, setAppsOpen] = useState(false);
+  const [appsSearch, setAppsSearch] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const shellClassName = dark
     ? "border-slate-800 bg-slate-900 text-slate-100"
     : "border-sky-200/60 bg-white/92 text-slate-900 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.28)]";
   const dividerClassName = dark ? "border-slate-800" : "border-slate-200/80";
-  const mutedClassName = dark ? "text-slate-400" : "text-slate-500";
 
-  // Items that belong to the current mode and are not hidden by the user.
-  const modeItems = APP_NAVIGATION_ITEMS.filter((item) => item.modes.includes(appMode));
-  const visibleItems = modeItems.filter((item) => item.pinned || !hiddenTabs.includes(item.id));
+  const filteredAddOns = ADD_ON_ITEMS.filter((item) =>
+    !hiddenTabs.includes(item.id) &&
+    (appMode === "ai-code" || item.id === "jarvis") &&
+    (appsSearch.trim() === "" || item.label.toLowerCase().includes(appsSearch.toLowerCase()) || item.description.toLowerCase().includes(appsSearch.toLowerCase()))
+  );
 
-  // Items the user can toggle (non-pinned items in the current mode).
-  const customisableItems = modeItems.filter((item) => !item.pinned);
-
-  function toggleHiddenTab(id: AppNavigationTab) {
-    if (hiddenTabs.includes(id)) {
-      onSetHiddenTabs(hiddenTabs.filter((t) => t !== id));
-    } else {
-      onSetHiddenTabs([...hiddenTabs, id]);
-    }
+  function handleSelectAddOn(id: AppNavigationTab) {
+    onSelectTab(id);
+    setAppsOpen(false);
   }
+
+  const isChatActive = activeTab === "chat";
+  const isAddOnActive = ADD_ON_ITEMS.some((a) => a.id === activeTab);
 
   return (
     <aside className={`hidden min-h-0 overflow-hidden rounded-[26px] border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
-      {/* Logo */}
+      {/* ── Logo ── */}
       <div className={`border-b px-4 py-4 ${dividerClassName}`}>
         <div className="rounded-2xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 px-4 py-4 text-white shadow-sm">
           <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
@@ -130,12 +137,8 @@ export function AppNavigationColumn({
                 onClick={() => onSetAppMode(m)}
                 className={`flex-1 rounded-[10px] py-1.5 text-xs font-semibold transition-all duration-150 ${
                   isActive
-                    ? dark
-                      ? "bg-slate-600 text-white shadow-sm"
-                      : "bg-white text-sky-700 shadow-sm"
-                    : dark
-                      ? "text-slate-400 hover:text-slate-200"
-                      : "text-slate-500 hover:text-slate-700"
+                    ? dark ? "bg-slate-600 text-white shadow-sm" : "bg-white text-sky-700 shadow-sm"
+                    : dark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700"
                 }`}
               >
                 {m === "ai-chat" ? "AI Chat" : "AI Code"}
@@ -145,124 +148,170 @@ export function AppNavigationColumn({
         </div>
       </div>
 
-      {/* Nav items */}
+      {/* ── Core nav ── */}
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-        {customiseOpen ? (
-          /* ── Customise panel ── */
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider opacity-60">Dostosuj zakładki</span>
-              <button
-                type="button"
-                onClick={() => setCustomiseOpen(false)}
-                className={`rounded-lg p-1 transition-colors ${dark ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
-                aria-label="Zamknij"
-              >
-                <X className="h-4 w-4" />
-              </button>
+        {/* Chat — always shown */}
+        <button
+          type="button"
+          onClick={() => onSelectTab("chat")}
+          aria-current={isChatActive ? "page" : undefined}
+          className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+            isChatActive
+              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-r from-sky-700 to-cyan-600 text-white shadow-sm"
+              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-700 hover:bg-sky-50"
+          }`}
+        >
+          <MessageSquareText className="h-4 w-4 flex-shrink-0" />
+          <span className="truncate">Chat</span>
+        </button>
+
+        {/* Apps / Add-ons button */}
+        <button
+          type="button"
+          onClick={() => setAppsOpen((v: boolean) => !v)}
+          className={`mt-1.5 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+            isAddOnActive
+              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-r from-sky-700 to-cyan-600 text-white shadow-sm"
+              : appsOpen
+                ? dark ? "bg-slate-800/60 text-white" : "bg-sky-50 text-sky-700"
+                : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-700 hover:bg-sky-50"
+          }`}
+        >
+          <Grid2x2 className="h-4 w-4 flex-shrink-0" />
+          <span className="flex-1 truncate text-left">Aplikacje</span>
+          {isAddOnActive && ADD_ON_ITEMS.find((a) => a.id === activeTab) && (
+            <span className={`ml-auto max-w-[70px] truncate text-[10px] font-normal opacity-75`}>
+              {ADD_ON_ITEMS.find((a) => a.id === activeTab)?.label}
+            </span>
+          )}
+        </button>
+
+        {/* ── Apps drawer ── */}
+        {appsOpen && (
+          <div className={`mt-2 overflow-hidden rounded-2xl border ${dark ? "border-slate-700 bg-slate-800/60" : "border-slate-200 bg-slate-50"}`}>
+            {/* Search */}
+            <div className={`flex items-center gap-2 border-b px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+              <Search className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
+              <input
+                value={appsSearch}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
+                placeholder="Szukaj aplikacji..."
+                className={`flex-1 bg-transparent text-xs outline-none placeholder-opacity-40 ${dark ? "placeholder-slate-500 text-slate-200" : "placeholder-slate-400 text-slate-700"}`}
+              />
+              {appsSearch && (
+                <button type="button" onClick={() => setAppsSearch("")} className="opacity-40 hover:opacity-70">
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
-            <div className="space-y-1">
-              {customisableItems.map((item) => {
+
+            {/* Add-on list */}
+            <div className="max-h-[340px] overflow-y-auto py-1.5">
+              {filteredAddOns.length === 0 && (
+                <p className="px-4 py-3 text-xs opacity-50">Brak aplikacji</p>
+              )}
+              {filteredAddOns.map((item) => {
                 const Icon = item.icon;
-                const isVisible = !hiddenTabs.includes(item.id);
+                const isActive = activeTab === item.id;
                 return (
-                  <label
+                  <button
                     key={item.id}
-                    className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                      dark ? "hover:bg-slate-800" : "hover:bg-sky-50"
+                    type="button"
+                    onClick={() => handleSelectAddOn(item.id)}
+                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors ${
+                      isActive
+                        ? dark ? "bg-slate-700 text-white" : "bg-sky-100 text-sky-800"
+                        : dark ? "text-slate-300 hover:bg-slate-700/60" : "text-slate-700 hover:bg-white"
                     }`}
                   >
-                    <Icon className={`h-4 w-4 flex-shrink-0 ${isVisible ? (dark ? "text-sky-400" : "text-sky-600") : mutedClassName}`} />
-                    <span className={`flex-1 truncate font-medium ${isVisible ? "" : mutedClassName}`}>{item.label}</span>
-                    <span
-                      role="checkbox"
-                      aria-checked={isVisible}
-                      onClick={() => toggleHiddenTab(item.id)}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                        isVisible
-                          ? "bg-sky-500"
-                          : dark
-                            ? "bg-slate-600"
-                            : "bg-slate-300"
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          isVisible ? "translate-x-4" : "translate-x-0"
-                        }`}
-                      />
-                    </span>
-                  </label>
+                    <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${item.color} shadow-sm`}>
+                      <Icon className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold">{item.label}</div>
+                      <div className={`truncate text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{item.description}</div>
+                    </div>
+                    {isActive && <span className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-500" />}
+                  </button>
                 );
               })}
             </div>
-          </div>
-        ) : (
-          /* ── Normal nav list ── */
-          <div className="space-y-1.5">
-            {visibleItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              const itemClassName = isActive
-                ? dark
-                  ? "bg-slate-800 text-white"
-                  : "bg-gradient-to-r from-sky-700 to-cyan-600 text-white shadow-sm"
-                : dark
-                  ? "text-slate-300 hover:bg-slate-800/80"
-                  : "text-slate-700 hover:bg-sky-50";
 
-              return (
-                <div key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectTab(item.id)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={`relative flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ease-out ${itemClassName}`}
-                  >
-                    <Icon className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
-                    <span className="truncate">{item.label}</span>
-                    {item.id === "notifications" && notificationUnread > 0 && (
-                      <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                        {notificationUnread > 99 ? "99+" : notificationUnread}
-                      </span>
-                    )}
-                  </button>
-                  {item.id === "jarvis" && (
-                    <div className="ml-10 mt-1 flex flex-col gap-1 text-xs">
-                      <a href="/downloads/jarvis-windows.exe" download className="text-sky-600 hover:underline">Pobierz Jarvis Windows</a>
-                      <a href="/downloads/jarvis-android.apk" download className="text-sky-600 hover:underline">Pobierz Jarvis Android</a>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {/* Manage visibility link */}
+            <div className={`border-t px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+              <Link
+                href="/integrations"
+                className={`flex items-center gap-1.5 text-[10px] font-medium transition-colors ${dark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}
+              >
+                <PlugZap className="h-3 w-3" />
+                Integracje i zarządzanie
+              </Link>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Bottom section: Customise + Integrations link */}
+      {/* ── Bottom: settings panel or avatar pill ── */}
       <div className={`border-t px-3 py-3 ${dividerClassName}`}>
-        {!customiseOpen && (
+        {settingsOpen ? (
+          /* Settings mini-panel */
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className={`text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`}>Konto & ustawienia</span>
+              <button type="button" onClick={() => setSettingsOpen(false)} className={`rounded-lg p-0.5 ${dark ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="space-y-0.5">
+              {[
+                { label: "Ustawienia", tab: "settings" as AppNavigationTab, icon: Settings2 },
+                { label: "Powiadomienia", tab: "notifications" as AppNavigationTab, icon: Bell },
+              ].map(({ label, tab, icon: Icon }) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => { onSelectTab(tab); setSettingsOpen(false); }}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                    activeTab === tab
+                      ? dark ? "bg-slate-700 text-white" : "bg-sky-100 text-sky-800"
+                      : dark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="flex-1 text-left">{label}</span>
+                  {tab === "notifications" && notificationUnread > 0 && (
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                      {notificationUnread > 99 ? "99+" : notificationUnread}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* Avatar pill */
           <button
             type="button"
-            onClick={() => setCustomiseOpen(true)}
-            className={`mb-2 flex w-full items-center gap-2.5 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors ${
-              dark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-500 hover:bg-sky-50 hover:text-slate-700"
+            onClick={() => setSettingsOpen(true)}
+            className={`flex w-full items-center gap-2.5 rounded-2xl px-3 py-2 transition-colors ${
+              dark ? "hover:bg-slate-800" : "hover:bg-slate-100"
             }`}
           >
-            <SlidersHorizontal className="h-4 w-4 flex-shrink-0" />
-            <span>Dostosuj zakładki</span>
+            <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+              dark ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-600"
+            }`}>
+              {getInitials(userEmail)}
+            </div>
+            <span className={`flex-1 truncate text-left text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>
+              {userEmail ? userEmail.split("@")[0] : "Konto"}
+            </span>
+            {notificationUnread > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                {notificationUnread > 99 ? "99+" : notificationUnread}
+              </span>
+            )}
           </button>
         )}
-        <Link
-          href="/integrations"
-          className={`flex w-full items-center gap-2.5 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors ${
-            dark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-500 hover:bg-sky-50 hover:text-slate-700"
-          }`}
-        >
-          <PlugZap className="h-4 w-4 flex-shrink-0" />
-          <span>Integracje →</span>
-        </Link>
       </div>
     </aside>
   );

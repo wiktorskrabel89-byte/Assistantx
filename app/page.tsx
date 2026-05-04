@@ -21,7 +21,7 @@ import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
 import type { AppMode } from "./lib/chat-types";
 
-// Tabs that are only available in AI Code mode
+// Tabs that are only available in AI Code mode (resets to "chat" if mode switches)
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
   "sandbox", "codebase", "scripts", "projects", "prompt-library",
   "learning", "stats", "ai-learning", "jarvis", "clinical", "knowledge-export",
@@ -71,7 +71,7 @@ function TabContent({
 }
 
 function HomeContent() {
-  const { state, setAppMode, setHiddenTabs } = useWorkspace();
+  const { state, setAppMode, setHiddenTabs, userEmail } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
   const notificationsHook = useNotifications();
 
@@ -112,6 +112,7 @@ function HomeContent() {
             onSetAppMode={setAppMode}
             hiddenTabs={hiddenTabs}
             onSetHiddenTabs={setHiddenTabs}
+            userEmail={userEmail}
           />
 
           {isChatTab ? (
