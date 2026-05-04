@@ -388,14 +388,17 @@ export function isModelProPlusOnly(modelId: string): boolean {
 /**
  * Filters a list of model IDs to only those accessible to the user's plan.
  * Pro+ users get all models; Pro users get all except Pro+-only; free users only get :free models.
+ * Falls back to the best paid models for the plan when no suitable model remains.
  */
 export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): string[] {
-  if (userPlan === "pro+") return modelIds;
+  if (userPlan === "pro+") {
+    // Pro+ can use every model; fall back to best Pro+ models if the list is empty.
+    return modelIds.length > 0 ? modelIds : TOP_PRO_PLUS_FALLBACK_MODELS;
+  }
   if (userPlan === "pro") {
     const filtered = modelIds.filter((id) => !isModelProPlusOnly(id));
-    if (filtered.length > 0) return filtered;
-    const freeFallback = modelIds.filter((id) => !isModelPremiumOnly(id));
-    return freeFallback.length > 0 ? freeFallback : [FREE_CHAT_MODEL];
+    // Fall back to best Pro-accessible premium models rather than free-tier models.
+    return filtered.length > 0 ? filtered : TOP_PRO_FALLBACK_MODELS;
   }
   const filtered = modelIds.filter((id) => !isModelPremiumOnly(id));
   return filtered.length > 0 ? filtered : [FREE_CHAT_MODEL];
@@ -416,6 +419,24 @@ export const TOP_FREE_CODE_MODELS = [
   "openai/gpt-oss-120b:free",
   "minimax/minimax-m2.5:free",
   "meta-llama/llama-3.3-70b-instruct:free",
+];
+
+/**
+ * Best premium models accessible to Pro-plan users (no Pro+-exclusive models).
+ * Used as a fallback when the filtered model list is empty for a Pro user.
+ */
+export const TOP_PRO_FALLBACK_MODELS: string[] = [
+  "openai/gpt-5.4",           // best frontier coding + chat model on Pro
+  "anthropic/claude-opus-4.6", // best Claude model accessible to Pro
+];
+
+/**
+ * Best premium models accessible to Pro+-plan users (includes Pro+-exclusive models).
+ * Used as a fallback when the model list is empty for a Pro+ user.
+ */
+export const TOP_PRO_PLUS_FALLBACK_MODELS: string[] = [
+  "anthropic/claude-opus-4.7", // Pro+-exclusive flagship model
+  "openai/gpt-5.4",            // best frontier model available on Pro+
 ];
 
 /**
