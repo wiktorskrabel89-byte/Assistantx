@@ -109,6 +109,7 @@ export function ConversationsSidebar({
                       <div
                         role="button"
                         tabIndex={0}
+                        aria-label={`Select chat: ${chat.title}`}
                         onClick={() => {
                           onSelectChat(chat.id);
                           onClose();

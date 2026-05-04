@@ -212,7 +212,7 @@ export function ChatTab() {
     // (Auto can still route to paid models behind the scenes).
     const selectedModelId = activeWorkspace.settings.preferredModelId;
     if ((state.userPlan === "pro" || state.userPlan === "pro+") &&
-      (selectedModelId === null || selectedModelId === undefined || isModelPremiumOnly(selectedModelId))) {
+      (selectedModelId == null || isModelPremiumOnly(selectedModelId))) {
       incrementPremiumRequests();
     }
 
