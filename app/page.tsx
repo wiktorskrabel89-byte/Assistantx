@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
 import { ClinicalTab } from "./components/tabs/ClinicalTab";
@@ -14,17 +14,17 @@ import {
   SandboxTab,
   ScriptsTab,
   SettingsTab,
-  StatsTab,
 } from "./components/tabs";
 import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
+import { createClient } from "@/lib/client";
 import type { AppMode } from "./lib/chat-types";
 
 // Tabs that are only available in AI Code mode (resets to "chat" if mode switches)
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
   "sandbox", "codebase", "scripts", "projects", "prompt-library",
-  "learning", "stats", "ai-learning", "jarvis", "clinical", "knowledge-export",
+  "learning", "ai-learning", "jarvis", "clinical", "knowledge-export",
 ];
 
 function TabContent({
@@ -57,8 +57,6 @@ function TabContent({
       return <KnowledgeExportTab dark={state.dark} />;
     case "settings":
       return <SettingsTab />;
-    case "stats":
-      return <StatsTab dark={state.dark} />;
     case "notifications":
       return <NotificationsTab dark={state.dark} notificationsHook={notificationsHook} />;
     case "ai-learning":
@@ -74,9 +72,26 @@ function HomeContent() {
   const { state, setAppMode, setHiddenTabs, userEmail } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
   const notificationsHook = useNotifications();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const adminCheckedRef = useRef(false);
 
   const appMode: AppMode = state.appMode ?? "ai-chat";
   const hiddenTabs: string[] = state.hiddenTabs ?? [];
+
+  // Check admin status once on mount
+  useEffect(() => {
+    if (adminCheckedRef.current) return;
+    adminCheckedRef.current = true;
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.access_token) return;
+      return fetch("/api/admin/check", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      }).then((res) => res.ok ? res.json() : null);
+    }).then((data: { isAdmin?: boolean } | null | undefined) => {
+      if (data?.isAdmin) setIsAdmin(true);
+    }).catch(() => null);
+  }, []);
 
   // Guard: if mode switches to AI Chat and current tab is code-only, reset to "chat"
   useEffect(() => {
@@ -113,6 +128,7 @@ function HomeContent() {
             hiddenTabs={hiddenTabs}
             onSetHiddenTabs={setHiddenTabs}
             userEmail={userEmail}
+            isAdmin={isAdmin}
           />
 
           {isChatTab ? (

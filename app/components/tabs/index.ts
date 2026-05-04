@@ -9,4 +9,3 @@ export { PromptLibraryTab } from "./PromptLibraryTab";
 export { SandboxTab } from "./SandboxTab";
 export { ScriptsTab } from "./ScriptsTab";
 export { SettingsTab } from "./SettingsTab";
-export { StatsTab } from "./StatsTab";

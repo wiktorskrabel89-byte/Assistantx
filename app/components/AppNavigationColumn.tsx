@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  BarChart2,
   Bell,
   BookOpen,
   BrainCircuit,
@@ -36,7 +35,6 @@ export type AppNavigationTab =
   | "knowledge-export"
   | "settings"
   | "notifications"
-  | "stats"
   | "ai-learning"
   | "jarvis";
 
@@ -51,6 +49,8 @@ type AppNavigationColumnProps = {
   onSetHiddenTabs: (tabs: string[]) => void;
   /** User email for avatar initials */
   userEmail?: string | null;
+  /** Whether the current user has admin role */
+  isAdmin?: boolean;
 };
 
 type AddOnItem = {
@@ -59,10 +59,12 @@ type AddOnItem = {
   description: string;
   icon: LucideIcon;
   color: string;
+  beta?: boolean;
+  adminOnly?: boolean;
 };
 
 const ADD_ON_ITEMS: AddOnItem[] = [
-  { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",        icon: BrainCircuit,  color: "from-violet-500 to-purple-600" },
+  { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",        icon: BrainCircuit,  color: "from-violet-500 to-purple-600", beta: true },
   { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",        icon: Stethoscope,   color: "from-emerald-500 to-teal-600" },
   { id: "sandbox",          label: "Sandbox",         description: "Środowisko testowe",         icon: SquareTerminal, color: "from-slate-500 to-slate-700" },
   { id: "learning",         label: "Learning",        description: "Materiały do nauki",         icon: BookOpen,      color: "from-sky-500 to-blue-600" },
@@ -71,8 +73,7 @@ const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "scripts",          label: "Scripts",         description: "Automatyzacja skryptów",     icon: CodeXml,       color: "from-lime-500 to-green-600" },
   { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",        icon: LibraryBig,    color: "from-pink-500 to-rose-600" },
   { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",         icon: Share2,        color: "from-indigo-500 to-violet-600" },
-  { id: "stats",            label: "Statystyki",      description: "Analizy i wykresy",          icon: BarChart2,     color: "from-orange-500 to-amber-600" },
-  { id: "ai-learning",      label: "AI Learning",     description: "Trenuj modele AI",           icon: BrainCircuit,  color: "from-fuchsia-500 to-pink-600" },
+  { id: "ai-learning",      label: "AI Learning",     description: "Trenuj modele AI",           icon: BrainCircuit,  color: "from-fuchsia-500 to-pink-600", adminOnly: true },
 ];
 
 function getInitials(email: string | null | undefined): string {
@@ -93,6 +94,7 @@ export function AppNavigationColumn({
   hiddenTabs,
   onSetHiddenTabs,
   userEmail,
+  isAdmin = false,
 }: AppNavigationColumnProps) {
   const [appsOpen, setAppsOpen] = useState(false);
   const [appsSearch, setAppsSearch] = useState("");
@@ -106,6 +108,7 @@ export function AppNavigationColumn({
   const filteredAddOns = ADD_ON_ITEMS.filter((item) =>
     !hiddenTabs.includes(item.id) &&
     (appMode === "ai-code" || item.id === "jarvis") &&
+    (!item.adminOnly || isAdmin) &&
     (appsSearch.trim() === "" || item.label.toLowerCase().includes(appsSearch.toLowerCase()) || item.description.toLowerCase().includes(appsSearch.toLowerCase()))
   );
 
@@ -228,7 +231,12 @@ export function AppNavigationColumn({
                       <Icon className="h-3.5 w-3.5 text-white" />
                     </div>
                     <div className="min-w-0">
-                      <div className="truncate text-xs font-semibold">{item.label}</div>
+                      <div className="flex items-center gap-1.5 truncate text-xs font-semibold">
+                        {item.label}
+                        {item.beta && (
+                          <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">Beta</span>
+                        )}
+                      </div>
                       <div className={`truncate text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{item.description}</div>
                     </div>
                     {isActive && <span className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-500" />}
