@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createClient as createAdminClient, createClient as createBearerClient } from "@supabase/supabase-js";
 
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -25,8 +25,10 @@ function getAdmin() {
 }
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(Number(searchParams.get("limit") ?? "30"), 100);
-  const offset = Math.max(Number(searchParams.get("offset") ?? "0"), 0);
+  const rawLimit = Number(searchParams.get("limit") ?? "30");
+  const rawOffset = Number(searchParams.get("offset") ?? "0");
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 30;
+  const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0) : 0;
 
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -66,8 +68,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "label and content are required" }, { status: 400 });
   }
 
+  // Use the admin client when available so the insert bypasses RLS with the
+  // correct user_id.  When SUPABASE_SERVICE_ROLE_KEY is not set, create a
+  // user-scoped client from the Bearer token so the insert runs as the
+  // authenticated user (RLS allows it via the insert_auth policy).
   const admin = getAdmin();
-  const client = admin ?? supabase;
+  let client;
+  if (admin) {
+    client = admin;
+  } else {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+    client = createBearerClient(url, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false },
+    });
+  }
 
   const { data, error } = await client
     .from("public_templates")
@@ -89,22 +105,13 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
-  // Atomic read-modify-write increment (acceptable for upvote counters)
-  const supabase = await createServerClient();
-  const { data: row, error: fetchError } = await supabase
-    .from("public_templates")
-    .select("upvotes")
-    .eq("id", id)
-    .single();
-
-  if (fetchError || !row) {
-    return NextResponse.json({ error: "Template not found" }, { status: 404 });
-  }
-
-  const { error } = await supabase
-    .from("public_templates")
-    .update({ upvotes: (row.upvotes ?? 0) + 1 })
-    .eq("id", id);
+  // Use the admin client (SUPABASE_SERVICE_ROLE_KEY) when available so the RPC
+  // call is authorised.  The RPC itself is SECURITY DEFINER and performs the
+  // increment atomically in a single SQL statement, avoiding the race condition
+  // that existed in the previous SELECT → UPDATE pattern.
+  const admin = getAdmin();
+  const client = admin ?? (await createServerClient());
+  const { error } = await client.rpc("increment_template_upvotes", { p_template_id: id });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

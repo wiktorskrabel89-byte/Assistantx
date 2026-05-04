@@ -41,7 +41,7 @@ export function IntegrationsPageClient({ dark }: { dark: boolean }) {
       setOauthLoading(null);
     };
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const providerValue = session?.user?.app_metadata?.provider as string | undefined;
       const provider: OAuthProvider | null = isOAuthProvider(providerValue) ? providerValue : null;
       applySession(provider, getLinkedProviders(session?.user?.identities));
@@ -63,6 +63,7 @@ export function IntegrationsPageClient({ dark }: { dark: boolean }) {
 
     return () => {
       active = false;
+      subscription.unsubscribe();
     };
   }, []);
 

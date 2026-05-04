@@ -13,11 +13,21 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
+import { createClient } from "@/lib/server";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const rlKey = getRateLimitKey(req, "memory-summarize");
+  // Require an authenticated Supabase session to prevent anonymous callers from
+  // burning API quota at no cost.
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate-limit by user ID for authenticated requests.
+  const rlKey = `memory-summarize:user:${user.id}`;
   const rl = checkRateLimit(rlKey, 10, 60_000);
   if (!rl.allowed) return rateLimitedResponse(rl.retryAfterMs);
 

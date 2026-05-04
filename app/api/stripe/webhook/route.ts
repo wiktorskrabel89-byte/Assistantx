@@ -16,7 +16,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { createClient, type User } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import type { UserPlan } from "@/lib/ai-config";
 
 export const runtime = "nodejs"; // required for Stripe signature verification
@@ -38,8 +38,10 @@ function getSupabaseAdmin() {
 /**
  * Merges the new userPlan into the user's workspace_states row.
  * Uses upsert so the row is created if it does not exist yet.
+ * Optionally also records the Stripe customer ID so future subscription
+ * events can be resolved without scanning all users.
  */
-async function setUserPlan(userId: string, plan: UserPlan): Promise<void> {
+async function setUserPlan(userId: string, plan: UserPlan, stripeCustomerId?: string | null): Promise<void> {
   const supabase = getSupabaseAdmin();
 
   // Read the current state so we can do a non-destructive merge
@@ -73,12 +75,22 @@ async function setUserPlan(userId: string, plan: UserPlan): Promise<void> {
   if (error) {
     throw new Error(`Failed to update plan for user ${userId}: ${error.message}`);
   }
+
+  // Persist the Stripe customer ID in the user's app_metadata so we can look
+  // it up efficiently in future subscription events without scanning all users.
+  if (stripeCustomerId) {
+    await supabase.auth.admin.updateUserById(userId, {
+      app_metadata: { stripe_customer_id: stripeCustomerId },
+    });
+  }
 }
 
 /**
  * Look up the Supabase user ID for a Stripe customer.
- * The checkout route stores userId in session.metadata.
- * For subscription events, fall back to customer email lookup via the admin API.
+ * Priority order:
+ *  1. userId stored in session.metadata (set at checkout — most reliable)
+ *  2. stripe_customer_id stored in user app_metadata (set after first checkout)
+ *  3. Customer email lookup via RPC (fallback for legacy accounts without mapping)
  */
 async function resolveUserId(
   stripe: Stripe,
@@ -88,15 +100,22 @@ async function resolveUserId(
   // Fast path: user ID was stored in session metadata during checkout
   if (metadata?.userId) return metadata.userId;
 
-  // Fallback: look up customer email from Stripe then find the matching user
   if (!customerId) return null;
+
+  // Second path: look up by stripe_customer_id stored in app_metadata via RPC
+  const supabase = getSupabaseAdmin();
+  const { data: byCustomer } = await supabase
+    .rpc("get_user_id_by_stripe_customer", { p_customer_id: customerId });
+  if (typeof byCustomer === "string" && byCustomer) return byCustomer;
+
+  // Last-resort fallback: look up customer email from Stripe then match by email.
+  // This is only reached for legacy accounts that predate customer-ID storage.
   const customer = await stripe.customers.retrieve(customerId);
   if (customer.deleted || !("email" in customer) || !customer.email) return null;
 
-  const supabase = getSupabaseAdmin();
-  const { data } = await supabase.auth.admin.listUsers();
-  const match = data?.users?.find((u: User) => u.email === customer.email);
-  return match?.id ?? null;
+  const { data: byEmail } = await supabase
+    .rpc("get_user_id_by_email", { p_email: customer.email });
+  return byEmail ?? null;
 }
 
 export async function POST(req: NextRequest) {
@@ -138,10 +157,11 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        const stripeCustomerId = typeof session.customer === "string" ? session.customer : null;
         const userId = await resolveUserId(
           stripe,
           session.metadata,
-          typeof session.customer === "string" ? session.customer : null
+          stripeCustomerId
         );
 
         if (!userId) {
@@ -151,7 +171,9 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        await setUserPlan(userId, plan as UserPlan);
+        // Pass the customer ID so it gets stored in app_metadata for efficient
+        // lookups on future subscription events (avoids listUsers() scan).
+        await setUserPlan(userId, plan as UserPlan, stripeCustomerId);
         console.info(`[stripe/webhook] Granted plan "${plan}" to user ${userId}`);
         break;
       }

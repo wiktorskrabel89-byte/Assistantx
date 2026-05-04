@@ -76,7 +76,7 @@ const nextConfig = {
     'mdast-util-mdx-jsx',
     'mdast-util-mdxjs-esm',
   ],
-  headers: async () => [
+   headers: async () => [
     {
       // Security headers for all responses
       source: '/(.*)',
@@ -91,6 +91,26 @@ const nextConfig = {
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
         // Enforce HTTPS for 2 years, include subdomains, request preload
         { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+        // Content-Security-Policy — static baseline; the per-request middleware
+        // (lib/middleware.ts / proxy.ts) injects a stricter nonce-based policy for
+        // pages that run through the Edge middleware.  This header acts as a
+        // defence-in-depth fallback for any path not covered by the middleware matcher.
+        {
+          key: 'Content-Security-Policy',
+          value: [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' blob: data: https:",
+            "font-src 'self' https://fonts.gstatic.com",
+            "connect-src *",
+            "frame-src 'none'",
+            "frame-ancestors 'none'",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+          ].join('; '),
+        },
       ],
     },
     {
