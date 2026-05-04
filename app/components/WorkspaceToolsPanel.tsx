@@ -12,8 +12,6 @@ type ToolDefinition = {
 const TOOLS: ToolDefinition[] = [
   { id: "web_search", label: "Web Search", description: "Enable real-time web access in all queries" },
   { id: "image_generation", label: "Image Generation", description: "Allow auto-generating images from prompts" },
-  { id: "code_execution", label: "Code Execution", description: "Suggest runnable code snippets" },
-  { id: "calculator", label: "Calculator", description: "Solve math and equations automatically" },
 ];
 
 type WorkspaceToolsPanelProps = {
