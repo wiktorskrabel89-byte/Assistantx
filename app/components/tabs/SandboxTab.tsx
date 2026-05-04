@@ -403,7 +403,8 @@ export function SandboxTab({ dark }: { dark: boolean }) {
                     <div className="flex-1" />
                     <button type="button"
                       onClick={() => {
-                        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify({ html, css, js }))));
+                        const payload = JSON.stringify({ html, css, js });
+                        const encoded = btoa(encodeURIComponent(payload).replace(/%([0-9A-F]{2})/g, (_, p) => String.fromCharCode(parseInt(p, 16))));
                         void navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?sandbox=${encoded}`);
                       }}
                       title="Kopiuj link do sandboxa" aria-label="Kopiuj link do sandboxa" className={sec}>

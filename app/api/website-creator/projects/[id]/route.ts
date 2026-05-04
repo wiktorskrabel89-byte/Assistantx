@@ -50,13 +50,12 @@ export async function PATCH(
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // Only allow updating safe fields
+  // Only allow updating safe fields — updated_at is handled automatically by the DB trigger
   const allowed: Record<string, unknown> = {};
   const patchableFields = ["name", "html", "css", "js", "status", "live_url", "northflank_service_id", "cloudflare_record_id"] as const;
   for (const field of patchableFields) {
     if (field in body) allowed[field] = body[field];
   }
-  allowed.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
     .from("website_creator_projects")

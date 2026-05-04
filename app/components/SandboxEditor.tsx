@@ -4,7 +4,9 @@ import dynamic from "next/dynamic";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
-// Monaco must be loaded client-side only — it uses browser APIs (web workers, etc.)
+// Monaco Editor requires browser-specific APIs (DOM, Web Workers, dynamic script loading)
+// that are unavailable during Next.js server-side rendering. The dynamic import with
+// ssr: false ensures it is only loaded in the browser.
 const MonacoEditor = dynamic(
   () => import("@monaco-editor/react").then((m) => m.default),
   {
