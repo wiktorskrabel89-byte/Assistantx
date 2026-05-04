@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
 import { ClinicalTab } from "./components/tabs/ClinicalTab";
@@ -17,8 +17,22 @@ import {
 } from "./components/tabs";
 import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
+import { useNotifications } from "./hooks/useNotifications";
+import { createClient } from "@/lib/client";
+import type { AppMode } from "./lib/chat-types";
 
-function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
+// Tabs that are only available in AI Code mode (resets to "chat" if mode switches)
+const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
+  "sandbox", "codebase", "scripts", "projects",
+];
+
+function TabContent({
+  activeTab,
+  notificationsHook,
+}: {
+  activeTab: AppNavigationTab;
+  notificationsHook: ReturnType<typeof useNotifications>;
+}) {
   const { state } = useWorkspace();
 
   switch (activeTab) {
@@ -43,7 +57,7 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
     case "settings":
       return <SettingsTab />;
     case "notifications":
-      return <NotificationsTab dark={state.dark} />;
+      return <NotificationsTab dark={state.dark} notificationsHook={notificationsHook} />;
     case "ai-learning":
       return <AILearningTab />;
     case "jarvis":
@@ -54,12 +68,43 @@ function TabContent({ activeTab }: { activeTab: AppNavigationTab }) {
 }
 
 function HomeContent() {
-  const { state } = useWorkspace();
+  const { state, setAppMode, setPinnedAddOns, userEmail } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
+  const notificationsHook = useNotifications();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const adminCheckedRef = useRef(false);
+
+  const appMode: AppMode = state.appMode ?? "ai-chat";
+  const pinnedAddOns: string[] = state.pinnedAddOns ?? [];
+
+  // Check admin status once on mount
+  useEffect(() => {
+    if (adminCheckedRef.current) return;
+    adminCheckedRef.current = true;
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.access_token) return;
+      return fetch("/api/admin/check", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      }).then((res) => res.ok ? res.json() : null);
+    }).then((data: { isAdmin?: boolean } | null | undefined) => {
+      if (data?.isAdmin) setIsAdmin(true);
+    }).catch(() => null);
+  }, []);
+
+  // Guard: if mode switches to AI Chat and current tab is code-only, reset to "chat"
+  useEffect(() => {
+    if (appMode === "ai-chat" && AI_CODE_ONLY_TABS.includes(activeAppTab)) {
+      setActiveAppTab("chat");
+    }
+  }, [appMode, activeAppTab]);
 
   const handleSelectAppTab = useCallback((tab: AppNavigationTab) => {
     setActiveAppTab(tab);
-  }, []);
+    if (tab === "notifications" && notificationsHook.unreadCount > 0) {
+      void notificationsHook.markAllRead();
+    }
+  }, [notificationsHook]);
 
   const bg = state.dark
     ? "bg-slate-950 text-slate-100"
@@ -72,13 +117,24 @@ function HomeContent() {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${bg}`}>
         <div className="mx-auto flex min-h-screen max-w-[1680px] gap-3 px-3 py-3">
-          <AppNavigationColumn dark={state.dark} activeTab={activeAppTab} onSelectTab={handleSelectAppTab} />
+          <AppNavigationColumn
+            dark={state.dark}
+            activeTab={activeAppTab}
+            onSelectTab={handleSelectAppTab}
+            notificationUnread={notificationsHook.unreadCount}
+            appMode={appMode}
+            onSetAppMode={setAppMode}
+            pinnedAddOns={pinnedAddOns}
+            onSetPinnedAddOns={setPinnedAddOns}
+            userEmail={userEmail}
+            isAdmin={isAdmin}
+          />
 
           {isChatTab ? (
-            <TabContent key={activeAppTab} activeTab={activeAppTab} />
+            <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} />
           ) : (
             <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
-              <TabContent key={activeAppTab} activeTab={activeAppTab} />
+              <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} />
             </main>
           )}
         </div>

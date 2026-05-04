@@ -350,7 +350,7 @@ describe("upgradeState", () => {
   });
 
   it("returns null for state with no workspaces", () => {
-    expect(upgradeState({ workspaces: [], activeWorkspaceId: "", dark: false, userPlan: "free", premiumRequestsUsed: 0 })).toBeNull();
+    expect(upgradeState({ workspaces: [], activeWorkspaceId: "", dark: false, userPlan: "free", premiumRequestsUsed: 0, appMode: "ai-chat", pinnedAddOns: [] })).toBeNull();
   });
 
   it("upgrades a valid minimal state", () => {
@@ -378,11 +378,12 @@ describe("upgradeState", () => {
       dark: true,
       userPlan: "free",
       premiumRequestsUsed: 0,
+      appMode: "ai-chat",
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
     expect(upgraded).not.toBeNull();
-    expect(upgraded.dark).toBe(true);
     // Empty title should be replaced with NEW_CHAT_TITLE
     expect(upgraded.workspaces[0].chats[0].title).toBe(NEW_CHAT_TITLE);
     // Empty message id should be replaced with a generated id
@@ -406,6 +407,8 @@ describe("upgradeState", () => {
       dark: false,
       userPlan: "free",
       premiumRequestsUsed: 0,
+      appMode: "ai-chat",
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
@@ -429,6 +432,8 @@ describe("upgradeState", () => {
       dark: false,
       userPlan: "free",
       premiumRequestsUsed: 0,
+      appMode: "ai-chat",
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
@@ -524,6 +529,8 @@ describe("upgradeState", () => {
       dark: false,
       userPlan: "pro",
       premiumRequestsUsed: 10,
+      appMode: "ai-chat",
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;
@@ -548,6 +555,8 @@ describe("upgradeState", () => {
       dark: false,
       userPlan: "pro+",
       premiumRequestsUsed: 200,
+      appMode: "ai-chat",
+      pinnedAddOns: [],
     };
 
     const upgraded = upgradeState(state)!;

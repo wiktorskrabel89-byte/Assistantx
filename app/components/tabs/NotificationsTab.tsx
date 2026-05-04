@@ -1,9 +1,10 @@
 "use client";
 
 import { AlertTriangle, Bell, CheckCircle, Info } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
+import type { AppNotification, UseNotificationsReturn } from "../../hooks/useNotifications";
 
 type NotificationKind = "info" | "warning" | "success";
 
@@ -27,9 +28,19 @@ const KIND_BORDER: Record<NotificationKind, { dark: string; light: string }> = {
   success: { dark: "border-emerald-900/50 bg-emerald-950/30", light: "border-emerald-200 bg-emerald-50" },
 };
 
-export function NotificationsTab({ dark }: { dark: boolean }) {
+function toNotificationKind(kind: string): NotificationKind {
+  if (kind === "info" || kind === "warning" || kind === "success") return kind;
+  return "info";
+}
+
+export function NotificationsTab({
+  dark,
+  notificationsHook,
+}: {
+  dark: boolean;
+  notificationsHook?: UseNotificationsReturn;
+}) {
   const { state } = useWorkspace();
-  const [manualNotifications, setManualNotifications] = useState<SystemNotification[]>([]);
 
   // Derive system event notifications from live workspace state
   const systemNotifications = useMemo<SystemNotification[]>(() => {
@@ -90,7 +101,19 @@ export function NotificationsTab({ dark }: { dark: boolean }) {
     return events;
   }, [state.userPlan, state.premiumRequestsUsed]);
 
-  const allNotifications = [...systemNotifications, ...manualNotifications];
+  // Realtime notifications from Supabase (passed from parent via hook)
+  const realtimeNotifications: SystemNotification[] = (notificationsHook?.notifications ?? []).map(
+    (n: AppNotification) => ({
+      id: n.id,
+      kind: toNotificationKind(n.kind),
+      title: n.title,
+      body: n.body,
+      date: new Date(n.createdAt).toLocaleString(),
+    })
+  );
+
+  const allNotifications = [...realtimeNotifications, ...systemNotifications];
+  const hasUnread = (notificationsHook?.unreadCount ?? 0) > 0;
 
   const sendTestNotification = async () => {
     if ("serviceWorker" in navigator) {
@@ -102,16 +125,6 @@ export function NotificationsTab({ dark }: { dark: boolean }) {
         });
       }
     }
-    setManualNotifications((prev) => [
-      {
-        id: `manual-${Date.now()}`,
-        kind: "info",
-        title: "Testowa notyfikacja",
-        body: "To jest przykładowe powiadomienie push.",
-        date: new Date().toLocaleString(),
-      },
-      ...prev,
-    ]);
   };
 
   return (
@@ -146,12 +159,26 @@ export function NotificationsTab({ dark }: { dark: boolean }) {
             Przeglądaj zdarzenia systemowe i testuj powiadomienia push w jednym miejscu.
           </p>
 
-          <button
-            className="mt-6 inline-flex items-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700"
-            onClick={sendTestNotification}
-          >
-            Wyślij testowe powiadomienie push
-          </button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              className="inline-flex items-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700"
+              onClick={sendTestNotification}
+            >
+              Wyślij testowe powiadomienie push
+            </button>
+            {hasUnread && notificationsHook && (
+              <button
+                className={`inline-flex items-center rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                  dark
+                    ? "border-sky-800/50 text-sky-200 hover:bg-sky-900/40"
+                    : "border-sky-200 text-sky-700 hover:bg-sky-50"
+                }`}
+                onClick={() => void notificationsHook.markAllRead()}
+              >
+                Oznacz wszystkie jako przeczytane
+              </button>
+            )}
+          </div>
         </div>
 
         <div

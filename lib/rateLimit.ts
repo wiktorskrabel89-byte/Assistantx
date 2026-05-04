@@ -63,6 +63,12 @@ export function checkRateLimit(
  * token (unique per Supabase session, no round-trip needed). Anonymous
  * requests fall back to the client IP.
  *
+ * IP extraction prefers `x-real-ip` (set by trusted reverse-proxies such as
+ * Nginx/Vercel and not spoofable by the client) over `x-forwarded-for`.
+ * When using `x-forwarded-for`, only the *last* address is used — this is
+ * the address appended by the nearest trusted proxy and cannot be faked by
+ * the browser.
+ *
  * @param req    Incoming Next.js route request
  * @param prefix Short route identifier, e.g. "chat" or "image"
  */
@@ -73,9 +79,21 @@ export function getRateLimitKey(req: Request, prefix: string): string {
     // Use a suffix slice — avoids huge keys while remaining unique per session
     return `${prefix}:tok:${token.slice(-40)}`;
   }
+
+  // x-real-ip is set by the nearest trusted proxy and cannot be spoofed by the client.
+  const realIp = req.headers.get("x-real-ip")?.trim();
+  if (realIp) return `${prefix}:ip:${realIp}`;
+
+  // x-forwarded-for is a comma-separated list; the *last* entry is appended
+  // by the nearest trusted proxy and is safe to use for rate limiting.
   const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
-  return `${prefix}:ip:${ip}`;
+  if (forwarded) {
+    const ips = forwarded.split(",");
+    const trustedIp = ips[ips.length - 1].trim();
+    if (trustedIp) return `${prefix}:ip:${trustedIp}`;
+  }
+
+  return `${prefix}:ip:unknown`;
 }
 
 /** Build a 429 Response with a Retry-After header. */

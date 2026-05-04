@@ -75,12 +75,16 @@ export type Workspace = {
   updatedAt: number;
 };
 
+export type AppMode = "ai-chat" | "ai-code";
+
 export type StoredState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   dark: boolean;
   userPlan: UserPlan;
   premiumRequestsUsed: number;
+  appMode: AppMode;
+  pinnedAddOns: string[];
 };
 
 export type Artifact = {

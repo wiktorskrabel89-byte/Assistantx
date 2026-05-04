@@ -1,11 +1,14 @@
 import JSZip from "jszip";
 import { PDFParse } from "pdf-parse";
+import { createClient } from "@/lib/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 
+// SVG is intentionally omitted from TEXT_EXTENSIONS: SVG files can embed
+// <script> tags and should not be treated as safe plain text for extraction.
 const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "json", "ts", "tsx", "js", "jsx", "py", "html", "css", "sql", "xml", "yml", "yaml"]);
 
 function getExtension(name: string) {
@@ -49,6 +52,13 @@ async function extractDocumentText(file: File, bytes: ArrayBuffer): Promise<stri
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
+  // Require authentication: file analysis calls OpenRouter which costs money.
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return Response.json({ error: "Authentication required." }, { status: 401 });
+  }
+
   // Rate limit: 10 upload/analysis requests per minute per user/IP
   const rlKey = getRateLimitKey(req, "upload");
   const rl = checkRateLimit(rlKey, 10, 60_000);

@@ -94,9 +94,25 @@ async function saveMessage(conversationId: string, role: "user" | "assistant", c
 }
 
 async function ensureConversation(conversationId: string, userId: string | null) {
+  if (!userId) return; // do not create conversation records without an authenticated owner
   const supabase = await getSupabase();
+
+  // Guard against a user injecting another user's conversationId.
+  // Check whether the conversation already exists and belongs to someone else.
+  const { data: existing } = await supabase
+    .from("conversations")
+    .select("user_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (existing && existing.user_id && existing.user_id !== userId) {
+    const err = new Error("Unauthorized: conversation belongs to another user") as Error & { status: number };
+    err.status = 403;
+    throw err;
+  }
+
   await supabase.from("conversations").upsert(
-    { id: conversationId, ...(userId ? { user_id: userId } : {}) },
+    { id: conversationId, user_id: userId },
     { onConflict: "id" }
   );
 }
@@ -473,7 +489,16 @@ export const POST = async (req: Request) => {
   // Build history: use Supabase memory if conversationId provided, else fall back to client history
   let historyMessages: Array<{ role: string; content: string }> = [];
   if (conversationId) {
-    await ensureConversation(conversationId, authUserId);
+    try {
+      await ensureConversation(conversationId, authUserId);
+    } catch (err) {
+      const status = (err as { status?: number }).status ?? 500;
+      const message = err instanceof Error ? err.message : "Failed to access conversation.";
+      return new Response(JSON.stringify({ error: message }), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     await saveMessage(conversationId, "user", message);
     const [summaries, memMessages] = await Promise.all([
       getMemorySummaries(conversationId),

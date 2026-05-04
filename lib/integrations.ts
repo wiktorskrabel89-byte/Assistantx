@@ -21,7 +21,6 @@ const GITHUB_IMPORTABLE_EXTENSIONS = new Set([
   "cs",
   "css",
   "csv",
-  "env",
   "go",
   "graphql",
   "h",
