@@ -321,7 +321,13 @@ export const POST = async (req: Request) => {
     costMode: rawCostMode,
     userPlan: rawUserPlan,
     thinkingEffort, // New: reasoning depth (Low, Medium, High, Xhigh)
+    systemPrompt: customSystemPrompt,
+    enabledTools,
   } = await req.json();
+
+  // Override addInternetContext if the workspace has web_search tool enabled
+  const effectiveAddInternetContext: boolean = addInternetContext ||
+    (Array.isArray(enabledTools) && enabledTools.includes("web_search"));
 
   // Fetch all Claude models and add any new ones to allowedModels
   let allowedModelsFinal = allowedModels;
@@ -421,7 +427,7 @@ export const POST = async (req: Request) => {
   const interactionProfileInstruction = typeof interactionProfile === "string" && interactionProfile.trim()
     ? `Tailor the response using this local interaction profile: ${interactionProfile.trim()}`
     : "";
-  const internetContextInstruction = addInternetContext
+  const internetContextInstruction = effectiveAddInternetContext
     ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
 
@@ -484,6 +490,11 @@ export const POST = async (req: Request) => {
       systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else {
       systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+  }
+
+  // Append any custom workspace system prompt
+  if (typeof customSystemPrompt === "string" && customSystemPrompt.trim()) {
+    systemPrompt = `${systemPrompt} ${customSystemPrompt.trim()}`.trim();
   }
 
   // Build history: use Supabase memory if conversationId provided, else fall back to client history

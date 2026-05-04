@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Search, Tag, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Search, Tag, X } from "lucide-react";
 import { useState } from "react";
 import { stripMarkdown } from "../lib/chat-state";
 import type { ChatThread } from "../lib/chat-types";
@@ -14,6 +14,7 @@ type ConversationsSidebarProps = {
   chatSearch: string;
   chats: ChatThread[];
   activeChatId: string;
+  systemPrompt: string;
   onClose: () => void;
   onSearchChange: (value: string) => void;
   onCreateChat: () => void;
@@ -21,6 +22,7 @@ type ConversationsSidebarProps = {
   onRenameChat: (chatId: string) => void;
   onDeleteChat: (chatId: string) => void;
   onSetChatTags: (chatId: string, tags: string[]) => void;
+  onSetSystemPrompt: (text: string) => void;
 };
 
 export function ConversationsSidebar({
@@ -32,6 +34,7 @@ export function ConversationsSidebar({
   chatSearch,
   chats,
   activeChatId,
+  systemPrompt,
   onClose,
   onSearchChange,
   onCreateChat,
@@ -39,9 +42,11 @@ export function ConversationsSidebar({
   onRenameChat,
   onDeleteChat,
   onSetChatTags,
+  onSetSystemPrompt,
 }: ConversationsSidebarProps) {
   const [editingTagsChatId, setEditingTagsChatId] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState("");
+  const [systemPromptOpen, setSystemPromptOpen] = useState(false);
 
   const handleAddTag = (chat: ChatThread) => {
     const tag = tagInput.trim();
@@ -94,6 +99,30 @@ export function ConversationsSidebar({
 
           <div className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
             {workspaceName}
+          </div>
+
+          {/* System prompt collapsible */}
+          <div className="px-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setSystemPromptOpen((prev) => !prev)}
+              className={`flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-[11px] font-medium transition-colors ${dark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700"}`}
+            >
+              {systemPromptOpen
+                ? <ChevronDown className="h-3 w-3 flex-shrink-0" />
+                : <ChevronRight className="h-3 w-3 flex-shrink-0" />}
+              System Prompt
+              {systemPrompt.trim() ? <span className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-500" /> : null}
+            </button>
+            {systemPromptOpen ? (
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => onSetSystemPrompt(e.target.value)}
+                placeholder="Add custom instructions for this workspace…"
+                rows={4}
+                className={`mt-1 w-full resize-none rounded-xl border px-2.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-sky-400 ${dark ? "border-slate-700 bg-slate-900 text-slate-200 placeholder-slate-600" : "border-slate-200 bg-slate-50 text-slate-800 placeholder-slate-400"}`}
+              />
+            ) : null}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-2">
