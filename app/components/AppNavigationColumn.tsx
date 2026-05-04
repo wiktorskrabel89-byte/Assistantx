@@ -212,9 +212,9 @@ export function AppNavigationColumn({
           </div>
         )}
 
-        {/* Pinned add-ons */}
+        {/* Pinned add-ons — compact icon grid (2 columns) */}
         {pinnedItems.length > 0 && (
-          <div className={`mt-1.5 space-y-0.5 ${appMode === "ai-code" ? "" : ""}`}>
+          <div className="mt-1.5 grid grid-cols-2 gap-1">
             {pinnedItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -224,15 +224,22 @@ export function AppNavigationColumn({
                   type="button"
                   onClick={() => onSelectTab(item.id)}
                   aria-current={isActive ? "page" : undefined}
-                  className={navButtonClass(isActive)}
+                  title={item.beta ? `${item.label} (Beta)` : item.label}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2.5 text-[10px] font-medium transition-all duration-200 ${
+                    isActive
+                      ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
+                      : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+                  }`}
                 >
-                  <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-gradient-to-br ${item.color}`}>
-                    <Icon className="h-3 w-3 text-white" />
+                  <div className="relative flex-shrink-0">
+                    <div className={`flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br ${item.color} shadow-sm`}>
+                      <Icon className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    {item.beta && (
+                      <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-violet-500 text-[6px] font-bold text-white ring-1 ring-white">β</span>
+                    )}
                   </div>
-                  <span className="flex-1 truncate">{item.label}</span>
-                  {item.beta && (
-                    <span className="ml-auto rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700">Beta</span>
-                  )}
+                  <span className="w-full truncate text-center leading-none px-1">{item.label}</span>
                 </button>
               );
             })}
