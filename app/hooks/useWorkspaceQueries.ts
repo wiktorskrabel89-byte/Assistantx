@@ -36,7 +36,7 @@ function deriveFeedbacks(workspace: Workspace): FeedbackRecord[] {
       chatId: chat.id,
       chatTitle: chat.title,
       messageId: message.id,
-      feedback: message.feedback as string,
+      feedback: String(message.feedback),
       createdAt: message.createdAt,
     }))
   );

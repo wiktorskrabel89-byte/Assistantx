@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { CodeReviewPanel } from "./CodeReviewPanel";
-import { FeedbackEmojis } from "./FeedbackEmojis";
+import { ReviewPanel } from "./ReviewPanel";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -16,12 +16,14 @@ type AIMessageProps = {
   copied: string | null;
   isStreaming: boolean;
   reasoningOpen: boolean;
-  feedback?: MessageFeedback;
+  rating?: MessageFeedback;
+  reviewText?: string;
   onCopyText: (text: string, id: string) => void;
   onToggleReasoning: (id: string) => void;
   onResponseAction: (action: ResponseAction, text: string) => void;
   onCreateFollowUp: (prompt: string) => void;
-  onFeedbackChange: (value: MessageFeedback | null) => void;
+  onRatingChange: (value: MessageFeedback | null) => void;
+  onReviewTextChange: (text: string) => void;
   onFork?: () => void;
 };
 
@@ -33,12 +35,14 @@ export function AIMessage({
   copied,
   isStreaming,
   reasoningOpen,
-  feedback,
+  rating,
+  reviewText,
   onCopyText,
   onToggleReasoning,
   onResponseAction,
   onCreateFollowUp,
-  onFeedbackChange,
+  onRatingChange,
+  onReviewTextChange,
   onFork,
 }: AIMessageProps) {
   let codeBlockIndex = 0;
@@ -174,7 +178,15 @@ export function AIMessage({
         </div>
 
         <CodeReviewPanel dark={dark} blocks={codeBlocks} onCreateFollowUp={onCreateFollowUp} />
-        {entry.ai ? <FeedbackEmojis dark={dark} value={feedback} onChange={onFeedbackChange} /> : null}
+        {entry.ai ? (
+          <ReviewPanel
+            dark={dark}
+            rating={rating}
+            reviewText={reviewText}
+            onRatingChange={onRatingChange}
+            onReviewTextChange={onReviewTextChange}
+          />
+        ) : null}
       </div>
     </div>
   );
