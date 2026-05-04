@@ -106,12 +106,21 @@ export function ConversationsSidebar({
                   const isTagging = editingTagsChatId === chat.id;
                   return (
                     <div key={chat.id}>
-                      <button
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => {
                           onSelectChat(chat.id);
                           onClose();
                         }}
-                        className={`group w-full rounded-2xl px-3 py-3 text-left transition-colors ${
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelectChat(chat.id);
+                            onClose();
+                          }
+                        }}
+                        className={`group w-full rounded-2xl px-3 py-3 text-left transition-colors cursor-pointer ${
                           chat.id === activeChatId
                             ? dark
                               ? "bg-slate-800 text-white"
@@ -148,7 +157,8 @@ export function ConversationsSidebar({
                             ) : null}
                           </div>
                           <div className="hidden gap-2 opacity-0 transition-opacity group-hover:flex group-hover:opacity-100">
-                            <span
+                            <button
+                              type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 onRenameChat(chat.id);
@@ -156,8 +166,9 @@ export function ConversationsSidebar({
                               className="text-[11px] text-slate-400 hover:text-sky-600"
                             >
                               Rename
-                            </span>
-                            <span
+                            </button>
+                            <button
+                              type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 setEditingTagsChatId(isTagging ? null : chat.id);
@@ -167,8 +178,9 @@ export function ConversationsSidebar({
                               title="Add tag"
                             >
                               Tag
-                            </span>
-                            <span
+                            </button>
+                            <button
+                              type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 onDeleteChat(chat.id);
@@ -176,10 +188,10 @@ export function ConversationsSidebar({
                               className="text-[11px] text-slate-400 hover:text-red-500"
                             >
                               Delete
-                            </span>
+                            </button>
                           </div>
                         </div>
-                      </button>
+                      </div>
 
                       {isTagging ? (
                         <div

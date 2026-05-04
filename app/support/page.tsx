@@ -145,6 +145,7 @@ export default function SupportPage() {
       console.error("Support chat error:", err);
       // Update the existing assistant placeholder if one was already appended,
       // otherwise add a new message and trigger auto-scroll.
+      let needsScrollIncrement = false;
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.content === "") {
@@ -155,9 +156,12 @@ export default function SupportPage() {
           };
           return updated;
         }
-        setMessageCount((n) => n + 1);
+        needsScrollIncrement = true;
         return [...prev, { role: "assistant", content: "Sorry, there was an error. Please try again." }];
       });
+      if (needsScrollIncrement) {
+        setMessageCount((n) => n + 1);
+      }
     }
 
     setLoading(false);

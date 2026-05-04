@@ -392,7 +392,7 @@ export const POST = async (req: Request) => {
     ? "openrouter/auto"
     : costControlled.modelId;
 
-  // Expose TOP_FREE_CODE_MODELS and TOP_FREE_CHAT_MODELS in API response for UI
+  // Determine if this is a search/DeepSeek/Gemini request for system prompt selection
   const isSearchMode = rawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");

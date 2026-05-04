@@ -312,4 +312,19 @@ describe("filterModelsByPlan", () => {
     const result = filterModelsByPlan(premiumOnly, "free");
     expect(result).toEqual([FREE_CHAT_MODEL]);
   });
+
+  it("pro plan with only pro+-only models falls back to free models if available", () => {
+    const proPlus = ["anthropic/claude-opus-4.7"];
+    const result = filterModelsByPlan(proPlus, "pro");
+    // No non-pro+-only models, no free models → fallback to FREE_CHAT_MODEL
+    expect(result).toEqual([FREE_CHAT_MODEL]);
+  });
+
+  it("pro plan with only pro+-only models and a free model falls back to free models", () => {
+    const mixed = ["anthropic/claude-opus-4.7", "meta-llama/llama-3.3-70b-instruct:free"];
+    const result = filterModelsByPlan(mixed, "pro");
+    // After filtering out pro+-only, free model remains
+    expect(result).toContain("meta-llama/llama-3.3-70b-instruct:free");
+    expect(result).not.toContain("anthropic/claude-opus-4.7");
+  });
 });

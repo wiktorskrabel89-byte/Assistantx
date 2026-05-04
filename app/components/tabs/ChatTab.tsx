@@ -207,9 +207,12 @@ export function ChatTab() {
       },
     ]);
 
-    // Count each sent message against the plan request quota only when a premium model is selected
+    // Count each sent message against the plan request quota.
+    // Increment for explicitly selected premium models, or when Auto mode is active
+    // (Auto can still route to paid models behind the scenes).
     const selectedModelId = activeWorkspace.settings.preferredModelId;
-    if ((state.userPlan === "pro" || state.userPlan === "pro+") && selectedModelId && isModelPremiumOnly(selectedModelId)) {
+    if ((state.userPlan === "pro" || state.userPlan === "pro+") &&
+      (selectedModelId === null || selectedModelId === undefined || isModelPremiumOnly(selectedModelId))) {
       incrementPremiumRequests();
     }
 
@@ -265,7 +268,11 @@ export function ChatTab() {
     if (typeof window === "undefined") return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
-      if (mod && event.key === "k") {
+      if (mod && event.key.toLowerCase() === "k") {
+        // Don't fire when the user is typing in an input, textarea, or contenteditable
+        const target = event.target as HTMLElement;
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
         event.preventDefault();
         createChatAction();
       }
