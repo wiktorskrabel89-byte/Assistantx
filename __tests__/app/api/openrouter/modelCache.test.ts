@@ -106,6 +106,22 @@ describe("getCachedModels", () => {
 
     jest.useRealTimers();
   });
+
+  it("returns the stale cache when fetch throws a network error after expiry", async () => {
+    jest.useFakeTimers();
+
+    mockFetch.mockImplementationOnce(() => makeOkResponse([{ id: "cached-model" }]));
+    await mod.getCachedModels(); // populate cache
+
+    jest.advanceTimersByTime(6 * 60 * 1000);
+
+    // Second fetch throws instead of returning a bad response
+    mockFetch.mockImplementationOnce(() => Promise.reject(new Error("Network error")));
+    const models = await mod.getCachedModels();
+    expect(models[0].id).toBe("cached-model");
+
+    jest.useRealTimers();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -146,6 +162,20 @@ describe("fetchLatestModelIds", () => {
     );
     const result = await mod.fetchLatestModelIds(["openai/gpt-4o"]);
     expect(result["openai/gpt-4o"]).toBe("openai/gpt-4o-2024-11");
+  });
+
+  it("uses numeric ordering when version numbers differ (e.g. 4.10 > 4.9)", async () => {
+    // A purely lexicographic sort would rank "4.9" above "4.10" because "9" > "1".
+    // The implementation uses localeCompare with { numeric: true }, so 4.10 wins.
+    mockFetch.mockImplementationOnce(() =>
+      makeOkResponse([
+        { id: "openai/gpt-4.9-turbo" },
+        { id: "openai/gpt-4.10-turbo" },
+        { id: "openai/gpt-4.8-turbo" },
+      ])
+    );
+    const result = await mod.fetchLatestModelIds(["openai/gpt-4."]);
+    expect(result["openai/gpt-4."]).toBe("openai/gpt-4.10-turbo");
   });
 
   it("handles multiple prefixes in a single call", async () => {

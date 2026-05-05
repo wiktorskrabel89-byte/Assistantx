@@ -157,14 +157,20 @@ export default function LoginPage() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
 
-    if (error) {
+      if (error) {
+        setSubmitState("error");
+        setFeedback(error.message);
+        return;
+      }
+    } catch (error) {
       setSubmitState("error");
-      setFeedback(error.message);
+      setFeedback(error instanceof Error ? error.message : "Sign-in failed. Please try again.");
       return;
     }
 
@@ -210,18 +216,26 @@ export default function LoginPage() {
     }
 
     const redirectTo = `${window.location.origin}/auth/callback`;
-    const { error } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: { emailRedirectTo: redirectTo },
-    });
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: { emailRedirectTo: redirectTo },
+      });
 
-    if (error) {
+      if (error) {
+        setSubmitState("error");
+        setFeedback(error.message);
+        return;
+      }
+    } catch (error) {
       setSubmitState("error");
-      setFeedback(error.message);
+      setFeedback(error instanceof Error ? error.message : "Registration failed. Please try again.");
       return;
     }
 
+    setPassword("");
+    setConfirmPassword("");
     setSubmitState("success");
     setFeedback("Account created! Check your inbox to confirm your email address.");
   }
@@ -258,9 +272,13 @@ export default function LoginPage() {
 
         <section className="rounded-3xl border border-sky-200/60 bg-white/92 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.45)] backdrop-blur sm:p-8">
           {/* Tab switcher */}
-          <div className="mb-6 flex rounded-xl border border-slate-200 bg-slate-100 p-1">
+          <div role="tablist" aria-label="Authentication options" className="mb-6 flex rounded-xl border border-slate-200 bg-slate-100 p-1">
             <button
               type="button"
+              role="tab"
+              aria-selected={tab === "login"}
+              aria-controls="panel-login"
+              id="tab-login"
               onClick={() => switchTab("login")}
               className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
                 tab === "login"
@@ -272,6 +290,10 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={tab === "register"}
+              aria-controls="panel-register"
+              id="tab-register"
               onClick={() => switchTab("register")}
               className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
                 tab === "register"
@@ -335,7 +357,7 @@ export default function LoginPage() {
 
           {/* Login form */}
           {tab === "login" && (
-            <form onSubmit={(event) => void handleLogin(event)} className="mt-5 space-y-4">
+            <form id="panel-login" role="tabpanel" aria-labelledby="tab-login" onSubmit={(event) => void handleLogin(event)} className="mt-5 space-y-4">
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-700">Email address</span>
                 <input
@@ -376,7 +398,7 @@ export default function LoginPage() {
 
           {/* Register form */}
           {tab === "register" && (
-            <form onSubmit={(event) => void handleRegister(event)} className="mt-5 space-y-4">
+            <form id="panel-register" role="tabpanel" aria-labelledby="tab-register" onSubmit={(event) => void handleRegister(event)} className="mt-5 space-y-4">
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-700">Email address</span>
                 <input
@@ -424,6 +446,8 @@ export default function LoginPage() {
                 <input
                   type="checkbox"
                   id="accept-policy"
+                  required
+                  aria-required="true"
                   checked={acceptedPolicy}
                   onChange={(event) => setAcceptedPolicy(event.target.checked)}
                   className="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer rounded border-slate-300 text-sky-600 focus:ring-sky-400"

@@ -339,7 +339,9 @@ export function ChatTab() {
       chatId: currentConversationId,
       patch: {
         messages: activeChat.messages.map((entry) => (
-          entry.id === messageId ? { ...entry, feedback: feedback ?? undefined } : entry
+          entry.id === messageId
+            ? { ...entry, feedback: feedback ?? undefined, reviewText: feedback === null ? undefined : entry.reviewText }
+            : entry
         )),
       },
     });

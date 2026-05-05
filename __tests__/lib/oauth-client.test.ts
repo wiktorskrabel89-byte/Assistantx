@@ -182,6 +182,20 @@ describe("clearOAuthErrorFromLocation", () => {
     expect(window.location.search).toBe("");
     expect(window.location.hash).toBe("");
   });
+
+  it("removes the 'error_code' query param from the URL", () => {
+    window.history.pushState({}, "", "/?error_code=oauth_exchange_failed&other=value");
+    clearOAuthErrorFromLocation();
+    expect(window.location.search).not.toContain("error_code=");
+    expect(window.location.search).toContain("other=value");
+  });
+
+  it("removes both 'error' and 'error_code' when both are present", () => {
+    window.history.pushState({}, "", "/?error=access_denied&error_code=oauth_exchange_failed");
+    clearOAuthErrorFromLocation();
+    expect(window.location.search).not.toContain("error=");
+    expect(window.location.search).not.toContain("error_code=");
+  });
 });
 
 // ---------------------------------------------------------------------------
