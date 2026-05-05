@@ -737,7 +737,7 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
 
   // ── Google Fonts insertion ────────────────────────────────────────────────────
   function insertGoogleFont(font: typeof GOOGLE_FONTS[0]) {
-    const linkTag = `<link rel="preconnect" href="https://fonts.googleapis.com">\n  <link href="${font.url}" rel="stylesheet">`;
+    const linkTag = `<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>\n  <link href="${font.url}" rel="stylesheet">`;
     if (html.includes(font.url)) { setShowFontsPanel(false); return; }
     let updated = html;
     if (/<\/head>/i.test(updated)) {
