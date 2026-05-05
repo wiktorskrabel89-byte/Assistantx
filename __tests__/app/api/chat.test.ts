@@ -24,11 +24,6 @@ jest.mock("@/lib/server", () => ({
   }),
 }));
 
-jest.mock("@/app/api/openrouter/modelCache", () => ({
-  fetchLatestModelIds: jest.fn().mockResolvedValue({}),
-  getCachedModels: jest.fn().mockResolvedValue([]),
-}));
-
 jest.mock("@/lib/rateLimit", () => ({
   checkRateLimit: jest.fn().mockReturnValue({ allowed: true, retryAfterMs: 0 }),
   getRateLimitKey: jest.fn().mockReturnValue("test-key"),

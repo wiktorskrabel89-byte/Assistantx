@@ -6,7 +6,6 @@ function getSupabase() {
   // For now, return createClient() directly for compatibility.
   return createClient();
 }
-import { fetchLatestModelIds, getCachedModels } from "../openrouter/modelCache";
 import {
   CHAT_MODELS,
   CODE_MODELS,
@@ -20,6 +19,8 @@ import {
   getCheaperAlternative,
   FREE_CODING_MODEL,
   FREE_CHAT_MODEL,
+  AUTO_PREFERRED_CODING_MODEL,
+  AUTO_PREFERRED_CHAT_MODEL,
   REASONING_MODEL_IDS,
   getModelMaxTokens,
 } from "@/lib/ai-config";
@@ -293,12 +294,9 @@ export const POST = async (req: Request) => {
   const rl = checkRateLimit(rlKey, 30, 60_000);
   if (!rl.allowed) return rateLimitedResponse(rl.retryAfterMs);
 
-  // Fetch GPT and Claude latest model IDs in a single (cached) request
-  const latestModels = await fetchLatestModelIds(["openai/gpt-", "anthropic/claude-"]);
-  const latestGpt = latestModels["openai/gpt-"];
-  const latestClaude = latestModels["anthropic/claude-"];
-  const CODE_MODEL = latestGpt ?? FREE_CODING_MODEL;
-  const CHAT_MODEL = latestClaude ?? FREE_CHAT_MODEL;
+  // Use static local model constants — no network call needed
+  const CODE_MODEL = AUTO_PREFERRED_CODING_MODEL;
+  const CHAT_MODEL = AUTO_PREFERRED_CHAT_MODEL;
 
   const requestSignal = req.signal;
   const {
@@ -329,20 +327,16 @@ export const POST = async (req: Request) => {
   const effectiveAddInternetContext: boolean = addInternetContext ||
     (Array.isArray(enabledTools) && enabledTools.includes("web_search"));
 
-  // Fetch all Claude models and add any new ones to allowedModels
+  // Merge any Claude models from the local curated list that aren't already in allowedModels
   let allowedModelsFinal = allowedModels;
-  try {
-    const allModels = await getCachedModels();
-    const claudeModels = allModels.filter((m) => m.id.startsWith("anthropic/claude-"));
-    if (Array.isArray(allowedModels)) {
-      const allowedSet = new Set(allowedModels);
-      const newClaudeIds = claudeModels
-        .filter((model) => !allowedSet.has(model.id))
-        .map((model) => model.id);
-      allowedModelsFinal = newClaudeIds.length > 0 ? [...allowedModels, ...newClaudeIds] : allowedModels;
-    }
-  } catch {
-    // fetchAllModels failure is non-fatal; proceed with the original allowedModels
+  if (Array.isArray(allowedModels)) {
+    const allowedSet = new Set<string>(allowedModels);
+    const localClaudeIds = [...new Set(
+      [...CHAT_MODELS, ...CODE_MODELS]
+        .map((m) => m.id)
+        .filter((id) => id.startsWith("anthropic/claude-") && !allowedSet.has(id))
+    )];
+    allowedModelsFinal = localClaudeIds.length > 0 ? [...allowedModels, ...localClaudeIds] : allowedModels;
   }
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];

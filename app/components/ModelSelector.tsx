@@ -1,14 +1,8 @@
 "use client";
 
 import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp } from "lucide-react";
-import { useEffect, useState } from "react";
-import { fetchAllModels } from "../api/openrouter/fetchAllModels";
-import { isModelPremiumOnly, isModelProPlusOnly, PRO_PLUS_ONLY_MODELS } from "@/lib/ai-config";
-
-type OpenRouterModel = {
-  id: string;
-  description?: string;
-};
+import { useState } from "react";
+import { ALL_MODELS, isModelPremiumOnly, isModelProPlusOnly } from "@/lib/ai-config";
 
 type ModelSelectorProps = {
   dark: boolean;
@@ -21,17 +15,7 @@ type ModelSelectorProps = {
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false }: ModelSelectorProps) {
   const [open, setOpen] = useState(true);
-  const [allModels, setAllModels] = useState<OpenRouterModel[]>([]);
   const isAuto = preferredModelId === null;
-
-  useEffect(() => {
-    fetchAllModels().then((models) => {
-      setAllModels(models);
-      if (!models || models.length === 0) {
-        console.warn('ModelSelector: No models loaded', models);
-      }
-    });
-  }, []);
 
   const pillBase = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none";
   const pillActive = dark
@@ -82,9 +66,8 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
             <Code2 className="mr-0.5 inline h-3 w-3" />
             All Models
           </span>
-          {allModels.map((model) => {
-            // Claude Opus 4.7 requires Pro+
-            const requiresProPlus = isModelProPlusOnly(model.id) || PRO_PLUS_ONLY_MODELS.includes(model.id);
+          {ALL_MODELS.map((model) => {
+            const requiresProPlus = isModelProPlusOnly(model.id);
             const requiresPremium = isModelPremiumOnly(model.id);
             const locked = requiresProPlus
               ? !isProPlus

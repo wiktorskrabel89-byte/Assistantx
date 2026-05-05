@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/client";
-import { fetchAllModels } from "@/app/api/openrouter/fetchAllModels";
+import { ALL_MODELS } from "@/lib/ai-config";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -34,10 +34,6 @@ type ChatEntry = {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
-};
-
-type ModelOption = {
-  id: string;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -241,7 +237,6 @@ export function ClinicalTab() {
     () => loadCustomFrameworks(),
   );
   const [selectedFrameworkId, setSelectedFrameworkId] = useState<string | null>(null);
-  const [allModels, setAllModels] = useState<ModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL);
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
@@ -264,10 +259,6 @@ export function ClinicalTab() {
   const selectedFramework = allFrameworks.find((f) => f.id === selectedFrameworkId) ?? null;
 
   // ── Effects ────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    fetchAllModels().then((models) => setAllModels(models));
-  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -489,8 +480,8 @@ export function ClinicalTab() {
   // ── Filtered models ────────────────────────────────────────────────────────
 
   const filteredModels = modelSearch.trim()
-    ? allModels.filter((m) => m.id.toLowerCase().includes(modelSearch.toLowerCase()))
-    : allModels;
+    ? ALL_MODELS.filter((m) => m.id.toLowerCase().includes(modelSearch.toLowerCase()))
+    : ALL_MODELS;
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
