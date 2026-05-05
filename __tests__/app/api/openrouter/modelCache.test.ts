@@ -230,9 +230,12 @@ describe("fetchAllModels", () => {
     expect(models[0].id).toBe("openai/gpt-4o");
   });
 
-  it("returns an empty array when the upstream API is unavailable", async () => {
+  it("returns local fallback models when the upstream API is unavailable", async () => {
     mockFetch.mockImplementationOnce(() => Promise.reject(new Error("Network error")));
     const models = await fetchMod.fetchAllModels();
-    expect(models).toEqual([]);
+    expect(models.length).toBeGreaterThan(0);
+    // Should contain at least one model from the local curated list
+    const ids = models.map((m: { id: string }) => m.id);
+    expect(ids.some((id: string) => id.includes("meta-llama") || id.includes("openai") || id.includes("anthropic"))).toBe(true);
   });
 });
