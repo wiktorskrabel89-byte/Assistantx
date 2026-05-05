@@ -25,63 +25,72 @@ describe("ModelSelector", () => {
     return { ...utils, onSelectModel };
   }
 
-  async function expandSelector(overrides: Partial<Parameters<typeof ModelSelector>[0]> = {}) {
-    const result = renderSelector(overrides);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Pokaż wybór modelu" }));
-    });
-    return result;
-  }
 
-  it("renders the toggle button collapsed by default", () => {
+  it("renders the toggle button expanded by default", () => {
     renderSelector();
-    expect(screen.getByRole("button", { name: "Pokaż wybór modelu" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ukryj wybór modelu" })).toBeInTheDocument();
   });
 
-  it("expands to show Auto button when toggle is clicked", async () => {
-    await expandSelector();
+  it("shows Auto button when expanded by default", async () => {
+    renderSelector();
+    await act(async () => {});
     expect(screen.getByRole("button", { name: /Auto/i })).toBeInTheDocument();
   });
 
-  it("Auto button is active (has bg-blue class) when preferredModelId is null", async () => {
-    await expandSelector({ preferredModelId: null });
+  it("Auto button is active (has blue class) when preferredModelId is null", async () => {
+    renderSelector({ preferredModelId: null });
+    await act(async () => {});
     const autoButton = screen.getByRole("button", { name: /Auto/i });
     expect(autoButton.className).toContain("blue");
   });
 
   it("Auto button is inactive when a model is selected", async () => {
-    await expandSelector({ preferredModelId: "openai/gpt-5" });
+    renderSelector({ preferredModelId: "openai/gpt-5" });
+    await act(async () => {});
     const autoButton = screen.getByRole("button", { name: /Auto/i });
     expect(autoButton.className).not.toContain("blue-950");
   });
 
   it("calls onSelectModel(null) when Auto is clicked", async () => {
-    const { onSelectModel } = await expandSelector({ preferredModelId: "openai/gpt-5" });
+    const { onSelectModel } = renderSelector({ preferredModelId: "openai/gpt-5" });
+    await act(async () => {});
     fireEvent.click(screen.getByRole("button", { name: /Auto/i }));
     expect(onSelectModel).toHaveBeenCalledWith(null);
   });
 
   it("renders loaded models as buttons", async () => {
-    await expandSelector();
+    renderSelector();
+    await act(async () => {});
     expect(screen.getByRole("button", { name: /openai\/gpt-5-mini/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /claude-opus-4\.6/i })).toBeInTheDocument();
   });
 
   it("calls onSelectModel with the model id when a model button is clicked", async () => {
-    const { onSelectModel } = await expandSelector();
+    const { onSelectModel } = renderSelector();
+    await act(async () => {});
     fireEvent.click(screen.getByRole("button", { name: /openai\/gpt-5-mini/i }));
     expect(onSelectModel).toHaveBeenCalledWith("openai/gpt-5-mini");
   });
 
-  it("collapses the list when toggle is clicked a second time", async () => {
-    await expandSelector();
-    // Click again to collapse
+  it("collapses the list when toggle is clicked", async () => {
+    renderSelector();
+    await act(async () => {});
     fireEvent.click(screen.getByRole("button", { name: "Ukryj wybór modelu" }));
     expect(screen.queryByRole("button", { name: /Auto/i })).not.toBeInTheDocument();
   });
 
+  it("re-expands when toggle is clicked again after collapsing", async () => {
+    renderSelector();
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Ukryj wybór modelu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pokaż wybór modelu" }));
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: /Auto/i })).toBeInTheDocument();
+  });
+
   it("shows Pro badge when isPremium is true and isProPlus is false", async () => {
-    await expandSelector({ isPremium: true });
+    renderSelector({ isPremium: true });
+    await act(async () => {});
     expect(screen.getByText("Pro")).toBeInTheDocument();
     expect(screen.queryByText("Pro+")).not.toBeInTheDocument();
   });
@@ -97,22 +106,22 @@ describe("ModelSelector", () => {
         onSelectModel={onSelectModel}
       />
     );
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Pokaż wybór modelu" }));
-    });
+    await act(async () => {});
     expect(screen.getByText("Pro+")).toBeInTheDocument();
     expect(screen.queryByText("Pro")).not.toBeInTheDocument();
   });
 
   it("hides plan badge when isPremium is false", async () => {
-    await expandSelector({ isPremium: false });
+    renderSelector({ isPremium: false });
+    await act(async () => {});
     expect(screen.queryByText("Pro")).not.toBeInTheDocument();
     expect(screen.queryByText("Pro+")).not.toBeInTheDocument();
   });
 
   it("locked models are disabled and do not call onSelectModel", async () => {
     // claude-opus-4.6 should be locked for non-premium users
-    const { onSelectModel } = await expandSelector({ isPremium: false });
+    const { onSelectModel } = renderSelector({ isPremium: false });
+    await act(async () => {});
     const lockedBtn = screen.getByRole("button", { name: /claude-opus/i });
     expect(lockedBtn).toBeDisabled();
     fireEvent.click(lockedBtn);
