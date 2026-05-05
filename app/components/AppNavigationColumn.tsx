@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { AppMode } from "../lib/chat-types";
+import { useWorkspace } from "../providers/WorkspaceProvider";
 
 export type AppNavigationTab =
   | "chat"
@@ -106,6 +107,26 @@ export function AppNavigationColumn({
   const [appsOpen, setAppsOpen] = useState(false);
   const [appsSearch, setAppsSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatSearchLocal, setChatSearchLocal] = useState("");
+
+  const {
+    filteredChats,
+    activeChat,
+    activeWorkspace,
+    setActiveChatId,
+    createChatAction,
+  } = useWorkspace();
+
+  const visibleChats = chatSearchLocal.trim()
+    ? filteredChats.filter((c) =>
+        c.title.toLowerCase().includes(chatSearchLocal.toLowerCase())
+      )
+    : filteredChats;
+
+  function handleSelectChat(chatId: string) {
+    setActiveChatId(activeWorkspace.id, chatId);
+    onSelectTab("chat");
+  }
 
   const shellClassName = dark
     ? "border-slate-800 bg-slate-900 text-slate-100"
@@ -182,8 +203,11 @@ export function AppNavigationColumn({
         </div>
       </div>
 
-      {/* ── Core nav ── */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+      {/* ── Core nav + Chats ── */}
+      <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
+
+      {/* Tabs section */}
+      <div className="flex-shrink-0 overflow-y-auto px-3 pt-4 pb-1">
         {/* Chat — always shown */}
         <button
           type="button"
@@ -367,6 +391,78 @@ export function AppNavigationColumn({
           </div>
         )}
       </div>
+
+      {/* ── Chats section ── */}
+      <div className="min-h-0 flex-1 flex flex-col">
+        {/* Header row */}
+        <div className={`flex flex-shrink-0 items-center justify-between border-t px-3 pt-2 pb-1.5 ${dividerClassName}`}>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Chats</span>
+          <button
+            type="button"
+            onClick={createChatAction}
+            title="New chat"
+            aria-label="New chat"
+            className={`flex h-5 w-5 items-center justify-center rounded-md transition-colors ${dark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"}`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="flex-shrink-0 px-3 pb-1.5">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+            <input
+              id="nav-chat-search"
+              name="navChatSearch"
+              value={chatSearchLocal}
+              onChange={(e) => setChatSearchLocal(e.target.value)}
+              placeholder="Search chats…"
+              className={`w-full rounded-lg border py-1 pl-6.5 pr-2 text-[11px] focus:outline-none ${dark ? "border-slate-700 bg-slate-800 text-slate-200 placeholder-slate-500" : "border-slate-200 bg-slate-50 text-slate-800 placeholder-slate-400"}`}
+            />
+            {chatSearchLocal && (
+              <button
+                type="button"
+                onClick={() => setChatSearchLocal("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Chat list — compact, scrollable */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          {visibleChats.length === 0 ? (
+            <p className="px-2 py-3 text-center text-[10px] text-slate-400">No chats found.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {visibleChats.map((chat) => {
+                const isActive = chat.id === activeChat.id;
+                return (
+                  <button
+                    key={chat.id}
+                    type="button"
+                    onClick={() => handleSelectChat(chat.id)}
+                    aria-current={isActive ? "page" : undefined}
+                    title={chat.title}
+                    className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-left transition-colors ${
+                      isActive
+                        ? dark ? "bg-slate-800 text-white" : "bg-sky-50 text-sky-800"
+                        : dark ? "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight">{chat.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      </div>{/* end Core nav + Chats */}
 
       {/* ── Bottom: settings panel or avatar pill ── */}
       <div className={`border-t px-3 py-3 ${dividerClassName}`}>

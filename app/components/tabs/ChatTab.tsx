@@ -20,7 +20,6 @@ import { ModelSelector } from "../ModelSelector";
 import { PremiumPlanBanner } from "../PremiumPlanBanner";
 import { PromptChainPanel } from "../PromptChainPanel";
 import { PromptManager } from "../PromptManager";
-import { PullToRefresh } from "../PullToRefresh";
 import { ShareConversationDialog } from "../ShareConversationDialog";
 import { ThinkingIndicator } from "../ThinkingIndicator";
 import { UsageDashboard } from "../UsageDashboard";
@@ -679,25 +678,27 @@ export function ChatTab() {
 
   return (
     <>
-      <ConversationsSidebar
-        open={sidebarOpen}
-        dark={state.dark}
-        cardBg={cardBg}
-        inputBg={inputBg}
-        workspaceName={activeWorkspace.name}
-        chatSearch={chatSearch}
-        chats={filteredConversations}
-        activeChatId={currentConversationId}
-        systemPrompt={activeWorkspace.settings.systemPrompt ?? ""}
-        onClose={() => setSidebarOpen(false)}
-        onSearchChange={setChatSearch}
-        onCreateChat={createChatAction}
-        onSelectChat={(chatId) => setActiveChatId(activeWorkspace.id, chatId)}
-        onRenameChat={renameChat}
-        onDeleteChat={deleteChat}
-        onSetChatTags={setChatTags}
-        onSetSystemPrompt={setSystemPrompt}
-      />
+      <div className="xl:hidden">
+        <ConversationsSidebar
+          open={sidebarOpen}
+          dark={state.dark}
+          cardBg={cardBg}
+          inputBg={inputBg}
+          workspaceName={activeWorkspace.name}
+          chatSearch={chatSearch}
+          chats={filteredConversations}
+          activeChatId={currentConversationId}
+          systemPrompt={activeWorkspace.settings.systemPrompt ?? ""}
+          onClose={() => setSidebarOpen(false)}
+          onSearchChange={setChatSearch}
+          onCreateChat={createChatAction}
+          onSelectChat={(chatId) => setActiveChatId(activeWorkspace.id, chatId)}
+          onRenameChat={renameChat}
+          onDeleteChat={deleteChat}
+          onSetChatTags={setChatTags}
+          onSetSystemPrompt={setSystemPrompt}
+        />
+      </div>
 
       <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
         <section className="flex h-full min-h-0 min-w-0 flex-col animate-tab-enter">
@@ -756,12 +757,6 @@ export function ChatTab() {
               </div>
 
               <div className="min-h-0 flex flex-1 flex-col">
-                <PullToRefresh
-                  dark={state.dark}
-                  disabled={loading}
-                  scrollContainerRef={chatScrollRef}
-                  onRefresh={refreshConversation}
-                />
                 <ChatList
                   chat={activeChat.messages}
                   loading={loading}
