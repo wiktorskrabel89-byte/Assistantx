@@ -18,6 +18,7 @@ type GitHubPanelProps = {
   onImportFile: (file: File, prompt: string) => void;
   onCopyVsCodePrompt: () => void;
   onDownloadVsCodeBundle: () => void;
+  onSendGoogleContext?: (context: string) => void;
 };
 
 export function GitHubPanel({
@@ -33,6 +34,7 @@ export function GitHubPanel({
   onImportFile,
   onCopyVsCodePrompt,
   onDownloadVsCodeBundle,
+  onSendGoogleContext,
 }: GitHubPanelProps) {
   useEffect(() => {
     if (!open) return;
@@ -86,6 +88,7 @@ export function GitHubPanel({
               onImportFile={onImportFile}
               onCopyVsCodePrompt={onCopyVsCodePrompt}
               onDownloadVsCodeBundle={onDownloadVsCodeBundle}
+              onSendGoogleContext={onSendGoogleContext}
             />
           </div>
         </div>

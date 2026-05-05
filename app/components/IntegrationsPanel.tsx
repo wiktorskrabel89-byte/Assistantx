@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { GitHubFileSummary, OAuthProvider } from "@/lib/integrations";
-import { Calendar, ChevronDown, GitBranch, GitPullRequest, Mail, RefreshCw, Upload } from "lucide-react";
+import { Calendar, ChevronDown, GitBranch, GitPullRequest, Mail, Plus, RefreshCw, Sparkles, Upload } from "lucide-react";
 
 type UserRepo = {
   fullName: string;
@@ -88,6 +88,7 @@ export function IntegrationsPanel({
   onImportFile,
   onCopyVsCodePrompt,
   onDownloadVsCodeBundle,
+  onSendGoogleContext,
 }: {
   dark: boolean;
   linkedProviders: OAuthProvider[];
@@ -99,6 +100,8 @@ export function IntegrationsPanel({
   onImportFile: (file: File, prompt: string) => void;
   onCopyVsCodePrompt: () => void;
   onDownloadVsCodeBundle: () => void;
+  /** Called with a context string to inject into the next chat message */
+  onSendGoogleContext?: (context: string) => void;
 }) {
   const [githubRepoInput, setGithubRepoInput] = useState("");
   const [githubRefInput, setGithubRefInput] = useState("");
@@ -144,10 +147,23 @@ export function IntegrationsPanel({
   const [gmailMessages, setGmailMessages] = useState<GmailMessageSummary[]>([]);
   const [gmailLoading, setGmailLoading] = useState(false);
   const [gmailError, setGmailError] = useState("");
+  const [gmailAnalysis, setGmailAnalysis] = useState<string | null>(null);
+  const [gmailAnalyzing, setGmailAnalyzing] = useState(false);
+  const [gmailAnalysisQuery, setGmailAnalysisQuery] = useState("");
 
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventSummary[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState("");
+  // Create event form
+  const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState("");
+  const [newEventStart, setNewEventStart] = useState("");
+  const [newEventEnd, setNewEventEnd] = useState("");
+  const [newEventDesc, setNewEventDesc] = useState("");
+  const [newEventLocation, setNewEventLocation] = useState("");
+  const [newEventAllDay, setNewEventAllDay] = useState(false);
+  const [createEventLoading, setCreateEventLoading] = useState(false);
+  const [createEventResult, setCreateEventResult] = useState<{ ok?: boolean; htmlLink?: string; error?: string } | null>(null);
 
   const filteredFiles = useMemo(() => {
     if (!githubRepo) return [];
@@ -367,7 +383,7 @@ export function IntegrationsPanel({
     setGmailError("");
 
     try {
-      const response = await fetch("/api/integrations/gmail?maxResults=10");
+      const response = await fetch("/api/integrations/gmail?maxResults=20");
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
@@ -379,6 +395,47 @@ export function IntegrationsPanel({
       setGmailError(error instanceof Error ? error.message : "Failed to fetch Gmail messages.");
     } finally {
       setGmailLoading(false);
+    }
+  }
+
+  async function analyzeGmail() {
+    setGmailAnalyzing(true);
+    setGmailError("");
+    setGmailAnalysis(null);
+
+    try {
+      const response = await fetch("/api/integrations/gmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          maxResults: 20,
+          query: gmailAnalysisQuery.trim() || undefined,
+        }),
+      });
+      const data = await response.json().catch(() => ({})) as {
+        messages?: GmailMessageSummary[];
+        analysis?: string | null;
+        error?: string;
+      };
+
+      if (!response.ok) throw new Error(data.error ?? "Analysis failed.");
+
+      if (data.messages) setGmailMessages(data.messages);
+
+      if (data.analysis) {
+        setGmailAnalysis(data.analysis);
+        // Also inject into chat context if callback is available
+        const emailList = (data.messages ?? [])
+          .map((m) => `Subject: ${m.subject} | From: ${m.from}`)
+          .join("\n");
+        onSendGoogleContext?.(
+          `Gmail inbox (${(data.messages ?? []).length} emails):\n${emailList}\n\nAI analysis:\n${data.analysis}`
+        );
+      }
+    } catch (error) {
+      setGmailError(error instanceof Error ? error.message : "Analysis failed.");
+    } finally {
+      setGmailAnalyzing(false);
     }
   }
 
@@ -399,6 +456,39 @@ export function IntegrationsPanel({
       setCalendarError(error instanceof Error ? error.message : "Failed to fetch calendar events.");
     } finally {
       setCalendarLoading(false);
+    }
+  }
+
+  async function createCalendarEvent() {
+    setCreateEventLoading(true);
+    setCreateEventResult(null);
+
+    try {
+      const response = await fetch("/api/integrations/google-calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newEventTitle.trim() || "New Event",
+          description: newEventDesc.trim(),
+          location: newEventLocation.trim(),
+          startDateTime: newEventStart,
+          endDateTime: newEventEnd || undefined,
+          allDay: newEventAllDay,
+        }),
+      });
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; htmlLink?: string; error?: string };
+
+      if (!response.ok) throw new Error(data.error ?? "Failed to create event.");
+
+      setCreateEventResult({ ok: true, htmlLink: data.htmlLink });
+      // Refresh calendar events
+      void fetchCalendarEvents();
+      // Reset form
+      setNewEventTitle(""); setNewEventStart(""); setNewEventEnd(""); setNewEventDesc(""); setNewEventLocation("");
+    } catch (error) {
+      setCreateEventResult({ error: error instanceof Error ? error.message : "Failed to create event." });
+    } finally {
+      setCreateEventLoading(false);
     }
   }
 
@@ -758,7 +848,7 @@ export function IntegrationsPanel({
               <Mail className={`mt-0.5 h-4 w-4 shrink-0 ${dark ? "text-blue-400" : "text-blue-600"}`} />
               <div>
                 <div className="text-sm font-medium">Gmail</div>
-                <p className="mt-1 text-xs leading-5 text-gray-500">View your recent inbox messages. Connect Google to enable Gmail access.</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">View and analyze your inbox with AI. Connect Google to enable Gmail access.</p>
               </div>
             </div>
             <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${googleConnected ? providerBadge(true, dark) : providerBadge(false, dark)}`}>
@@ -767,14 +857,42 @@ export function IntegrationsPanel({
           </div>
 
           <div className="mt-3 space-y-2">
-            <button
-              onClick={() => void fetchGmailMessages()}
-              disabled={gmailLoading || !googleConnected}
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-gray-800 text-gray-100 hover:bg-gray-700 disabled:opacity-50" : "bg-white text-gray-900 border border-gray-200 hover:bg-gray-100 disabled:opacity-50"}`}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${gmailLoading ? "animate-spin" : ""}`} />
-              {gmailLoading ? "Loading..." : "Load recent emails"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => void fetchGmailMessages()}
+                disabled={gmailLoading || !googleConnected}
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-gray-800 text-gray-100 hover:bg-gray-700 disabled:opacity-50" : "bg-white text-gray-900 border border-gray-200 hover:bg-gray-100 disabled:opacity-50"}`}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${gmailLoading ? "animate-spin" : ""}`} />
+                {gmailLoading ? "Loading..." : "Load emails"}
+              </button>
+              <button
+                onClick={() => void analyzeGmail()}
+                disabled={gmailAnalyzing || !googleConnected}
+                title="AI analyzes your inbox and tells you which emails are important"
+                aria-label="Analyze inbox with AI"
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-blue-900/70 text-blue-200 hover:bg-blue-800 disabled:opacity-50" : "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"}`}
+              >
+                <Sparkles className={`h-3.5 w-3.5 ${gmailAnalyzing ? "animate-spin" : ""}`} />
+                {gmailAnalyzing ? "Analyzing..." : "Analyze with AI"}
+              </button>
+            </div>
+
+            <input
+              type="text"
+              value={gmailAnalysisQuery}
+              onChange={(e) => setGmailAnalysisQuery(e.target.value)}
+              placeholder="Custom question (e.g. which emails need urgent reply?)"
+              disabled={!googleConnected}
+              className={`w-full rounded-xl border px-3 py-2 text-xs ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"} disabled:opacity-50`}
+            />
+
+            {gmailAnalysis && (
+              <div className={`rounded-xl border px-3 py-2 text-xs leading-relaxed ${dark ? "border-blue-900 bg-blue-950/40 text-blue-100" : "border-blue-200 bg-blue-50 text-blue-900"}`}>
+                <div className="mb-1 font-semibold">AI inbox analysis</div>
+                <div className="whitespace-pre-wrap">{gmailAnalysis}</div>
+              </div>
+            )}
 
             {gmailMessages.length > 0 && (
               <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
@@ -802,7 +920,7 @@ export function IntegrationsPanel({
               <Calendar className={`mt-0.5 h-4 w-4 shrink-0 ${dark ? "text-green-400" : "text-green-600"}`} />
               <div>
                 <div className="text-sm font-medium">Google Calendar</div>
-                <p className="mt-1 text-xs leading-5 text-gray-500">View upcoming events from your primary calendar for the next 7 days.</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">View and create events in your primary calendar.</p>
               </div>
             </div>
             <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${googleConnected ? providerBadge(true, dark) : providerBadge(false, dark)}`}>
@@ -811,14 +929,88 @@ export function IntegrationsPanel({
           </div>
 
           <div className="mt-3 space-y-2">
-            <button
-              onClick={() => void fetchCalendarEvents()}
-              disabled={calendarLoading || !googleConnected}
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-gray-800 text-gray-100 hover:bg-gray-700 disabled:opacity-50" : "bg-white text-gray-900 border border-gray-200 hover:bg-gray-100 disabled:opacity-50"}`}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${calendarLoading ? "animate-spin" : ""}`} />
-              {calendarLoading ? "Loading..." : "Load upcoming events"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => void fetchCalendarEvents()}
+                disabled={calendarLoading || !googleConnected}
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-gray-800 text-gray-100 hover:bg-gray-700 disabled:opacity-50" : "bg-white text-gray-900 border border-gray-200 hover:bg-gray-100 disabled:opacity-50"}`}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${calendarLoading ? "animate-spin" : ""}`} />
+                {calendarLoading ? "Loading..." : "Load events"}
+              </button>
+              <button
+                onClick={() => { setShowCreateEvent((v) => !v); setCreateEventResult(null); }}
+                disabled={!googleConnected}
+                title="Create a new calendar event"
+                aria-label="Create calendar event"
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-green-900/70 text-green-200 hover:bg-green-800 disabled:opacity-50" : "bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"}`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create event
+              </button>
+            </div>
+
+            {showCreateEvent && googleConnected && (
+              <div className={`space-y-2 rounded-xl border px-3 py-3 ${dark ? "border-gray-700 bg-gray-900/60" : "border-gray-300 bg-white"}`}>
+                <div className="text-xs font-semibold">New event</div>
+                <input
+                  type="text"
+                  value={newEventTitle}
+                  onChange={(e) => setNewEventTitle(e.target.value)}
+                  placeholder="Event title"
+                  className={`w-full rounded-lg border px-2 py-1.5 text-xs ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
+                />
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <input type="checkbox" checked={newEventAllDay} onChange={(e) => setNewEventAllDay(e.target.checked)} />
+                    All day
+                  </label>
+                </div>
+                <input
+                  type={newEventAllDay ? "date" : "datetime-local"}
+                  value={newEventStart}
+                  onChange={(e) => setNewEventStart(e.target.value)}
+                  className={`w-full rounded-lg border px-2 py-1.5 text-xs ${dark ? "border-gray-700 bg-gray-900 text-gray-100" : "border-gray-300 bg-white text-gray-900"}`}
+                />
+                <input
+                  type={newEventAllDay ? "date" : "datetime-local"}
+                  value={newEventEnd}
+                  onChange={(e) => setNewEventEnd(e.target.value)}
+                  placeholder="End (optional)"
+                  className={`w-full rounded-lg border px-2 py-1.5 text-xs ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
+                />
+                <input
+                  type="text"
+                  value={newEventLocation}
+                  onChange={(e) => setNewEventLocation(e.target.value)}
+                  placeholder="Location (optional)"
+                  className={`w-full rounded-lg border px-2 py-1.5 text-xs ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
+                />
+                <textarea
+                  value={newEventDesc}
+                  onChange={(e) => setNewEventDesc(e.target.value)}
+                  placeholder="Description (optional)"
+                  rows={2}
+                  className={`w-full rounded-lg border px-2 py-1.5 text-xs resize-none ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
+                />
+                <button
+                  onClick={() => void createCalendarEvent()}
+                  disabled={createEventLoading || !newEventStart}
+                  className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${dark ? "bg-green-900 text-green-100 hover:bg-green-800 disabled:opacity-50" : "bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"}`}
+                >
+                  {createEventLoading ? "Creating..." : "Save to Google Calendar"}
+                </button>
+                {createEventResult?.ok && (
+                  <div className="text-xs text-emerald-400">
+                    Event created!{" "}
+                    {createEventResult.htmlLink && (
+                      <a href={createEventResult.htmlLink} target="_blank" rel="noopener noreferrer" className="underline">Open in Calendar</a>
+                    )}
+                  </div>
+                )}
+                {createEventResult?.error && <div className="text-xs text-rose-400">{createEventResult.error}</div>}
+              </div>
+            )}
 
             {calendarEvents.length > 0 && (
               <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
