@@ -433,8 +433,11 @@ export const POST = async (req: Request) => {
     : "";
 
   // Inject Gmail / Calendar context when the tools provide it
-  const googleContextInstruction = (typeof googleContext === "string" && googleContext.trim())
-    ? `The user has connected Google. Current context from their Google account:\n${googleContext.trim()}`
+  // Truncate to ~2000 chars to prevent prompt injection and excessive token usage
+  const rawGoogleContext = typeof googleContext === "string" ? googleContext.trim() : "";
+  const safeGoogleContext = rawGoogleContext.slice(0, 2000);
+  const googleContextInstruction = safeGoogleContext
+    ? `The user has connected Google. Current context from their Google account:\n${safeGoogleContext}`
     : "";
 
   const costDowngradeNote = costControlled.downgraded ? ` (downgraded by ${costMode} cost mode)` : "";
