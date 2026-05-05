@@ -113,8 +113,9 @@ function HomeContent() {
 
   const handleOpenInSandbox = useCallback((html: string, css: string, js: string) => {
     setSandboxInitCode({ html, css, js });
+    setAppMode("ai-code");
     setActiveAppTab("sandbox");
-  }, []);
+  }, [setAppMode]);
 
   const bg = state.dark
     ? "bg-slate-950 text-slate-100"

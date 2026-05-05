@@ -56,6 +56,17 @@ export async function POST(req: NextRequest) {
   const { projectId, html = "", css = "", js = "", pages = [], label } = body;
   if (!projectId) return Response.json({ error: "Missing projectId" }, { status: 400 });
 
+  // Verify the project belongs to this user before inserting
+  const { data: project, error: projectError } = await supabase
+    .from("website_creator_projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", user.id)
+    .single();
+  if (projectError || !project) {
+    return Response.json({ error: "Project not found" }, { status: 404 });
+  }
+
   const { data, error } = await supabase
     .from("website_creator_snapshots")
     .insert({ project_id: projectId, user_id: user.id, html, css, js, pages, label })

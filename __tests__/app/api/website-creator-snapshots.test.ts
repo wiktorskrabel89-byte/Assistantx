@@ -94,10 +94,22 @@ describe("GET /api/website-creator/snapshots", () => {
 
 describe("POST /api/website-creator/snapshots", () => {
   function setupPostChain(result: { data: unknown; error: unknown }) {
+    // First call: project ownership check → from("website_creator_projects").select().eq().eq().single()
+    const projectSingleMock = jest.fn().mockResolvedValue({ data: { id: "proj-1" }, error: null });
+    const projectEqUserMock = jest.fn().mockReturnValue({ single: projectSingleMock });
+    const projectEqIdMock = jest.fn().mockReturnValue({ eq: projectEqUserMock });
+    const projectSelectMock = jest.fn().mockReturnValue({ eq: projectEqIdMock });
+
+    // Second call: insert → from("website_creator_snapshots").insert().select().single()
     const singleMock = jest.fn().mockResolvedValue(result);
     const selectMock = jest.fn().mockReturnValue({ single: singleMock });
     const insertMock = jest.fn().mockReturnValue({ select: selectMock });
-    mockFrom.mockReturnValue({ insert: insertMock });
+
+    mockFrom
+      .mockReturnValueOnce({ select: projectSelectMock })
+      .mockReturnValue({ insert: insertMock });
+
+    return { insertMock };
   }
 
   it("returns 401 when not authenticated", async () => {
@@ -152,10 +164,7 @@ describe("POST /api/website-creator/snapshots", () => {
 
   it("uses empty defaults when optional fields are omitted", async () => {
     const created = { id: "snap-2", label: null, created_at: "2024-02-01" };
-    const singleMock = jest.fn().mockResolvedValue({ data: created, error: null });
-    const selectMock = jest.fn().mockReturnValue({ single: singleMock });
-    const insertMock = jest.fn().mockReturnValue({ select: selectMock });
-    mockFrom.mockReturnValue({ insert: insertMock });
+    const { insertMock } = setupPostChain({ data: created, error: null });
 
     const res = await POST(makeReq("POST", {}, { projectId: "proj-1" }));
     expect(res.status).toBe(201);
@@ -166,5 +175,19 @@ describe("POST /api/website-creator/snapshots", () => {
       js: "",
       pages: [],
     }));
+  });
+
+  it("returns 404 when project does not belong to the user", async () => {
+    // Project ownership check returns no matching project
+    const projectSingleMock = jest.fn().mockResolvedValue({ data: null, error: { message: "not found" } });
+    const projectEqUserMock = jest.fn().mockReturnValue({ single: projectSingleMock });
+    const projectEqIdMock = jest.fn().mockReturnValue({ eq: projectEqUserMock });
+    const projectSelectMock = jest.fn().mockReturnValue({ eq: projectEqIdMock });
+    mockFrom.mockReturnValue({ select: projectSelectMock });
+
+    const res = await POST(makeReq("POST", {}, { projectId: "other-users-proj" }));
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("Project not found");
   });
 });

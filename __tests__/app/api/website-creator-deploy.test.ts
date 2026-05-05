@@ -10,6 +10,18 @@
 import { POST } from "@/app/api/website-creator/deploy/route";
 import { NextRequest } from "next/server";
 
+const mockGetUser = jest.fn();
+
+jest.mock("@/lib/server", () => ({
+  createClient: jest.fn(() =>
+    Promise.resolve({
+      auth: { getUser: mockGetUser },
+    })
+  ),
+}));
+
+const FAKE_USER = { id: "user-deploy" };
+
 function makeReq(body?: object): NextRequest {
   return new NextRequest("http://localhost/api/website-creator/deploy", {
     method: "POST",
@@ -21,9 +33,17 @@ function makeReq(body?: object): NextRequest {
 beforeEach(() => {
   delete process.env.NORTHFLANK_API_KEY;
   delete process.env.NORTHFLANK_PROJECT_ID;
+  jest.clearAllMocks();
+  mockGetUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
 });
 
 describe("POST /api/website-creator/deploy — simulated mode", () => {
+  it("returns 401 when not authenticated", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: new Error("no session") });
+    const res = await POST(makeReq({ projectName: "test" }));
+    expect(res.status).toBe(401);
+  });
+
   it("returns 400 on invalid JSON body", async () => {
     const req = new NextRequest("http://localhost/api/website-creator/deploy", {
       method: "POST",

@@ -110,7 +110,6 @@ export function AppNavigationColumn({
   const [chatSearchLocal, setChatSearchLocal] = useState("");
 
   const {
-    filteredChats,
     activeChat,
     activeWorkspace,
     setActiveChatId,
@@ -118,10 +117,10 @@ export function AppNavigationColumn({
   } = useWorkspace();
 
   const visibleChats = chatSearchLocal.trim()
-    ? filteredChats.filter((c) =>
+    ? activeWorkspace.chats.filter((c) =>
         c.title.toLowerCase().includes(chatSearchLocal.toLowerCase())
       )
-    : filteredChats;
+    : activeWorkspace.chats;
 
   function handleSelectChat(chatId: string) {
     setActiveChatId(activeWorkspace.id, chatId);
@@ -399,7 +398,7 @@ export function AppNavigationColumn({
           <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Chats</span>
           <button
             type="button"
-            onClick={createChatAction}
+            onClick={() => { createChatAction(); onSelectTab("chat"); }}
             title="New chat"
             aria-label="New chat"
             className={`flex h-5 w-5 items-center justify-center rounded-md transition-colors ${dark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"}`}
@@ -424,6 +423,8 @@ export function AppNavigationColumn({
               <button
                 type="button"
                 onClick={() => setChatSearchLocal("")}
+                title="Clear search"
+                aria-label="Clear search"
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
               >
                 <X className="h-3 w-3" />
@@ -538,6 +539,7 @@ export function AppNavigationColumn({
           type="button"
           onClick={() => onSelectTab("chat")}
           title="Chat"
+          aria-label="Chat"
           className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
             isChatActive
               ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
@@ -557,6 +559,7 @@ export function AppNavigationColumn({
               type="button"
               onClick={() => onSelectTab(item.id)}
               title={item.label}
+              aria-label={item.label}
               className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
                 isActive
                   ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
@@ -573,6 +576,7 @@ export function AppNavigationColumn({
           type="button"
           onClick={() => setAppsOpen((v: boolean) => !v)}
           title="Aplikacje"
+          aria-label="Aplikacje"
           className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
             appsOpen || (isAddOnActive && !pinnedAddOns.includes(activeTab))
               ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
@@ -589,6 +593,7 @@ export function AppNavigationColumn({
           type="button"
           onClick={() => onSelectTab("settings")}
           title="Ustawienia"
+          aria-label="Ustawienia"
           className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
             activeTab === "settings"
               ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
@@ -603,6 +608,7 @@ export function AppNavigationColumn({
           type="button"
           onClick={() => onSelectTab("notifications")}
           title="Powiadomienia"
+          aria-label="Powiadomienia"
           className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
             activeTab === "notifications"
               ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
@@ -622,6 +628,7 @@ export function AppNavigationColumn({
           type="button"
           onClick={() => onSelectTab("settings")}
           title={userEmail ?? "Konto"}
+          aria-label={userEmail ?? "Konto"}
           className={`mt-1 flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
             dark ? "bg-slate-700 text-slate-200 hover:bg-slate-600" : "bg-slate-200 text-slate-600 hover:bg-slate-300"
           }`}

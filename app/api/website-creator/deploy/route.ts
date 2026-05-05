@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/server";
 import { NextRequest } from "next/server";
 
 /** POST /api/website-creator/deploy
@@ -11,6 +12,18 @@ import { NextRequest } from "next/server";
  */
 
 export const maxDuration = 60;
+
+async function getUser(req: NextRequest) {
+  const supabase = await createClient();
+  const token = req.headers.get("authorization")?.replace("Bearer ", "");
+  if (token) {
+    const { data } = await supabase.auth.getUser(token);
+    if (data.user) return data.user;
+  }
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+  return data.user;
+}
 
 function buildIndexHtml(html: string, css: string, js: string): string {
   return `<!DOCTYPE html>
@@ -30,6 +43,9 @@ ${js ? `<script>\n${js}\n</script>` : ""}
 }
 
 export async function POST(req: NextRequest) {
+  const user = await getUser(req);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   let body: { projectId?: string; projectName?: string; html?: string; css?: string; js?: string };
   try {
     body = await req.json() as typeof body;

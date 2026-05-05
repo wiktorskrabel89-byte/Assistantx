@@ -10,6 +10,18 @@
 import { GET } from "@/app/api/website-creator/logs/route";
 import { NextRequest } from "next/server";
 
+const mockGetUser = jest.fn();
+
+jest.mock("@/lib/server", () => ({
+  createClient: jest.fn(() =>
+    Promise.resolve({
+      auth: { getUser: mockGetUser },
+    })
+  ),
+}));
+
+const FAKE_USER = { id: "user-logs" };
+
 function makeReq(params: Record<string, string> = {}): NextRequest {
   const url = new URL("http://localhost/api/website-creator/logs");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -31,6 +43,16 @@ async function readStream(res: Response): Promise<string> {
 
 beforeEach(() => {
   delete process.env.NORTHFLANK_API_KEY;
+  jest.clearAllMocks();
+  mockGetUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
+});
+
+describe("GET /api/website-creator/logs — auth", () => {
+  it("returns 401 when not authenticated", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: new Error("no session") });
+    const res = await GET(makeReq());
+    expect(res.status).toBe(401);
+  });
 });
 
 describe("GET /api/website-creator/logs — simulated mode", () => {

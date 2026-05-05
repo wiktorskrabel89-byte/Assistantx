@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/server";
 import { NextRequest } from "next/server";
 
 /** GET /api/website-creator/logs?serviceId=...&projectId=...
@@ -8,7 +9,22 @@ import { NextRequest } from "next/server";
 
 export const maxDuration = 60;
 
+async function getUser(req: NextRequest) {
+  const supabase = await createClient();
+  const token = req.headers.get("authorization")?.replace("Bearer ", "");
+  if (token) {
+    const { data } = await supabase.auth.getUser(token);
+    if (data.user) return data.user;
+  }
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+  return data.user;
+}
+
 export async function GET(req: NextRequest) {
+  const user = await getUser(req);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(req.url);
   const serviceId = searchParams.get("serviceId");
   const northflankProjectId = searchParams.get("projectId") ?? process.env.NORTHFLANK_PROJECT_ID;

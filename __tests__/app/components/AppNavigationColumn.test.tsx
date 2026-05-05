@@ -19,9 +19,8 @@ const MOCK_CHATS: ChatThread[] = [
 
 jest.mock("@/app/providers/WorkspaceProvider", () => ({
   useWorkspace: () => ({
-    filteredChats: MOCK_CHATS,
     activeChat: MOCK_CHATS[0],
-    activeWorkspace: { id: "ws-1", name: "Test Workspace" },
+    activeWorkspace: { id: "ws-1", name: "Test Workspace", chats: MOCK_CHATS },
     setActiveChatId: mockSetActiveChatId,
     createChatAction: mockCreateChatAction,
   }),
@@ -136,8 +135,9 @@ describe("AppNavigationColumn — click interactions", () => {
       renderNav();
       const searchInput = screen.getByPlaceholderText("Search chats…");
       fireEvent.change(searchInput, { target: { value: "Second" } });
-      // After typing, only one chat is visible — clicking the X restores all
-      fireEvent.change(searchInput, { target: { value: "" } });
+      // After typing, only "Second Chat" is visible — clicking the X button restores all
+      const clearButton = screen.getByRole("button", { name: "Clear search" });
+      fireEvent.click(clearButton);
       expect(screen.getAllByText("First Chat").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Second Chat").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Third Chat").length).toBeGreaterThan(0);

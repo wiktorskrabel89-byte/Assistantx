@@ -52,9 +52,11 @@ CLOUDFLARE_ZONE_ID=...
 CLOUDFLARE_BASE_DOMAIN=yourdomain.com
 ```
 
-Run the migration to enable project storage:
+Run the migrations to enable project storage:
 ```bash
 supabase/migrations/20260504_website_creator.sql
+supabase/migrations/20260504_website_creator_enhancements.sql
+supabase/migrations/20260505_website_creator_snapshot_user_idx.sql
 ```
 
 Required Supabase setup:
