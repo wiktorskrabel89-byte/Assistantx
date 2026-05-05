@@ -154,6 +154,19 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiAbortRef = useRef<AbortController | null>(null);
 
+  // Auto-detect device size from window width
+  useEffect(() => {
+    function detectDevice() {
+      const w = window.innerWidth;
+      if (w < 640) setDeviceFrame("mobile");
+      else if (w < 1024) setDeviceFrame("tablet");
+      else setDeviceFrame("none");
+    }
+    detectDevice();
+    window.addEventListener("resize", detectDevice);
+    return () => window.removeEventListener("resize", detectDevice);
+  }, []);
+
   // Load from localStorage on mount (only when no initialCode is provided)
   useEffect(() => {
     if (initialCode) return;
@@ -384,27 +397,6 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
         <button type="button" onClick={clearCode} title="Wyczyść kod" aria-label="Wyczyść kod" className={sec}>
           <Trash2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Wyczyść</span>
         </button>
-
-        {/* Device frame selector (HTML mode only) */}
-        {sandboxMode === "html-css-js" && (
-          <div className={`flex rounded-xl border overflow-hidden ${dark ? "border-slate-600" : "border-slate-300"}`}>
-            <button type="button" onClick={() => setDeviceFrame("none")}
-              title="Pełny widok" aria-label="Pełny widok"
-              className={`px-2 py-1.5 text-xs transition-colors ${deviceFrame === "none" ? (dark ? "bg-slate-600 text-white" : "bg-slate-200 text-slate-800") : (dark ? "text-slate-400 hover:bg-slate-700" : "text-slate-500 hover:bg-slate-100")}`}>
-              <Monitor className="h-3.5 w-3.5" />
-            </button>
-            <button type="button" onClick={() => setDeviceFrame("tablet")}
-              title="Tablet (768px)" aria-label="Tablet (768px)"
-              className={`border-x px-2 py-1.5 text-xs transition-colors ${deviceFrame === "tablet" ? (dark ? "bg-slate-600 text-sky-400 border-slate-500" : "bg-sky-50 text-sky-600 border-slate-300") : (dark ? "border-slate-600 text-slate-400 hover:bg-slate-700" : "border-slate-300 text-slate-500 hover:bg-slate-100")}`}>
-              <Monitor className="h-3 w-3" />
-            </button>
-            <button type="button" onClick={() => setDeviceFrame("mobile")}
-              title="Mobile (375px)" aria-label="Mobile (375px)"
-              className={`px-2 py-1.5 text-xs transition-colors ${deviceFrame === "mobile" ? (dark ? "bg-slate-600 text-sky-400" : "bg-sky-50 text-sky-600") : (dark ? "text-slate-400 hover:bg-slate-700" : "text-slate-500 hover:bg-slate-100")}`}>
-              <Smartphone className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
 
         <button type="button" onClick={handleReview} title="Przegląd kodu AI" aria-label="Przegląd kodu AI" className={sec}>
           <BookMarked className="h-3.5 w-3.5 text-violet-400" /><span className="hidden sm:inline">Przegląd AI</span>
