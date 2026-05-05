@@ -97,12 +97,10 @@ function HomeContent() {
     }).catch(() => null);
   }, []);
 
-  // Guard: if mode switches to AI Chat and current tab is code-only, reset to "chat"
-  useEffect(() => {
-    if (appMode === "ai-chat" && AI_CODE_ONLY_TABS.includes(activeAppTab)) {
-      setActiveAppTab("chat");
-    }
-  }, [appMode, activeAppTab]);
+  // Guard: if mode switches to AI Chat and current tab is code-only, show "chat" instead.
+  // Use derived state to avoid calling setState synchronously inside an effect.
+  const visibleTab: AppNavigationTab =
+    appMode === "ai-chat" && AI_CODE_ONLY_TABS.includes(activeAppTab) ? "chat" : activeAppTab;
 
   const handleSelectAppTab = useCallback((tab: AppNavigationTab) => {
     setActiveAppTab(tab);
@@ -123,14 +121,14 @@ function HomeContent() {
   const cardBg = state.dark
     ? "bg-slate-900 border-slate-800"
     : "bg-white/92 border-sky-200/60 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.28)]";
-  const isChatTab = activeAppTab === "chat";
+  const isChatTab = visibleTab === "chat";
 
   return (
     <div className={`h-dvh overflow-hidden transition-colors duration-300 ${bg}`}>
         <div className="mx-auto flex h-full max-w-[1680px] gap-3 px-3 py-3">
           <AppNavigationColumn
             dark={state.dark}
-            activeTab={activeAppTab}
+            activeTab={visibleTab}
             onSelectTab={handleSelectAppTab}
             notificationUnread={notificationsHook.unreadCount}
             appMode={appMode}
@@ -142,10 +140,10 @@ function HomeContent() {
           />
 
           {isChatTab ? (
-            <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} sandboxInitCode={sandboxInitCode} onOpenInSandbox={handleOpenInSandbox} />
+            <TabContent key={visibleTab} activeTab={visibleTab} notificationsHook={notificationsHook} sandboxInitCode={sandboxInitCode} onOpenInSandbox={handleOpenInSandbox} />
           ) : (
             <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
-              <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} sandboxInitCode={sandboxInitCode} onOpenInSandbox={handleOpenInSandbox} />
+              <TabContent key={visibleTab} activeTab={visibleTab} notificationsHook={notificationsHook} sandboxInitCode={sandboxInitCode} onOpenInSandbox={handleOpenInSandbox} />
             </main>
           )}
         </div>

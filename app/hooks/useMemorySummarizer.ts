@@ -35,7 +35,9 @@ export function useMemorySummarizer({
   // Keep a ref to the latest memoryNotes so the async fetch callback
   // always appends to the most-current value (avoids stale-closure overwrites).
   const memoryNotesRef = useRef(memoryNotes);
-  memoryNotesRef.current = memoryNotes;
+  useEffect(() => {
+    memoryNotesRef.current = memoryNotes;
+  }, [memoryNotes]);
 
   useEffect(() => {
     if (!memoryEnabled) return;

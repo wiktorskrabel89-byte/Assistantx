@@ -1,7 +1,7 @@
 "use client";
 
 import { BarChart2, X } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChatThread } from "../lib/chat-types";
 import type { UserPlan } from "@/lib/ai-config";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
@@ -23,6 +23,9 @@ function dayKey(ts: number): string {
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function UsageDashboard({ open, dark, userPlan, premiumRequestsUsed, workspaces, onClose }: UsageDashboardProps) {
+  // Capture the current time when the dashboard opens so the chart window
+  // stays stable and we avoid calling Date.now() inside useMemo (impure).
+  const [now] = useState(Date.now);
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -50,7 +53,6 @@ export function UsageDashboard({ open, dark, userPlan, premiumRequestsUsed, work
 
   // Last 7 days buckets
   const last7 = useMemo(() => {
-    const now = Date.now();
     const buckets: Record<string, number> = {};
     for (let i = 6; i >= 0; i--) {
       const ts = now - i * 86_400_000;
@@ -64,7 +66,7 @@ export function UsageDashboard({ open, dark, userPlan, premiumRequestsUsed, work
       const d = new Date(key);
       return { label: DAY_LABELS[d.getDay()], count };
     });
-  }, [allMessages]);
+  }, [allMessages, now]);
 
   // Per-model breakdown
   const modelBreakdown = useMemo(() => {

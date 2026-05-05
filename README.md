@@ -50,6 +50,10 @@ NORTHFLANK_PROJECT_ID=...
 CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_ZONE_ID=...
 CLOUDFLARE_BASE_DOMAIN=yourdomain.com
+
+# Admin access — comma-separated list of emails granted the AI Learning tab
+# (in addition to any Supabase users whose app_metadata.role === "admin")
+ADMIN_EMAILS=wiktorskrabel89@gmail.com
 ```
 
 Run the migrations to enable project storage:

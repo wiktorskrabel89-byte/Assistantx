@@ -3,7 +3,6 @@
 import {
   Bot,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Clock,
   Download,
@@ -327,7 +326,6 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
   useEffect(() => {
     if (!activeProject || activeProject.id.startsWith("local-")) return;
     if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
-    setSaveStatus("idle");
     autoSaveDebounceRef.current = setTimeout(async () => {
       setSaveStatus("saving");
       try {
@@ -351,12 +349,12 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
       }
     }, 3000);
     return () => { if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, css, js, pages, activeProject, activePageId]);
 
   // Load projects on mount
   useEffect(() => {
     void loadProjects();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function getAuthToken(): Promise<string | null> {
@@ -729,7 +727,7 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
     const name = `page-${pages.length + 2}.html`;
     const starterHtml = `<h1>${name}</h1>\n<p>Treść strony...</p>`;
     const newPage: Page = { id, name, html: starterHtml };
-    // Save the current page's HTML before switching
+    // Persist the HTML of the currently-active page before switching
     if (activePageId === null) {
       mainHtmlRef.current = html;
     } else {
