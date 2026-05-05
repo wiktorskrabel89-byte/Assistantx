@@ -6,6 +6,18 @@
 import { POST } from "@/app/api/website-creator/domain/route";
 import { NextRequest } from "next/server";
 
+const mockGetUser = jest.fn();
+
+jest.mock("@/lib/server", () => ({
+  createClient: jest.fn(() =>
+    Promise.resolve({
+      auth: { getUser: mockGetUser },
+    })
+  ),
+}));
+
+const FAKE_USER = { id: "user-domain" };
+
 function makeReq(body: object): NextRequest {
   return new NextRequest("http://localhost/api/website-creator/domain", {
     method: "POST",
@@ -18,11 +30,19 @@ beforeEach(() => {
   delete process.env.CLOUDFLARE_API_TOKEN;
   delete process.env.CLOUDFLARE_ZONE_ID;
   delete process.env.CLOUDFLARE_BASE_DOMAIN;
+  jest.clearAllMocks();
+  mockGetUser.mockResolvedValue({ data: { user: FAKE_USER }, error: null });
 });
 
 // ── Simulated mode ───────────────────────────────────────────────────────────
 
 describe("POST /api/website-creator/domain — simulated mode", () => {
+  it("returns 401 when not authenticated", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: new Error("no session") });
+    const res = await POST(makeReq({ subdomain: "mysite" }));
+    expect(res.status).toBe(401);
+  });
+
   it("returns 400 on invalid JSON body", async () => {
     const req = new NextRequest("http://localhost/api/website-creator/domain", {
       method: "POST",

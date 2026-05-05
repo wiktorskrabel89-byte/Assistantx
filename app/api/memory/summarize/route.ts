@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
 import { createClient } from "@/lib/server";
 
 export const runtime = "nodejs";

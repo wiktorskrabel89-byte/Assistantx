@@ -3,7 +3,6 @@
 import {
   Bot,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Clock,
   Download,
@@ -327,7 +326,6 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
   useEffect(() => {
     if (!activeProject || activeProject.id.startsWith("local-")) return;
     if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
-    setSaveStatus("idle");
     autoSaveDebounceRef.current = setTimeout(async () => {
       setSaveStatus("saving");
       try {
@@ -351,12 +349,12 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
       }
     }, 3000);
     return () => { if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, css, js, pages, activeProject, activePageId]);
 
   // Load projects on mount
   useEffect(() => {
     void loadProjects();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function getAuthToken(): Promise<string | null> {
@@ -493,16 +491,17 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
         setDeployLogs((prev) => [...prev, "✓ Plik index.html przesłany.", `✓ URL podglądu: ${data.previewUrl ?? "—"}`, "Wdrożenie zakończone. Przypisz domenę, by opublikować."]);
         if (data.previewUrl) {
           const stagingUrl = data.previewUrl;
+          const deploymentId = data.deploymentId ?? null;
           setPreviewDeployUrl(stagingUrl);
-          // Store preview_url in DB without marking as "live" yet
-          setActiveProject((p) => p ? { ...p, preview_url: stagingUrl, status: "deploying" } : p);
-          setProjects((ps) => ps.map((x) => x.id === activeProject.id ? { ...x, preview_url: stagingUrl, status: "deploying" } : x));
+          // Store preview_url and northflank_service_id in DB without marking as "live" yet
+          setActiveProject((p) => p ? { ...p, preview_url: stagingUrl, northflank_service_id: deploymentId ?? p.northflank_service_id, status: "deploying" } : p);
+          setProjects((ps) => ps.map((x) => x.id === activeProject.id ? { ...x, preview_url: stagingUrl, northflank_service_id: deploymentId ?? x.northflank_service_id, status: "deploying" } : x));
           const token = await getAuthToken();
           if (token && !activeProject.id.startsWith("local-")) {
             void fetch(`/api/website-creator/projects/${activeProject.id}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ preview_url: stagingUrl, status: "deploying" }),
+              body: JSON.stringify({ preview_url: stagingUrl, northflank_service_id: deploymentId, status: "deploying" }),
             });
           }
           // Auto-save a snapshot on every deploy
@@ -726,9 +725,17 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
   function addPage() {
     const id = `page-${Date.now()}`;
     const name = `page-${pages.length + 2}.html`;
-    const newPage: Page = { id, name, html: `<h1>${name}</h1>\n<p>Treść strony...</p>` };
-    setPages((p) => [...p, newPage]);
-    switchPage(id);
+    const starterHtml = `<h1>${name}</h1>\n<p>Treść strony...</p>`;
+    const newPage: Page = { id, name, html: starterHtml };
+    // Persist the HTML of the currently-active page before switching
+    if (activePageId === null) {
+      mainHtmlRef.current = html;
+    } else {
+      setPages((prev) => prev.map((pg) => pg.id === activePageId ? { ...pg, html } : pg));
+    }
+    setPages((prev) => [...prev, newPage]);
+    setActivePageId(id);
+    setHtml(starterHtml);
   }
 
   function deletePage(pageId: string) {
@@ -884,7 +891,7 @@ ${js ? `<script>\n${js}\n<\/script>` : ""}
             projects.map((p) => (
               <div key={p.id}
                 onClick={() => openProject(p)}
-                className={`flex cursor-pointer items-center gap-2 px-3 py-2.5 transition-colors ${itemHover} ${activeProject?.id === p.id ? (dark2 ? "bg-slate-800" : "bg-orange-50") : ""}`}>
+                className={`group flex cursor-pointer items-center gap-2 px-3 py-2.5 transition-colors ${itemHover} ${activeProject?.id === p.id ? (dark2 ? "bg-slate-800" : "bg-orange-50") : ""}`}>
                 <div className="min-w-0 flex-1">
                   <div className={`truncate text-xs font-medium ${dark2 ? "text-slate-200" : "text-slate-800"}`}>{p.name}</div>
                   <div className="mt-0.5 flex items-center gap-1.5">

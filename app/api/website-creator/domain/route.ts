@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/server";
 import { NextRequest } from "next/server";
 
 /** POST /api/website-creator/domain
@@ -11,7 +12,21 @@ import { NextRequest } from "next/server";
  * When Cloudflare env vars are not configured, returns a simulated response.
  */
 
+async function getUser(req: NextRequest) {
+  const supabase = await createClient();
+  const token = req.headers.get("authorization")?.replace("Bearer ", "");
+  if (token) {
+    const { data } = await supabase.auth.getUser(token);
+    if (data.user) return data.user;
+  }
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+  return data.user;
+}
+
 export async function POST(req: NextRequest) {
+  const user = await getUser(req);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   let body: { projectId?: string; subdomain?: string; targetUrl?: string };
   try {
     body = await req.json() as typeof body;

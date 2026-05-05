@@ -446,12 +446,6 @@ export function ChatTab() {
     setAppsOpen((current) => panel === "apps" ? !current : false);
   }, []);
 
-  const refreshConversation = useCallback(() => {
-    if (typeof window !== "undefined") {
-      window.location.reload();
-    }
-  }, []);
-
   const applyPromptTemplate = useCallback((templateId: string) => {
     const template = activeWorkspace.settings.promptTemplates.find((item) => item.id === templateId);
     if (!template) return;

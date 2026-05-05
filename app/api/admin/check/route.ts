@@ -23,8 +23,16 @@ export async function GET(req: Request) {
     }
 
     const appMetadata = data.user.app_metadata ?? {};
-    // Admins have app_metadata.role === "admin" (set in Supabase dashboard)
-    const isAdmin = appMetadata.role === "admin";
+    // Admins have app_metadata.role === "admin" (set in Supabase dashboard).
+    // Additional owner emails can be specified via the ADMIN_EMAILS env var
+    // (comma-separated) to grant admin access without Supabase metadata changes.
+    const ownerEmails = (process.env.ADMIN_EMAILS ?? "wiktorskrabel89@gmail.com")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
+    const isAdmin =
+      appMetadata.role === "admin" ||
+      ownerEmails.includes(data.user.email ?? "");
 
     return Response.json({ isAdmin }, noStore);
   } catch {

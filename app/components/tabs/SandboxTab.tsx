@@ -8,11 +8,9 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
-  Monitor,
   Package,
   Play,
   RefreshCw,
-  Smartphone,
   Sparkles,
   SquareTerminal,
   Trash2,
@@ -131,9 +129,39 @@ async function streamChatRequest(
 
 export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?: { html: string; css: string; js: string } }) {
   const [sandboxMode, setSandboxMode] = useState<SandboxMode>("html-css-js");
-  const [html, setHtml] = useState(initialCode?.html ?? INITIAL_HTML);
-  const [css, setCss] = useState(initialCode?.css ?? INITIAL_CSS);
-  const [js, setJs] = useState(initialCode?.js ?? INITIAL_JS);
+  const [html, setHtml] = useState(() => {
+    if (initialCode?.html !== undefined) return initialCode.html;
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("sandbox-html-css-js") : null;
+      if (saved) {
+        const parsed = JSON.parse(saved) as { html?: string; css?: string; js?: string };
+        if (parsed.html !== undefined) return parsed.html;
+      }
+    } catch { /* ignore */ }
+    return INITIAL_HTML;
+  });
+  const [css, setCss] = useState(() => {
+    if (initialCode?.css !== undefined) return initialCode.css;
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("sandbox-html-css-js") : null;
+      if (saved) {
+        const parsed = JSON.parse(saved) as { html?: string; css?: string; js?: string };
+        if (parsed.css !== undefined) return parsed.css;
+      }
+    } catch { /* ignore */ }
+    return INITIAL_CSS;
+  });
+  const [js, setJs] = useState(() => {
+    if (initialCode?.js !== undefined) return initialCode.js;
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("sandbox-html-css-js") : null;
+      if (saved) {
+        const parsed = JSON.parse(saved) as { html?: string; css?: string; js?: string };
+        if (parsed.js !== undefined) return parsed.js;
+      }
+    } catch { /* ignore */ }
+    return INITIAL_JS;
+  });
   const [singleCode, setSingleCode] = useState("");
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showLangDropdown, setShowLangDropdown] = useState(false);
@@ -165,21 +193,6 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
     detectDevice();
     window.addEventListener("resize", detectDevice);
     return () => window.removeEventListener("resize", detectDevice);
-  }, []);
-
-  // Load from localStorage on mount (only when no initialCode is provided)
-  useEffect(() => {
-    if (initialCode) return;
-    try {
-      const saved = localStorage.getItem("sandbox-html-css-js");
-      if (saved) {
-        const parsed = JSON.parse(saved) as { html?: string; css?: string; js?: string };
-        if (parsed.html !== undefined) setHtml(parsed.html);
-        if (parsed.css !== undefined) setCss(parsed.css);
-        if (parsed.js !== undefined) setJs(parsed.js);
-      }
-    } catch { /* ignore */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Save to localStorage whenever HTML/CSS/JS changes

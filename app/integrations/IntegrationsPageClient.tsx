@@ -11,7 +11,6 @@ import {
 } from "@/lib/integrations";
 import {
   clearPendingOAuthProvider,
-  formatOAuthErrorMessage,
   getPendingOAuthProvider,
   rememberPendingOAuthProvider,
 } from "@/lib/oauth-client";

@@ -155,9 +155,16 @@ export async function POST(request: Request) {
     let eventBody: Record<string, unknown>;
     if (allDay) {
       const dateStr = startDate.toISOString().slice(0, 10);
-      const endDateStr = body.endDateTime
-        ? new Date(body.endDateTime).toISOString().slice(0, 10)
-        : new Date(startDate.getTime() + 86_400_000).toISOString().slice(0, 10);
+      let endDateStr: string;
+      if (body.endDateTime) {
+        const endDate = new Date(body.endDateTime);
+        if (isNaN(endDate.getTime())) {
+          return Response.json({ error: "Invalid endDateTime. Use ISO 8601 format." }, { status: 400 });
+        }
+        endDateStr = endDate.toISOString().slice(0, 10);
+      } else {
+        endDateStr = new Date(startDate.getTime() + 86_400_000).toISOString().slice(0, 10);
+      }
       eventBody = {
         summary: title,
         description,
@@ -166,9 +173,15 @@ export async function POST(request: Request) {
         end: { date: endDateStr },
       };
     } else {
-      const endDate = body.endDateTime
-        ? new Date(body.endDateTime)
-        : new Date(startDate.getTime() + 3_600_000); // default 1 hour
+      let endDate: Date;
+      if (body.endDateTime) {
+        endDate = new Date(body.endDateTime);
+        if (isNaN(endDate.getTime())) {
+          return Response.json({ error: "Invalid endDateTime. Use ISO 8601 format." }, { status: 400 });
+        }
+      } else {
+        endDate = new Date(startDate.getTime() + 3_600_000); // default 1 hour
+      }
       eventBody = {
         summary: title,
         description,
