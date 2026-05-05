@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Download,
   ExternalLink,
   Eye,
   File,
@@ -14,13 +15,17 @@ import {
   History,
   LayoutGrid,
   Loader2,
+  Monitor,
   Plus,
   PlusCircle,
   RefreshCw,
   Rocket,
+  Shield,
+  Smartphone,
   Sparkles,
   Terminal,
   Trash2,
+  Type,
   Wand2,
   X,
 } from "lucide-react";
@@ -156,6 +161,21 @@ const COMPONENT_SNIPPETS = [
   },
 ];
 
+// ─── Google Fonts list ─────────────────────────────────────────────────────────
+
+const GOOGLE_FONTS = [
+  { name: "Inter",            url: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" },
+  { name: "Roboto",           url: "https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" },
+  { name: "Open Sans",        url: "https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap" },
+  { name: "Poppins",          url: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" },
+  { name: "Lato",             url: "https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" },
+  { name: "Montserrat",       url: "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" },
+  { name: "Playfair Display", url: "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" },
+  { name: "Nunito",           url: "https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" },
+  { name: "Raleway",          url: "https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700&display=swap" },
+  { name: "Source Code Pro",  url: "https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap" },
+];
+
 // ─── Build iframe preview document ────────────────────────────────────────────
 
 function buildPreview(html: string, css: string, js: string): string {
@@ -261,6 +281,17 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
 
   // Component library panel
   const [showComponentPanel, setShowComponentPanel] = useState(false);
+
+  // Google Fonts panel
+  const [showFontsPanel, setShowFontsPanel] = useState(false);
+
+  // SEO panel
+  const [showSeoPanel, setShowSeoPanel] = useState(false);
+  const [seoTitle, setSeoTitle] = useState("");
+  const [seoDesc, setSeoDesc] = useState("");
+
+  // Responsive preview size
+  const [previewSize, setPreviewSize] = useState<"full" | "tablet" | "mobile">("full");
 
   // Version history
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -704,6 +735,101 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
     setShowComponentPanel(false);
   }
 
+  // ── Google Fonts insertion ────────────────────────────────────────────────────
+  function insertGoogleFont(font: typeof GOOGLE_FONTS[0]) {
+    const linkTag = `<link rel="preconnect" href="https://fonts.googleapis.com">\n  <link href="${font.url}" rel="stylesheet">`;
+    if (html.includes(font.url)) { setShowFontsPanel(false); return; }
+    let updated = html;
+    if (/<\/head>/i.test(updated)) {
+      updated = updated.replace(/<\/head>/i, `  ${linkTag}\n</head>`);
+    } else if (/<head[^>]*>/i.test(updated)) {
+      updated = updated.replace(/<head[^>]*>/i, (m) => `${m}\n  ${linkTag}`);
+    } else {
+      updated = `<head>\n  ${linkTag}\n</head>\n` + updated;
+    }
+    setHtml(updated);
+    if (!css.includes(`'${font.name}'`) && !css.includes(`"${font.name}"`)) {
+      setCss((prev) => `${prev}\n\nbody { font-family: '${font.name}', sans-serif; }`);
+    }
+    setShowFontsPanel(false);
+  }
+
+  // ── SEO meta helpers ──────────────────────────────────────────────────────────
+  function openSeoPanel() {
+    const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/is);
+    const descMatch =
+      html.match(/<meta\s+name=["']description["'][^>]+content=["']([^"']*)["']/i) ??
+      html.match(/<meta\s+content=["']([^"']*)["'][^>]+name=["']description["']/i);
+    setSeoTitle(titleMatch?.[1] ?? "");
+    setSeoDesc(descMatch?.[1] ?? "");
+    setShowSeoPanel(true);
+  }
+
+  function applySeo() {
+    let updated = html;
+    // Title
+    if (/<title[^>]*>/i.test(updated)) {
+      updated = updated.replace(/<title[^>]*>[\s\S]*?<\/title>/i, `<title>${seoTitle}</title>`);
+    } else if (/<\/head>/i.test(updated)) {
+      updated = updated.replace(/<\/head>/i, `  <title>${seoTitle}</title>\n</head>`);
+    } else {
+      updated = `<head><title>${seoTitle}</title></head>\n` + updated;
+    }
+    // Description
+    const descTag = `<meta name="description" content="${seoDesc}">`;
+    if (/<meta\s+name=["']description["']/i.test(updated)) {
+      updated = updated.replace(/<meta\s+name=["']description["'][^>]*\/?>/i, descTag);
+    } else if (/<\/head>/i.test(updated)) {
+      updated = updated.replace(/<\/head>/i, `  ${descTag}\n</head>`);
+    }
+    setHtml(updated);
+    setShowSeoPanel(false);
+  }
+
+  // ── Export as self-contained HTML ─────────────────────────────────────────────
+  function exportHtml() {
+    const fullHtml = `<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${activeProject?.name ?? "Moja strona"}</title>
+  <style>
+${css}
+  </style>
+</head>
+<body>
+${html}
+${js ? `<script>\n${js}\n<\/script>` : ""}
+</body>
+</html>`;
+    const blob = new Blob([fullHtml], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(activeProject?.name ?? "strona").replace(/\s+/g, "-").toLowerCase()}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── AI accessibility audit ────────────────────────────────────────────────────
+  async function runAccessibilityAudit() {
+    setRightTab("ai");
+    aiAbortRef.current?.abort();
+    aiAbortRef.current = new AbortController();
+    setAiResponse("");
+    setAiLoading(true);
+    const prompt = `Przeprowadź audyt dostępności (WCAG 2.1) poniższego kodu HTML i CSS. Wymień konkretne problemy z dostępnością wraz z sugestiami poprawek (kontrasty, atrybuty alt, aria-label, role, nawigacja klawiaturą itp.).\n\nHTML:\n${html}\n\nCSS:\n${css}`;
+    let full = "";
+    try {
+      await streamChat(prompt, aiAbortRef.current.signal, (t) => { full += t; setAiResponse(full); });
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setAiResponse("Błąd audytu dostępności.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   // Styling
   const dark2 = dark;
   const bg = dark2 ? "bg-slate-950 text-slate-100" : "bg-white text-slate-900";
@@ -839,6 +965,10 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
                 <span className="hidden sm:inline">Sandbox</span>
               </button>
             )}
+            <button type="button" onClick={exportHtml} title="Eksportuj jako HTML" aria-label="Eksportuj jako HTML" className={sec}>
+              <Download className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Eksportuj</span>
+            </button>
             <button type="button" onClick={() => void saveActiveProject()} className={sec}>
               Zapisz
             </button>
@@ -875,6 +1005,16 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
             className={`${sec} text-xs px-2 py-1`}>
             <LayoutGrid className="h-3 w-3 text-emerald-400" /><span className="hidden md:inline">Komponenty</span>
           </button>
+          <button type="button" onClick={() => { setShowFontsPanel((v) => !v); setShowSeoPanel(false); setShowComponentPanel(false); }}
+            title="Google Fonts" aria-label="Google Fonts"
+            className={`${sec} text-xs px-2 py-1`}>
+            <Type className="h-3 w-3 text-pink-400" /><span className="hidden md:inline">Czcionki</span>
+          </button>
+          <button type="button" onClick={() => { openSeoPanel(); setShowFontsPanel(false); setShowComponentPanel(false); }}
+            title="SEO" aria-label="SEO"
+            className={`${sec} text-xs px-2 py-1`}>
+            <Globe2 className="h-3 w-3 text-sky-400" /><span className="hidden md:inline">SEO</span>
+          </button>
           <button type="button" onClick={() => { if (aiPrompt.trim()) { void generateCode(aiPrompt); setAiPrompt(""); } }}
             disabled={aiLoading || !aiPrompt.trim()} className={`${pri} disabled:opacity-40 text-xs px-2.5 py-1.5`}>
             {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Sparkles className="h-3.5 w-3.5" />Generuj</>}
@@ -899,6 +1039,59 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
                   <span className={`mt-0.5 text-[10px] ${dark2 ? "text-slate-500" : "text-slate-400"}`}>HTML + CSS</span>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Google Fonts panel */}
+        {showFontsPanel && (
+          <div className={`flex-shrink-0 border-b ${dark2 ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-slate-50"}`}>
+            <div className={`flex items-center justify-between px-4 py-2 text-[10px] font-semibold uppercase tracking-wide ${dark2 ? "text-slate-500" : "text-slate-400"}`}>
+              <span className="flex items-center gap-1.5"><Type className="h-3 w-3" />Google Fonts</span>
+              <button type="button" onClick={() => setShowFontsPanel(false)} title="Zamknij" aria-label="Zamknij"
+                className={dark2 ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-700"}>
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2 px-4 pb-3">
+              {GOOGLE_FONTS.map((font) => (
+                <button key={font.name} type="button" onClick={() => insertGoogleFont(font)}
+                  className={`rounded-xl border px-3 py-1.5 text-xs transition-all ${dark2 ? "border-slate-700 bg-slate-800 hover:border-pink-500/60 hover:bg-slate-700" : "border-slate-200 bg-white hover:border-pink-400 hover:bg-pink-50/50"}`}>
+                  {font.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* SEO panel */}
+        {showSeoPanel && (
+          <div className={`flex-shrink-0 border-b ${dark2 ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-slate-50"}`}>
+            <div className={`flex items-center justify-between px-4 py-2 text-[10px] font-semibold uppercase tracking-wide ${dark2 ? "text-slate-500" : "text-slate-400"}`}>
+              <span className="flex items-center gap-1.5"><Globe2 className="h-3 w-3" />SEO Meta Tags</span>
+              <button type="button" onClick={() => setShowSeoPanel(false)} title="Zamknij" aria-label="Zamknij"
+                className={dark2 ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-700"}>
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-2 px-4 pb-3">
+              <div className="flex flex-col gap-1">
+                <label className={`text-[10px] font-medium ${dark2 ? "text-slate-400" : "text-slate-500"}`}>Tytuł strony (title)</label>
+                <input value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)}
+                  placeholder="Tytuł widoczny w wynikach wyszukiwania"
+                  className={`rounded-xl border px-3 py-1.5 text-xs outline-none transition-colors ${dark2 ? "border-slate-600 bg-slate-800 text-slate-200 placeholder-slate-600 focus:border-sky-500" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400 focus:border-sky-400"}`}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={`text-[10px] font-medium ${dark2 ? "text-slate-400" : "text-slate-500"}`}>Opis (meta description)</label>
+                <input value={seoDesc} onChange={(e) => setSeoDesc(e.target.value)}
+                  placeholder="Krótki opis strony (ok. 160 znaków)"
+                  className={`rounded-xl border px-3 py-1.5 text-xs outline-none transition-colors ${dark2 ? "border-slate-600 bg-slate-800 text-slate-200 placeholder-slate-600 focus:border-sky-500" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400 focus:border-sky-400"}`}
+                />
+              </div>
+              <button type="button" onClick={applySeo} className={`${sec} self-end text-xs px-3 py-1.5`}>
+                Zastosuj w HTML
+              </button>
             </div>
           </div>
         )}
@@ -970,7 +1163,36 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
         {/* Preview pane */}
         {rightTab === "preview" && (
           <div className="flex min-h-0 flex-1 flex-col">
-            <iframe srcDoc={previewDoc} title="Podgląd strony" className="min-h-0 flex-1 w-full border-none bg-white" sandbox="allow-scripts" />
+            {/* Responsive size controls */}
+            <div className={`flex flex-shrink-0 items-center gap-1 border-b px-2 py-1 ${dark2 ? "border-slate-700 bg-slate-900/40" : "border-slate-100 bg-slate-50"}`}>
+              <span className={`mr-1 text-[10px] ${dark2 ? "text-slate-600" : "text-slate-400"}`}>Widok:</span>
+              {(["full", "tablet", "mobile"] as const).map((size) => {
+                const icons = { full: Monitor, tablet: Monitor, mobile: Smartphone };
+                const labels = { full: "Pełny", tablet: "Tablet", mobile: "Mobile" };
+                const Icon = icons[size];
+                return (
+                  <button key={size} type="button" onClick={() => setPreviewSize(size)}
+                    title={labels[size]} aria-label={labels[size]}
+                    className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-[10px] transition-colors ${previewSize === size ? (dark2 ? "bg-slate-700 text-orange-400" : "bg-orange-100 text-orange-600") : (dark2 ? "text-slate-500 hover:bg-slate-800 hover:text-slate-300" : "text-slate-400 hover:bg-slate-200 hover:text-slate-600")}`}>
+                    <Icon className={size === "tablet" ? "h-3 w-3" : "h-3.5 w-3.5"} />
+                    <span className="hidden sm:inline">{labels[size]}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {previewSize !== "full" ? (
+              <div className={`flex min-h-0 flex-1 items-start justify-center overflow-auto p-2 ${dark2 ? "bg-slate-800/40" : "bg-slate-100"}`}>
+                <div className="overflow-hidden rounded-xl border-2 shadow-lg bg-white flex-shrink-0"
+                  style={{
+                    width: previewSize === "mobile" ? 375 : 768,
+                    borderColor: dark2 ? "#475569" : "#94a3b8",
+                  }}>
+                  <iframe srcDoc={previewDoc} title="Podgląd strony" className="w-full border-none bg-white" style={{ height: previewSize === "mobile" ? 667 : 600 }} sandbox="allow-scripts" />
+                </div>
+              </div>
+            ) : (
+              <iframe srcDoc={previewDoc} title="Podgląd strony" className="min-h-0 flex-1 w-full border-none bg-white" sandbox="allow-scripts" />
+            )}
             {/* Staging URL (after deploy, before domain) */}
             {previewDeployUrl && !activeProject?.live_url && (
               <div className={`flex flex-shrink-0 items-center gap-2 border-t px-3 py-2 text-xs ${dark2 ? "border-slate-700 text-slate-400" : "border-slate-200 text-slate-500"}`}>
@@ -1078,6 +1300,11 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
             <div className={`flex flex-shrink-0 gap-2 border-t p-2 ${dark2 ? "border-slate-700" : "border-slate-200"}`}>
               <button type="button" onClick={troubleshootWithAI} disabled={aiLoading} className={`${sec} disabled:opacity-40 flex-1 justify-center`}>
                 <Sparkles className="h-3.5 w-3.5" />Rozwiąż problem z AI
+              </button>
+              <button type="button" onClick={() => void runAccessibilityAudit()} disabled={aiLoading}
+                title="Audyt dostępności WCAG" aria-label="Audyt dostępności WCAG"
+                className={`${sec} disabled:opacity-40`}>
+                <Shield className="h-3.5 w-3.5 text-emerald-400" />WCAG
               </button>
               {aiLoading && (
                 <button type="button" onClick={() => aiAbortRef.current?.abort()} className={sec}>

@@ -6,8 +6,13 @@ import {
   ChevronDown,
   Globe,
   Loader2,
+  Maximize2,
+  Minimize2,
+  Monitor,
+  Package,
   Play,
   RefreshCw,
+  Smartphone,
   Sparkles,
   SquareTerminal,
   Trash2,
@@ -58,6 +63,21 @@ const INITIAL_SINGLE: Record<SandboxMode, string> = {
   json: `{\n  "greeting": "Hello, World!",\n  "version": 1\n}`,
   markdown: `# Hello World\n\nWelcome to the **Sandbox**!\n\n- Start writing Markdown here\n- Preview renders on the right`,
 };
+
+// ─── CDN library list ──────────────────────────────────────────────────────────
+
+const CDN_LIBRARIES = [
+  { name: "Tailwind CSS (Play CDN)", description: "Utility-first CSS framework", tag: '<script src="https://cdn.tailwindcss.com"></script>' },
+  { name: "Alpine.js", description: "Lightweight reactive JS", tag: '<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>' },
+  { name: "Three.js", description: "3D graphics library", tag: '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>' },
+  { name: "Chart.js", description: "Charts & graphs", tag: '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>' },
+  { name: "GSAP", description: "Professional animations", tag: '<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>' },
+  { name: "Animate.css", description: "CSS animation classes", tag: '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">' },
+  { name: "jQuery", description: "DOM manipulation library", tag: '<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>' },
+  { name: "Bootstrap CSS", description: "CSS component framework", tag: '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">' },
+  { name: "D3.js", description: "Data visualizations", tag: '<script src="https://d3js.org/d3.v7.min.js"></script>' },
+  { name: "Lodash", description: "JS utility functions", tag: '<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>' },
+];
 
 // ─── Build iframe preview document ────────────────────────────────────────────
 
@@ -128,8 +148,34 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
   const [aiInput, setAiInput] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [runMode, setRunMode] = useState(false);
+  const [deviceFrame, setDeviceFrame] = useState<"none" | "mobile" | "tablet">("none");
+  const [showCdnPicker, setShowCdnPicker] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiAbortRef = useRef<AbortController | null>(null);
+
+  // Load from localStorage on mount (only when no initialCode is provided)
+  useEffect(() => {
+    if (initialCode) return;
+    try {
+      const saved = localStorage.getItem("sandbox-html-css-js");
+      if (saved) {
+        const parsed = JSON.parse(saved) as { html?: string; css?: string; js?: string };
+        if (parsed.html !== undefined) setHtml(parsed.html);
+        if (parsed.css !== undefined) setCss(parsed.css);
+        if (parsed.js !== undefined) setJs(parsed.js);
+      }
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Save to localStorage whenever HTML/CSS/JS changes
+  useEffect(() => {
+    if (sandboxMode !== "html-css-js") return;
+    try {
+      localStorage.setItem("sandbox-html-css-js", JSON.stringify({ html, css, js }));
+    } catch { /* ignore */ }
+  }, [html, css, js, sandboxMode]);
 
   // Debounce preview rebuild
   useEffect(() => {
@@ -226,6 +272,27 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
     void sendAI(prompt);
   }
 
+  function insertCdn(lib: typeof CDN_LIBRARIES[0]) {
+    const tagPrefix = lib.tag.slice(0, 40);
+    if (html.includes(tagPrefix)) { setShowCdnPicker(false); return; }
+    let updated = html;
+    if (lib.tag.startsWith("<script")) {
+      if (/<\/body>/i.test(updated)) {
+        updated = updated.replace(/<\/body>/i, `  ${lib.tag}\n</body>`);
+      } else {
+        updated = updated + "\n" + lib.tag;
+      }
+    } else {
+      if (/<\/head>/i.test(updated)) {
+        updated = updated.replace(/<\/head>/i, `  ${lib.tag}\n</head>`);
+      } else {
+        updated = lib.tag + "\n" + updated;
+      }
+    }
+    setHtml(updated);
+    setShowCdnPicker(false);
+  }
+
   // Styling helpers
   const toolbarCls = dark ? "border-slate-700 bg-slate-800/80" : "border-slate-200 bg-white/95";
   const panelCls = dark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-slate-50";
@@ -285,6 +352,30 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
           )}
         </div>
 
+        {/* CDN library picker */}
+        {sandboxMode === "html-css-js" && (
+          <div className="relative">
+            <button type="button" onClick={() => { setShowCdnPicker((v) => !v); setShowModeDropdown(false); setShowLangDropdown(false); }}
+              title="Wstaw bibliotekę CDN" aria-label="Wstaw bibliotekę CDN" className={sec}>
+              <Package className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Biblioteki</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+            {showCdnPicker && (
+              <div className={`absolute left-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-xl border shadow-lg ${dark ? "border-slate-600 bg-slate-800" : "border-slate-200 bg-white"}`}>
+                <div className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wide ${dark ? "text-slate-500" : "text-slate-400"}`}>Wstaw CDN</div>
+                {CDN_LIBRARIES.map((lib) => (
+                  <button key={lib.name} type="button" onClick={() => insertCdn(lib)}
+                    className={`flex w-full flex-col items-start px-3 py-2 text-xs transition-colors ${dark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"}`}>
+                    <span className="font-medium">{lib.name}</span>
+                    <span className={`text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{lib.description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex-1" />
 
         <button type="button" onClick={refreshPreview} title="Odśwież podgląd" aria-label="Odśwież podgląd" className={sec}>
@@ -293,23 +384,53 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
         <button type="button" onClick={clearCode} title="Wyczyść kod" aria-label="Wyczyść kod" className={sec}>
           <Trash2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Wyczyść</span>
         </button>
+
+        {/* Device frame selector (HTML mode only) */}
+        {sandboxMode === "html-css-js" && (
+          <div className={`flex rounded-xl border overflow-hidden ${dark ? "border-slate-600" : "border-slate-300"}`}>
+            <button type="button" onClick={() => setDeviceFrame("none")}
+              title="Pełny widok" aria-label="Pełny widok"
+              className={`px-2 py-1.5 text-xs transition-colors ${deviceFrame === "none" ? (dark ? "bg-slate-600 text-white" : "bg-slate-200 text-slate-800") : (dark ? "text-slate-400 hover:bg-slate-700" : "text-slate-500 hover:bg-slate-100")}`}>
+              <Monitor className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" onClick={() => setDeviceFrame("tablet")}
+              title="Tablet (768px)" aria-label="Tablet (768px)"
+              className={`border-x px-2 py-1.5 text-xs transition-colors ${deviceFrame === "tablet" ? (dark ? "bg-slate-600 text-sky-400 border-slate-500" : "bg-sky-50 text-sky-600 border-slate-300") : (dark ? "border-slate-600 text-slate-400 hover:bg-slate-700" : "border-slate-300 text-slate-500 hover:bg-slate-100")}`}>
+              <Monitor className="h-3 w-3" />
+            </button>
+            <button type="button" onClick={() => setDeviceFrame("mobile")}
+              title="Mobile (375px)" aria-label="Mobile (375px)"
+              className={`px-2 py-1.5 text-xs transition-colors ${deviceFrame === "mobile" ? (dark ? "bg-slate-600 text-sky-400" : "bg-sky-50 text-sky-600") : (dark ? "text-slate-400 hover:bg-slate-700" : "text-slate-500 hover:bg-slate-100")}`}>
+              <Smartphone className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         <button type="button" onClick={handleReview} title="Przegląd kodu AI" aria-label="Przegląd kodu AI" className={sec}>
           <BookMarked className="h-3.5 w-3.5 text-violet-400" /><span className="hidden sm:inline">Przegląd AI</span>
         </button>
         <button type="button" onClick={() => setAiPanelOpen((v) => !v)} title="Panel AI" aria-label="Panel AI" className={pri}>
           <Bot className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI</span>
         </button>
-        <button type="button" onClick={() => setPreviewVisible((v) => !v)}
-          title={previewVisible ? "Ukryj podgląd" : "Pokaż podgląd"} aria-label={previewVisible ? "Ukryj podgląd" : "Pokaż podgląd"}
+        <button type="button" onClick={() => { setRunMode((v) => !v); if (!runMode) setPreviewVisible(true); }}
+          title={runMode ? "Wyjdź z trybu prezentacji" : "Tryb prezentacji"} aria-label={runMode ? "Wyjdź z trybu prezentacji" : "Tryb prezentacji"}
           className={sec}>
-          <Play className="h-3.5 w-3.5" /><span className="hidden sm:inline">{previewVisible ? "Ukryj podgląd" : "Podgląd"}</span>
+          {runMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          <span className="hidden sm:inline">{runMode ? "Wyjdź" : "Prezentacja"}</span>
         </button>
+        {!runMode && (
+          <button type="button" onClick={() => setPreviewVisible((v) => !v)}
+            title={previewVisible ? "Ukryj podgląd" : "Pokaż podgląd"} aria-label={previewVisible ? "Ukryj podgląd" : "Pokaż podgląd"}
+            className={sec}>
+            <Play className="h-3.5 w-3.5" /><span className="hidden sm:inline">{previewVisible ? "Ukryj podgląd" : "Podgląd"}</span>
+          </button>
+        )}
       </div>
 
       {/* ── Main area ── */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Editor pane */}
-        <div className={`flex min-h-0 flex-col ${previewVisible || aiPanelOpen ? "w-1/2" : "flex-1"} border-r ${dark ? "border-slate-700" : "border-slate-200"}`}>
+        {/* Editor pane — hidden in run mode */}
+        <div className={`flex min-h-0 flex-col border-r ${dark ? "border-slate-700" : "border-slate-200"} ${runMode ? "hidden" : (previewVisible || aiPanelOpen ? "w-1/2" : "flex-1")}`}>
           {sandboxMode === "html-css-js" ? (
             <div className="flex min-h-0 flex-1 flex-col divide-y divide-slate-700/60">
               <div className="min-h-0 flex-1">
@@ -366,21 +487,44 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
           </div>
         </div>
 
-        {/* Right pane */}
-        {(previewVisible || aiPanelOpen) && (
+        {/* Right pane — always visible in run mode */}
+        {(previewVisible || aiPanelOpen || runMode) && (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {previewVisible && (
+            {(previewVisible || runMode) && (
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className={`flex flex-shrink-0 items-center gap-2 border-b px-3 py-1.5 ${panelCls}`}>
                   <span className={`text-xs font-semibold ${dark ? "text-sky-400" : "text-sky-600"}`}>
                     {sandboxMode === "html-css-js" ? "Podgląd" : "Wyjście"}
                   </span>
                   {sandboxMode === "html-css-js" && (
-                    <span className={`ml-auto text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{getPageTitle()}</span>
+                    <span className={`text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{getPageTitle()}</span>
+                  )}
+                  <div className="flex-1" />
+                  {runMode && (
+                    <button type="button" onClick={() => setRunMode(false)}
+                      title="Wyjdź z trybu prezentacji" aria-label="Wyjdź z trybu prezentacji"
+                      className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] transition-colors ${dark ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-slate-200 hover:text-slate-800"}`}>
+                      <Minimize2 className="h-3 w-3" />Wyjdź z prezentacji
+                    </button>
+                  )}
+                  {/* Device frame label */}
+                  {deviceFrame !== "none" && (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] ${dark ? "bg-slate-700 text-sky-400" : "bg-sky-100 text-sky-700"}`}>
+                      {deviceFrame === "mobile" ? "📱 375px" : "💻 768px"}
+                    </span>
                   )}
                 </div>
                 {sandboxMode === "html-css-js" ? (
-                  <iframe srcDoc={previewDoc} title="Podgląd sandboxa" className="min-h-0 flex-1 w-full border-none bg-white" sandbox="allow-scripts" />
+                  deviceFrame !== "none" ? (
+                    <div className={`flex min-h-0 flex-1 items-center justify-center overflow-auto p-4 ${dark ? "bg-slate-800/40" : "bg-slate-100"}`}>
+                      <div className={`overflow-hidden rounded-2xl border-4 shadow-2xl bg-white flex-shrink-0 ${dark ? "border-slate-500" : "border-slate-400"}`}
+                        style={{ width: deviceFrame === "mobile" ? 375 : 768, height: deviceFrame === "mobile" ? 667 : 600 }}>
+                        <iframe srcDoc={previewDoc} title="Podgląd sandboxa" className="w-full h-full border-none bg-white" sandbox="allow-scripts" />
+                      </div>
+                    </div>
+                  ) : (
+                    <iframe srcDoc={previewDoc} title="Podgląd sandboxa" className="min-h-0 flex-1 w-full border-none bg-white" sandbox="allow-scripts" />
+                  )
                 ) : (
                   <div className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center ${dark ? "text-slate-400" : "text-slate-500"}`}>
                     <SquareTerminal className={`h-10 w-10 ${dark ? "text-slate-700" : "text-slate-300"}`} />
@@ -483,8 +627,8 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
       </div>
 
       {/* Close dropdowns on outside click */}
-      {(showModeDropdown || showLangDropdown) && (
-        <div className="fixed inset-0 z-20" onClick={() => { setShowModeDropdown(false); setShowLangDropdown(false); }} />
+      {(showModeDropdown || showLangDropdown || showCdnPicker) && (
+        <div className="fixed inset-0 z-20" onClick={() => { setShowModeDropdown(false); setShowLangDropdown(false); setShowCdnPicker(false); }} />
       )}
     </div>
   );
