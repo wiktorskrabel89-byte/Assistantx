@@ -57,11 +57,22 @@ export async function POST(request: Request) {
       return Response.json({ error: "repo, branch, and path are required." }, { status: 400 });
     }
 
+    // Validate repo format (owner/name) to prevent URL injection
+    if (!/^[\w.\-]+\/[\w.\-]+$/.test(repo)) {
+      return Response.json({ error: "Invalid repo format. Use owner/repo." }, { status: 400 });
+    }
+
+    // Validate path doesn't traverse directories or start with slash
+    if (path.startsWith("/") || path.includes("..")) {
+      return Response.json({ error: "Invalid file path." }, { status: 400 });
+    }
+
     // Try to get the current file SHA (needed for updates)
     let sha: string | undefined;
+    const encodedPath = path.split("/").map(encodeURIComponent).join("/");
     try {
       const existing = await githubFetch(
-        `https://api.github.com/repos/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`,
+        `https://api.github.com/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`,
         token
       );
       const existingData = await existing.json() as { sha?: string };
@@ -74,14 +85,14 @@ export async function POST(request: Request) {
     const payload: Record<string, unknown> = { message, content: base64Content, branch };
     if (sha) payload.sha = sha;
 
-    await githubFetch(`https://api.github.com/repos/${repo}/contents/${path}`, token, {
+    await githubFetch(`https://api.github.com/repos/${repo}/contents/${encodedPath}`, token, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
 
     return Response.json({
       ok: true,
-      url: `https://github.com/${repo}/blob/${branch}/${path}`,
+      url: `https://github.com/${repo}/blob/${encodeURIComponent(branch)}/${path}`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to commit to GitHub.";

@@ -57,6 +57,11 @@ export async function POST(request: Request) {
       return Response.json({ error: "repo, head branch, and base branch are required." }, { status: 400 });
     }
 
+    // Validate repo format (owner/name) to prevent URL injection
+    if (!/^[\w.\-]+\/[\w.\-]+$/.test(repo)) {
+      return Response.json({ error: "Invalid repo format. Use owner/repo." }, { status: 400 });
+    }
+
     const response = await githubFetch(`https://api.github.com/repos/${repo}/pulls`, token, {
       method: "POST",
       body: JSON.stringify({ title, body, head, base }),
