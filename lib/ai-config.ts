@@ -131,11 +131,6 @@ export const CODE_MODELS: ModelOption[] = [
     description: "Strong free model for chat and code.",
   },
   {
-    id: "meta-llama/llama-4-scout:free",
-    label: "Llama 4 Scout (Free)",
-    description: "Llama 4 Scout free coding model.",
-  },
-  {
     id: "anthropic/claude-opus-4.6",
     label: "Claude Opus 4.6",
     description: "Premium code and analysis model.",
@@ -268,7 +263,6 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
   "nvidia/nemotron-3-super-120b-a12b:free": "free",
   "meta-llama/llama-3.3-70b-instruct:free": "free",
-  "meta-llama/llama-4-scout:free": "free",
   "google/gemini-2.0-flash-exp:free": "free",
   "mistralai/mistral-small-3.1-24b-instruct:free": "free",
   "qwen/qwen3-235b-a22b:free": "free",

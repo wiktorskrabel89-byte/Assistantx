@@ -253,7 +253,6 @@ const MODEL_LABELS: Record<string, string> = {
   "nvidia/nemotron-3-super-120b-a12b:free": "Nemotron 3 Super 120B (Free)",
   "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
   "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
-  "meta-llama/llama-4-scout:free": "Llama 4 Scout",
   "deepseek/deepseek-v3.2": "DeepSeek V3.2",
   "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash",
   "google/gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
