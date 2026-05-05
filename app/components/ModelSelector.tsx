@@ -1,8 +1,8 @@
 "use client";
 
 import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp } from "lucide-react";
-import { useEffect, useState } from "react";
-import { fetchAllModels } from "../api/openrouter/fetchAllModels";
+import { useState } from "react";
+import { LOCAL_FALLBACK_MODELS } from "../api/openrouter/fetchAllModels";
 import { PRO_PLUS_ONLY_MODELS } from "@/lib/ai-config";
 
 type OpenRouterModel = {
@@ -21,17 +21,8 @@ type ModelSelectorProps = {
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false }: ModelSelectorProps) {
   const [open, setOpen] = useState(true);
-  const [allModels, setAllModels] = useState<OpenRouterModel[]>([]);
+  const allModels = LOCAL_FALLBACK_MODELS;
   const isAuto = preferredModelId === null;
-
-  useEffect(() => {
-    fetchAllModels().then((models) => {
-      setAllModels(models);
-      if (!models || models.length === 0) {
-        console.warn('ModelSelector: No models loaded', models);
-      }
-    });
-  }, []);
 
   const pillBase = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none";
   const pillActive = dark

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/client";
-import { fetchAllModels } from "@/app/api/openrouter/fetchAllModels";
+import { LOCAL_FALLBACK_MODELS } from "@/app/api/openrouter/fetchAllModels";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -241,7 +241,7 @@ export function ClinicalTab() {
     () => loadCustomFrameworks(),
   );
   const [selectedFrameworkId, setSelectedFrameworkId] = useState<string | null>(null);
-  const [allModels, setAllModels] = useState<ModelOption[]>([]);
+  const allModels = LOCAL_FALLBACK_MODELS;
   const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL);
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
@@ -264,10 +264,6 @@ export function ClinicalTab() {
   const selectedFramework = allFrameworks.find((f) => f.id === selectedFrameworkId) ?? null;
 
   // ── Effects ────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    fetchAllModels().then((models) => setAllModels(models));
-  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
