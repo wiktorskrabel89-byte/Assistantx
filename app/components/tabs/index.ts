@@ -7,5 +7,5 @@ export { NotificationsTab } from "./NotificationsTab";
 export { ProjectsTab } from "./ProjectsTab";
 export { PromptLibraryTab } from "./PromptLibraryTab";
 export { SandboxTab } from "./SandboxTab";
-export { ScriptsTab } from "./ScriptsTab";
 export { SettingsTab } from "./SettingsTab";
+export { WebsiteCreatorTab } from "./WebsiteCreatorTab";

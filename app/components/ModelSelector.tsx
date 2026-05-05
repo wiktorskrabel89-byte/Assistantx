@@ -20,7 +20,7 @@ type ModelSelectorProps = {
 
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false }: ModelSelectorProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [allModels, setAllModels] = useState<OpenRouterModel[]>([]);
   const isAuto = preferredModelId === null;
 

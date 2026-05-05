@@ -323,6 +323,7 @@ export const POST = async (req: Request) => {
     thinkingEffort, // New: reasoning depth (Low, Medium, High, Xhigh)
     systemPrompt: customSystemPrompt,
     enabledTools,
+    googleContext,
   } = await req.json();
 
   // Override addInternetContext if the workspace has web_search tool enabled
@@ -431,6 +432,14 @@ export const POST = async (req: Request) => {
     ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
 
+  // Inject Gmail / Calendar context when the tools provide it
+  // Truncate to ~2000 chars to prevent prompt injection and excessive token usage
+  const rawGoogleContext = typeof googleContext === "string" ? googleContext.trim() : "";
+  const safeGoogleContext = rawGoogleContext.slice(0, 2000);
+  const googleContextInstruction = safeGoogleContext
+    ? `The user has connected Google. Current context from their Google account:\n${safeGoogleContext}`
+    : "";
+
   const costDowngradeNote = costControlled.downgraded ? ` (downgraded by ${costMode} cost mode)` : "";
   const planDowngradeNote = (modelId && planEnforcedModelId !== modelId) ? " (switched to free model — premium plan required)" : "";
   const routeReason = isSearchMode
@@ -481,15 +490,15 @@ export const POST = async (req: Request) => {
 
   let systemPrompt: string;
   if (isSearchMode) {
-      systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (isDeepSeek) {
-      systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (isGemini) {
-      systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else if (inferredCodeRequest) {
-      systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   } else {
-      systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
   }
 
   // Append any custom workspace system prompt

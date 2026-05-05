@@ -43,9 +43,14 @@ async function getCalendarContext() {
   };
 }
 
-async function calendarFetch(url: string, token: string) {
+async function calendarFetch(url: string, token: string, options?: RequestInit) {
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(options?.headers as Record<string, string> ?? {}),
+    },
   });
 
   if (!response.ok) {
@@ -107,3 +112,88 @@ export async function GET(request: Request) {
     return Response.json({ error: message }, { status: 500 });
   }
 }
+
+/**
+ * POST /api/integrations/google-calendar
+ * Creates a new event in the user's primary calendar.
+ * Body: { title: string, description?: string, startDateTime: string, endDateTime?: string, location?: string, allDay?: boolean }
+ */
+export async function POST(request: Request) {
+  try {
+    const { user, token } = await getCalendarContext();
+    if (!user) {
+      return Response.json({ error: "Sign in before creating calendar events." }, { status: 401 });
+    }
+    if (!token) {
+      return Response.json({ error: "Reconnect Google and grant Calendar access first." }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => ({})) as {
+      title?: string;
+      description?: string;
+      startDateTime?: string;
+      endDateTime?: string;
+      location?: string;
+      allDay?: boolean;
+    };
+
+    const title = body.title?.trim() || "New Event";
+    const description = body.description?.trim() ?? "";
+    const location = body.location?.trim() ?? "";
+    const allDay = Boolean(body.allDay);
+
+    if (!body.startDateTime) {
+      return Response.json({ error: "startDateTime is required (ISO 8601)." }, { status: 400 });
+    }
+
+    // Validate ISO 8601 date/datetime
+    const startDate = new Date(body.startDateTime);
+    if (isNaN(startDate.getTime())) {
+      return Response.json({ error: "Invalid startDateTime. Use ISO 8601 format." }, { status: 400 });
+    }
+
+    let eventBody: Record<string, unknown>;
+    if (allDay) {
+      const dateStr = startDate.toISOString().slice(0, 10);
+      const endDateStr = body.endDateTime
+        ? new Date(body.endDateTime).toISOString().slice(0, 10)
+        : new Date(startDate.getTime() + 86_400_000).toISOString().slice(0, 10);
+      eventBody = {
+        summary: title,
+        description,
+        location,
+        start: { date: dateStr },
+        end: { date: endDateStr },
+      };
+    } else {
+      const endDate = body.endDateTime
+        ? new Date(body.endDateTime)
+        : new Date(startDate.getTime() + 3_600_000); // default 1 hour
+      eventBody = {
+        summary: title,
+        description,
+        location,
+        start: { dateTime: startDate.toISOString() },
+        end: { dateTime: endDate.toISOString() },
+      };
+    }
+
+    const createResponse = await calendarFetch(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      token,
+      { method: "POST", body: JSON.stringify(eventBody) }
+    );
+    const created = (await createResponse.json()) as { id?: string; htmlLink?: string; summary?: string };
+
+    return Response.json({
+      ok: true,
+      id: created.id ?? null,
+      htmlLink: created.htmlLink ?? null,
+      title: created.summary ?? title,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create calendar event.";
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
+

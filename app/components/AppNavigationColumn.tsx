@@ -5,9 +5,9 @@ import {
   BookOpen,
   BrainCircuit,
   Check,
-  CodeXml,
   Database,
   FolderKanban,
+  Globe2,
   Grid2x2,
   LibraryBig,
   MessageSquareText,
@@ -30,13 +30,13 @@ export type AppNavigationTab =
   | "learning"
   | "projects"
   | "codebase"
-  | "scripts"
   | "prompt-library"
   | "knowledge-export"
   | "settings"
   | "notifications"
   | "ai-learning"
-  | "jarvis";
+  | "jarvis"
+  | "website-creator";
 
 type AppNavigationColumnProps = {
   dark: boolean;
@@ -70,6 +70,7 @@ const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen,     color: "from-sky-500 to-blue-600" },
   { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig,   color: "from-pink-500 to-rose-600" },
   { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2,       color: "from-indigo-500 to-violet-600" },
+  { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2,  color: "from-orange-500 to-amber-600" },
   { id: "ai-learning",      label: "AI Learning",     description: "Trenuj modele AI",      icon: BrainCircuit, color: "from-fuchsia-500 to-pink-600", adminOnly: true },
 ];
 
@@ -78,7 +79,6 @@ const CORE_CODE_TABS: { id: AppNavigationTab; label: string; icon: LucideIcon }[
   { id: "sandbox",  label: "Sandbox",  icon: SquareTerminal },
   { id: "projects", label: "Projekty", icon: FolderKanban },
   { id: "codebase", label: "Codebase", icon: Database },
-  { id: "scripts",  label: "Scripts",  icon: CodeXml },
 ];
 
 const ADD_ON_IDS = new Set(ADD_ON_ITEMS.map((a) => a.id));
@@ -151,6 +151,7 @@ export function AppNavigationColumn({
   }
 
   return (
+    <>
     <aside className={`hidden min-h-0 overflow-hidden rounded-[26px] border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
       {/* ── Logo ── */}
       <div className={`border-b px-4 py-4 ${dividerClassName}`}>
@@ -430,6 +431,198 @@ export function AppNavigationColumn({
         )}
       </div>
     </aside>
+
+      {/* ── Mobile compact icon strip (below xl) ── */}
+      <nav
+        aria-label="App navigation"
+        className={`xl:hidden flex flex-shrink-0 flex-col items-center gap-1 py-3 w-14 min-h-0 rounded-[26px] border ${shellClassName}`}
+      >
+        {/* Chat */}
+        <button
+          type="button"
+          onClick={() => onSelectTab("chat")}
+          title="Chat"
+          className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
+            isChatActive
+              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
+              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+          }`}
+        >
+          <MessageSquareText className="h-5 w-5" />
+        </button>
+
+        {/* Pinned add-ons */}
+        {pinnedItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelectTab(item.id)}
+              title={item.label}
+              className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
+                isActive
+                  ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
+                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+            </button>
+          );
+        })}
+
+        {/* Apps */}
+        <button
+          type="button"
+          onClick={() => setAppsOpen((v: boolean) => !v)}
+          title="Aplikacje"
+          className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
+            appsOpen || (isAddOnActive && !pinnedAddOns.includes(activeTab))
+              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
+              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+          }`}
+        >
+          <Grid2x2 className="h-5 w-5" />
+        </button>
+
+        <div className="flex-1" />
+
+        {/* Settings */}
+        <button
+          type="button"
+          onClick={() => onSelectTab("settings")}
+          title="Ustawienia"
+          className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
+            activeTab === "settings"
+              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
+              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+          }`}
+        >
+          <Settings2 className="h-5 w-5" />
+        </button>
+
+        {/* Notifications */}
+        <button
+          type="button"
+          onClick={() => onSelectTab("notifications")}
+          title="Powiadomienia"
+          className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
+            activeTab === "notifications"
+              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
+              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+          }`}
+        >
+          <Bell className="h-5 w-5" />
+          {notificationUnread > 0 && (
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+              {notificationUnread > 99 ? "99+" : notificationUnread}
+            </span>
+          )}
+        </button>
+
+        {/* User avatar */}
+        <button
+          type="button"
+          onClick={() => onSelectTab("settings")}
+          title={userEmail ?? "Konto"}
+          className={`mt-1 flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
+            dark ? "bg-slate-700 text-slate-200 hover:bg-slate-600" : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+          }`}
+        >
+          {getInitials(userEmail)}
+        </button>
+      </nav>
+
+      {/* ── Mobile apps overlay (fixed, below xl) ── */}
+      {appsOpen && (
+        <div
+          className="xl:hidden fixed inset-0 z-50 flex items-end justify-start p-4"
+          onClick={() => setAppsOpen(false)}
+        >
+          <div
+            className={`max-h-[70vh] w-72 overflow-hidden rounded-2xl border shadow-2xl ${
+              dark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
+            }`}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            {/* Search */}
+            <div className={`flex items-center gap-2 border-b px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+              <Search className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
+              <input
+                value={appsSearch}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
+                placeholder="Szukaj aplikacji..."
+                className={`flex-1 bg-transparent text-xs outline-none ${
+                  dark ? "placeholder-slate-500 text-slate-200" : "placeholder-slate-400 text-slate-700"
+                }`}
+              />
+              {appsSearch && (
+                <button type="button" onClick={() => setAppsSearch("")} className="opacity-40 hover:opacity-70">
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {/* Add-on list */}
+            <div className="max-h-[55vh] overflow-y-auto py-1.5">
+              {eligibleAddOns.length === 0 && (
+                <p className="px-4 py-3 text-xs opacity-50">Brak aplikacji</p>
+              )}
+              {eligibleAddOns.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                const isPinned = pinnedAddOns.includes(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-2 px-2 py-1.5 ${isActive ? (dark ? "bg-slate-700/50" : "bg-sky-50/80") : ""}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAddOn(item.id)}
+                      className="flex flex-1 min-w-0 items-center gap-2.5 rounded-xl px-1 py-1 text-left transition-colors hover:opacity-80"
+                    >
+                      <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${item.color} shadow-sm`}>
+                        <Icon className="h-3.5 w-3.5 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`truncate text-xs font-semibold ${dark ? "text-slate-200" : "text-slate-700"}`}>{item.label}</span>
+                          {item.beta && (
+                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700">Beta</span>
+                          )}
+                          {item.adminOnly && (
+                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700">Admin</span>
+                          )}
+                        </div>
+                        <div className={`truncate text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{item.description}</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => togglePin(item.id)}
+                      title={isPinned ? "Usuń z zakładek" : "Dodaj do zakładek"}
+                      className={`flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-lg border transition-colors ${
+                        isPinned
+                          ? dark ? "border-sky-600 bg-sky-900/50 text-sky-400" : "border-sky-300 bg-sky-50 text-sky-600"
+                          : dark ? "border-slate-600 text-slate-400 hover:border-slate-400" : "border-slate-300 text-slate-400 hover:border-slate-500"
+                      }`}
+                    >
+                      {isPinned ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className={`border-t px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+              <p className={`text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>
+                Kliknij <Plus className="inline h-2.5 w-2.5" /> aby przypiąć do paska bocznego.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

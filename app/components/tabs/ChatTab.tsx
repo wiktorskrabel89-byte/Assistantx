@@ -123,6 +123,7 @@ export function ChatTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importedShareRef = useRef(false);
+  const googleContextRef = useRef<string>("");
 
   const currentConversationId = activeChat.id;
   const workspaceQueries = useWorkspaceQueries({
@@ -973,6 +974,7 @@ export function ChatTab() {
         onImportFile={handleImportedFile}
         onCopyVsCodePrompt={() => void copyVsCodePrompt()}
         onDownloadVsCodeBundle={downloadVsCodeBundle}
+        onSendGoogleContext={(context) => { googleContextRef.current = context; }}
       />
       <WorkspaceToolsPanel
         open={workspaceToolsOpen}

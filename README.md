@@ -35,6 +35,28 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 OPENROUTER_API_KEY=...
 ```
 
+### Website Creator (optional)
+
+The Website Creator add-on supports deploying static sites to Northflank and
+configuring custom domains via Cloudflare. These are optional — the tab works
+without them in "simulated" mode.
+
+```bash
+# Northflank — deploy static sites
+NORTHFLANK_API_KEY=...
+NORTHFLANK_PROJECT_ID=...
+
+# Cloudflare — assign custom subdomains (optional)
+CLOUDFLARE_API_TOKEN=...
+CLOUDFLARE_ZONE_ID=...
+CLOUDFLARE_BASE_DOMAIN=yourdomain.com
+```
+
+Run the migration to enable project storage:
+```bash
+supabase/migrations/20260504_website_creator.sql
+```
+
 Required Supabase setup:
 
 1. Add your app origin and `/auth/callback` to Supabase Auth redirect URLs.

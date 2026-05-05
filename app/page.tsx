@@ -12,9 +12,9 @@ import {
   ProjectsTab,
   PromptLibraryTab,
   SandboxTab,
-  ScriptsTab,
   SettingsTab,
 } from "./components/tabs";
+import { WebsiteCreatorTab } from "./components/tabs/WebsiteCreatorTab";
 import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
@@ -23,15 +23,19 @@ import type { AppMode } from "./lib/chat-types";
 
 // Tabs that are only available in AI Code mode (resets to "chat" if mode switches)
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
-  "sandbox", "codebase", "scripts", "projects",
+  "sandbox", "codebase", "projects",
 ];
 
 function TabContent({
   activeTab,
   notificationsHook,
+  sandboxInitCode,
+  onOpenInSandbox,
 }: {
   activeTab: AppNavigationTab;
   notificationsHook: ReturnType<typeof useNotifications>;
+  sandboxInitCode?: { html: string; css: string; js: string } | null;
+  onOpenInSandbox?: (html: string, css: string, js: string) => void;
 }) {
   const { state } = useWorkspace();
 
@@ -41,15 +45,15 @@ function TabContent({
     case "clinical":
       return <ClinicalTab />;
     case "sandbox":
-      return <SandboxTab dark={state.dark} />;
+      return <SandboxTab dark={state.dark} initialCode={sandboxInitCode ?? undefined} />;
     case "learning":
       return <LearningTab dark={state.dark} />;
     case "projects":
       return <ProjectsTab dark={state.dark} />;
     case "codebase":
       return <CodebaseTab dark={state.dark} />;
-    case "scripts":
-      return <ScriptsTab dark={state.dark} />;
+    case "website-creator":
+      return <WebsiteCreatorTab dark={state.dark} onOpenInSandbox={onOpenInSandbox} />;
     case "prompt-library":
       return <PromptLibraryTab dark={state.dark} />;
     case "knowledge-export":
@@ -73,6 +77,7 @@ function HomeContent() {
   const notificationsHook = useNotifications();
   const [isAdmin, setIsAdmin] = useState(false);
   const adminCheckedRef = useRef(false);
+  const [sandboxInitCode, setSandboxInitCode] = useState<{ html: string; css: string; js: string } | null>(null);
 
   const appMode: AppMode = state.appMode ?? "ai-chat";
   const pinnedAddOns: string[] = state.pinnedAddOns ?? [];
@@ -106,6 +111,11 @@ function HomeContent() {
     }
   }, [notificationsHook]);
 
+  const handleOpenInSandbox = useCallback((html: string, css: string, js: string) => {
+    setSandboxInitCode({ html, css, js });
+    setActiveAppTab("sandbox");
+  }, []);
+
   const bg = state.dark
     ? "bg-slate-950 text-slate-100"
     : "bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.18),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.15),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] text-slate-900";
@@ -115,7 +125,7 @@ function HomeContent() {
   const isChatTab = activeAppTab === "chat";
 
   return (
-    <div className={`h-screen overflow-hidden transition-colors duration-300 ${bg}`}>
+    <div className={`h-dvh overflow-hidden transition-colors duration-300 ${bg}`}>
         <div className="mx-auto flex h-full max-w-[1680px] gap-3 px-3 py-3">
           <AppNavigationColumn
             dark={state.dark}
@@ -131,10 +141,10 @@ function HomeContent() {
           />
 
           {isChatTab ? (
-            <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} />
+            <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} sandboxInitCode={sandboxInitCode} onOpenInSandbox={handleOpenInSandbox} />
           ) : (
             <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
-              <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} />
+              <TabContent key={activeAppTab} activeTab={activeAppTab} notificationsHook={notificationsHook} sandboxInitCode={sandboxInitCode} onOpenInSandbox={handleOpenInSandbox} />
             </main>
           )}
         </div>

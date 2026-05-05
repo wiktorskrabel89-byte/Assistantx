@@ -110,6 +110,11 @@ export function useChatTransport({
   const processingQueueRef = useRef(false);
   const queuedMessagesRef = useRef<QueuedMessage[]>([]);
   const isMountedRef = useRef(true);
+  // Google integration context injected into the next chat message system prompt
+  const googleContextRef = useRef<string>("");
+  const setGoogleContext = useCallback((context: string) => {
+    googleContextRef.current = context;
+  }, []);
 
   const revokeQueuedPreview = useCallback((preview: string | null) => {
     if (preview?.startsWith("blob:")) {
@@ -399,6 +404,7 @@ export function useChatTransport({
           thinkingEffort: queuedMessage.thinkingEffort,
           systemPrompt: activeSettings.systemPrompt ?? "",
           enabledTools: activeSettings.enabledTools ?? [],
+          googleContext: googleContextRef.current || undefined,
         }),
       });
 
@@ -449,5 +455,6 @@ export function useChatTransport({
     queueComposerMessage,
     removeQueuedMessage,
     stopCurrentGeneration,
+    setGoogleContext,
   };
 }
