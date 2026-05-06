@@ -389,7 +389,9 @@ export const POST = async (req: Request) => {
       : FREE_CHAT_MODEL;
 
   const selectedModel = isAutoRouted
-    ? "openrouter/auto"
+    ? (costFilteredModels.find(id => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
+        ?? costFilteredModels[0]
+        ?? (inferredCodeRequest ? FREE_CODING_MODEL : FREE_CHAT_MODEL))
     : costControlled.modelId;
 
   // Determine if this is a search/DeepSeek/Gemini request for system prompt selection
@@ -538,9 +540,6 @@ export const POST = async (req: Request) => {
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
     stream: true,
-    // When isAutoRouted, selectedModel is "openrouter/auto" which isn't in MODEL_MAX_TOKENS;
-    // getModelMaxTokens falls back to DEFAULT_MAX_TOKENS (4096), which is acceptable since
-    // the auto-router selects the actual model and applies its own limits.
     max_tokens: getModelMaxTokens(selectedModel),
     messages: [
       { role: "system", content: systemPrompt },
@@ -555,9 +554,7 @@ export const POST = async (req: Request) => {
     requestBody.reasoning_level = thinkingEffort;
   }
 
-  if (isAutoRouted) {
-    requestBody.plugins = [{ id: "auto-router", allowed_models: costFilteredModels }];
-  }
+
 
   const sendOpenRouterRequest = async (body: Record<string, unknown>) => {
     return fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -703,9 +700,7 @@ export const POST = async (req: Request) => {
             try {
               const parsed = JSON.parse(raw);
               if (!modelSent) {
-                const label = effectiveModel === "openrouter/auto"
-                  ? "Auto router"
-                  : (MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI");
+                const label = MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI";
                 safeEnqueue(`data: ${JSON.stringify({ model: label, routeReason: effectiveRouteReason, status: "Writing response..." })}\n\n`);
                 modelSent = true;
               }
@@ -726,9 +721,7 @@ export const POST = async (req: Request) => {
         if (requestSignal.aborted) return;
 
         if (!modelSent) {
-          const fallback = effectiveModel === "openrouter/auto"
-            ? "Auto Router"
-            : (MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI");
+          const fallback = MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI";
           safeEnqueue(`data: ${JSON.stringify({ model: fallback, routeReason: effectiveRouteReason })}\n\n`);
         }
         safeEnqueue(`data: ${JSON.stringify({ status: "Done" })}\n\n`);

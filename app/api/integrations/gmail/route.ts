@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/server";
 import { getProviderTokenCookieName } from "@/lib/integrations";
 import { cookies } from "next/headers";
+import { AUTO_PREFERRED_CHAT_MODEL } from "@/lib/ai-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -192,7 +193,7 @@ export async function POST(request: Request) {
         "X-Title": "AssistantX",
       },
       body: JSON.stringify({
-        model: "openrouter/auto",
+        model: AUTO_PREFERRED_CHAT_MODEL,
         max_tokens: 2048,
         messages: [{ role: "user", content: prompt }],
       }),
