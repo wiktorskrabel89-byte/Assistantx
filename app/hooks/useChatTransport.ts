@@ -387,6 +387,7 @@ export function useChatTransport({
         body: JSON.stringify({
           message: userMsg,
           mode: queuedMessage.mode,
+          modelId: preferredModelId ?? undefined,
           allowedModels: effectiveAllowedModels,
           history,
           conversationId: chatId,
