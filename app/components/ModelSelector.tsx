@@ -2,13 +2,7 @@
 
 import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
-import { LOCAL_FALLBACK_MODELS } from "../api/openrouter/fetchAllModels";
-import { PRO_PLUS_ONLY_MODELS } from "@/lib/ai-config";
-
-type OpenRouterModel = {
-  id: string;
-  description?: string;
-};
+import { ALL_MODELS, isModelPremiumOnly, isModelProPlusOnly } from "@/lib/ai-config";
 
 type ModelSelectorProps = {
   dark: boolean;
@@ -21,7 +15,6 @@ type ModelSelectorProps = {
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false }: ModelSelectorProps) {
   const [open, setOpen] = useState(true);
-  const allModels = LOCAL_FALLBACK_MODELS;
   const isAuto = preferredModelId === null;
 
   const pillBase = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none";
@@ -73,12 +66,12 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
             <Code2 className="mr-0.5 inline h-3 w-3" />
             All Models
           </span>
-          {allModels.map((model) => {
-            // Claude Opus 4.7 requires Pro+
-            const requiresProPlus = PRO_PLUS_ONLY_MODELS.includes(model.id);
+          {ALL_MODELS.map((model) => {
+            const requiresProPlus = isModelProPlusOnly(model.id);
+            const requiresPremium = isModelPremiumOnly(model.id);
             const locked = requiresProPlus
               ? !isProPlus
-              : Boolean(!isPremium && (model.id.includes("opus") || model.description?.toLowerCase().includes("premium")));
+              : requiresPremium && !isPremium;
             const lockReason = requiresProPlus
               ? `Pro+ plan required for ${model.id}`
               : `Pro plan required for ${model.id}`;
