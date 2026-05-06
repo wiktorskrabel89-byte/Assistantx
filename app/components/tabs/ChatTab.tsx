@@ -39,7 +39,6 @@ import {
 import type {
   MessageFeedback,
   Mode,
-  QueuedMessage,
   ResponseAction,
   SharePayload,
   StyleMode,
