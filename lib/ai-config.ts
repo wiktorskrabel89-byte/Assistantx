@@ -82,9 +82,19 @@ export const CHAT_MODELS: ModelOption[] = [
     description: "Standard OpenAI chat model.",
   },
   {
+    id: "openai/gpt-5.4",
+    label: "GPT-5.4",
+    description: "Latest frontier chat and coding model.",
+  },
+  {
     id: "anthropic/claude-sonnet-4.5",
     label: "Claude Sonnet 4.5",
     description: "Strong reasoning and writing.",
+  },
+  {
+    id: "anthropic/claude-opus-4.6",
+    label: "Claude Opus 4.6",
+    description: "Premium Claude model for chat and analysis.",
   },
   {
     id: "anthropic/claude-opus-4.7",
