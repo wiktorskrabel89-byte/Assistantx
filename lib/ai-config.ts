@@ -77,14 +77,29 @@ export const CHAT_MODELS: ModelOption[] = [
     description: "Free MiniMax general-purpose model.",
   },
   {
-    id: "openai/gpt-5.1",
-    label: "GPT-5.1",
-    description: "Standard OpenAI chat model.",
+    id: "openai/gpt-5.2",
+    label: "GPT-5.2",
+    description: "Premium OpenAI chat model.",
+  },
+  {
+    id: "openai/gpt-5.3",
+    label: "GPT-5.3",
+    description: "Advanced OpenAI chat model.",
+  },
+  {
+    id: "openai/gpt-5.4",
+    label: "GPT-5.4",
+    description: "Latest frontier chat and coding model.",
   },
   {
     id: "anthropic/claude-sonnet-4.5",
     label: "Claude Sonnet 4.5",
     description: "Strong reasoning and writing.",
+  },
+  {
+    id: "anthropic/claude-opus-4.6",
+    label: "Claude Opus 4.6",
+    description: "Premium Claude model for chat and analysis.",
   },
   {
     id: "anthropic/claude-opus-4.7",
@@ -241,13 +256,14 @@ export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
   { id: "chat-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
   { id: "chat-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
   // Locked/paid models below
-  { id: "chat-gpt-5.1", label: "GPT-5.1", modelId: "openai/gpt-5.1", costTier: "standard" },
+  { id: "chat-gpt-5.2", label: "GPT-5.2", modelId: "openai/gpt-5.2", costTier: "premium" },
+  { id: "chat-gpt-5.3", label: "GPT-5.3", modelId: "openai/gpt-5.3", costTier: "premium" },
   { id: "chat-claude-sonnet", label: "Claude Sonnet 4.5", modelId: "anthropic/claude-sonnet-4.5", costTier: "standard" },
   { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview", costTier: "cheap" },
 ];
 
 export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
-export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.1";
+export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.2";
 
 export const FREE_CODING_MODEL = "openai/gpt-oss-120b:free";
 export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
@@ -275,7 +291,7 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "deepseek/deepseek-v3.2": "standard",
   "anthropic/claude-sonnet-4.5": "standard",
   "openai/gpt-5": "standard",
-  "openai/gpt-5.1": "standard",
+  "openai/gpt-5.3": "premium",
   "qwen/qwen3-235b-a22b": "standard",
   "perplexity/sonar": "standard",
   "moonshotai/kimi-k2-thinking": "standard",
@@ -432,9 +448,9 @@ export const TOP_PRO_PLUS_FALLBACK_MODELS: string[] = [
  */
 export const REASONING_MODEL_IDS: string[] = [
   "openai/gpt-5.4",
-  "openai/gpt-5.1",
   "openai/gpt-5.2",
   "openai/gpt-5.2-pro",
+  "openai/gpt-5.3",
   "openai/gpt-5-mini",
   "openai/gpt-5-nano",
   "openai/gpt-5",
@@ -466,7 +482,7 @@ export const MODEL_MAX_TOKENS: Record<string, number> = {
   "openai/gpt-5.5": 8192,
   "openai/gpt-5.2": 8192,
   "openai/gpt-5.2-pro": 8192,
-  "openai/gpt-5.1": 8192,
+  "openai/gpt-5.3": 8192,
   "openai/gpt-5": 8192,
   "google/gemini-3-pro-preview": 8192,
   "google/gemini-3-flash-preview": 8192,
