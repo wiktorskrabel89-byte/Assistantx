@@ -251,7 +251,6 @@ export function detectLanguage(text: string): { lang: string; name: string } | n
 }
 
 const MODEL_LABELS: Record<string, string> = {
-  "nvidia/nemotron-3-super-120b-a12b:free": "Nemotron 3 Super 120B (Free)",
   "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
   "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
   "deepseek/deepseek-v3.2": "DeepSeek V3.2",

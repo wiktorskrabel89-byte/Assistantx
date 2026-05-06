@@ -10,7 +10,6 @@ import { ChatSessionsPanel } from "../ChatSessionsPanel";
 import { CodeHistoryPanel } from "../CodeHistoryPanel";
 import { ConversationToolbar } from "../ConversationToolbar";
 import { ConversationsSidebar } from "../ConversationsSidebar";
-import { CostModeSelector } from "../CostModeSelector";
 import { CustomAgentManager } from "../CustomAgentManager";
 import { GitHubPanel } from "../GitHubPanel";
 import { GoogleIntegrationBanner } from "../GoogleIntegrationBanner";
@@ -710,12 +709,6 @@ export function ChatTab() {
                 isPremium={state.userPlan !== "free"}
                 isProPlus={state.userPlan === "pro+"}
                 onSelectModel={setPreferredModelId}
-              />
-              <div className={`hidden sm:block h-5 w-px ${state.dark ? "bg-slate-700" : "bg-slate-200"}`} />
-              <CostModeSelector
-                dark={state.dark}
-                costMode={activeWorkspace.settings.costMode ?? "balanced"}
-                onSelectCostMode={setCostMode}
               />
             </div>
           </div>
