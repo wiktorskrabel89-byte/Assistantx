@@ -286,6 +286,7 @@ const MODEL_LABELS: Record<string, string> = {
 
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
+import { filterHealthyModels, markModelDown, recordModelSuccess } from "@/app/api/openrouter/modelHealth";
 
 export const POST = async (req: Request) => {
   // Rate limit: 30 chat requests per minute per user/IP
@@ -368,7 +369,13 @@ export const POST = async (req: Request) => {
     ? filterModelsByCostMode(planFilteredAllowedModels, costMode)
     : planFilteredAllowedModels;
 
-  const isAutoRouted = usingAutoRouter(costFilteredModels, planEnforcedModelId, inferredImageRequest);
+  // Exclude models that are currently marked as down from auto-routing.
+  // filterHealthyModels falls back to the full list if all models are marked down.
+  const healthyFilteredModels = Array.isArray(costFilteredModels)
+    ? filterHealthyModels(costFilteredModels)
+    : costFilteredModels;
+
+  const isAutoRouted = usingAutoRouter(healthyFilteredModels, planEnforcedModelId, inferredImageRequest);
 
   // Apply cost control to manually selected or default model
   const defaultModel = userPlan === "free"
@@ -386,8 +393,8 @@ export const POST = async (req: Request) => {
     : getFreePlanFallback(inferredCodeRequest);
 
   const selectedModel = isAutoRouted
-    ? (costFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
-        ?? costFilteredModels[0]
+    ? (healthyFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
+        ?? healthyFilteredModels[0]
         ?? getFreePlanFallback(inferredCodeRequest))
     : costControlled.modelId;
 
@@ -632,6 +639,10 @@ export const POST = async (req: Request) => {
             (status === 404 && /No endpoints found|No models match/i.test(err)) ||
             (status >= 500 && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free"))
           ) {
+            // Mark the initial model as down when OpenRouter says it has no endpoint or is erroring.
+            if (typeof requestBody.model === "string") {
+              markModelDown(requestBody.model);
+            }
             const fallbackList = getModelFallbackList();
             for (const modelId of fallbackList) {
               safeEnqueue(`data: ${JSON.stringify({ status: `Model ${triedModels.at(-1)} unavailable, trying ${modelId}...` })}\n\n`);
@@ -650,6 +661,10 @@ export const POST = async (req: Request) => {
               } else {
                 err = await response.text();
                 status = response.status;
+                // Mark each failing fallback model as down too.
+                if (status >= 500 || (status === 404 && /No endpoints found|No models match/i.test(err))) {
+                  markModelDown(modelId);
+                }
               }
             }
             if (!found) {
@@ -659,6 +674,10 @@ export const POST = async (req: Request) => {
             // Credits fallback or other error
             const shouldAutoRouterFallback = isAutoRouted && status === 404 && /No models match your request and model restrictions/i.test(err);
             const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(status, err);
+            // Mark the model as down on 5xx errors that are NOT credits-related.
+            if (status >= 500 && !shouldCreditsFallback && typeof requestBody.model === "string") {
+              markModelDown(requestBody.model);
+            }
             if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
               throw new Error(`OpenRouter error ${status}: ${err}`);
             }
@@ -727,6 +746,8 @@ export const POST = async (req: Request) => {
           const fallback = MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI";
           safeEnqueue(`data: ${JSON.stringify({ model: fallback, routeReason: effectiveRouteReason })}\n\n`);
         }
+        // Stream completed without error — clear any down status for this model.
+        recordModelSuccess(effectiveModel);
         safeEnqueue(`data: ${JSON.stringify({ status: "Done" })}\n\n`);
         safeEnqueue("data: [DONE]\n\n");
       } catch (error) {

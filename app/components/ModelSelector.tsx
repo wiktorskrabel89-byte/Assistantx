@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp, Brain } from "lucide-react";
+import { AlertTriangle, Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp, Brain } from "lucide-react";
 import { useState } from "react";
 import { ALL_MODELS, CHAT_MODELS, CODE_MODELS, isModelPremiumOnly, isModelProPlusOnly, REASONING_MODEL_IDS } from "@/lib/ai-config";
 import type { AppMode } from "../lib/chat-types";
@@ -17,10 +17,12 @@ type ModelSelectorProps = {
   thinkingEffort?: ThinkingEffort;
   onThinkingEffortChange?: (effort: ThinkingEffort) => void;
   appMode?: AppMode;
+  /** Set of model IDs currently marked as down by the server health tracker. */
+  downModelIds?: Set<string>;
 };
 
 
-export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false, thinkingEffort = "Medium", onThinkingEffortChange, appMode }: ModelSelectorProps) {
+export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false, thinkingEffort = "Medium", onThinkingEffortChange, appMode, downModelIds }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const isAuto = preferredModelId === null;
@@ -35,6 +37,9 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   const pillLocked = dark
     ? "border-slate-700 bg-slate-900/50 text-slate-500 cursor-not-allowed opacity-60"
     : "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed opacity-60";
+  const pillDown = dark
+    ? "border-orange-800 bg-orange-950/30 text-orange-300 cursor-not-allowed opacity-70"
+    : "border-orange-300 bg-orange-50 text-orange-600 cursor-not-allowed opacity-70";
 
   const sectionLabel = `text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`;
 
@@ -52,23 +57,28 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   const renderModelButton = (model: { id: string; description: string }) => {
     const requiresProPlus = isModelProPlusOnly(model.id);
     const requiresPremium = isModelPremiumOnly(model.id);
-    const locked = requiresProPlus
+    const isDown = downModelIds?.has(model.id) ?? false;
+    const locked = isDown || (requiresProPlus
       ? !isProPlus
-      : requiresPremium && !isPremium;
-    const lockReason = requiresProPlus
-      ? `Pro+ plan required for ${model.id}`
-      : `Pro plan required for ${model.id}`;
+      : requiresPremium && !isPremium);
+    const lockReason = isDown
+      ? `${model.id} is currently unreachable — will retry automatically after 2 hours`
+      : requiresProPlus
+        ? `Pro+ plan required for ${model.id}`
+        : `Pro plan required for ${model.id}`;
     return (
       <button
         key={model.id}
         onClick={() => !locked && onSelectModel(model.id)}
-        className={`${pillBase} ${locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
+        className={`${pillBase} ${isDown ? pillDown : locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
         title={locked ? lockReason : `Use ${model.id}`}
+        aria-label={isDown ? `${model.id} — model down` : undefined}
         disabled={locked}
       >
-        {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+        {isDown ? <AlertTriangle className="h-3 w-3 text-orange-400" /> : locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
         {model.id}
-        {requiresProPlus && <Crown className="h-3 w-3 text-purple-400" aria-label="Pro+ exclusive" />}
+        {isDown && <span className="ml-1 text-[10px] font-semibold uppercase text-orange-400">Down</span>}
+        {!isDown && requiresProPlus && <Crown className="h-3 w-3 text-purple-400" aria-label="Pro+ exclusive" />}
         {model.description ? <span className="ml-1 text-xs text-slate-400">{model.description}</span> : null}
       </button>
     );
@@ -84,6 +94,12 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
       >
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         {open ? "Ukryj wybór modelu" : "Pokaż wybór modelu"}
+        {downModelIds && downModelIds.size > 0 && (
+          <span className="ml-1 inline-flex items-center gap-0.5 text-orange-500" title={`${downModelIds.size} model(s) currently unreachable`}>
+            <AlertTriangle className="h-3 w-3" />
+            {downModelIds.size}
+          </span>
+        )}
       </button>
       {open && (
         <div
