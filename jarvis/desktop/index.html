@@ -15,11 +15,10 @@
       --text: #0f172a;
       --muted: #475569;
       --danger: #ea580c;
+      --success: #16a34a;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -30,180 +29,233 @@
         radial-gradient(circle at 88% 82%, rgba(251, 146, 60, 0.14), transparent 36%),
         linear-gradient(140deg, #f8fafc, #e2e8f0 48%, #dbeafe);
       color: var(--text);
-      padding: 24px;
+      padding: 20px;
     }
 
     .app {
       display: grid;
       gap: 16px;
-      max-width: 1100px;
+      max-width: 1200px;
       margin: 0 auto;
-      grid-template-columns: 320px 1fr;
+      grid-template-columns: 300px 1fr;
     }
 
     .panel {
       background: var(--panel);
       border: 1px solid var(--panel-border);
       border-radius: 18px;
-      padding: 18px;
+      padding: 16px;
       box-shadow: 0 24px 80px -28px rgba(14, 116, 144, 0.25);
       backdrop-filter: blur(8px);
     }
 
-    h1, h2, p {
-      margin: 0;
-    }
+    h1, h2, p { margin: 0; }
 
-    .stack {
-      display: grid;
-      gap: 12px;
-    }
+    .stack { display: grid; gap: 10px; }
 
     .badge {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 12px;
+      padding: 6px 12px;
       border-radius: 999px;
       background: rgba(3, 105, 161, 0.08);
       color: #075985;
-      font-size: 14px;
+      font-size: 13px;
       width: fit-content;
       border: 1px solid rgba(56, 189, 248, 0.45);
+      font-weight: 600;
     }
 
-    .muted {
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.5;
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #94a3b8;
+      transition: background 0.3s;
     }
+    .dot.connected { background: var(--success); }
+    .dot.error { background: var(--danger); }
+
+    .muted { color: var(--muted); font-size: 13px; line-height: 1.5; }
 
     .value {
       font-family: Consolas, monospace;
-      font-size: 13px;
+      font-size: 12px;
       word-break: break-all;
-      padding: 10px 12px;
-      border-radius: 12px;
+      padding: 8px 10px;
+      border-radius: 10px;
       background: rgba(255, 255, 255, 0.8);
       border: 1px solid rgba(148, 163, 184, 0.35);
     }
 
+    /* URL bar */
+    .url-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 6px;
+    }
+
+    /* Quick-action buttons */
     .actions {
       display: grid;
-      gap: 10px;
+      gap: 6px;
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     button {
       border: 0;
-      border-radius: 12px;
-      padding: 12px 14px;
+      border-radius: 10px;
+      padding: 10px 12px;
       cursor: pointer;
       color: #ffffff;
-      background: linear-gradient(135deg, #0369a1 0%, #0891b2 100%);
-      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+      font-weight: 600;
+      font-size: 13px;
+      transition: opacity 0.15s;
     }
+    button:hover { opacity: 0.88; }
 
     button.secondary {
       color: var(--text);
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.85);
       border: 1px solid rgba(148, 163, 184, 0.35);
+    }
+    button.danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+    }
+    button.sm {
+      padding: 8px 10px;
+      font-size: 12px;
     }
 
     .composer {
       display: grid;
-      gap: 10px;
+      gap: 8px;
       grid-template-columns: 1fr auto;
-      margin-top: 12px;
+      margin-top: 10px;
     }
 
     input {
       width: 100%;
-      border-radius: 12px;
+      border-radius: 10px;
       border: 1px solid rgba(148, 163, 184, 0.35);
       background: rgba(255, 255, 255, 0.86);
       color: var(--text);
-      padding: 12px 14px;
+      padding: 10px 12px;
       outline: none;
+      font-size: 13px;
+    }
+    input:focus {
+      border-color: rgba(14, 165, 233, 0.55);
+      box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.12);
     }
 
     #log {
-      min-height: 420px;
-      max-height: 420px;
+      min-height: 380px;
+      max-height: 460px;
       overflow: auto;
-      display: grid;
-      gap: 10px;
-      margin-top: 14px;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 8px;
+      margin-top: 12px;
     }
 
     .message {
-      padding: 12px 14px;
-      border-radius: 14px;
+      padding: 10px 12px;
+      border-radius: 12px;
       background: rgba(255, 255, 255, 0.92);
       border: 1px solid rgba(148, 163, 184, 0.3);
+      font-size: 13px;
     }
-
-    .message.system {
-      border-color: rgba(14, 165, 233, 0.45);
-    }
-
-    .message.error {
-      border-color: rgba(249, 115, 22, 0.35);
-      color: #fed7aa;
-    }
+    .message.system { border-color: rgba(14, 165, 233, 0.45); }
+    .message.error  { border-color: rgba(249, 115, 22, 0.4); color: #9a3412; }
 
     .message small {
       display: block;
       color: var(--muted);
-      margin-bottom: 6px;
+      font-size: 11px;
+      margin-bottom: 4px;
     }
 
-    @media (max-width: 860px) {
-      .app {
-        grid-template-columns: 1fr;
-      }
+    hr { border: none; border-top: 1px solid rgba(148,163,184,0.25); }
+
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="app">
+    <!-- Sidebar -->
     <aside class="panel stack">
-      <span class="badge">Jarvis Desktop</span>
-      <h1>Desktop Control Surface</h1>
-      <p class="muted">Electron shell for the local Jarvis agent. It keeps a device token, can talk to a WebSocket backend, and exposes a small command console for the existing desktop helpers in this repo.</p>
+      <div class="badge">
+        <span class="dot" id="status-dot"></span>
+        Jarvis Desktop
+      </div>
 
       <div class="stack">
         <h2>Status</h2>
-        <div id="connection-status" class="value">Starting...</div>
+        <div id="connection-status" class="value">Starting…</div>
       </div>
 
       <div class="stack">
         <h2>Device Token</h2>
-        <div id="device-token" class="value">Loading...</div>
+        <div id="device-token" class="value">Loading…</div>
       </div>
 
       <div class="stack">
         <h2>Backend URL</h2>
-        <div id="backend-url" class="value">Loading...</div>
+        <div id="backend-url" class="value">Loading…</div>
       </div>
 
+      <hr>
+
+      <!-- URL Bar -->
+      <div class="stack">
+        <h2>Open URL / Search</h2>
+        <div class="url-row">
+          <input id="url-input" type="text" placeholder="https://… or search query">
+          <button class="sm" id="url-go" title="Open URL in browser">Open</button>
+          <button class="sm secondary" id="url-search" title="Google search">Search</button>
+        </div>
+      </div>
+
+      <hr>
+
+      <!-- Quick Actions -->
       <div class="stack">
         <h2>Quick Actions</h2>
         <div class="actions">
-          <button type="button" data-command="open:discord">Open Discord</button>
-          <button type="button" data-command="open:spotify">Open Spotify</button>
-          <button type="button" data-command="command:screenshot">Take Screenshot</button>
-          <button type="button" class="secondary" data-command="local:otworz-roblox">Simulate Phone Command</button>
+          <button type="button" data-command="open:discord">Discord</button>
+          <button type="button" data-command="open:spotify">Spotify</button>
+          <button type="button" data-command="open:chrome">Chrome</button>
+          <button type="button" data-command="open:roblox">Roblox</button>
+          <button type="button" data-command="open:steam">Steam</button>
+          <button type="button" data-command="command:screenshot">Screenshot</button>
+          <button type="button" data-command="command:sysinfo" class="secondary">System Info</button>
+          <button type="button" data-command="command:listProcesses" class="secondary">Processes</button>
+          <button type="button" data-command="command:volumeUp" class="secondary">Vol +</button>
+          <button type="button" data-command="command:volumeDown" class="secondary">Vol −</button>
+          <button type="button" data-command="command:mute" class="secondary">Mute</button>
+          <button type="button" data-command="command:lockScreen" class="secondary">Lock</button>
+          <button type="button" data-command="command:sleep" class="secondary">Sleep</button>
+          <button type="button" data-command="command:shutdown" class="danger">Shutdown</button>
         </div>
       </div>
     </aside>
 
+    <!-- Main panel -->
     <main class="panel">
       <h2>Command Log</h2>
-      <p class="muted">The desktop app retries the WebSocket connection automatically. The FastAPI backend now exposes <code>/ws</code>; the log below will show registration, prompts, responses, and routed commands whenever the API server is running.</p>
+      <p class="muted">
+        All responses from your PC appear here in real time.
+        The desktop agent retries the WebSocket connection automatically.
+        Type a prompt or command below, or use the quick-action buttons on the left.
+      </p>
 
       <div class="composer">
-        <input id="input" type="text" placeholder="Type a Jarvis prompt or desktop command...">
+        <input id="input" type="text" placeholder="Type a Jarvis prompt or command… (e.g. &quot;open YouTube&quot;, &quot;screenshot&quot;)">
         <button id="send" type="button">Send</button>
       </div>
 
