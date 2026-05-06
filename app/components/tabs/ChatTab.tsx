@@ -713,6 +713,7 @@ export function ChatTab() {
                 onSelectModel={setPreferredModelId}
                 thinkingEffort={thinkingEffort}
                 onThinkingEffortChange={setThinkingEffort}
+                appMode={state.appMode}
               />
             </div>
           </div>

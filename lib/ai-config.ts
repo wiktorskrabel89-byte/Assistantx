@@ -153,7 +153,7 @@ export const CODE_MODELS: ModelOption[] = [
   {
     id: "nvidia/nemotron-3-super-120b-a12b:free",
     label: "Nemotron 3 Super (Free)",
-    description: "NVIDIA's free code model (last-resort fallback).",
+    description: "NVIDIA's free code model (alternative free option).",
   },
 ];
 

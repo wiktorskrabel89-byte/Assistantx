@@ -2,7 +2,8 @@
 
 import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp, Brain } from "lucide-react";
 import { useState } from "react";
-import { ALL_MODELS, isModelPremiumOnly, isModelProPlusOnly, REASONING_MODEL_IDS } from "@/lib/ai-config";
+import { ALL_MODELS, CHAT_MODELS, CODE_MODELS, isModelPremiumOnly, isModelProPlusOnly, REASONING_MODEL_IDS } from "@/lib/ai-config";
+import type { AppMode } from "../lib/chat-types";
 
 const THINKING_EFFORTS = ["Low", "Medium", "High", "Xhigh"] as const;
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
@@ -15,10 +16,11 @@ type ModelSelectorProps = {
   isProPlus?: boolean;
   thinkingEffort?: ThinkingEffort;
   onThinkingEffortChange?: (effort: ThinkingEffort) => void;
+  appMode?: AppMode;
 };
 
 
-export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false, thinkingEffort = "Medium", onThinkingEffortChange }: ModelSelectorProps) {
+export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false, thinkingEffort = "Medium", onThinkingEffortChange, appMode }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const isAuto = preferredModelId === null;
@@ -36,8 +38,16 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
 
   const sectionLabel = `text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`;
 
-  const freeModels = ALL_MODELS.filter((m) => !isModelPremiumOnly(m.id));
-  const premiumModels = ALL_MODELS.filter((m) => isModelPremiumOnly(m.id));
+  // Filter the visible model list based on the current app mode
+  const visibleModels: { id: string; description: string }[] =
+    appMode === "ai-chat"
+      ? CHAT_MODELS.map((m) => ({ id: m.id, description: m.description }))
+      : appMode === "ai-code"
+        ? CODE_MODELS.map((m) => ({ id: m.id, description: m.description }))
+        : ALL_MODELS;
+
+  const freeModels = visibleModels.filter((m) => !isModelPremiumOnly(m.id));
+  const premiumModels = visibleModels.filter((m) => isModelPremiumOnly(m.id));
 
   const renderModelButton = (model: { id: string; description: string }) => {
     const requiresProPlus = isModelProPlusOnly(model.id);
