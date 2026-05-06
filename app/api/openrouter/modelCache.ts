@@ -10,15 +10,17 @@ export type OpenRouterModel = {
   description?: string;
 };
 
-/** Returns the local curated model list. No network call is made. */
+/** Returns the local curated model list. No network call is made.
+ *  The async signature is kept for backward compatibility with existing callers.
+ */
 export async function getCachedModels(): Promise<OpenRouterModel[]> {
   return ALL_MODELS;
 }
 
 /**
  * Returns the "latest" model ID that starts with each given prefix, selected
- * from the local curated list using the same numeric locale-compare sort as
- * the previous network version.
+ * from the local curated list using numeric locale-compare sort.
+ * The async signature is kept for backward compatibility with existing callers.
  */
 export async function fetchLatestModelIds(
   prefixes: string[],
