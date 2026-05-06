@@ -95,9 +95,23 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
             <>
               <span className={sectionLabel}>
                 <Code2 className="mr-0.5 inline h-3 w-3" />
-                All Models
+                Premium Models
               </span>
-              {ALL_MODELS.map(renderModelButton)}
+              {premiumModels.map(renderModelButton)}
+              <button
+                className={`${pillBase} ${pillInactive}`}
+                onClick={() => setShowMore((v) => !v)}
+                aria-expanded={showMore}
+                aria-controls="more-models-list"
+              >
+                {showMore ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                More models
+              </button>
+              {showMore && (
+                <div id="more-models-list" className="flex flex-wrap gap-2 w-full">
+                  {freeModels.map(renderModelButton)}
+                </div>
+              )}
             </>
           ) : (
             <>

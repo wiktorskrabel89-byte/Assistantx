@@ -51,10 +51,29 @@ describe("ModelSelector", () => {
   });
 
   it("renders local models as buttons after expanding (no async loading)", () => {
-    // Premium users see all models
+    // Premium users see premium models up front; expand More models to see free ones
     openSelector();
     expect(screen.getByRole("button", { name: /anthropic\/claude-opus-4\.6/i })).toBeInTheDocument();
+    // openai/gpt-5.1 is a premium model (standard tier), also visible up front
     expect(screen.getByRole("button", { name: /openai\/gpt-5\.1/i })).toBeInTheDocument();
+  });
+
+  it("premium users see premium models up front and free models behind More models", () => {
+    openSelector({ isPremium: true });
+    // Premium section label visible
+    expect(screen.getByText(/premium models/i)).toBeInTheDocument();
+    // A premium model visible directly
+    expect(screen.getByRole("button", { name: /anthropic\/claude-opus-4\.6/i })).toBeInTheDocument();
+    // Free models NOT shown directly
+    expect(screen.queryByRole("button", { name: /meta-llama\/llama-3\.3-70b-instruct:free/i })).not.toBeInTheDocument();
+    // "More models" toggle is shown
+    expect(screen.getByRole("button", { name: /more models/i })).toBeInTheDocument();
+  });
+
+  it("premium users can expand More models to see free models", () => {
+    openSelector({ isPremium: true });
+    fireEvent.click(screen.getByRole("button", { name: /more models/i }));
+    expect(screen.getByRole("button", { name: /meta-llama\/llama-3\.3-70b-instruct:free/i })).toBeInTheDocument();
   });
 
   it("calls onSelectModel with the model id when a model button is clicked", () => {
