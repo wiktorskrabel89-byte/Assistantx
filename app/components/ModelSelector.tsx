@@ -57,7 +57,8 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   const renderModelButton = (model: { id: string; label: string; description: string }) => {
     const requiresProPlus = isModelProPlusOnly(model.id);
     const requiresPremium = isModelPremiumOnly(model.id);
-    const isDown = downModelIds?.has(model.id) ?? false;
+    // Down-model tracking only applies to free models.
+    const isDown = !requiresPremium && (downModelIds?.has(model.id) ?? false);
     const locked = isDown || (requiresProPlus
       ? !isProPlus
       : requiresPremium && !isPremium);

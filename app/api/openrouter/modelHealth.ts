@@ -30,9 +30,11 @@ const downModels = new Map<string, HealthEntry>();
 
 /**
  * Mark a model as down.
+ * Only free models (those whose ID ends with ":free") are tracked.
  * Restarts (or initialises) the 2-hour cooling-off window.
  */
 export function markModelDown(modelId: string): void {
+  if (!modelId.endsWith(":free")) return;
   const now = Date.now();
   downModels.set(modelId, { markedDownAt: now, lastCheckedAt: now });
 }
