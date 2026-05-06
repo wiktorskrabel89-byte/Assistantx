@@ -22,23 +22,38 @@ export default function JarvisTab() {
           </p>
 
           <div className="mt-7 grid gap-3 sm:grid-cols-2">
-            <a
-              href="/jarvis/JarvisSetup.exe"
-              download
-              className="group inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700"
-            >
-              <span>Download for Windows</span>
-              <span className="ml-2 transition-transform group-hover:translate-x-0.5">{"->"}</span>
-            </a>
+            <div className="flex flex-col gap-2">
+              <button
+                disabled
+                className="inline-flex cursor-not-allowed items-center justify-center rounded-xl bg-gradient-to-r from-sky-300 to-cyan-300 px-5 py-3 text-sm font-semibold text-white/80 shadow-sm opacity-60"
+                title="Windows installer coming soon"
+              >
+                <span>Download for Windows (x64)</span>
+              </button>
+              <button
+                disabled
+                className="inline-flex cursor-not-allowed items-center justify-center rounded-xl bg-gradient-to-r from-sky-300 to-cyan-300 px-5 py-3 text-sm font-semibold text-white/80 shadow-sm opacity-60"
+                title="Windows installer coming soon"
+              >
+                <span>Download for Windows (ARM64)</span>
+              </button>
+              <p className="text-center text-[11px] font-medium text-amber-600">
+                🚧 Windows installer not yet available — coming soon
+              </p>
+            </div>
 
-            <a
-              href="/jarvis/JarvisApp.apk"
-              download
-              className="group inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/60"
-            >
-              <span>Download for Android</span>
-              <span className="ml-2 transition-transform group-hover:translate-x-0.5">{"->"}</span>
-            </a>
+            <div className="flex flex-col gap-2">
+              <button
+                disabled
+                className="inline-flex cursor-not-allowed items-center justify-center rounded-xl border border-slate-200 bg-white/60 px-5 py-3 text-sm font-semibold text-slate-400 shadow-sm opacity-60"
+                title="Android APK coming soon"
+              >
+                <span>Download for Android</span>
+              </button>
+              <p className="text-center text-[11px] font-medium text-amber-600">
+                🚧 Android APK not yet available — coming soon
+              </p>
+            </div>
           </div>
         </div>
 
