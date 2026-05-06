@@ -2,6 +2,10 @@
 const nextConfig = {
   output: 'standalone',
   generateEtags: false,
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 86400,
+  },
   // Allow Next.js's webpack/turbopack build process to transpile ESM-only packages
   // in the react-markdown and react-syntax-highlighter dependency trees
   transpilePackages: [

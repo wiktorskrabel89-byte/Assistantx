@@ -1,25 +1,68 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
-import { ClinicalTab } from "./components/tabs/ClinicalTab";
-import {
-  AILearningTab,
-  CodebaseTab,
-  KnowledgeExportTab,
-  LearningTab,
-  NotificationsTab,
-  ProjectsTab,
-  PromptLibraryTab,
-  SandboxTab,
-  SettingsTab,
-} from "./components/tabs";
-import { WebsiteCreatorTab } from "./components/tabs/WebsiteCreatorTab";
-import JarvisTab from "./components/tabs/JarvisTab";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
 import { createClient } from "@/lib/client";
 import type { AppMode } from "./lib/chat-types";
+
+// Shared skeleton shown while a tab's JS chunk is loading
+function TabSkeleton() {
+  return <div className="flex h-full w-full animate-pulse rounded-[inherit] bg-slate-200/60 dark:bg-slate-800/60" />;
+}
+
+// Non-initial tabs are code-split so they don't inflate the first-load bundle.
+// ChatTab is kept as a static import because it is the default visible tab.
+const ClinicalTab = dynamic(
+  () => import("./components/tabs/ClinicalTab").then((m) => m.ClinicalTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const SandboxTab = dynamic(
+  () => import("./components/tabs/SandboxTab").then((m) => m.SandboxTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const LearningTab = dynamic(
+  () => import("./components/tabs/LearningTab").then((m) => m.LearningTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const ProjectsTab = dynamic(
+  () => import("./components/tabs/ProjectsTab").then((m) => m.ProjectsTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const CodebaseTab = dynamic(
+  () => import("./components/tabs/CodebaseTab").then((m) => m.CodebaseTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const WebsiteCreatorTab = dynamic(
+  () => import("./components/tabs/WebsiteCreatorTab").then((m) => m.WebsiteCreatorTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const PromptLibraryTab = dynamic(
+  () => import("./components/tabs/PromptLibraryTab").then((m) => m.PromptLibraryTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const KnowledgeExportTab = dynamic(
+  () => import("./components/tabs/KnowledgeExportTab").then((m) => m.KnowledgeExportTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const SettingsTab = dynamic(
+  () => import("./components/tabs/SettingsTab").then((m) => m.SettingsTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const NotificationsTab = dynamic(
+  () => import("./components/tabs/NotificationsTab").then((m) => m.NotificationsTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const AILearningTab = dynamic(
+  () => import("./components/tabs/AILearningTab").then((m) => m.AILearningTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
+const JarvisTab = dynamic(
+  () => import("./components/tabs/JarvisTab"),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
 
 // Tabs that are only available in AI Code mode (resets to "chat" if mode switches)
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
