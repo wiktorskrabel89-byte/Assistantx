@@ -1,5 +1,5 @@
 const WebSocket = require('ws');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const EventEmitter = require('events');
 
 // ipcRenderer is available because this module runs in the Electron renderer
@@ -111,6 +111,7 @@ function run(command, successMessage, errorMessage) {
 /**
  * Open a URL in the system default browser.
  * Uses Electron's shell.openExternal via IPC (main process).
+ * URL must start with http:// or https://.
  */
 function openUrl(url) {
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -122,32 +123,33 @@ function openUrl(url) {
       .then(() => respond(`Opened URL in browser: ${url}`))
       .catch((err) => respond(`Failed to open URL: ${err.message}`));
   } else {
-    // Fallback for non-Electron environments (e.g. tests)
-    run(`start "" "${url}"`, `Opened ${url}`, `Failed to open ${url}`);
+    respond('URL opening requires Electron (ipcRenderer not available).');
   }
 }
 
 /**
- * Open a URL in Chrome specifically.
- * Falls back to openUrl if Chrome isn't found at the default path.
+ * Open a URL in Chrome (or the default browser if Chrome isn't found).
+ * Uses shell.openExternal via IPC to avoid shell injection.
  */
 function openChromeTab(url) {
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
 
+  // Try to launch Chrome directly via execFile (no shell interpolation of url).
+  // execFile does NOT spawn a shell, so the url arg is passed literally.
   const chromePaths = [
-    '"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"',
-    '"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
   ];
 
   const tryNext = (paths) => {
     if (paths.length === 0) {
+      // Fall back to shell.openExternal via IPC
       openUrl(url);
       return;
     }
-    const chrome = paths[0];
-    exec(`${chrome} "${url}"`, (error) => {
+    execFile(paths[0], [url], (error) => {
       if (error) {
         tryNext(paths.slice(1));
       } else {
@@ -243,7 +245,8 @@ function closeApp(app) {
 // --------------------------------------------------------------------------
 
 function takeScreenshot() {
-  const screenshotPath = `%USERPROFILE%\\Desktop\\jarvis_screenshot_${Date.now()}.png`;
+  const ts = Date.now();
+  const screenshotPath = `%USERPROFILE%\\Desktop\\jarvis_screenshot_${ts}.png`;
   const psCmd = [
     'Add-Type -AssemblyName System.Windows.Forms',
     'Add-Type -AssemblyName System.Drawing',
@@ -260,7 +263,7 @@ function takeScreenshot() {
       respond(`Screenshot failed: ${error.message}`);
       return;
     }
-    respond(`Screenshot saved to Desktop: jarvis_screenshot_${Date.now()}.png`);
+    respond(`Screenshot saved to Desktop: jarvis_screenshot_${ts}.png`);
     if (ipcRenderer) {
       ipcRenderer.invoke('open-path', `%USERPROFILE%\\Desktop`);
     }
@@ -305,11 +308,21 @@ function setVolume(level) {
 }
 
 function typeText(text) {
-  // Use PowerShell + SendKeys to type text into the active window
-  const escaped = text.replace(/'/g, "''");
-  const psCmd = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')`;
-  exec(`powershell -NoProfile -Command "${psCmd}"`, (error) => {
-    respond(error ? `Failed to type text: ${error.message}` : `Typed: ${text}`);
+  // Escape characters that have special meaning in SendKeys syntax.
+  const sendKeysEscaped = text.replace(/[+^%~(){}[\]]/g, (ch) => `{${ch}}`);
+
+  // Build the PowerShell script and pass it as a base64-encoded command
+  // to avoid any shell string injection (no user content is interpolated
+  // into the command line — only the encoded script argument is passed).
+  const psScript = [
+    'Add-Type -AssemblyName System.Windows.Forms',
+    `[System.Windows.Forms.SendKeys]::SendWait(${JSON.stringify(sendKeysEscaped)})`,
+  ].join('; ');
+
+  const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+
+  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], (error) => {
+    respond(error ? `Failed to type text: ${error.message}` : `Typed text successfully.`);
   });
 }
 

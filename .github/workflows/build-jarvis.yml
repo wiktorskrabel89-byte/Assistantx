@@ -15,6 +15,10 @@ jobs:
     name: Build Jarvis EXE (Windows)
     runs-on: windows-latest
 
+    # Minimal permissions: read code + write releases
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -146,10 +146,12 @@ window.addEventListener('DOMContentLoaded', () => {
 	onMessage((rawMessage) => {
 		try {
 			const parsed = JSON.parse(rawMessage);
-			const body = parsed.text || rawMessage;
+			// parsed.text is the human-readable content; fall back to stringifying the whole object
+			const body = typeof parsed.text === 'string' ? parsed.text : JSON.stringify(parsed);
 			const title = parsed.type === 'response' ? '✅ Jarvis' : `Backend (${parsed.type || '?'})`;
 			appendMessage(log, title, body, 'system');
 		} catch {
+			// rawMessage is not JSON — display as plain text
 			appendMessage(log, 'Backend event', rawMessage, 'system');
 		}
 	});
