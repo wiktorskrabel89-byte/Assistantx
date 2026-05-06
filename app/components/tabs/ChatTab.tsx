@@ -42,6 +42,7 @@ import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
+import type { ThinkingEffort } from "../ModelSelector";
 
 export function ChatTab() {
   const {
@@ -94,6 +95,7 @@ export function ChatTab() {
 
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
+  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>("Medium");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [codeHistoryOpen, setCodeHistoryOpen] = useState(false);
@@ -709,6 +711,8 @@ export function ChatTab() {
                 isPremium={state.userPlan !== "free"}
                 isProPlus={state.userPlan === "pro+"}
                 onSelectModel={setPreferredModelId}
+                thinkingEffort={thinkingEffort}
+                onThinkingEffortChange={setThinkingEffort}
               />
             </div>
           </div>
@@ -735,6 +739,7 @@ export function ChatTab() {
             onQueueMessage={queueComposerMessage}
             onRemoveQueuedMessage={removeQueuedMessage}
             selectedModel={activeWorkspace.settings.preferredModelId ?? "openai/gpt-5.4"}
+            thinkingEffort={thinkingEffort}
             premiumLimitReached={(() => {
               const limit = state.userPlan === "pro"
                 ? PRO_PLAN.premiumRequestsPerMonth

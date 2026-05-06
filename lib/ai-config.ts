@@ -254,7 +254,6 @@ export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
 export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
   { id: "chat-llama-3.3-free", label: "Llama 3.3 70B (Free)", modelId: "meta-llama/llama-3.3-70b-instruct:free", costTier: "free" },
   { id: "chat-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
-  { id: "chat-glm-4.5-air-free", label: "GLM 4.5 Air (Free)", modelId: "z-ai/glm-4.5-air:free", costTier: "free" },
   { id: "chat-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
   // Locked/paid models below
   { id: "chat-gpt-5.1", label: "GPT-5.1", modelId: "openai/gpt-5.1", costTier: "standard" },
@@ -274,14 +273,14 @@ export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
  */
 export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
-  "nvidia/nemotron-3-super-120b-a12b:free": "free",
   "meta-llama/llama-3.3-70b-instruct:free": "free",
-  "google/gemini-2.0-flash-exp:free": "free",
-  "mistralai/mistral-small-3.1-24b-instruct:free": "free",
-  "qwen/qwen3-235b-a22b:free": "free",
   "openai/gpt-oss-120b:free": "free",
   "minimax/minimax-m2.5:free": "free",
   "z-ai/glm-4.5-air:free": "free",
+  "google/gemini-2.0-flash-exp:free": "free",
+  "nvidia/nemotron-3-super-120b-a12b:free": "free",
+  "qwen/qwen3-235b-a22b:free": "free",
+  "mistralai/mistral-small-3.1-24b-instruct:free": "free",
   // Cheap models — fast, low cost per token
   "google/gemini-2.5-flash-lite": "cheap",
   "google/gemini-3-flash-preview": "cheap",
@@ -418,11 +417,9 @@ export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): stri
 export const TOP_FREE_CHAT_MODELS = [
   "meta-llama/llama-3.3-70b-instruct:free",
   "openai/gpt-oss-120b:free",
-  "z-ai/glm-4.5-air:free",
   "minimax/minimax-m2.5:free",
 ];
 export const TOP_FREE_CODE_MODELS = [
-  "nvidia/nemotron-3-super-120b-a12b:free",
   "openai/gpt-oss-120b:free",
   "minimax/minimax-m2.5:free",
   "meta-llama/llama-3.3-70b-instruct:free",
@@ -463,14 +460,11 @@ export const REASONING_MODEL_IDS: string[] = [
   "openai/gpt-oss-120b:free",
   "google/gemini-3-flash-preview",
   "google/gemini-3-pro-preview",
-  "google/gemini-2.0-flash-exp:free",
   "google/gemini-2.5-flash-lite",
   "deepseek/deepseek-r1",
   "deepseek/deepseek-v3.2",
   "moonshotai/kimi-k2-thinking",
-  "nvidia/nemotron-3-super-120b-a12b:free",
   "minimax/minimax-m2.5:free",
-  "z-ai/glm-4.5-air:free",
   "perplexity/sonar",
 ];
 

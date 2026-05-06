@@ -548,10 +548,13 @@ export const POST = async (req: Request) => {
     ],
   };
 
-  // Only send reasoning_level if supported and provided
-  if (thinkingEffort && REASONING_MODEL_IDS.some((id) => selectedModel.includes(id.split("/").pop()!))) {
-    // OpenRouter, Gemini, DeepSeek, etc. use 'reasoning_level' or 'thinking_effort'
-    requestBody.reasoning_level = thinkingEffort;
+  // Only send reasoning_level if the selected model explicitly supports it.
+  // Use exact ID match to avoid false positives from substring matching.
+  if (thinkingEffort && REASONING_MODEL_IDS.includes(selectedModel)) {
+    // Map numeric effort (1=low, 2=medium, 3=high, 4=xhigh) to the string OpenRouter expects.
+    const effortMap: Record<number, string> = { 1: "low", 2: "medium", 3: "high", 4: "xhigh" };
+    const effortNum = typeof thinkingEffort === "number" ? thinkingEffort : 2;
+    requestBody.reasoning_level = effortMap[effortNum] ?? "medium";
   }
 
 

@@ -76,6 +76,8 @@ export type ChatComposerProps = {
   onQueueMessage: (thinkingEffort: number) => void;
   onRemoveQueuedMessage: (queueId: string) => void;
   selectedModel: string;
+  /** Current thinking effort level — controlled externally (from ModelSelector). */
+  thinkingEffort?: string;
   premiumLimitReached?: boolean;
   planRequestLimit?: number;
 };
@@ -98,6 +100,7 @@ export function ChatComposer({
   onQueueMessage,
   onRemoveQueuedMessage,
   selectedModel,
+  thinkingEffort = "Medium",
   premiumLimitReached = false,
   planRequestLimit,
 }: ChatComposerProps) {
@@ -115,10 +118,7 @@ export function ChatComposer({
     resizeComposer();
   }, [message, resizeComposer]);
 
-  // Reasoning depth state
-  const [thinkingEffort, setThinkingEffort] = useState("Medium");
-
-  const showThinkingEffort = REASONING_MODEL_IDS.some((id) => selectedModel.includes(id.split("/").pop()!));
+  const showThinkingEffort = REASONING_MODEL_IDS.includes(selectedModel);
 
   // ── Voice input ────────────────────────────────────────────────────────────
   const [micActive, setMicActive] = useState(false);
@@ -266,19 +266,8 @@ export function ChatComposer({
         />
 
         {showThinkingEffort && (
-          <div className="mb-2 flex items-center gap-2">
-            <label htmlFor="thinking-effort" className="text-xs font-medium text-slate-500 dark:text-slate-400">Thinking Effort:</label>
-            <select
-              id="thinking-effort"
-              value={thinkingEffort}
-              onChange={e => setThinkingEffort(e.target.value)}
-              className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-              <option value="Xhigh">Xhigh</option>
-            </select>
+          <div className="mb-1 flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+            <span>Thinking: <span className="font-medium text-slate-600 dark:text-slate-300">{thinkingEffort}</span></span>
           </div>
         )}
         <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${dark ? "border-slate-800 bg-slate-950" : "border-sky-200/60 bg-white/95"}`}>
@@ -326,7 +315,8 @@ export function ChatComposer({
                 let effortNum = 2;
                 if (thinkingEffort === "Low") effortNum = 1;
                 else if (thinkingEffort === "High") effortNum = 3;
-                onQueueMessage(effortNum);
+                else if (thinkingEffort === "Xhigh") effortNum = 4;
+                onQueueMessage(showThinkingEffort ? effortNum : 2);
               }
             }}
             onPaste={handlePaste}
@@ -361,6 +351,7 @@ export function ChatComposer({
               let effortNum = 2;
               if (thinkingEffort === "Low") effortNum = 1;
               else if (thinkingEffort === "High") effortNum = 3;
+              else if (thinkingEffort === "Xhigh") effortNum = 4;
               onQueueMessage(showThinkingEffort ? effortNum : 2);
             }}
             disabled={premiumLimitReached || (!message.trim() && !file)}
