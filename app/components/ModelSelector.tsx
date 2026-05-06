@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp, Brain } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ALL_MODELS, CHAT_MODELS, CODE_MODELS, isModelPremiumOnly, isModelProPlusOnly, REASONING_MODEL_IDS } from "@/lib/ai-config";
 import type { AppMode } from "../lib/chat-types";
 
@@ -23,6 +23,7 @@ type ModelSelectorProps = {
 
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false, thinkingEffort = "Medium", onThinkingEffortChange, appMode, downModelIds }: ModelSelectorProps) {
+  const modelListId = useId();
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const isAuto = preferredModelId === null;
