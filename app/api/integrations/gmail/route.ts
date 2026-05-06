@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/server";
 import { getProviderTokenCookieName } from "@/lib/integrations";
-import { cookies } from "next/headers";
 import { AUTO_PREFERRED_CHAT_MODEL } from "@/lib/ai-config";
+import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
