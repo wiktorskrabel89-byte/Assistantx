@@ -405,18 +405,25 @@ export const POST = async (req: Request) => {
 
 
 
-  const fallbackModel = rawMode === "search"
+  // When the web_search tool is enabled, treat the request as search mode so Perplexity
+  // Sonar (which has real internet access) is used instead of a plain text instruction.
+  const toolWebSearchEnabled = Array.isArray(enabledTools) && enabledTools.includes("web_search");
+  const effectiveRawMode = toolWebSearchEnabled ? "search" : rawMode;
+
+  const fallbackModel = effectiveRawMode === "search"
     ? SEARCH_MODEL
     : getFreePlanFallback(inferredCodeRequest);
 
-  const selectedModel = isAutoRouted
-    ? (healthyFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
-        ?? healthyFilteredModels[0]
-        ?? getFreePlanFallback(inferredCodeRequest))
-    : costControlled.modelId;
+  const selectedModel = toolWebSearchEnabled
+    ? SEARCH_MODEL
+    : isAutoRouted
+      ? (healthyFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
+          ?? healthyFilteredModels[0]
+          ?? getFreePlanFallback(inferredCodeRequest))
+      : costControlled.modelId;
 
   // Determine if this is a search/DeepSeek/Gemini request for system prompt selection
-  const isSearchMode = rawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
+  const isSearchMode = effectiveRawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(message);
@@ -459,7 +466,7 @@ export const POST = async (req: Request) => {
   const costDowngradeNote = costControlled.downgraded ? ` (downgraded by ${costMode} cost mode)` : "";
   const planDowngradeNote = (modelId && planEnforcedModelId !== modelId) ? " (switched to free model — premium plan required)" : "";
   const routeReason = isSearchMode
-    ? (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model")
+    ? (toolWebSearchEnabled ? "Web Search tool active — using search model with internet access" : (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model"))
     : isAutoRouted
       ? rawMode === "code"
         ? `Auto router choosing the best coding model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
@@ -522,9 +529,20 @@ export const POST = async (req: Request) => {
     systemPrompt = `${systemPrompt} ${customSystemPrompt.trim()}`.trim();
   }
 
-  // Build history: use Supabase memory if conversationId provided, else fall back to client history
+  // Helper to convert client-side history pairs to role/content message format.
+  const clientHistoryToMessages = (h: unknown): Array<{ role: string; content: string }> =>
+    Array.isArray(h)
+      ? h.flatMap((entry: { user: string; ai: string }) => [
+          { role: "user", content: entry.user },
+          { role: "assistant", content: entry.ai },
+        ])
+      : [];
+
+  // Build history: use Supabase memory when conversationId + authenticated user are both present,
+  // otherwise fall back to client-supplied history (covers unauthenticated users and
+  // cases where the DB is unavailable).
   let historyMessages: Array<{ role: string; content: string }> = [];
-  if (conversationId) {
+  if (conversationId && authUserId) {
     try {
       await ensureConversation(conversationId, authUserId);
     } catch (err) {
@@ -548,13 +566,15 @@ export const POST = async (req: Request) => {
       .filter((m: { content: string }) => m.content !== message) // exclude the message we just saved
       .map((m: { role: string; content: string }) => ({ role: m.role, content: m.content }));
     historyMessages = [...summaryMessages, ...recentMessages];
+
+    // If Supabase returned no history (e.g. first message or RPC not yet applied),
+    // fall back to the client-supplied history so conversation context is never lost.
+    if (historyMessages.length === 0) {
+      historyMessages = clientHistoryToMessages(history);
+    }
   } else {
-    historyMessages = Array.isArray(history)
-      ? history.flatMap((entry: { user: string; ai: string }) => [
-          { role: "user", content: entry.user },
-          { role: "assistant", content: entry.ai },
-        ])
-      : [];
+    // Unauthenticated users or no conversationId: use client-provided history.
+    historyMessages = clientHistoryToMessages(history);
   }
 
 
@@ -610,8 +630,8 @@ export const POST = async (req: Request) => {
       const safeClose = async () => {
         if (closed) return;
         closed = true;
-        // Save assistant reply to Supabase memory
-        if (conversationId && fullReply.trim()) {
+        // Save assistant reply to Supabase memory (only for authenticated users)
+        if (conversationId && authUserId && fullReply.trim()) {
           await saveMessage(conversationId, "assistant", fullReply.trim());
         }
         controller.close();
