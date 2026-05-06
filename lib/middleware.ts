@@ -23,6 +23,8 @@ function buildCsp(nonce: string): string {
     "font-src 'self' https://fonts.gstatic.com",
     // API and WebSocket connections are allowed to any origin (LLM providers etc.)
     "connect-src *",
+    // Monaco Editor creates web workers as blob: URLs
+    "worker-src blob:",
     // No iframes at all
     "frame-src 'none'",
     // Block this page from being embedded in any frame (CSP equivalent of X-Frame-Options: DENY)

@@ -57,6 +57,22 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
     };
   }
 
+  const missingConfig = normalizedMessage.includes("supabaseurl is required")
+    || normalizedMessage.includes("supabasekey is required")
+    || normalizedMessage.includes("url is required")
+    || normalizedMessage.includes("invalid url");
+
+  if (missingConfig) {
+    return {
+      status: 503,
+      payload: {
+        code: "workspace_sync_not_configured",
+        error: "Supabase is not configured. Cloud sync is unavailable.",
+        hint: "Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are set in your .env file.",
+      },
+    };
+  }
+
   const missingPolicies = code === "42501"
     || normalizedMessage.includes("row-level security")
     || normalizedMessage.includes("permission denied");

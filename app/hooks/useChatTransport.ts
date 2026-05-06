@@ -380,36 +380,54 @@ export function useChatTransport({
         headers["Authorization"] = `Bearer ${session.access_token}`;
       }
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers,
-        signal: requestAbortController.signal,
-        body: JSON.stringify({
-          message: userMsg,
-          mode: queuedMessage.mode,
-          modelId: preferredModelId ?? undefined,
-          allowedModels: effectiveAllowedModels,
-          history,
-          conversationId: chatId,
-          assistantName: activeCustomAgent?.name,
-          assistantPurpose,
-          assistantInstructions: activeCustomAgent?.instructions,
-          memoryNotes: activeSettings.memoryNotes,
-          style: activeSettings.styleMode,
-          languageLock: activeSettings.languageLock,
-          preferredProgrammingLanguage,
-          interactionProfile,
-          addInternetContext: queuedMessage.mode === "search" || (activeSettings.enabledTools ?? []).includes("web_search"),
-          costMode: "performance",
-          userPlan: stateRef.current.userPlan,
-          thinkingEffort: queuedMessage.thinkingEffort,
-          systemPrompt: activeSettings.systemPrompt ?? "",
-          enabledTools: activeSettings.enabledTools ?? [],
-          googleContext: googleContextRef.current || undefined,
-        }),
-      });
+      const chatBody = {
+        message: userMsg,
+        mode: queuedMessage.mode,
+        modelId: preferredModelId ?? undefined,
+        allowedModels: effectiveAllowedModels,
+        history,
+        conversationId: chatId,
+        assistantName: activeCustomAgent?.name,
+        assistantPurpose,
+        assistantInstructions: activeCustomAgent?.instructions,
+        memoryNotes: activeSettings.memoryNotes,
+        style: activeSettings.styleMode,
+        languageLock: activeSettings.languageLock,
+        preferredProgrammingLanguage,
+        interactionProfile,
+        addInternetContext: queuedMessage.mode === "search" || (activeSettings.enabledTools ?? []).includes("web_search"),
+        costMode: "performance",
+        userPlan: stateRef.current.userPlan,
+        thinkingEffort: queuedMessage.thinkingEffort,
+        systemPrompt: activeSettings.systemPrompt ?? "",
+        enabledTools: activeSettings.enabledTools ?? [],
+        googleContext: googleContextRef.current || undefined,
+      };
 
-      await consumeStream(response, workspaceId, chatId);
+      const doChatFetch = async (bodyOverride?: Partial<typeof chatBody>) => {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers,
+          signal: requestAbortController.signal,
+          body: JSON.stringify({ ...chatBody, ...bodyOverride }),
+        });
+        await consumeStream(res, workspaceId, chatId);
+      };
+
+      try {
+        await doChatFetch();
+      } catch (innerError) {
+        if (isAbortLikeError(innerError)) throw innerError;
+        // Network-level failure (e.g. ERR_HTTP2_PROTOCOL_ERROR): retry once with auto model selection.
+        // Clear any partial content so the retry response renders cleanly (the status message
+        // communicates to the user that a retry is in progress).
+        updateLastMessage(workspaceId, chatId, (entry) => ({
+          ...entry,
+          ai: "",
+          status: "Retrying with fallback model...",
+        }));
+        await doChatFetch({ modelId: undefined, allowedModels: getAllowedModels(queuedMessage.mode) });
+      }
     } catch (error) {
       if (isAbortLikeError(error)) return;
       updateLastMessage(workspaceId, chatId, (entry) => ({

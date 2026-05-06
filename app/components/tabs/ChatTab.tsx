@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,6 +42,21 @@ import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 import type { ThinkingEffort } from "../ModelSelector";
+
+/** Poll interval for the model health endpoint (ms). */
+const MODEL_HEALTH_POLL_MS = 60_000; // 1 minute
+
+/** Fetch the set of currently-down model IDs from the server. */
+async function fetchDownModelIds(): Promise<Set<string>> {
+  try {
+    const res = await fetch("/api/model-health");
+    if (!res.ok) return new Set();
+    const data = await res.json() as { downModels?: string[] };
+    return new Set(Array.isArray(data.downModels) ? data.downModels : []);
+  } catch {
+    return new Set();
+  }
+}
 
 export function ChatTab() {
   const {
@@ -112,11 +126,28 @@ export function ChatTab() {
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedMessageContent, setEditedMessageContent] = useState("");
+  const [downModelIds, setDownModelIds] = useState<Set<string>>(new Set());
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importedShareRef = useRef(false);
+
+  // Poll the model-health endpoint to keep the down-model set up to date.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      void fetchDownModelIds().then((ids) => {
+        if (!cancelled) setDownModelIds(ids);
+      });
+    };
+    poll();
+    const timer = setInterval(poll, MODEL_HEALTH_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   const currentConversationId = activeChat.id;
   const workspaceQueries = useWorkspaceQueries({
@@ -713,6 +744,8 @@ export function ChatTab() {
                 onSelectModel={setPreferredModelId}
                 thinkingEffort={thinkingEffort}
                 onThinkingEffortChange={setThinkingEffort}
+                appMode={state.appMode}
+                downModelIds={downModelIds}
               />
             </div>
           </div>
