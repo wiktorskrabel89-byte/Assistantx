@@ -1,7 +1,6 @@
 "use client";
 
-import { BarChart2, Braces, GitCompare, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Workflow, Wrench, type LucideIcon } from "lucide-react";
-import type { BuiltInAgent, CustomAgent } from "../lib/chat-types";
+import { BarChart2, Braces, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, type LucideIcon } from "lucide-react";
 
 type ChatHeaderProps = {
   dark: boolean;
@@ -9,11 +8,7 @@ type ChatHeaderProps = {
   assistantIcon: LucideIcon;
   assistantName: string;
   activeChatTitle: string;
-  activeAgentId: string;
-  builtInAgents: BuiltInAgent[];
-  customAgents: CustomAgent[];
   onOpenSidebar: () => void;
-  onSelectAgent: (agentId: string) => void;
   onOpenAgentManager: () => void;
   onOpenSessions: () => void;
   onOpenCodeHistory: () => void;
@@ -23,8 +18,6 @@ type ChatHeaderProps = {
   onOpenPrompts: () => void;
   onCreateChat: () => void;
   onOpenWorkspaceTools: () => void;
-  onOpenPromptChain: () => void;
-  onOpenCompare: () => void;
   onOpenUsage: () => void;
 };
 
@@ -34,11 +27,7 @@ export function ChatHeader({
   assistantIcon: AssistantIcon,
   assistantName,
   activeChatTitle,
-  activeAgentId,
-  builtInAgents,
-  customAgents,
   onOpenSidebar,
-  onSelectAgent,
   onOpenAgentManager,
   onOpenSessions,
   onOpenCodeHistory,
@@ -48,8 +37,6 @@ export function ChatHeader({
   onOpenPrompts,
   onCreateChat,
   onOpenWorkspaceTools,
-  onOpenPromptChain,
-  onOpenCompare,
   onOpenUsage,
 }: ChatHeaderProps) {
   const toolButtonClassName = `hidden h-10 w-10 items-center justify-center rounded-xl border lg:flex ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`;
@@ -94,30 +81,9 @@ export function ChatHeader({
             <Wrench className="h-4 w-4" />
           </button>
 
-          <button onClick={onOpenPromptChain} className={toolButtonClassName} title="Prompt chain" aria-label="Open prompt chain panel">
-            <Workflow className="h-4 w-4" />
-          </button>
-
-          <button onClick={onOpenCompare} className={toolButtonClassName} title="Compare models" aria-label="Open model comparison panel">
-            <GitCompare className="h-4 w-4" />
-          </button>
-
           <button onClick={onOpenUsage} className={toolButtonClassName} title="Usage dashboard" aria-label="Open usage dashboard">
             <BarChart2 className="h-4 w-4" />
           </button>
-
-          <select
-            value={activeAgentId}
-            onChange={(event) => onSelectAgent(event.target.value)}
-            className={`hidden rounded-xl border px-3 py-2 text-sm md:block ${inputBg}`}
-          >
-            {builtInAgents.map((agent) => (
-              <option key={agent.id} value={agent.id}>{agent.name}</option>
-            ))}
-            {customAgents.map((agent) => (
-              <option key={agent.id} value={agent.id}>{agent.name}</option>
-            ))}
-          </select>
 
           <button
             onClick={onOpenAgentManager}

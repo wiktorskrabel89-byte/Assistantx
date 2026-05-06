@@ -400,7 +400,7 @@ export function useChatTransport({
           preferredProgrammingLanguage,
           interactionProfile,
           addInternetContext: queuedMessage.mode === "search" || (activeSettings.enabledTools ?? []).includes("web_search"),
-          costMode: activeSettings.costMode,
+          costMode: "performance",
           userPlan: stateRef.current.userPlan,
           thinkingEffort: queuedMessage.thinkingEffort,
           systemPrompt: activeSettings.systemPrompt ?? "",

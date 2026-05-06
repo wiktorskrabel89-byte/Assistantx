@@ -627,8 +627,11 @@ export const POST = async (req: Request) => {
           let fallbackReason = routeReason;
           let found = false;
 
-          // Try all models in order if 404 (no endpoint found)
-          if (status === 404 && /No endpoints found|No models match/i.test(err)) {
+          // Try all models in order if 404 (no endpoint found) or 5xx (server error on a free model)
+          if (
+            (status === 404 && /No endpoints found|No models match/i.test(err)) ||
+            (status >= 500 && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free"))
+          ) {
             const fallbackList = getModelFallbackList();
             for (const modelId of fallbackList) {
               safeEnqueue(`data: ${JSON.stringify({ status: `Model ${triedModels.at(-1)} unavailable, trying ${modelId}...` })}\n\n`);

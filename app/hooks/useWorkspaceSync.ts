@@ -78,9 +78,19 @@ export function useWorkspaceSync({ loaded, state, setState, stateRef }: UseWorks
       applySession(data.user?.email ?? null, provider, getLinkedProviders(data.user?.identities));
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       const providerValue = typeof session?.user?.app_metadata?.provider === "string" ? session.user.app_metadata.provider : null;
       const provider: OAuthProvider | null = isOAuthProvider(providerValue) ? providerValue : null;
+      // TOKEN_REFRESHED and USER_UPDATED don't change the signed-in identity, so
+      // we only refresh user metadata without resetting the cloud sync state.
+      // Resetting sync state on every token refresh would re-trigger the hydration
+      // GET, creating an endless retry loop if the endpoint is returning errors.
+      if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        setUserEmail(session?.user?.email ?? null);
+        setAuthProvider(provider);
+        setLinkedProviders(getLinkedProviders(session?.user?.identities));
+        return;
+      }
       applySession(session?.user?.email ?? null, provider, getLinkedProviders(session?.user?.identities));
     });
 
