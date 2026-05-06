@@ -352,7 +352,7 @@ export function getCheaperAlternative(modelId: string, costMode: CostMode, isCod
   // Pick the best model within budget for the request type
   const candidates = isCodeRequest
     ? ["deepseek/deepseek-r1", "deepseek/deepseek-v3.2"]
-    : ["google/gemini-3-flash-preview", "openai/gpt-5-mini", "meta-llama/llama-3.3-70b-instruct", "meta-llama/llama-3.3-70b-instruct:free"];
+    : ["google/gemini-3-flash-preview", "openai/gpt-5-mini", "meta-llama/llama-3.3-70b-instruct:free"];
 
   for (const candidate of candidates) {
     if (isModelAllowedByCostMode(candidate, costMode)) {
