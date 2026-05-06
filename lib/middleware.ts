@@ -15,7 +15,7 @@ function buildCsp(nonce: string): string {
     "default-src 'self'",
     // 'unsafe-inline' is overridden by the nonce in browsers that support it;
     // kept as a fallback.  'unsafe-eval' only in dev for HMR.
-    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://assistantx.pl`,
+    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://assistantx.pl https://cdn.jsdelivr.net`,
     "style-src 'self' 'unsafe-inline'",
     // Restrict images to HTTPS + safe data URIs; avoid the broad wildcard '*'
     "img-src 'self' blob: data: https:",

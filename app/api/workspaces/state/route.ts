@@ -33,9 +33,18 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
   const message = getErrorProperty(error, "message") ?? (error instanceof Error ? error.message : fallbackMessage);
   const normalizedMessage = message.toLowerCase();
 
-  const missingWorkspaceTable = code === "42P01"
-    || code === "PGRST205"
-    || (normalizedMessage.includes("workspace_states") && (normalizedMessage.includes("does not exist") || normalizedMessage.includes("not found")));
+  // PostgREST error codes that indicate a missing or unconfigured table.
+  // 42P01  — PostgreSQL "relation does not exist"
+  // PGRST116 — The result contains 0 rows (may indicate missing table when used with maybeSingle)
+  // PGRST200 — relationship not found in schema cache
+  // PGRST201 — ambiguous foreign key in schema cache
+  // PGRST202 — not found in schema cache (column)
+  // PGRST204 — column not found
+  // PGRST205 — could not find a foreign-key constraint in schema cache
+  const postgrestMissingCodes = new Set(["42P01", "PGRST116", "PGRST200", "PGRST201", "PGRST202", "PGRST204", "PGRST205"]);
+  const missingWorkspaceTable = (code !== null && postgrestMissingCodes.has(code))
+    || normalizedMessage.includes("does not exist")
+    || (normalizedMessage.includes("workspace_states") && normalizedMessage.includes("not found"));
 
   if (missingWorkspaceTable) {
     return {

@@ -99,7 +99,7 @@ const nextConfig = {
           key: 'Content-Security-Policy',
           value: [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline'",
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' blob: data: https:",
             "font-src 'self' https://fonts.gstatic.com",
