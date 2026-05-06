@@ -301,3 +301,129 @@ describe("POST /api/chat — unauthenticated user uses client history", () => {
     expect(assistantMessages.some((m) => m.content === "Nice to meet you, Wiktor!")).toBe(true);
   });
 });
+
+describe('POST /api/chat — "websearch" prefix enables web plugin on current model', () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('strips the "websearch" prefix and adds the web plugin to the request', async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "websearch what is the capital of France",
+      mode: "chat",
+      modelId: "meta-llama/llama-3.3-70b-instruct:free",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      model: string;
+      plugins: Array<{ id: string }>;
+      messages: Array<{ role: string; content: string }>;
+    };
+
+    // Plugin should be added for web search
+    expect(calledBody.plugins).toEqual([{ id: "web" }]);
+
+    // The model should remain the user's selected model, not be replaced by perplexity/sonar
+    expect(calledBody.model).toBe("meta-llama/llama-3.3-70b-instruct:free");
+
+    // The "websearch" prefix should be stripped from the user message
+    const userMsg = calledBody.messages.find((m) => m.role === "user");
+    expect(userMsg?.content).toBe("what is the capital of France");
+  });
+
+  it('is case-insensitive: "WEBSEARCH" also triggers the web plugin', async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "WEBSEARCH latest news today",
+      mode: "chat",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      plugins: Array<{ id: string }>;
+      messages: Array<{ role: string; content: string }>;
+    };
+
+    expect(calledBody.plugins).toEqual([{ id: "web" }]);
+    const userMsg = calledBody.messages.find((m) => m.role === "user");
+    expect(userMsg?.content).toBe("latest news today");
+  });
+
+  it('does NOT add the web plugin when message does not start with "websearch"', async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Tell me about websearch algorithms",
+      mode: "chat",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      plugins?: Array<{ id: string }>;
+    };
+
+    // "websearch" only triggers when it's at the very beginning of the message
+    expect(calledBody.plugins).toBeUndefined();
+  });
+
+  it('does NOT override the model when "websearch" prefix is used (keeps user-selected model)', async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "websearch current weather in Warsaw",
+      mode: "chat",
+      modelId: "openai/gpt-oss-120b:free",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      model: string;
+    };
+
+    // Model must NOT be overridden to perplexity/sonar
+    expect(calledBody.model).not.toBe("perplexity/sonar");
+    expect(calledBody.model).toBe("openai/gpt-oss-120b:free");
+  });
+});
