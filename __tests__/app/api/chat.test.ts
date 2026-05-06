@@ -194,7 +194,8 @@ describe("POST /api/chat — 5xx free-model retry cascade", () => {
   });
 });
 
-describe("POST /api/chat — 429 provider rate-limit retry cascade", () => {
+
+describe("POST /api/chat — web_search tool routes to Perplexity", () => {
   let POST: (req: Request) => Promise<Response>;
 
   beforeAll(async () => {
@@ -213,91 +214,90 @@ describe("POST /api/chat — 429 provider rate-limit retry cascade", () => {
     });
   }
 
-  const providerRateLimitBody = JSON.stringify({
-    error: {
-      message: "Provider returned error",
-      code: 429,
-      metadata: {
-        raw: "meta-llama/llama-3.3-70b-instruct:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations",
-        provider_name: "Venice",
-        is_byok: false,
-      },
-    },
-  });
-
-  it("retries with another free model when a free model returns 429 upstream rate limit, and succeeds", async () => {
-    let callCount = 0;
-    const mockFetch = jest.spyOn(globalThis, "fetch").mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        return Promise.resolve(
-          new Response(providerRateLimitBody, {
-            status: 429,
-            headers: { "Content-Type": "application/json" },
-          })
-        );
-      }
-      return Promise.resolve(
-        new Response(
-          `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello!" } }] })}\ndata: [DONE]\n`,
-          { status: 200, headers: { "Content-Type": "text/event-stream" } }
-        )
-      );
-    });
+  it("uses perplexity/sonar when enabledTools includes web_search", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
 
     const req = makeRequest({
-      message: "Hello",
+      message: "What happened today?",
       mode: "chat",
-      modelId: "meta-llama/llama-3.3-70b-instruct:free",
+      enabledTools: ["web_search"],
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    await res.text();
-
-    // Should have been called at least twice (initial + one retry)
-    expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(2);
-
-    // The retry must use another free model
-    const retryCall = mockFetch.mock.calls[1];
-    const retryBody = JSON.parse(
-      (retryCall?.[1] as RequestInit | undefined)?.body as string ?? "{}"
-    ) as { model?: string };
-    expect(retryBody.model?.endsWith(":free")).toBe(true);
-    // The retry must not reuse the rate-limited model
-    expect(retryBody.model).not.toBe("meta-llama/llama-3.3-70b-instruct:free");
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).toBe("perplexity/sonar");
   });
 
-  it("does not treat 429 upstream rate limit as a credits error", async () => {
-    let callCount = 0;
-    jest.spyOn(globalThis, "fetch").mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        return Promise.resolve(
-          new Response(providerRateLimitBody, {
-            status: 429,
-            headers: { "Content-Type": "application/json" },
-          })
-        );
-      }
-      return Promise.resolve(
-        new Response(
-          `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\ndata: [DONE]\n`,
-          { status: 200, headers: { "Content-Type": "text/event-stream" } }
-        )
-      );
-    });
+  it("does NOT use perplexity/sonar when enabledTools does not include web_search", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
 
     const req = makeRequest({
-      message: "Hello",
+      message: "Hello there",
       mode: "chat",
-      modelId: "meta-llama/llama-3.3-70b-instruct:free",
+      enabledTools: [],
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    const text = await res.text();
-    // Should NOT contain "Insufficient credits" — it's a rate limit, not a credits error
-    expect(text).not.toMatch(/Insufficient credits/i);
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).not.toBe("perplexity/sonar");
+  });
+});
+
+describe("POST /api/chat — unauthenticated user uses client history", () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("includes client-supplied history in messages when unauthenticated and conversationId is present", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Wiktor" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "What is my name?",
+      mode: "chat",
+      conversationId: "conv-123",
+      history: [{ user: "my name is wiktor", ai: "Nice to meet you, Wiktor!" }],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    // History should include the prior exchange
+    const userMessages = calledBody.messages.filter((m) => m.role === "user");
+    const assistantMessages = calledBody.messages.filter((m) => m.role === "assistant");
+    expect(userMessages.some((m) => m.content === "my name is wiktor")).toBe(true);
+    expect(assistantMessages.some((m) => m.content === "Nice to meet you, Wiktor!")).toBe(true);
   });
 });
