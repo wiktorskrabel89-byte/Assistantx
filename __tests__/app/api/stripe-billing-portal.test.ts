@@ -83,9 +83,12 @@ describe("POST /api/stripe/billing-portal", () => {
   it("returns 500 when STRIPE_SECRET_KEY is not set", async () => {
     const original = process.env.STRIPE_SECRET_KEY;
     delete process.env.STRIPE_SECRET_KEY;
-    const res = await POST(makeReq({}));
-    expect(res.status).toBe(500);
-    process.env.STRIPE_SECRET_KEY = original;
+    try {
+      const res = await POST(makeReq({}));
+      expect(res.status).toBe(500);
+    } finally {
+      process.env.STRIPE_SECRET_KEY = original;
+    }
   });
 
   it("returns a Stripe portal URL for an authenticated user with a customer ID", async () => {
@@ -126,7 +129,7 @@ describe("POST /api/stripe/billing-portal", () => {
     // Should NOT use the cross-origin URL
     expect(callArgs?.return_url).not.toBe("https://evil.com/steal");
     // Should fall back to a same-origin URL
-    expect(callArgs?.return_url).toMatch(new RegExp(`^${ORIGIN}`));
+    expect(callArgs?.return_url.startsWith(ORIGIN)).toBe(true);
   });
 
   it("rejects an open-redirect bypass URL (https://app.example.com@evil.com)", async () => {
@@ -136,13 +139,13 @@ describe("POST /api/stripe/billing-portal", () => {
     await POST(makeReq({ returnUrl: bypassUrl }));
     const callArgs = mockPortalCreate.mock.calls[0]?.[0] as { return_url: string };
     expect(callArgs?.return_url).not.toBe(bypassUrl);
-    expect(callArgs?.return_url).toMatch(new RegExp(`^${ORIGIN}`));
+    expect(callArgs?.return_url.startsWith(ORIGIN)).toBe(true);
   });
 
   it("handles a malformed returnUrl gracefully (falls back to default)", async () => {
     await POST(makeReq({ returnUrl: "not-a-valid-url" }));
     const callArgs = mockPortalCreate.mock.calls[0]?.[0] as { return_url: string };
-    expect(callArgs?.return_url).toMatch(new RegExp(`^${ORIGIN}`));
+    expect(callArgs?.return_url.startsWith(ORIGIN)).toBe(true);
   });
 
   it("returns 500 when Stripe throws an error", async () => {

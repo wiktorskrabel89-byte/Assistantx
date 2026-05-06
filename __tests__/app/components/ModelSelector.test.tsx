@@ -42,6 +42,8 @@ describe("ModelSelector", () => {
     openSelector({ preferredModelId: "openai/gpt-5.1" });
     const autoButton = screen.getByRole("button", { name: /Auto/i });
     expect(autoButton.className).not.toContain("blue-950");
+    // Inactive state uses slate border (positive check for inactive styling)
+    expect(autoButton.className).toContain("border-slate");
   });
 
   it("calls onSelectModel(null) when Auto is clicked", () => {

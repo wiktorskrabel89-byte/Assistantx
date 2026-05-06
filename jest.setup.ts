@@ -21,3 +21,15 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     })),
   });
 }
+
+// jsdom does not expose Node.js's TextEncoder / TextDecoder globals; polyfill them
+// so components that use the Encoding API (e.g. SSE parsing) work in tests.
+if (typeof TextEncoder === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { TextEncoder, TextDecoder } = require("util") as {
+    TextEncoder: typeof globalThis.TextEncoder;
+    TextDecoder: typeof globalThis.TextDecoder;
+  };
+  global.TextEncoder = TextEncoder;
+  global.TextDecoder = TextDecoder;
+}

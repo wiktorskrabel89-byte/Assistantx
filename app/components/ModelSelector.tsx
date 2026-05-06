@@ -1,7 +1,7 @@
 "use client";
 
 import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp, Brain } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ALL_MODELS, isModelPremiumOnly, isModelProPlusOnly, REASONING_MODEL_IDS } from "@/lib/ai-config";
 
 const THINKING_EFFORTS = ["Low", "Medium", "High", "Xhigh"] as const;
@@ -19,6 +19,10 @@ type ModelSelectorProps = {
 
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false, thinkingEffort = "Medium", onThinkingEffortChange }: ModelSelectorProps) {
+  const uid = useId();
+  const modelListId = `${uid}-model-list`;
+  const moreModelsId = `${uid}-more-models`;
+  const lockedDescId = `${uid}-locked-desc`;
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const isAuto = preferredModelId === null;
@@ -51,9 +55,11 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
     return (
       <button
         key={model.id}
+        type="button"
         onClick={() => !locked && onSelectModel(model.id)}
         className={`${pillBase} ${locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
         title={locked ? lockReason : `Use ${model.id}`}
+        aria-describedby={locked ? lockedDescId : undefined}
         disabled={locked}
       >
         {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
@@ -67,20 +73,22 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   return (
     <div className="w-full">
       <button
+        type="button"
         className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold mb-2"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-controls="model-selector-list"
+        aria-controls={modelListId}
       >
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         {open ? "Ukryj wybór modelu" : "Pokaż wybór modelu"}
       </button>
       {open && (
         <div
-          id="model-selector-list"
+          id={modelListId}
           className="flex flex-wrap items-center gap-2 overflow-x-auto max-w-full scrollbar-thin scrollbar-thumb-slate-400 scrollbar-track-slate-100"
         >
           <button
+            type="button"
             onClick={() => onSelectModel(null)}
             className={`${pillBase} ${isAuto ? pillActive : pillInactive}`}
             title="Automatically pick the best model for your request"
@@ -88,6 +96,11 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
             <Zap className="h-3 w-3" />
             Auto
           </button>
+
+          {/* Visually-hidden description for locked models, referenced via aria-describedby */}
+          <span id={lockedDescId} className="sr-only">
+            This model requires a higher plan. Upgrade to unlock it.
+          </span>
 
           {isPremium && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-500">
@@ -104,16 +117,17 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
               </span>
               {premiumModels.map(renderModelButton)}
               <button
+                type="button"
                 className={`${pillBase} ${pillInactive}`}
                 onClick={() => setShowMore((v) => !v)}
                 aria-expanded={showMore}
-                aria-controls="more-models-list"
+                aria-controls={moreModelsId}
               >
                 {showMore ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                 More models
               </button>
               {showMore && (
-                <div id="more-models-list" className="flex flex-wrap gap-2 w-full">
+                <div id={moreModelsId} className="flex flex-wrap gap-2 w-full">
                   {freeModels.map(renderModelButton)}
                 </div>
               )}
@@ -126,16 +140,17 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
               </span>
               {freeModels.map(renderModelButton)}
               <button
+                type="button"
                 className={`${pillBase} ${pillInactive}`}
                 onClick={() => setShowMore((v) => !v)}
                 aria-expanded={showMore}
-                aria-controls="more-models-list"
+                aria-controls={moreModelsId}
               >
                 {showMore ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                 More models
               </button>
               {showMore && (
-                <div id="more-models-list" className="flex flex-wrap gap-2 w-full">
+                <div id={moreModelsId} className="flex flex-wrap gap-2 w-full">
                   {premiumModels.map(renderModelButton)}
                 </div>
               )}
@@ -152,6 +167,7 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
               {THINKING_EFFORTS.map((effort) => (
                 <button
                   key={effort}
+                  type="button"
                   onClick={() => onThinkingEffortChange(effort)}
                   className={`${pillBase} ${thinkingEffort === effort ? pillActive : pillInactive}`}
                   title={`Set thinking effort to ${effort}`}
