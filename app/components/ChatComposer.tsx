@@ -118,7 +118,7 @@ export function ChatComposer({
   // Reasoning depth state
   const [thinkingEffort, setThinkingEffort] = useState("Medium");
 
-  const showThinkingEffort = REASONING_MODEL_IDS.some((id) => selectedModel.includes(id.split("/").pop()!));
+  const showThinkingEffort = REASONING_MODEL_IDS.includes(selectedModel);
 
   // ── Voice input ────────────────────────────────────────────────────────────
   const [micActive, setMicActive] = useState(false);
@@ -326,7 +326,8 @@ export function ChatComposer({
                 let effortNum = 2;
                 if (thinkingEffort === "Low") effortNum = 1;
                 else if (thinkingEffort === "High") effortNum = 3;
-                onQueueMessage(effortNum);
+                else if (thinkingEffort === "Xhigh") effortNum = 4;
+                onQueueMessage(showThinkingEffort ? effortNum : 2);
               }
             }}
             onPaste={handlePaste}
@@ -361,6 +362,7 @@ export function ChatComposer({
               let effortNum = 2;
               if (thinkingEffort === "Low") effortNum = 1;
               else if (thinkingEffort === "High") effortNum = 3;
+              else if (thinkingEffort === "Xhigh") effortNum = 4;
               onQueueMessage(showThinkingEffort ? effortNum : 2);
             }}
             disabled={premiumLimitReached || (!message.trim() && !file)}
