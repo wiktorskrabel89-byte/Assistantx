@@ -264,7 +264,7 @@ export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
 export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
 export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.1";
 
-export const FREE_CODING_MODEL = "openai/gpt-oss-120b:free";
+export const FREE_CODING_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 /**

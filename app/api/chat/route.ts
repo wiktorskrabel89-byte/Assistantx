@@ -553,7 +553,8 @@ export const POST = async (req: Request) => {
   if (thinkingEffort && REASONING_MODEL_IDS.includes(selectedModel)) {
     // Map numeric effort (1=low, 2=medium, 3=high, 4=xhigh) to the string OpenRouter expects.
     const effortMap: Record<number, string> = { 1: "low", 2: "medium", 3: "high", 4: "xhigh" };
-    requestBody.reasoning_level = effortMap[thinkingEffort as number] ?? "medium";
+    const effortNum = typeof thinkingEffort === "number" ? thinkingEffort : 2;
+    requestBody.reasoning_level = effortMap[effortNum] ?? "medium";
   }
 
 
