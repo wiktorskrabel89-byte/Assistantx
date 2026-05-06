@@ -31,6 +31,12 @@
       "!dist/**",
       "!scripts/**"
     ],
+    "extraResources": [
+      {
+        "from": "scripts/post-install.ps1",
+        "to": "post-install.ps1"
+      }
+    ],
     "win": {
       "target": [
         {
@@ -48,7 +54,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Jarvis"
+      "shortcutName": "Jarvis",
+      "include": "installer.nsh"
     }
   }
 }
