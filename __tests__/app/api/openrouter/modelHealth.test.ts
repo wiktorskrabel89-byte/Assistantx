@@ -38,24 +38,30 @@ describe("modelHealth", () => {
   // ---------------------------------------------------------------------------
 
   it("isModelDown returns false for an unknown model", () => {
-    expect(isModelDown("openai/gpt-5.1")).toBe(false);
+    expect(isModelDown("test/model-a:free")).toBe(false);
   });
 
   it("isModelDown returns true immediately after markModelDown", () => {
-    markModelDown("openai/gpt-5.1");
-    expect(isModelDown("openai/gpt-5.1")).toBe(true);
+    markModelDown("test/model-a:free");
+    expect(isModelDown("test/model-a:free")).toBe(true);
   });
 
   it("isModelDown returns false after 2-hour window elapses", () => {
-    markModelDown("openai/gpt-5.1");
+    markModelDown("test/model-a:free");
     jest.advanceTimersByTime(RECHECK_MS);
-    expect(isModelDown("openai/gpt-5.1")).toBe(false);
+    expect(isModelDown("test/model-a:free")).toBe(false);
   });
 
   it("isModelDown returns true just before the 2-hour window elapses", () => {
-    markModelDown("openai/gpt-5.1");
+    markModelDown("test/model-a:free");
     jest.advanceTimersByTime(RECHECK_MS - 1);
-    expect(isModelDown("openai/gpt-5.1")).toBe(true);
+    expect(isModelDown("test/model-a:free")).toBe(true);
+  });
+
+  it("markModelDown ignores non-free models", () => {
+    markModelDown("openai/gpt-5.1");
+    expect(isModelDown("openai/gpt-5.1")).toBe(false);
+    expect(getDownModels()).not.toContain("openai/gpt-5.1");
   });
 
   // ---------------------------------------------------------------------------
@@ -63,10 +69,10 @@ describe("modelHealth", () => {
   // ---------------------------------------------------------------------------
 
   it("recordModelSuccess clears the down status immediately", () => {
-    markModelDown("openai/gpt-5.1");
-    expect(isModelDown("openai/gpt-5.1")).toBe(true);
-    recordModelSuccess("openai/gpt-5.1");
-    expect(isModelDown("openai/gpt-5.1")).toBe(false);
+    markModelDown("test/model-a:free");
+    expect(isModelDown("test/model-a:free")).toBe(true);
+    recordModelSuccess("test/model-a:free");
+    expect(isModelDown("test/model-a:free")).toBe(false);
   });
 
   it("recordModelSuccess on an unknown model has no effect", () => {
@@ -75,10 +81,10 @@ describe("modelHealth", () => {
   });
 
   it("marking a model down again after recordModelSuccess re-starts the window", () => {
-    markModelDown("openai/gpt-5.1");
-    recordModelSuccess("openai/gpt-5.1");
-    markModelDown("openai/gpt-5.1");
-    expect(isModelDown("openai/gpt-5.1")).toBe(true);
+    markModelDown("test/model-a:free");
+    recordModelSuccess("test/model-a:free");
+    markModelDown("test/model-a:free");
+    expect(isModelDown("test/model-a:free")).toBe(true);
   });
 
   // ---------------------------------------------------------------------------
@@ -86,28 +92,28 @@ describe("modelHealth", () => {
   // ---------------------------------------------------------------------------
 
   it("filterHealthyModels removes down models from the list", () => {
-    markModelDown("openai/gpt-5.1");
-    const result = filterHealthyModels(["openai/gpt-5.4", "openai/gpt-5.1"]);
-    expect(result).toEqual(["openai/gpt-5.4"]);
+    markModelDown("test/model-a:free");
+    const result = filterHealthyModels(["test/model-b:free", "test/model-a:free"]);
+    expect(result).toEqual(["test/model-b:free"]);
   });
 
   it("filterHealthyModels falls back to the full list if all models are down", () => {
-    markModelDown("openai/gpt-5.1");
-    markModelDown("openai/gpt-5.4");
-    const result = filterHealthyModels(["openai/gpt-5.1", "openai/gpt-5.4"]);
-    expect(result).toEqual(["openai/gpt-5.1", "openai/gpt-5.4"]);
+    markModelDown("test/model-a:free");
+    markModelDown("test/model-b:free");
+    const result = filterHealthyModels(["test/model-a:free", "test/model-b:free"]);
+    expect(result).toEqual(["test/model-a:free", "test/model-b:free"]);
   });
 
   it("filterHealthyModels returns the full list when no models are down", () => {
-    const ids = ["openai/gpt-5.1", "anthropic/claude-opus-4.6"];
+    const ids = ["test/model-a:free", "test/model-b:free"];
     expect(filterHealthyModels(ids)).toEqual(ids);
   });
 
   it("filterHealthyModels includes models whose window has elapsed", () => {
-    markModelDown("openai/gpt-5.1");
+    markModelDown("test/model-a:free");
     jest.advanceTimersByTime(RECHECK_MS);
-    const result = filterHealthyModels(["openai/gpt-5.1", "openai/gpt-5.4"]);
-    expect(result).toContain("openai/gpt-5.1");
+    const result = filterHealthyModels(["test/model-a:free", "test/model-b:free"]);
+    expect(result).toContain("test/model-a:free");
   });
 
   // ---------------------------------------------------------------------------
@@ -119,23 +125,23 @@ describe("modelHealth", () => {
   });
 
   it("getDownModels returns ids of all currently-down models", () => {
-    markModelDown("openai/gpt-5.1");
-    markModelDown("anthropic/claude-opus-4.6");
+    markModelDown("test/model-a:free");
+    markModelDown("test/model-b:free");
     const downs = getDownModels();
-    expect(downs).toContain("openai/gpt-5.1");
-    expect(downs).toContain("anthropic/claude-opus-4.6");
+    expect(downs).toContain("test/model-a:free");
+    expect(downs).toContain("test/model-b:free");
   });
 
   it("getDownModels excludes models whose window has elapsed", () => {
-    markModelDown("openai/gpt-5.1");
+    markModelDown("test/model-a:free");
     jest.advanceTimersByTime(RECHECK_MS);
-    expect(getDownModels()).not.toContain("openai/gpt-5.1");
+    expect(getDownModels()).not.toContain("test/model-a:free");
   });
 
   it("getDownModels excludes models cleared by recordModelSuccess", () => {
-    markModelDown("openai/gpt-5.1");
-    recordModelSuccess("openai/gpt-5.1");
-    expect(getDownModels()).not.toContain("openai/gpt-5.1");
+    markModelDown("test/model-a:free");
+    recordModelSuccess("test/model-a:free");
+    expect(getDownModels()).not.toContain("test/model-a:free");
   });
 
   // ---------------------------------------------------------------------------
@@ -143,11 +149,11 @@ describe("modelHealth", () => {
   // ---------------------------------------------------------------------------
 
   it("_resetForTests clears all health state", () => {
-    markModelDown("openai/gpt-5.1");
-    markModelDown("anthropic/claude-opus-4.6");
+    markModelDown("test/model-a:free");
+    markModelDown("test/model-b:free");
     _resetForTests();
     expect(getDownModels()).toEqual([]);
-    expect(isModelDown("openai/gpt-5.1")).toBe(false);
+    expect(isModelDown("test/model-a:free")).toBe(false);
   });
 
   // ---------------------------------------------------------------------------
@@ -155,24 +161,24 @@ describe("modelHealth", () => {
   // ---------------------------------------------------------------------------
 
   it("re-marks a model down after the window expires if it fails again", () => {
-    markModelDown("openai/gpt-5.1");
+    markModelDown("test/model-a:free");
     jest.advanceTimersByTime(RECHECK_MS);
     // At this point isModelDown returns false — live request is allowed through.
-    expect(isModelDown("openai/gpt-5.1")).toBe(false);
+    expect(isModelDown("test/model-a:free")).toBe(false);
     // The live request fails again → re-mark
-    markModelDown("openai/gpt-5.1");
-    expect(isModelDown("openai/gpt-5.1")).toBe(true);
+    markModelDown("test/model-a:free");
+    expect(isModelDown("test/model-a:free")).toBe(true);
   });
 
   it("tracks multiple models independently", () => {
-    markModelDown("openai/gpt-5.1");
+    markModelDown("test/model-a:free");
     // Advance halfway
     jest.advanceTimersByTime(RECHECK_MS / 2);
-    markModelDown("anthropic/claude-opus-4.6");
-    // After the full window from the start, gpt-5.1's window has elapsed
+    markModelDown("test/model-b:free");
+    // After the full window from the start, model-a's window has elapsed
     jest.advanceTimersByTime(RECHECK_MS / 2);
-    expect(isModelDown("openai/gpt-5.1")).toBe(false);
-    // claude-opus-4.6 was marked halfway in, so still down
-    expect(isModelDown("anthropic/claude-opus-4.6")).toBe(true);
+    expect(isModelDown("test/model-a:free")).toBe(false);
+    // model-b was marked halfway in, so still down
+    expect(isModelDown("test/model-b:free")).toBe(true);
   });
 });
