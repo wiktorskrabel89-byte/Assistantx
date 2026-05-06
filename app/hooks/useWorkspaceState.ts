@@ -317,8 +317,22 @@ export function useWorkspaceState() {
   }, []);
 
   const setAppMode = useCallback((appMode: import("../lib/chat-types").AppMode) => {
+    // Capture workspace snapshot before the async setState to avoid any race.
+    const snap = stateRef.current;
+    const ws = snap.workspaces.find((w) => w.id === snap.activeWorkspaceId) ?? snap.workspaces[0];
     setState((prev) => ({ ...prev, appMode }));
-  }, []);
+    // Auto-switch built-in agent to match mode (only when no custom agent is currently active)
+    const isCustomAgent = ws.settings.customAgents.some((a) => a.id === ws.settings.activeAgentId);
+    if (!isCustomAgent) {
+      const targetId = appMode === "ai-chat" ? "builtin-chat" : "builtin-code";
+      updateWorkspace(ws.id, (workspace) => ({
+        ...workspace,
+        settings: { ...workspace.settings, activeAgentId: targetId },
+      }));
+      const builtIn = BUILT_IN_AGENTS.find((a) => a.id === targetId);
+      if (builtIn) setWorkspaceMode(builtIn.preferredMode);
+    }
+  }, [stateRef, updateWorkspace, setWorkspaceMode]);
 
   const setPinnedAddOns = useCallback((pinnedAddOns: string[]) => {
     setState((prev) => ({ ...prev, pinnedAddOns }));
