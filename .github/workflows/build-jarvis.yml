@@ -61,6 +61,15 @@ jobs:
           path: jarvis/desktop/dist/JarvisSetup-arm64.exe
           if-no-files-found: warn
 
+      - name: Upload updater metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JarvisUpdaterMetadata
+          path: |
+            jarvis/desktop/dist/latest.yml
+            jarvis/desktop/dist/*.blockmap
+          if-no-files-found: warn
+
       - name: Publish to GitHub Release (jarvis-latest)
         uses: softprops/action-gh-release@v2
         with:
@@ -83,5 +92,7 @@ jobs:
           files: |
             jarvis/desktop/dist/JarvisSetup-x64.exe
             jarvis/desktop/dist/JarvisSetup-arm64.exe
+            jarvis/desktop/dist/latest.yml
+            jarvis/desktop/dist/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

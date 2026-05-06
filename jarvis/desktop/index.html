@@ -89,6 +89,16 @@
       border: 1px solid rgba(148, 163, 184, 0.35);
     }
 
+    .update-actions {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
     /* URL bar */
     .url-row {
       display: grid;
@@ -207,6 +217,20 @@
       <div class="stack">
         <h2>Backend URL</h2>
         <div id="backend-url" class="value">Loading…</div>
+      </div>
+
+      <div class="stack">
+        <h2>App Version</h2>
+        <div id="app-version" class="value">Loading…</div>
+      </div>
+
+      <div class="stack">
+        <h2>Updates</h2>
+        <div id="update-status" class="value">Waiting to check for updates…</div>
+        <div class="update-actions">
+          <button type="button" id="check-updates">Check now</button>
+          <button type="button" id="install-update" class="secondary" hidden>Install update</button>
+        </div>
       </div>
 
       <hr>

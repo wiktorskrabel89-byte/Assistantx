@@ -4,6 +4,10 @@
   "main": "main.js",
   "author": "AssistantX",
   "description": "Minimalny szkielet aplikacji Jarvis Desktop (Electron)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wiktorskrabel89-byte/nextjs-boilerplate.git"
+  },
   "scripts": {
     "dev": "electron .",
     "start": "electron .",
@@ -17,7 +21,7 @@
     "dist:win:public": "npm run dist:win:all && npm run publish:download"
   },
   "devDependencies": {
-    "electron": "^28.2.3",
+    "electron": "^41.5.0",
     "electron-builder": "^26.0.12"
   },
   "build": {
@@ -56,6 +60,17 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Jarvis",
       "include": "installer.nsh"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "wiktorskrabel89-byte",
+        "repo": "nextjs-boilerplate",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
   }
 }

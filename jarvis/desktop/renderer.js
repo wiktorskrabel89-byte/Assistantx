@@ -47,6 +47,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const tokenNode = document.getElementById('device-token');
 	const statusNode = document.getElementById('connection-status');
 	const backendUrlNode = document.getElementById('backend-url');
+	const appVersionNode = document.getElementById('app-version');
+	const updateStatusNode = document.getElementById('update-status');
+	const checkUpdatesButton = document.getElementById('check-updates');
+	const installUpdateButton = document.getElementById('install-update');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
 	const urlInput = document.getElementById('url-input');
 	const urlGo = document.getElementById('url-go');
@@ -59,6 +63,21 @@ window.addEventListener('DOMContentLoaded', () => {
 	function updateStatus(status, detail) {
 		statusNode.textContent = detail ? `${status}: ${detail}` : status;
 		setStatusDot(status);
+	}
+
+	function updateAutoUpdateStatus(payload) {
+		if (!updateStatusNode) return;
+
+		const detail = payload?.detail ? `${payload.status}: ${payload.detail}` : payload?.status || 'idle';
+		updateStatusNode.textContent = detail;
+
+		if (installUpdateButton) {
+			installUpdateButton.hidden = !payload?.downloaded;
+		}
+
+		if (checkUpdatesButton) {
+			checkUpdatesButton.disabled = payload?.status === 'checking';
+		}
 	}
 
 	// ── Prompt submission ────────────────────────────────────────────────────
@@ -105,6 +124,48 @@ window.addEventListener('DOMContentLoaded', () => {
 	if (urlInput) {
 		urlInput.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter') doOpenUrl(urlInput.value);
+		});
+	}
+
+	if (ipcRenderer && appVersionNode) {
+		ipcRenderer.invoke('get-app-meta').then((meta) => {
+			appVersionNode.textContent = meta.packaged
+				? `v${meta.version}`
+				: `v${meta.version} (dev mode, updater off)`;
+		}).catch(() => {
+			appVersionNode.textContent = 'Unknown';
+		});
+
+		ipcRenderer.on('app-meta', (_event, meta) => {
+			appVersionNode.textContent = meta.packaged
+				? `v${meta.version}`
+				: `v${meta.version} (dev mode, updater off)`;
+		});
+
+		ipcRenderer.on('auto-update-status', (_event, payload) => {
+			updateAutoUpdateStatus(payload);
+
+			if (['checking', 'up-to-date', 'ready-to-install', 'error'].includes(payload?.status)) {
+				appendMessage(log, 'Updater', payload.detail || payload.status, payload?.status === 'error' ? 'error' : 'system');
+			}
+		});
+	}
+
+	if (checkUpdatesButton && ipcRenderer) {
+		checkUpdatesButton.addEventListener('click', async () => {
+			const result = await ipcRenderer.invoke('check-for-updates');
+			if (result?.ok === false && result.reason === 'not-packaged') {
+				appendMessage(log, 'Updater', 'Auto-update works after installing the EXE build.', 'error');
+			}
+		});
+	}
+
+	if (installUpdateButton && ipcRenderer) {
+		installUpdateButton.addEventListener('click', async () => {
+			const result = await ipcRenderer.invoke('install-update');
+			if (!result?.ok) {
+				appendMessage(log, 'Updater', 'No downloaded update is ready yet.', 'error');
+			}
 		});
 	}
 
@@ -160,4 +221,3 @@ window.addEventListener('DOMContentLoaded', () => {
 	updateStatus('ready');
 	appendMessage(log, 'Jarvis Desktop', 'Shell initialized. Connecting to backend…');
 });
-
