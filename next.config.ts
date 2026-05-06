@@ -99,11 +99,14 @@ const nextConfig = {
           key: 'Content-Security-Policy',
           value: [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline'",
+            // https://cdn.jsdelivr.net is required for Monaco Editor (loaded by @monaco-editor/react)
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' blob: data: https:",
             "font-src 'self' https://fonts.gstatic.com",
             "connect-src *",
+            // Monaco Editor creates web workers as blob: URLs
+            "worker-src blob:",
             "frame-src 'none'",
             "frame-ancestors 'none'",
             "object-src 'none'",
