@@ -707,18 +707,24 @@ export function IntegrationsPanel({
                 <div className={`space-y-2 border-t px-3 pb-3 pt-2 ${dark ? "border-gray-800" : "border-gray-200"}`}>
                   <p className="text-[11px] text-gray-500">Creates or updates a file in your repository directly from AssistantX.</p>
                   <input
+                    id="commit-branch"
+                    name="commitBranch"
                     value={commitBranch}
                     onChange={(e) => setCommitBranch(e.target.value)}
                     placeholder="Branch (e.g. main)"
                     className={`w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
                   />
                   <input
+                    id="commit-path"
+                    name="commitPath"
                     value={commitPath}
                     onChange={(e) => setCommitPath(e.target.value)}
                     placeholder="File path (e.g. src/index.ts)"
                     className={`w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
                   />
                   <textarea
+                    id="commit-content"
+                    name="commitContent"
                     value={commitContent}
                     onChange={(e) => setCommitContent(e.target.value)}
                     placeholder="File content…"
@@ -726,6 +732,8 @@ export function IntegrationsPanel({
                     className={`w-full rounded-xl border px-3 py-2 font-mono text-xs resize-none ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
                   />
                   <input
+                    id="commit-message"
+                    name="commitMessage"
                     value={commitMessage}
                     onChange={(e) => setCommitMessage(e.target.value)}
                     placeholder="Commit message (optional)"
@@ -764,12 +772,16 @@ export function IntegrationsPanel({
                   <p className="text-[11px] text-gray-500">Open a pull request in your repository. Commit changes to a branch first.</p>
                   <div className="flex gap-2">
                     <input
+                      id="pr-head"
+                      name="prHead"
                       value={prHead}
                       onChange={(e) => setPrHead(e.target.value)}
                       placeholder="Head branch (feature)"
                       className={`flex-1 rounded-xl border px-3 py-2 text-sm ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
                     />
                     <input
+                      id="pr-base"
+                      name="prBase"
                       value={prBase}
                       onChange={(e) => setPrBase(e.target.value)}
                       placeholder="Base branch (main)"
@@ -777,12 +789,16 @@ export function IntegrationsPanel({
                     />
                   </div>
                   <input
+                    id="pr-title"
+                    name="prTitle"
                     value={prTitle}
                     onChange={(e) => setPrTitle(e.target.value)}
                     placeholder="PR title"
                     className={`w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
                   />
                   <textarea
+                    id="pr-body"
+                    name="prBody"
                     value={prBody}
                     onChange={(e) => setPrBody(e.target.value)}
                     placeholder="PR description (optional)"
@@ -879,6 +895,8 @@ export function IntegrationsPanel({
             </div>
 
             <input
+              id="gmail-analysis-query"
+              name="gmailAnalysisQuery"
               type="text"
               value={gmailAnalysisQuery}
               onChange={(e) => setGmailAnalysisQuery(e.target.value)}
@@ -954,6 +972,8 @@ export function IntegrationsPanel({
               <div className={`space-y-2 rounded-xl border px-3 py-3 ${dark ? "border-gray-700 bg-gray-900/60" : "border-gray-300 bg-white"}`}>
                 <div className="text-xs font-semibold">New event</div>
                 <input
+                  id="new-event-title"
+                  name="newEventTitle"
                   type="text"
                   value={newEventTitle}
                   onChange={(e) => setNewEventTitle(e.target.value)}
@@ -962,17 +982,21 @@ export function IntegrationsPanel({
                 />
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-1.5 text-xs">
-                    <input type="checkbox" checked={newEventAllDay} onChange={(e) => setNewEventAllDay(e.target.checked)} />
+                    <input id="new-event-all-day" name="newEventAllDay" type="checkbox" checked={newEventAllDay} onChange={(e) => setNewEventAllDay(e.target.checked)} />
                     All day
                   </label>
                 </div>
                 <input
+                  id="new-event-start"
+                  name="newEventStart"
                   type={newEventAllDay ? "date" : "datetime-local"}
                   value={newEventStart}
                   onChange={(e) => setNewEventStart(e.target.value)}
                   className={`w-full rounded-lg border px-2 py-1.5 text-xs ${dark ? "border-gray-700 bg-gray-900 text-gray-100" : "border-gray-300 bg-white text-gray-900"}`}
                 />
                 <input
+                  id="new-event-end"
+                  name="newEventEnd"
                   type={newEventAllDay ? "date" : "datetime-local"}
                   value={newEventEnd}
                   onChange={(e) => setNewEventEnd(e.target.value)}
@@ -980,6 +1004,8 @@ export function IntegrationsPanel({
                   className={`w-full rounded-lg border px-2 py-1.5 text-xs ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
                 />
                 <input
+                  id="new-event-location"
+                  name="newEventLocation"
                   type="text"
                   value={newEventLocation}
                   onChange={(e) => setNewEventLocation(e.target.value)}
@@ -987,6 +1013,8 @@ export function IntegrationsPanel({
                   className={`w-full rounded-lg border px-2 py-1.5 text-xs ${dark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500" : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"}`}
                 />
                 <textarea
+                  id="new-event-desc"
+                  name="newEventDesc"
                   value={newEventDesc}
                   onChange={(e) => setNewEventDesc(e.target.value)}
                   placeholder="Description (optional)"
