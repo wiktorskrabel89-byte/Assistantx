@@ -9,6 +9,11 @@ jest.mock("@/app/api/openrouter/fetchAllModels", () => ({
     { id: "anthropic/claude-opus-4.6", description: "" },
     { id: "openai/gpt-5-mini", description: "" },
   ]),
+  LOCAL_FALLBACK_MODELS: [
+    { id: "openai/gpt-5", description: "" },
+    { id: "anthropic/claude-opus-4.6", description: "" },
+    { id: "openai/gpt-5-mini", description: "" },
+  ],
 }));
 
 describe("ModelSelector", () => {
