@@ -251,6 +251,7 @@ export function detectLanguage(text: string): { lang: string; name: string } | n
 }
 
 const MODEL_LABELS: Record<string, string> = {
+  "nvidia/nemotron-3-super-120b-a12b:free": "Nemotron 3 Super 120B (Free)",
   "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
   "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B",
   "deepseek/deepseek-v3.2": "DeepSeek V3.2",
@@ -626,8 +627,11 @@ export const POST = async (req: Request) => {
           let fallbackReason = routeReason;
           let found = false;
 
-          // Try all models in order if 404 (no endpoint found)
-          if (status === 404 && /No endpoints found|No models match/i.test(err)) {
+          // Try all models in order if 404 (no endpoint found) or 5xx (server error on a free model)
+          if (
+            (status === 404 && /No endpoints found|No models match/i.test(err)) ||
+            (status >= 500 && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free"))
+          ) {
             const fallbackList = getModelFallbackList();
             for (const modelId of fallbackList) {
               safeEnqueue(`data: ${JSON.stringify({ status: `Model ${triedModels.at(-1)} unavailable, trying ${modelId}...` })}\n\n`);

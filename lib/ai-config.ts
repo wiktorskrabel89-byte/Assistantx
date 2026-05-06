@@ -106,6 +106,11 @@ export const CHAT_MODELS: ModelOption[] = [
 export const CODE_MODELS: ModelOption[] = [
   // Only include models referenced in RECOMMENDED_CODING_MODELS or as free fallbacks
   {
+    id: "nvidia/nemotron-3-super-120b-a12b:free",
+    label: "Nemotron 3 Super (Free)",
+    description: "NVIDIA's best free code model.",
+  },
+  {
     id: "openai/gpt-oss-120b:free",
     label: "GPT OSS 120B (Free)",
     description: "Free OpenAI open-source 120B coding model.",
@@ -235,6 +240,7 @@ export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
+  { id: "coding-nemotron-super-free", label: "Nemotron 3 Super (Free)", modelId: "nvidia/nemotron-3-super-120b-a12b:free", costTier: "free" },
   { id: "coding-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
   { id: "coding-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
   // Locked/paid models below
@@ -259,7 +265,7 @@ export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
 export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
 export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.1";
 
-export const FREE_CODING_MODEL = "openai/gpt-oss-120b:free";
+export const FREE_CODING_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 /**
@@ -268,6 +274,7 @@ export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
  */
 export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
+  "nvidia/nemotron-3-super-120b-a12b:free": "free",
   "meta-llama/llama-3.3-70b-instruct:free": "free",
   "google/gemini-2.0-flash-exp:free": "free",
   "mistralai/mistral-small-3.1-24b-instruct:free": "free",
@@ -415,6 +422,7 @@ export const TOP_FREE_CHAT_MODELS = [
   "minimax/minimax-m2.5:free",
 ];
 export const TOP_FREE_CODE_MODELS = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
   "openai/gpt-oss-120b:free",
   "minimax/minimax-m2.5:free",
   "meta-llama/llama-3.3-70b-instruct:free",
@@ -460,6 +468,7 @@ export const REASONING_MODEL_IDS: string[] = [
   "deepseek/deepseek-r1",
   "deepseek/deepseek-v3.2",
   "moonshotai/kimi-k2-thinking",
+  "nvidia/nemotron-3-super-120b-a12b:free",
   "minimax/minimax-m2.5:free",
   "z-ai/glm-4.5-air:free",
   "perplexity/sonar",
