@@ -194,3 +194,110 @@ describe("POST /api/chat — 5xx free-model retry cascade", () => {
   });
 });
 
+
+describe("POST /api/chat — web_search tool routes to Perplexity", () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("uses perplexity/sonar when enabledTools includes web_search", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "What happened today?",
+      mode: "chat",
+      enabledTools: ["web_search"],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).toBe("perplexity/sonar");
+  });
+
+  it("does NOT use perplexity/sonar when enabledTools does not include web_search", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Hello there",
+      mode: "chat",
+      enabledTools: [],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).not.toBe("perplexity/sonar");
+  });
+});
+
+describe("POST /api/chat — unauthenticated user uses client history", () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("includes client-supplied history in messages when unauthenticated and conversationId is present", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Wiktor" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "What is my name?",
+      mode: "chat",
+      conversationId: "conv-123",
+      history: [{ user: "my name is wiktor", ai: "Nice to meet you, Wiktor!" }],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    // History should include the prior exchange
+    const userMessages = calledBody.messages.filter((m) => m.role === "user");
+    const assistantMessages = calledBody.messages.filter((m) => m.role === "assistant");
+    expect(userMessages.some((m) => m.content === "my name is wiktor")).toBe(true);
+    expect(assistantMessages.some((m) => m.content === "Nice to meet you, Wiktor!")).toBe(true);
+  });
+});
