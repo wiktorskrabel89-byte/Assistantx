@@ -25,6 +25,7 @@ type ModelSelectorProps = {
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false, thinkingEffort = "Medium", onThinkingEffortChange, appMode, downModelIds }: ModelSelectorProps) {
   const modelListId = useId();
   const lockedDescId = useId();
+  const moreModelsId = useId();
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const isAuto = preferredModelId === null;
@@ -56,7 +57,7 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   const freeModels = visibleModels.filter((m) => !isModelPremiumOnly(m.id));
   const premiumModels = visibleModels.filter((m) => isModelPremiumOnly(m.id));
 
-  const renderModelButton = (model: { id: string; label: string; description: string }) => {
+  const renderModelButton = (model: { id: string; description: string }) => {
     const requiresProPlus = isModelProPlusOnly(model.id);
     const requiresPremium = isModelPremiumOnly(model.id);
     // Down-model tracking only applies to free models.
