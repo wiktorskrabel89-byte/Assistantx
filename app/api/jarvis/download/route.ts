@@ -1,5 +1,8 @@
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
+
+const BUILD_COMMAND =
+  "cd jarvis/desktop && npm install && npm run dist:win:all && npm run publish:download";
 
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
@@ -13,19 +16,20 @@ export async function GET(request: Request): Promise<Response> {
     `JarvisSetup-${arch}.exe`,
   );
 
-  if (!fs.existsSync(filePath)) {
+  try {
+    await fs.access(filePath);
+  } catch {
     return Response.json(
       {
         error: "Installer not yet available",
         arch,
-        instructions:
-          "Build the installer first: cd jarvis/desktop && npm install && npm run dist:win:all && npm run publish:download",
+        instructions: `Build the installer first: ${BUILD_COMMAND}`,
       },
       { status: 503 },
     );
   }
 
-  const fileBuffer = fs.readFileSync(filePath);
+  const fileBuffer = await fs.readFile(filePath);
 
   return new Response(fileBuffer, {
     headers: {

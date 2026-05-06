@@ -73,7 +73,7 @@ try {
     Write-Host "" -ForegroundColor White
     Write-Host "Possible causes:" -ForegroundColor White
     Write-Host "  - The server at the base URL is not running." -ForegroundColor White
-    Write-Host "  - The installer has not been built yet. Run: npm run dist:win:all && npm run publish:download" -ForegroundColor White
+    Write-Host "  - The installer has not been built yet. Run: cd jarvis/desktop && npm install && npm run dist:win:all && npm run publish:download" -ForegroundColor White
     Write-Host "  - Set the correct URL via -DownloadUrl or the JARVIS_BASE_URL environment variable." -ForegroundColor White
     exit 1
 }
