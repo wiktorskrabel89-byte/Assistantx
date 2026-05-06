@@ -303,6 +303,8 @@ export function AppNavigationColumn({
             <div className={`flex items-center gap-2 border-b px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
               <Search className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
               <input
+                id="apps-search-desktop"
+                name="appsSearchDesktop"
                 value={appsSearch}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
                 placeholder="Szukaj aplikacji..."
@@ -653,6 +655,8 @@ export function AppNavigationColumn({
             <div className={`flex items-center gap-2 border-b px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
               <Search className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
               <input
+                id="apps-search-mobile"
+                name="appsSearchMobile"
                 value={appsSearch}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
                 placeholder="Szukaj aplikacji..."
