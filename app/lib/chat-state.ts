@@ -218,6 +218,13 @@ export function formatCloudSyncError(status: number, data: unknown, fallbackMess
     };
   }
 
+  if (status === 503 || payload.code === "workspace_sync_not_configured") {
+    return {
+      status: "local" as const,
+      message: "Cloud sync is not configured. Workspace changes stay local.",
+    };
+  }
+
   return {
     status: "error" as const,
     message: payload.hint ? `${payload.error ?? fallbackMessage} ${payload.hint}` : (payload.error ?? fallbackMessage),
