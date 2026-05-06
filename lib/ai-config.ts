@@ -77,11 +77,6 @@ export const CHAT_MODELS: ModelOption[] = [
     description: "Free MiniMax general-purpose model.",
   },
   {
-    id: "google/gemini-2.0-flash-exp:free",
-    label: "Gemini 2.0 Flash (Free)",
-    description: "Fast free chat model.",
-  },
-  {
     id: "openai/gpt-5.1",
     label: "GPT-5.1",
     description: "Standard OpenAI chat model.",
@@ -114,16 +109,6 @@ export const CODE_MODELS: ModelOption[] = [
     id: "minimax/minimax-m2.5:free",
     label: "MiniMax M2.5 (Free)",
     description: "Free MiniMax model for code tasks.",
-  },
-  {
-    id: "qwen/qwen3-235b-a22b:free",
-    label: "Qwen 3 235B (Free)",
-    description: "Large open model for code tasks.",
-  },
-  {
-    id: "mistralai/mistral-small-3.1-24b-instruct:free",
-    label: "Mistral Small 3.1 (Free)",
-    description: "Strong free model for chat and code.",
   },
   {
     id: "anthropic/claude-opus-4.6",
@@ -277,10 +262,7 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "openai/gpt-oss-120b:free": "free",
   "minimax/minimax-m2.5:free": "free",
   "z-ai/glm-4.5-air:free": "free",
-  "google/gemini-2.0-flash-exp:free": "free",
   "nvidia/nemotron-3-super-120b-a12b:free": "free",
-  "qwen/qwen3-235b-a22b:free": "free",
-  "mistralai/mistral-small-3.1-24b-instruct:free": "free",
   // Cheap models — fast, low cost per token
   "google/gemini-2.5-flash-lite": "cheap",
   "google/gemini-3-flash-preview": "cheap",

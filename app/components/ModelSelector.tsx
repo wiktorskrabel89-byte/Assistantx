@@ -47,17 +47,17 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   const sectionLabel = `text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`;
 
   // Filter the visible model list based on the current app mode
-  const visibleModels: { id: string; description: string }[] =
+  const visibleModels: { id: string; label: string; description: string }[] =
     appMode === "ai-chat"
-      ? CHAT_MODELS.map((m) => ({ id: m.id, description: m.description }))
+      ? CHAT_MODELS.map((m) => ({ id: m.id, label: m.label, description: m.description }))
       : appMode === "ai-code"
-        ? CODE_MODELS.map((m) => ({ id: m.id, description: m.description }))
+        ? CODE_MODELS.map((m) => ({ id: m.id, label: m.label, description: m.description }))
         : ALL_MODELS;
 
   const freeModels = visibleModels.filter((m) => !isModelPremiumOnly(m.id));
   const premiumModels = visibleModels.filter((m) => isModelPremiumOnly(m.id));
 
-  const renderModelButton = (model: { id: string; description: string }) => {
+  const renderModelButton = (model: { id: string; label: string; description: string }) => {
     const requiresProPlus = isModelProPlusOnly(model.id);
     const requiresPremium = isModelPremiumOnly(model.id);
     // Down-model tracking only applies to free models.
@@ -66,22 +66,22 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
       ? !isProPlus
       : requiresPremium && !isPremium);
     const lockReason = isDown
-      ? `${model.id} is currently unreachable — will retry automatically after 2 hours`
+      ? `${model.label} is currently unreachable — will retry automatically after 2 hours`
       : requiresProPlus
-        ? `Pro+ plan required for ${model.id}`
-        : `Pro plan required for ${model.id}`;
+        ? `Pro+ plan required for ${model.label}`
+        : `Pro plan required for ${model.label}`;
     return (
       <button
         key={model.id}
         type="button"
         onClick={() => !locked && onSelectModel(model.id)}
         className={`${pillBase} ${isDown ? pillDown : locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
-        title={locked ? lockReason : `Use ${model.id}`}
-        aria-label={isDown ? `${model.id} — model down` : undefined}
+        title={locked ? lockReason : `Use ${model.label}`}
+        aria-label={isDown ? `${model.label} — model down` : undefined}
         disabled={locked}
       >
         {isDown ? <AlertTriangle className="h-3 w-3 text-orange-400" /> : locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-        {model.id}
+        {model.label}
         {isDown && <span className="ml-1 text-[10px] font-semibold uppercase text-orange-400">Down</span>}
         {!isDown && requiresProPlus && <Crown className="h-3 w-3 text-purple-400" aria-label="Pro+ exclusive" />}
         {model.description ? <span className="ml-1 text-xs text-slate-400">{model.description}</span> : null}
