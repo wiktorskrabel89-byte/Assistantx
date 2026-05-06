@@ -1,6 +1,29 @@
 "use client";
 
 export default function JarvisTab() {
+  async function downloadForWindows() {
+    let arch = "x64";
+    try {
+      const nav = navigator as Navigator & {
+        userAgentData?: {
+          getHighEntropyValues: (hints: string[]) => Promise<{ architecture?: string }>;
+        };
+      };
+      if (nav.userAgentData) {
+        const data = await nav.userAgentData.getHighEntropyValues(["architecture"]);
+        if (data.architecture === "arm") arch = "arm64";
+      }
+    } catch {
+      // fall back to x64
+    }
+    const a = document.createElement("a");
+    a.href = `/jarvis/JarvisSetup-${arch}.exe`;
+    a.download = `JarvisSetup-${arch}.exe`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6">
@@ -24,21 +47,14 @@ export default function JarvisTab() {
           <div className="mt-7 grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <button
-                disabled
-                className="inline-flex cursor-not-allowed items-center justify-center rounded-xl bg-gradient-to-r from-sky-300 to-cyan-300 px-5 py-3 text-sm font-semibold text-white/80 shadow-sm opacity-60"
-                title="Windows installer coming soon"
+                onClick={downloadForWindows}
+                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                title="Download Jarvis for Windows"
               >
-                <span>Download for Windows (x64)</span>
+                <span>Download for Windows</span>
               </button>
-              <button
-                disabled
-                className="inline-flex cursor-not-allowed items-center justify-center rounded-xl bg-gradient-to-r from-sky-300 to-cyan-300 px-5 py-3 text-sm font-semibold text-white/80 shadow-sm opacity-60"
-                title="Windows installer coming soon"
-              >
-                <span>Download for Windows (ARM64)</span>
-              </button>
-              <p className="text-center text-[11px] font-medium text-amber-600">
-                🚧 Windows installer not yet available — coming soon
+              <p className="text-center text-[11px] font-medium text-green-600">
+                ✅ Auto-detects x64 or ARM64
               </p>
             </div>
 
