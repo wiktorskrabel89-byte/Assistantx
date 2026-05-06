@@ -668,8 +668,10 @@ export const POST = async (req: Request) => {
               }
             }
             if (!found) {
-              throw new Error(`OpenRouter error 404: No available models. Tried: ${triedModels.join(", ")}. Last error: ${err}`);
+              throw new Error(`OpenRouter error ${status}: No available models. Tried: ${triedModels.join(", ")}. Last error: ${err}`);
             }
+            // Propagate the updated reason so the client sees the correct fallback info
+            effectiveRouteReason = fallbackReason;
           } else {
             // Credits fallback or other error
             const shouldAutoRouterFallback = isAutoRouted && status === 404 && /No models match your request and model restrictions/i.test(err);

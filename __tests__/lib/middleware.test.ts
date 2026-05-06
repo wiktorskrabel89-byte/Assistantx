@@ -98,7 +98,7 @@ describe("updateSession", () => {
     expect(csp).toMatch(/'nonce-[A-Za-z0-9+/]+=*'/);
   });
 
-  it("propagates the nonce via the x-nonce request header", async () => {
+  it("nonce in CSP is a non-empty base64 string", async () => {
     mockGetClaims.mockResolvedValue({
       data: { claims: { sub: "user-id-123" } },
     });

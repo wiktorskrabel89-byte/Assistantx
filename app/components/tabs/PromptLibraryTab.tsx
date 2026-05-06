@@ -269,6 +269,8 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
               <input
                 ref={fileInputRef}
                 type="file"
+                id="prompt-library-file"
+                name="promptLibraryFile"
                 accept=".txt,.md,.markdown,.prompt,.text"
                 className="hidden"
                 onChange={handleFileUpload}
@@ -422,6 +424,8 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
                 <div>
                   <label className={labelClass}>Nazwa szablonu</label>
                   <input
+                    id="new-prompt-name"
+                    name="newPromptName"
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
@@ -432,6 +436,8 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
                 <div className="flex flex-1 flex-col">
                   <label className={labelClass}>Treść szablonu</label>
                   <textarea
+                    id="new-prompt-content"
+                    name="newPromptContent"
                     rows={14}
                     value={newContent}
                     onChange={(e) => setNewContent(e.target.value)}
@@ -475,6 +481,8 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
                 <div>
                   <label className={labelClass}>Nazwa szablonu</label>
                   <input
+                    id="edit-prompt-name"
+                    name="editPromptName"
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
@@ -484,6 +492,8 @@ export function PromptLibraryTab({ dark }: { dark: boolean }) {
                 <div className="flex flex-1 flex-col">
                   <label className={labelClass}>Treść szablonu</label>
                   <textarea
+                    id="edit-prompt-content"
+                    name="editPromptContent"
                     rows={14}
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}

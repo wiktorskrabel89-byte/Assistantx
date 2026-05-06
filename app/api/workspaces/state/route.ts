@@ -92,10 +92,17 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
 async function getAuthenticatedUser() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
-  // Auth errors (expired session, invalid JWT, missing session) must not be
-  // re-thrown here: the calling handler already returns 401 when user is null,
-  // and throwing would cause buildWorkspaceSyncError to emit a misleading 500.
-  if (error || !data.user) return { supabase, user: null };
+  if (error) {
+    // Swallow expected auth errors (expired session, invalid JWT, missing session — typically
+    // status 401/403). Re-throw unexpected operational failures so buildWorkspaceSyncError
+    // can surface an appropriate 5xx instead of silently converting them into 401s.
+    const status = typeof error === "object" && error !== null && "status" in error
+      ? (error as { status: unknown }).status
+      : undefined;
+    if (typeof status === "number" && status !== 401 && status !== 403) throw error;
+    return { supabase, user: null };
+  }
+  if (!data.user) return { supabase, user: null };
   return { supabase, user: data.user };
 }
 
