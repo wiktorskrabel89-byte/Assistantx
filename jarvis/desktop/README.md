@@ -19,20 +19,32 @@ npm run dev
 
 ## Budowanie instalatora Windows
 
+Obsługiwane architektury: **x64** (Intel/AMD) i **ARM64** (np. Snapdragon, Surface Pro X).
+
 ```bash
 npm install
+
+# tylko x64
 npm run dist:win
+
+# tylko ARM64
+npm run dist:win:arm64
+
+# obie architektury jednocześnie (zalecane)
+npm run dist:win:all
 ```
 
-Polecenie tworzy instalator `JarvisSetup.exe` w katalogu `dist/` przy użyciu `electron-builder` i targetu `nsis`.
+Polecenia tworzą pliki `JarvisSetup-x64.exe` i/lub `JarvisSetup-arm64.exe` w katalogu `dist/` przy użyciu `electron-builder` i targetu `nsis`.
 
-Jeśli chcesz od razu podmienić plik pobierany przez aplikację webową w `public/jarvis/JarvisSetup.exe`, uruchom:
+> **Uwaga:** Budowanie instalatora `.exe` działa najlepiej na Windows. Na Linux może wymagać Wine lub działać z ograniczeniami.
+
+Jeśli chcesz od razu skopiować gotowe instalatory do katalogu publicznego aplikacji Next.js (`public/jarvis/`), uruchom:
 
 ```bash
 npm run dist:win:public
 ```
 
-Skrypt `publish:download` kopiuje gotowy instalator do katalogu publicznego aplikacji Next.js.
+Skrypt `publish:download` kopiuje `JarvisSetup-x64.exe` i `JarvisSetup-arm64.exe` do `public/jarvis/`.
 
 ## Bootstrap PowerShell
 
@@ -44,7 +56,11 @@ Przykład uruchomienia:
 powershell -ExecutionPolicy Bypass -File .\scripts\JarvisSystemSetup.ps1
 ```
 
-Domyślnie skrypt pobiera instalator z `http://127.0.0.1:3000/jarvis/JarvisSetup.exe`, czyli z aktualnego endpointu pobierania tej aplikacji webowej. Możesz to nadpisać przez `-DownloadUrl` albo zmienną środowiskową `JARVIS_DOWNLOAD_URL`.
+Skrypt **automatycznie wykrywa architekturę CPU** (`$env:PROCESSOR_ARCHITECTURE`) i pobiera odpowiedni instalator:
+- `AMD64` → `JarvisSetup-x64.exe`
+- `ARM64` → `JarvisSetup-arm64.exe`
+
+Domyślnie instalatory są pobierane z `http://127.0.0.1:3000/jarvis/`. Możesz zmienić bazowy URL przez zmienną środowiskową `JARVIS_BASE_URL` lub podać jawny URL przez `-DownloadUrl`.
 
 Skrypt zakłada, że aplikacja po instalacji będzie nazywać się `Jarvis.exe`, co jest zgodne z `productName: "Jarvis"` w konfiguracji `electron-builder`.
 
@@ -52,9 +68,10 @@ Opcjonalne przełączniki:
 
 - `-ApplyPowerTweaks` wyłącza Fast Startup i hibernację.
 - `-SkipAutostart` pomija utworzenie skrótu autostartu.
-- `-DownloadUrl` pozwala wskazać publiczny adres instalatora, jeśli nie używasz lokalnego serwera na porcie 3000.
+- `-DownloadUrl` pozwala wskazać dokładny URL instalatora (pomija auto-detekcję architektury).
+- `-BaseUrl` pozwala zmienić bazowy URL, z którego wybierany jest instalator wg architektury.
 
-Jest to zewnętrzny bootstrapper Windows. Nie jest uruchamiany przez sam instalator NSIS, tylko pobiera i odpala wygenerowany `JarvisSetup.exe` w trybie silent.
+Jest to zewnętrzny bootstrapper Windows. Nie jest uruchamiany przez sam instalator NSIS, tylko pobiera i odpala wygenerowany plik `.exe` w trybie silent.
 
 ## Stan integracji z kodem Jarvis
 

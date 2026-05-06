@@ -1,11 +1,22 @@
 param(
-    [string]$DownloadUrl = $(if ($env:JARVIS_DOWNLOAD_URL) { $env:JARVIS_DOWNLOAD_URL } else { "http://127.0.0.1:3000/jarvis/JarvisSetup.exe" }),
+    [string]$DownloadUrl = "",
+    [string]$BaseUrl = $(if ($env:JARVIS_BASE_URL) { $env:JARVIS_BASE_URL } else { "http://127.0.0.1:3000/jarvis" }),
     [string]$InstallDir = "$env:ProgramFiles\Jarvis",
     [string]$SetupFileName = "JarvisSetup.exe",
     [string]$AppName = "Jarvis.exe",
     [switch]$ApplyPowerTweaks,
     [switch]$SkipAutostart
 )
+
+# Auto-detect CPU architecture and pick the right installer when no explicit URL is given
+if ([string]::IsNullOrWhiteSpace($DownloadUrl)) {
+    $arch = $env:PROCESSOR_ARCHITECTURE   # AMD64 or ARM64
+    if ($arch -eq "ARM64") {
+        $DownloadUrl = "$BaseUrl/JarvisSetup-arm64.exe"
+    } else {
+        $DownloadUrl = "$BaseUrl/JarvisSetup-x64.exe"
+    }
+}
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ErrorActionPreference = "Stop"
@@ -29,7 +40,7 @@ if (-not (Test-IsAdministrator)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($DownloadUrl)) {
-    Write-Host "ERROR: Set -DownloadUrl or JARVIS_DOWNLOAD_URL before running." -ForegroundColor Red
+    Write-Host "ERROR: Could not determine download URL. Set -DownloadUrl or JARVIS_BASE_URL before running." -ForegroundColor Red
     exit 1
 }
 
@@ -37,6 +48,8 @@ Clear-Host
 Write-Host "----------------------------------------------" -ForegroundColor Cyan
 Write-Host "     JARVIS SYSTEM SETUP - AUTOMATED FLOW     " -ForegroundColor Cyan
 Write-Host "----------------------------------------------" -ForegroundColor Cyan
+Write-Host "Detected architecture : $($env:PROCESSOR_ARCHITECTURE)" -ForegroundColor DarkCyan
+Write-Host "Installer URL         : $DownloadUrl" -ForegroundColor DarkCyan
 
 if (-not (Test-Path $InstallDir)) {
     New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
