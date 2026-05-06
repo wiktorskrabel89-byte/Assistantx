@@ -53,9 +53,9 @@ describe("ModelSelector", () => {
   it("renders local models as buttons after expanding (no async loading)", () => {
     // Premium users see premium models up front; expand More models to see free ones
     openSelector();
-    expect(screen.getByRole("button", { name: /anthropic\/claude-opus-4\.6/i })).toBeInTheDocument();
-    // openai/gpt-5.1 is a premium model (standard tier), also visible up front
-    expect(screen.getByRole("button", { name: /openai\/gpt-5\.1/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Claude Opus 4\.6/i })).toBeInTheDocument();
+    // GPT-5.1 is a premium model (standard tier), also visible up front
+    expect(screen.getByRole("button", { name: /GPT-5\.1/i })).toBeInTheDocument();
   });
 
   it("premium users see premium models up front and free models behind More models", () => {
@@ -63,9 +63,9 @@ describe("ModelSelector", () => {
     // Premium section label visible
     expect(screen.getByText(/premium models/i)).toBeInTheDocument();
     // A premium model visible directly
-    expect(screen.getByRole("button", { name: /anthropic\/claude-opus-4\.6/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Claude Opus 4\.6/i })).toBeInTheDocument();
     // Free models NOT shown directly
-    expect(screen.queryByRole("button", { name: /meta-llama\/llama-3\.3-70b-instruct:free/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Llama 3\.3 70B/i })).not.toBeInTheDocument();
     // "More models" toggle is shown
     expect(screen.getByRole("button", { name: /more models/i })).toBeInTheDocument();
   });
@@ -73,12 +73,12 @@ describe("ModelSelector", () => {
   it("premium users can expand More models to see free models", () => {
     openSelector({ isPremium: true });
     fireEvent.click(screen.getByRole("button", { name: /more models/i }));
-    expect(screen.getByRole("button", { name: /meta-llama\/llama-3\.3-70b-instruct:free/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Llama 3\.3 70B/i })).toBeInTheDocument();
   });
 
   it("calls onSelectModel with the model id when a model button is clicked", () => {
     const { onSelectModel } = openSelector();
-    fireEvent.click(screen.getByRole("button", { name: /openai\/gpt-5\.1/i }));
+    fireEvent.click(screen.getByRole("button", { name: /GPT-5\.1/i }));
     expect(onSelectModel).toHaveBeenCalledWith("openai/gpt-5.1");
   });
 
@@ -87,9 +87,9 @@ describe("ModelSelector", () => {
     // Free section label visible
     expect(screen.getByText(/free models/i)).toBeInTheDocument();
     // A free model is visible
-    expect(screen.getByRole("button", { name: /meta-llama\/llama-3\.3-70b-instruct:free/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Llama 3\.3 70B/i })).toBeInTheDocument();
     // Premium models are NOT shown directly
-    expect(screen.queryByRole("button", { name: /anthropic\/claude-opus-4\.6/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Claude Opus 4\.6/i })).not.toBeInTheDocument();
     // "More models" toggle is shown
     expect(screen.getByRole("button", { name: /more models/i })).toBeInTheDocument();
   });
@@ -97,7 +97,7 @@ describe("ModelSelector", () => {
   it("free users can expand More models to see premium models (locked)", () => {
     openSelector({ isPremium: false });
     fireEvent.click(screen.getByRole("button", { name: /more models/i }));
-    const lockedBtn = screen.getByRole("button", { name: /anthropic\/claude-opus-4\.6/i });
+    const lockedBtn = screen.getByRole("button", { name: /Claude Opus 4\.6/i });
     expect(lockedBtn).toBeInTheDocument();
     expect(lockedBtn).toBeDisabled();
   });
@@ -144,10 +144,10 @@ describe("ModelSelector", () => {
   });
 
   it("locked models are disabled and do not call onSelectModel", () => {
-    // claude-opus-4.6 is a premium model, locked for non-premium users; expand More models first
+    // Claude Opus 4.6 is a premium model, locked for non-premium users; expand More models first
     const { onSelectModel } = openSelector({ isPremium: false });
     fireEvent.click(screen.getByRole("button", { name: /more models/i }));
-    const lockedBtn = screen.getByRole("button", { name: /claude-opus-4\.6/i });
+    const lockedBtn = screen.getByRole("button", { name: /claude opus 4\.6/i });
     expect(lockedBtn).toBeDisabled();
     fireEvent.click(lockedBtn);
     expect(onSelectModel).not.toHaveBeenCalled();

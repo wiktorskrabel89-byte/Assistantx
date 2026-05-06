@@ -39,7 +39,7 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
   const freeModels = ALL_MODELS.filter((m) => !isModelPremiumOnly(m.id));
   const premiumModels = ALL_MODELS.filter((m) => isModelPremiumOnly(m.id));
 
-  const renderModelButton = (model: { id: string; description: string }) => {
+  const renderModelButton = (model: { id: string; label: string; description: string }) => {
     const requiresProPlus = isModelProPlusOnly(model.id);
     const requiresPremium = isModelPremiumOnly(model.id);
     const locked = requiresProPlus
@@ -53,11 +53,11 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
         key={model.id}
         onClick={() => !locked && onSelectModel(model.id)}
         className={`${pillBase} ${locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
-        title={locked ? lockReason : `Use ${model.id}`}
+        title={locked ? lockReason : `Use ${model.label}`}
         disabled={locked}
       >
         {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-        {model.id}
+        {model.label}
         {requiresProPlus && <Crown className="h-3 w-3 text-purple-400" aria-label="Pro+ exclusive" />}
         {model.description ? <span className="ml-1 text-xs text-slate-400">{model.description}</span> : null}
       </button>

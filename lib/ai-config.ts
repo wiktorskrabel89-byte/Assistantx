@@ -179,13 +179,13 @@ export const SEARCH_MODELS: ModelOption[] = [
  * Deduplicated list of all locally curated models (chat + code + search).
  * Used by the ModelSelector and other UI components instead of fetching from OpenRouter.
  */
-export const ALL_MODELS: { id: string; description: string }[] = (() => {
+export const ALL_MODELS: { id: string; label: string; description: string }[] = (() => {
   const seen = new Set<string>();
   return [...CHAT_MODELS, ...CODE_MODELS, ...SEARCH_MODELS].filter((m) => {
     if (seen.has(m.id)) return false;
     seen.add(m.id);
     return true;
-  }).map((m) => ({ id: m.id, description: m.description }));
+  }).map((m) => ({ id: m.id, label: m.label, description: m.description }));
 })();
 
 export const LANGUAGE_OPTIONS: LanguageOption[] = [
