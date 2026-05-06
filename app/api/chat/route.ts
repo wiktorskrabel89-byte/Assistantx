@@ -340,8 +340,16 @@ export const POST = async (req: Request) => {
     googleContext,
   } = await req.json();
 
+  // Detect "websearch" trigger word at the very start of the message (any case).
+  // When present, strip it so the model receives a clean prompt.
+  const websearchTrigger = /^websearch\s*/i.test(typeof message === "string" ? message : "");
+  const effectiveMessage: string = websearchTrigger && typeof message === "string"
+    ? message.replace(/^websearch\s*/i, "").trim()
+    : (typeof message === "string" ? message : "");
+
   // Override addInternetContext if the workspace has web_search tool enabled
   const effectiveAddInternetContext: boolean = addInternetContext ||
+    websearchTrigger ||
     (Array.isArray(enabledTools) && enabledTools.includes("web_search"));
 
   // Merge any Claude models from the local curated list that aren't already in allowedModels
@@ -408,6 +416,8 @@ export const POST = async (req: Request) => {
   // When the web_search tool is enabled, treat the request as search mode so Perplexity
   // Sonar (which has real internet access) is used instead of a plain text instruction.
   const toolWebSearchEnabled = Array.isArray(enabledTools) && enabledTools.includes("web_search");
+  // "websearch" prefix trigger forces search mode but keeps the user's selected model
+  // (web browsing is added via the OpenRouter web plugin instead of switching to Perplexity).
   const effectiveRawMode = toolWebSearchEnabled ? "search" : rawMode;
 
   const fallbackModel = effectiveRawMode === "search"
@@ -423,10 +433,10 @@ export const POST = async (req: Request) => {
       : costControlled.modelId;
 
   // Determine if this is a search/DeepSeek/Gemini request for system prompt selection
-  const isSearchMode = effectiveRawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
+  const isSearchMode = websearchTrigger || effectiveRawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
-  const detected = detectLanguage(message);
+  const detected = detectLanguage(effectiveMessage);
   const languageName = languageLock !== "auto"
     ? (LANGUAGE_NAMES[languageLock] ?? "English")
     : (detected?.name ?? "English");
@@ -466,7 +476,7 @@ export const POST = async (req: Request) => {
   const costDowngradeNote = costControlled.downgraded ? ` (downgraded by ${costMode} cost mode)` : "";
   const planDowngradeNote = (modelId && planEnforcedModelId !== modelId) ? " (switched to free model — premium plan required)" : "";
   const routeReason = isSearchMode
-    ? (toolWebSearchEnabled ? "Web Search tool active — using search model with internet access" : (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model"))
+    ? (websearchTrigger && !toolWebSearchEnabled ? `Web search triggered by "websearch" prefix — browsing the web with ${MODEL_LABELS[selectedModel] ?? selectedModel}` : toolWebSearchEnabled ? "Web Search tool active — using search model with internet access" : (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model"))
     : isAutoRouted
       ? rawMode === "code"
         ? `Auto router choosing the best coding model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
@@ -585,9 +595,15 @@ export const POST = async (req: Request) => {
     messages: [
       { role: "system", content: systemPrompt },
       ...historyMessages,
-      { role: "user", content: message },
+      { role: "user", content: effectiveMessage },
     ],
   };
+
+  // When the "websearch" prefix was used, ask OpenRouter to add live web browsing
+  // to whichever model the user has selected (works for any model via the web plugin).
+  if (websearchTrigger && !toolWebSearchEnabled) {
+    requestBody.plugins = [{ id: "web" }];
+  }
 
   // Only send reasoning_level if the selected model explicitly supports it.
   // Use exact ID match to avoid false positives from substring matching.
