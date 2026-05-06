@@ -16,64 +16,88 @@ describe("ModelSelector", () => {
     return { ...utils, onSelectModel };
   }
 
+  function openSelector(overrides: Partial<Parameters<typeof ModelSelector>[0]> = {}) {
+    const result = renderSelector(overrides);
+    fireEvent.click(screen.getByRole("button", { name: "Pokaż wybór modelu" }));
+    return result;
+  }
 
-  it("renders the toggle button expanded by default", () => {
+  it("renders the toggle button collapsed by default", () => {
     renderSelector();
-    expect(screen.getByRole("button", { name: "Ukryj wybór modelu" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pokaż wybór modelu" })).toBeInTheDocument();
   });
 
-  it("shows Auto button when expanded by default", () => {
-    renderSelector();
+  it("shows Auto button after expanding", () => {
+    openSelector();
     expect(screen.getByRole("button", { name: /Auto/i })).toBeInTheDocument();
   });
 
   it("Auto button is active (has blue class) when preferredModelId is null", () => {
-    renderSelector({ preferredModelId: null });
+    openSelector({ preferredModelId: null });
     const autoButton = screen.getByRole("button", { name: /Auto/i });
     expect(autoButton.className).toContain("blue");
   });
 
   it("Auto button is inactive when a model is selected", () => {
-    // Use a model that exists in ALL_MODELS
-    renderSelector({ preferredModelId: "openai/gpt-5.1" });
+    openSelector({ preferredModelId: "openai/gpt-5.1" });
     const autoButton = screen.getByRole("button", { name: /Auto/i });
     expect(autoButton.className).not.toContain("blue-950");
   });
 
   it("calls onSelectModel(null) when Auto is clicked", () => {
-    const { onSelectModel } = renderSelector({ preferredModelId: "openai/gpt-5.1" });
+    const { onSelectModel } = openSelector({ preferredModelId: "openai/gpt-5.1" });
     fireEvent.click(screen.getByRole("button", { name: /Auto/i }));
     expect(onSelectModel).toHaveBeenCalledWith(null);
   });
 
-  it("renders local models as buttons immediately (no async loading)", () => {
-    renderSelector();
-    // These models are in ALL_MODELS (from lib/ai-config)
+  it("renders local models as buttons after expanding (no async loading)", () => {
+    // Premium users see all models
+    openSelector();
     expect(screen.getByRole("button", { name: /anthropic\/claude-opus-4\.6/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /openai\/gpt-5\.1/i })).toBeInTheDocument();
   });
 
   it("calls onSelectModel with the model id when a model button is clicked", () => {
-    const { onSelectModel } = renderSelector();
+    const { onSelectModel } = openSelector();
     fireEvent.click(screen.getByRole("button", { name: /openai\/gpt-5\.1/i }));
     expect(onSelectModel).toHaveBeenCalledWith("openai/gpt-5.1");
   });
 
-  it("collapses the list when toggle is clicked", () => {
-    renderSelector();
+  it("free users see only free models and a More models button after expanding", () => {
+    openSelector({ isPremium: false });
+    // Free section label visible
+    expect(screen.getByText(/free models/i)).toBeInTheDocument();
+    // A free model is visible
+    expect(screen.getByRole("button", { name: /meta-llama\/llama-3\.3-70b-instruct:free/i })).toBeInTheDocument();
+    // Premium models are NOT shown directly
+    expect(screen.queryByRole("button", { name: /anthropic\/claude-opus-4\.6/i })).not.toBeInTheDocument();
+    // "More models" toggle is shown
+    expect(screen.getByRole("button", { name: /more models/i })).toBeInTheDocument();
+  });
+
+  it("free users can expand More models to see premium models (locked)", () => {
+    openSelector({ isPremium: false });
+    fireEvent.click(screen.getByRole("button", { name: /more models/i }));
+    const lockedBtn = screen.getByRole("button", { name: /anthropic\/claude-opus-4\.6/i });
+    expect(lockedBtn).toBeInTheDocument();
+    expect(lockedBtn).toBeDisabled();
+  });
+
+  it("collapses the list when toggle is clicked again", () => {
+    openSelector();
     fireEvent.click(screen.getByRole("button", { name: "Ukryj wybór modelu" }));
     expect(screen.queryByRole("button", { name: /Auto/i })).not.toBeInTheDocument();
   });
 
-  it("re-expands when toggle is clicked again after collapsing", () => {
-    renderSelector();
+  it("re-expands when toggle is clicked after collapsing", () => {
+    openSelector();
     fireEvent.click(screen.getByRole("button", { name: "Ukryj wybór modelu" }));
     fireEvent.click(screen.getByRole("button", { name: "Pokaż wybór modelu" }));
     expect(screen.getByRole("button", { name: /Auto/i })).toBeInTheDocument();
   });
 
   it("shows Pro badge when isPremium is true and isProPlus is false", () => {
-    renderSelector({ isPremium: true });
+    openSelector({ isPremium: true });
     expect(screen.getByText("Pro")).toBeInTheDocument();
     expect(screen.queryByText("Pro+")).not.toBeInTheDocument();
   });
@@ -89,19 +113,21 @@ describe("ModelSelector", () => {
         onSelectModel={onSelectModel}
       />
     );
+    fireEvent.click(screen.getByRole("button", { name: "Pokaż wybór modelu" }));
     expect(screen.getByText("Pro+")).toBeInTheDocument();
     expect(screen.queryByText("Pro")).not.toBeInTheDocument();
   });
 
   it("hides plan badge when isPremium is false", () => {
-    renderSelector({ isPremium: false });
+    openSelector({ isPremium: false });
     expect(screen.queryByText("Pro")).not.toBeInTheDocument();
     expect(screen.queryByText("Pro+")).not.toBeInTheDocument();
   });
 
   it("locked models are disabled and do not call onSelectModel", () => {
-    // claude-opus-4.6 is a premium model, locked for non-premium users
-    const { onSelectModel } = renderSelector({ isPremium: false });
+    // claude-opus-4.6 is a premium model, locked for non-premium users; expand More models first
+    const { onSelectModel } = openSelector({ isPremium: false });
+    fireEvent.click(screen.getByRole("button", { name: /more models/i }));
     const lockedBtn = screen.getByRole("button", { name: /claude-opus-4\.6/i });
     expect(lockedBtn).toBeDisabled();
     fireEvent.click(lockedBtn);

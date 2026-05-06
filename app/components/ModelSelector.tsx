@@ -14,7 +14,8 @@ type ModelSelectorProps = {
 
 
 export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false }: ModelSelectorProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const isAuto = preferredModelId === null;
 
   const pillBase = "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none";
@@ -29,6 +30,34 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
     : "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed opacity-60";
 
   const sectionLabel = `text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`;
+
+  const freeModels = ALL_MODELS.filter((m) => !isModelPremiumOnly(m.id));
+  const premiumModels = ALL_MODELS.filter((m) => isModelPremiumOnly(m.id));
+
+  const renderModelButton = (model: { id: string; description: string }) => {
+    const requiresProPlus = isModelProPlusOnly(model.id);
+    const requiresPremium = isModelPremiumOnly(model.id);
+    const locked = requiresProPlus
+      ? !isProPlus
+      : requiresPremium && !isPremium;
+    const lockReason = requiresProPlus
+      ? `Pro+ plan required for ${model.id}`
+      : `Pro plan required for ${model.id}`;
+    return (
+      <button
+        key={model.id}
+        onClick={() => !locked && onSelectModel(model.id)}
+        className={`${pillBase} ${locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
+        title={locked ? lockReason : `Use ${model.id}`}
+        disabled={locked}
+      >
+        {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+        {model.id}
+        {requiresProPlus && <Crown className="h-3 w-3 text-purple-400" aria-label="Pro+ exclusive" />}
+        {model.description ? <span className="ml-1 text-xs text-slate-400">{model.description}</span> : null}
+      </button>
+    );
+  };
 
   return (
     <div className="w-full">
@@ -62,34 +91,37 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
             </span>
           )}
 
-          <span className={sectionLabel}>
-            <Code2 className="mr-0.5 inline h-3 w-3" />
-            All Models
-          </span>
-          {ALL_MODELS.map((model) => {
-            const requiresProPlus = isModelProPlusOnly(model.id);
-            const requiresPremium = isModelPremiumOnly(model.id);
-            const locked = requiresProPlus
-              ? !isProPlus
-              : requiresPremium && !isPremium;
-            const lockReason = requiresProPlus
-              ? `Pro+ plan required for ${model.id}`
-              : `Pro plan required for ${model.id}`;
-            return (
+          {isPremium ? (
+            <>
+              <span className={sectionLabel}>
+                <Code2 className="mr-0.5 inline h-3 w-3" />
+                All Models
+              </span>
+              {ALL_MODELS.map(renderModelButton)}
+            </>
+          ) : (
+            <>
+              <span className={sectionLabel}>
+                <Code2 className="mr-0.5 inline h-3 w-3" />
+                Free Models
+              </span>
+              {freeModels.map(renderModelButton)}
               <button
-                key={model.id}
-                onClick={() => !locked && onSelectModel(model.id)}
-                className={`${pillBase} ${locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
-                title={locked ? lockReason : `Use ${model.id}`}
-                disabled={locked}
+                className={`${pillBase} ${pillInactive}`}
+                onClick={() => setShowMore((v) => !v)}
+                aria-expanded={showMore}
+                aria-controls="more-models-list"
               >
-                {locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-                {model.id}
-                {requiresProPlus && <Crown className="h-3 w-3 text-purple-400" aria-label="Pro+ exclusive" />}
-                {model.description ? <span className="ml-1 text-xs text-slate-400">{model.description}</span> : null}
+                {showMore ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                More models
               </button>
-            );
-          })}
+              {showMore && (
+                <div id="more-models-list" className="flex flex-wrap gap-2 w-full">
+                  {premiumModels.map(renderModelButton)}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
