@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
 import type { MessageFeedback } from "../lib/chat-types";
 
@@ -19,12 +19,21 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
   const [localText, setLocalText] = useState(reviewText ?? "");
   const [expanded, setExpanded] = useState(false);
   const [saved, setSaved] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up the "Saved" timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
   const displayRating = hovered ?? rating ?? 0;
 
   function handleRatingClick(star: number) {
     if (rating === star) {
       onRatingChange(null);
+      setLocalText("");
       setExpanded(false);
     } else {
       onRatingChange(star as MessageFeedback);
@@ -32,10 +41,19 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
     }
   }
 
+  function handleToggleExpanded() {
+    const next = !expanded;
+    // Sync localText from the persisted reviewText each time the textarea is opened,
+    // so external changes (remote sync, mutations) are reflected.
+    if (next) setLocalText(reviewText ?? "");
+    setExpanded(next);
+  }
+
   function handleSave() {
     onReviewTextChange(localText.slice(0, MAX_REVIEW_LENGTH));
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setSaved(false), 2000);
   }
 
   return (
@@ -72,7 +90,7 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
         {rating ? (
           <button
             type="button"
-            onClick={() => setExpanded((v) => !v)}
+            onClick={handleToggleExpanded}
             className={`text-xs transition-colors ${
               dark
                 ? "text-slate-400 hover:text-slate-200"
@@ -95,6 +113,7 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
             onChange={(e) => setLocalText(e.target.value)}
             placeholder="Napisz komentarz (opcjonalnie)..."
             rows={3}
+            maxLength={MAX_REVIEW_LENGTH}
             className={`w-full resize-none rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
               dark
                 ? "border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500 focus:border-sky-600"

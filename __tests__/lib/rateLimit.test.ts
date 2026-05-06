@@ -76,7 +76,7 @@ describe("checkRateLimit", () => {
 
     // Fill a short-window key so it becomes stale quickly.
     const staleKey = freshKey("prune");
-    checkRateLimit(staleKey, 1, 1_000); // 1-second window
+    checkRateLimit(staleKey, 1, 1_000); // 1-second window — now at limit
 
     // Advance time by 70 s — past both the 1-second window and the
     // 60-second prune interval so that maybePrune actually runs.
@@ -88,6 +88,14 @@ describe("checkRateLimit", () => {
     const result = checkRateLimit(freshK, 5, 60_000);
     expect(result.allowed).toBe(true);
 
+    // After pruning, staleKey's entry should be cleared: filling it once is allowed
+    // (a new 1-second window starts at t+70s), but the second immediate call is denied.
+    const after1 = checkRateLimit(staleKey, 1, 1_000);
+    expect(after1.allowed).toBe(true);
+    const after2 = checkRateLimit(staleKey, 1, 1_000);
+    expect(after2.allowed).toBe(false); // window filled by the prior call, not a stale timestamp
+    expect(after2.retryAfterMs).toBeGreaterThan(0); // must be a fresh near-future expiry
+
     jest.useRealTimers();
   });
 
@@ -98,11 +106,13 @@ describe("checkRateLimit", () => {
     const key = freshKey();
     checkRateLimit(key, 1, 5_000); // fill the limit at t=0
 
-    // Move to just before expiry so retryAfterMs would be tiny but still >= 0.
+    // Move to just before expiry so retryAfterMs would be ~1 ms.
     jest.advanceTimersByTime(4_999);
     const result = checkRateLimit(key, 1, 5_000);
     expect(result.allowed).toBe(false);
-    expect(result.retryAfterMs).toBeGreaterThanOrEqual(0);
+    // Should be about 1 ms (5000 - 4999), not zero or a large value.
+    expect(result.retryAfterMs).toBeGreaterThan(0);
+    expect(result.retryAfterMs).toBeLessThanOrEqual(10);
 
     jest.useRealTimers();
   });

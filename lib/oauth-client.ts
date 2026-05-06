@@ -69,6 +69,7 @@ export function clearOAuthErrorFromLocation() {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
   url.searchParams.delete("error");
+  url.searchParams.delete("error_code");
   url.hash = "";
   window.history.replaceState({}, "", `${url.pathname}${url.search}`);
 }

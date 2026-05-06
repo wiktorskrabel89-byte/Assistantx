@@ -163,7 +163,9 @@ export default function SupportPage() {
         }
         return [...prev, { role: "assistant", content: "Sorry, there was an error. Please try again." }];
       });
-      if (!assistantPlaceholderAppended) {
+      // If the placeholder was never appended, or it had already received content
+      // (meaning the catch appended a new bubble), we need to trigger auto-scroll.
+      if (!assistantPlaceholderAppended || reply !== "") {
         setMessageCount((n) => n + 1);
       }
     }
