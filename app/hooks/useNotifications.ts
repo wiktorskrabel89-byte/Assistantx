@@ -44,55 +44,69 @@ export function useNotifications(): UseNotificationsReturn {
     let active = true;
 
     async function bootstrap() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user || !active) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user || !active) return;
 
-      const userId = session.user.id;
+        const userId = session.user.id;
 
-      // Initial fetch
-      const { data } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(50);
+        // Initial fetch
+        const { data } = await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(50);
 
-      if (active && data) {
-        setNotifications((data as Record<string, unknown>[]).map(rowToNotification));
-      }
+        if (active && data) {
+          setNotifications((data as Record<string, unknown>[]).map(rowToNotification));
+        }
 
-      // Realtime subscription
-      const channel = supabase
-        .channel(`notifications:${userId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${userId}`,
-          },
-          (payload) => {
-            if (!active) return;
-            if (payload.eventType === "INSERT") {
-              const incoming = rowToNotification(payload.new as Record<string, unknown>);
-              setNotifications((prev) => [incoming, ...prev]);
-            } else if (payload.eventType === "UPDATE") {
-              const updated = rowToNotification(payload.new as Record<string, unknown>);
-              setNotifications((prev) =>
-                prev.map((n) => (n.id === updated.id ? updated : n))
-              );
-            } else if (payload.eventType === "DELETE") {
-              const deleted = payload.old as { id?: string };
-              if (deleted?.id) {
-                setNotifications((prev) => prev.filter((n) => n.id !== deleted.id));
+        // Guard against unmount during the async fetch above.
+        if (!active) return;
+
+        // Realtime subscription
+        const channel = supabase
+          .channel(`notifications:${userId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "notifications",
+              filter: `user_id=eq.${userId}`,
+            },
+            (payload) => {
+              if (!active) return;
+              if (payload.eventType === "INSERT") {
+                const incoming = rowToNotification(payload.new as Record<string, unknown>);
+                setNotifications((prev) => [incoming, ...prev]);
+              } else if (payload.eventType === "UPDATE") {
+                const updated = rowToNotification(payload.new as Record<string, unknown>);
+                setNotifications((prev) =>
+                  prev.map((n) => (n.id === updated.id ? updated : n))
+                );
+              } else if (payload.eventType === "DELETE") {
+                const deleted = payload.old as { id?: string };
+                if (deleted?.id) {
+                  setNotifications((prev) => prev.filter((n) => n.id !== deleted.id));
+                }
               }
             }
-          }
-        )
-        .subscribe();
+          )
+          .subscribe((_status, err) => {
+            // Realtime transport errors (e.g. "Connection closed") are non-fatal.
+            // Supabase will attempt to reconnect automatically; suppress the
+            // unhandled-rejection that would otherwise surface in the console.
+            if (err && process.env.NODE_ENV === "development") {
+              console.warn("Notifications realtime error:", err);
+            }
+          });
 
-      channelRef.current = channel;
+        channelRef.current = channel;
+      } catch {
+        // Ignore bootstrap errors (e.g. network issues or missing realtime config).
+      }
     }
 
     void bootstrap();
