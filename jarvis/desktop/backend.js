@@ -1,6 +1,8 @@
 const WebSocket = require('ws');
 const { exec, execFile } = require('child_process');
 const EventEmitter = require('events');
+const os = require('os');
+const path = require('path');
 
 // ipcRenderer is available because this module runs in the Electron renderer
 // process (loaded via renderer.js with nodeIntegration: true).
@@ -246,7 +248,9 @@ function closeApp(app) {
 
 function takeScreenshot() {
   const ts = Date.now();
-  const screenshotPath = `%USERPROFILE%\\Desktop\\jarvis_screenshot_${ts}.png`;
+  // Use $env:USERPROFILE (PowerShell syntax) instead of %USERPROFILE% (cmd.exe syntax)
+  // so the environment variable is correctly expanded inside the PowerShell command.
+  const screenshotPath = `$env:USERPROFILE\\Desktop\\jarvis_screenshot_${ts}.png`;
   const psCmd = [
     'Add-Type -AssemblyName System.Windows.Forms',
     'Add-Type -AssemblyName System.Drawing',
@@ -265,7 +269,9 @@ function takeScreenshot() {
     }
     respond(`Screenshot saved to Desktop: jarvis_screenshot_${ts}.png`);
     if (ipcRenderer) {
-      ipcRenderer.invoke('open-path', `%USERPROFILE%\\Desktop`);
+      // Resolve Desktop path via Node.js (works outside PowerShell context)
+      const desktopPath = path.join(process.env.USERPROFILE || os.homedir(), 'Desktop');
+      ipcRenderer.invoke('open-path', desktopPath);
     }
   });
 }
@@ -309,7 +315,8 @@ function setVolume(level) {
 
 function typeText(text) {
   // Escape characters that have special meaning in SendKeys syntax.
-  const sendKeysEscaped = text.replace(/[+^%~(){}[\]]/g, (ch) => `{${ch}}`);
+  // Use \[ and \] to avoid an ambiguous unescaped [ inside the character class.
+  const sendKeysEscaped = text.replace(/[\[\]+^%~(){}]/g, (ch) => `{${ch}}`);
 
   // Build the PowerShell script and pass it as a base64-encoded command
   // to avoid any shell string injection (no user content is interpolated
@@ -398,6 +405,7 @@ module.exports = {
   connectToBackend,
   sendDesktopPrompt,
   sendMessageToBackend,
+  getCurrentToken: () => currentToken,
   onMessage: (callback) => emitter.on('message', callback),
   onStatus: (callback) => emitter.on('status', callback),
   getBackendUrl: () => BACKEND_URL,

@@ -3,7 +3,7 @@
 // Maps Polish and English phrases to structured commands that are
 // dispatched back to backend.js for execution.
 
-const { sendMessageToBackend } = require('./backend');
+const { sendMessageToBackend, getCurrentToken } = require('./backend');
 
 // ── App aliases ──────────────────────────────────────────────────────────────
 const APP_ALIASES = {
@@ -126,7 +126,10 @@ function resolveApp(name) {
 }
 
 function dispatchCommand(command, extra = {}) {
-  const sent = sendMessageToBackend({ type: 'command', command, ...extra });
+  // Include the current device token so the backend can authorise the command,
+  // matching the behaviour of other senders (quick-action buttons, Android sendCommand).
+  const token = getCurrentToken();
+  const sent = sendMessageToBackend({ type: 'command', command, token, ...extra });
   if (!sent) {
     // Backend not connected — execute locally via handleCommand in backend.js
     const { handleCommand: handle } = require('./backend');

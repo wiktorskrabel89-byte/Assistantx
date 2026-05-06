@@ -1,12 +1,6 @@
 "use client";
 
-import { useState } from "react";
-
-type DownloadState = "idle" | "downloading" | "error";
-
 export default function JarvisTab() {
-  const [winState, setWinState] = useState<DownloadState>("idle");
-  const [winError, setWinError] = useState<string | null>(null);
 
   async function downloadForWindows() {
     let arch = "x64";
@@ -24,32 +18,9 @@ export default function JarvisTab() {
       // fall back to x64
     }
 
-    setWinState("downloading");
-    setWinError(null);
-
-    try {
-      const res = await fetch(`/api/jarvis/download?arch=${arch}`);
-      if (!res.ok) {
-        const json = (await res.json().catch(() => ({}))) as { instructions?: string };
-        const msg = json.instructions ?? `Installer not available (${res.status}).`;
-        setWinState("error");
-        setWinError(msg);
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `JarvisSetup-${arch}.exe`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setWinState("idle");
-    } catch {
-      setWinState("error");
-      setWinError("Download failed. Make sure the server is running.");
-    }
+    // Navigate directly to the API route so the browser handles redirects and
+    // streaming natively — avoids CORS issues and user-gesture restrictions.
+    window.location.href = `/api/jarvis/download?arch=${arch}`;
   }
 
   return (
@@ -77,22 +48,14 @@ export default function JarvisTab() {
             <div className="flex flex-col gap-2">
               <button
                 onClick={downloadForWindows}
-                disabled={winState === "downloading"}
-                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
+                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
                 title="Download Jarvis for Windows"
               >
-                {winState === "downloading" ? "Preparing download…" : "Download for Windows"}
+                Download for Windows
               </button>
-              {winState === "error" && winError ? (
-                <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] leading-5 text-orange-700">
-                  <p className="font-semibold">Installer not ready</p>
-                  <p className="mt-0.5">{winError}</p>
-                </div>
-              ) : (
-                <p className="text-center text-[11px] font-medium text-green-600">
-                  ✅ Auto-detects x64 or ARM64
-                </p>
-              )}
+              <p className="text-center text-[11px] font-medium text-green-600">
+                ✅ Auto-detects x64 or ARM64
+              </p>
             </div>
 
             {/* Android */}

@@ -402,6 +402,33 @@ describe('POST /api/chat — "websearch" prefix enables web plugin on current mo
     expect(calledBody.plugins).toBeUndefined();
   });
 
+  it('does NOT trigger websearch for messages starting with "websearching"', async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "websearching for something",
+      mode: "chat",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      plugins?: Array<{ id: string }>;
+      messages: Array<{ role: string; content: string }>;
+    };
+
+    // "websearching" should not trigger the websearch plugin
+    expect(calledBody.plugins).toBeUndefined();
+    // The message must be sent as-is, without stripping any prefix
+    const userMsg = calledBody.messages.find((m) => m.role === "user");
+    expect(userMsg?.content).toBe("websearching for something");
+  });
+
   it('does NOT override the model when "websearch" prefix is used (keeps user-selected model)', async () => {
     const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

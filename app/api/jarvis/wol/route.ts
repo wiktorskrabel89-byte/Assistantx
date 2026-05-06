@@ -1,4 +1,5 @@
 import dgram from "node:dgram";
+import { createClient } from "@/lib/server";
 
 /** Parse a MAC address string into a 6-byte Buffer.
  *  Accepts formats: AA:BB:CC:DD:EE:FF  AA-BB-CC-DD-EE-FF  AABBCCDDEEFF
@@ -55,7 +56,23 @@ function sendMagicPacket(
   });
 }
 
+/** Wake-on-LAN ports that are standard and safe to accept from callers. */
+const ALLOWED_WOL_PORTS = [7, 9];
+
 export async function POST(request: Request): Promise<Response> {
+  // Require authentication — this endpoint sends UDP packets into the server's
+  // network and must not be callable by anonymous users.
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const token = authHeader.slice(7);
+  const supabase = await createClient();
+  const { data, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !data.user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -73,7 +90,17 @@ export async function POST(request: Request): Promise<Response> {
 
   const broadcast =
     typeof body.broadcast === "string" ? body.broadcast.trim() : "255.255.255.255";
-  const port = typeof body.port === "number" && body.port > 0 ? body.port : 9;
+  const requestedPort = typeof body.port === "number" && body.port > 0 ? body.port : 9;
+
+  // Only allow standard WoL ports (9 and 7) to prevent this endpoint being
+  // abused as a general-purpose UDP packet sender into the server's network.
+  if (!ALLOWED_WOL_PORTS.includes(requestedPort)) {
+    return Response.json(
+      { error: `Port must be one of: ${ALLOWED_WOL_PORTS.join(", ")}` },
+      { status: 400 },
+    );
+  }
+  const port = requestedPort;
 
   let macBytes: Buffer;
   try {

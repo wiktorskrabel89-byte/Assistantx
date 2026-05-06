@@ -179,7 +179,7 @@ export const SEARCH_MODELS: ModelOption[] = [
  * Deduplicated list of all locally curated models (chat + code + search).
  * Used by the ModelSelector and other UI components instead of fetching from OpenRouter.
  */
-export const ALL_MODELS: { id: string; label: string; description: string }[] = (() => {
+export const ALL_MODELS: ModelOption[] = (() => {
   const seen = new Set<string>();
   return [...CHAT_MODELS, ...CODE_MODELS, ...SEARCH_MODELS].filter((m) => {
     if (seen.has(m.id)) return false;
@@ -291,12 +291,12 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "deepseek/deepseek-v3.2": "standard",
   "anthropic/claude-sonnet-4.5": "standard",
   "openai/gpt-5": "standard",
-  "openai/gpt-5.3": "premium",
   "qwen/qwen3-235b-a22b": "standard",
   "perplexity/sonar": "standard",
   "moonshotai/kimi-k2-thinking": "standard",
   "minimax/minimax-m2.5": "standard",
   // Premium models — frontier, high cost per token
+  "openai/gpt-5.3": "premium",
   "anthropic/claude-opus-4.5": "premium",
   "anthropic/claude-opus-4.6": "premium",
   "anthropic/claude-opus-4.7": "premium",

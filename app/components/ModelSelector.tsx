@@ -77,7 +77,8 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
         onClick={() => !locked && onSelectModel(model.id)}
         className={`${pillBase} ${isDown ? pillDown : locked ? pillLocked : preferredModelId === model.id ? pillActive : pillInactive}`}
         title={locked ? lockReason : `Use ${model.label}`}
-        aria-label={isDown ? `${model.label} — model down` : undefined}
+        aria-label={isDown ? `${model.label} — model down` : locked ? lockReason : undefined}
+        aria-describedby={locked && !isDown ? lockedDescId : undefined}
         disabled={locked}
       >
         {isDown ? <AlertTriangle className="h-3 w-3 text-orange-400" /> : locked ? <Lock className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
