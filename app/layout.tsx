@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
+import Script from "next/script";
 import { QueryProvider } from "./components/QueryProvider";
 import "./globals.css";
 
@@ -27,22 +29,12 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Register service worker for PWA and push notifications
-  if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/service-worker.js");
-      navigator.serviceWorker.register("/push-sw.js");
-    });
-    // Request push notification permission
-    if (Notification && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -54,6 +46,25 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>
+        {/* Register service workers for PWA and push notifications */}
+        <Script
+          id="sw-register"
+          strategy="afterInteractive"
+          nonce={nonce}
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/service-worker.js');
+                  navigator.serviceWorker.register('/push-sw.js');
+                });
+              }
+              if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+                Notification.requestPermission();
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );
