@@ -4,11 +4,13 @@
   "main": "index.js",
   "description": "Minimalny szkielet aplikacji Jarvis Android (React Native)",
   "scripts": {
-    "start": "react-native start"
+    "start": "react-native start",
+    "android": "react-native run-android",
+    "ios": "react-native run-ios"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "react": "^18.3.1",
-    "react-native": "^0.76.7"
+    "react": "^19.0.0",
+    "react-native": "^0.78.3"
   }
 }

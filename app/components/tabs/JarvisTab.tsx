@@ -1,6 +1,13 @@
 "use client";
 
+import { useState } from "react";
+
+type DownloadState = "idle" | "downloading" | "error";
+
 export default function JarvisTab() {
+  const [winState, setWinState] = useState<DownloadState>("idle");
+  const [winError, setWinError] = useState<string | null>(null);
+
   async function downloadForWindows() {
     let arch = "x64";
     try {
@@ -16,12 +23,33 @@ export default function JarvisTab() {
     } catch {
       // fall back to x64
     }
-    const a = document.createElement("a");
-    a.href = `/jarvis/JarvisSetup-${arch}.exe`;
-    a.download = `JarvisSetup-${arch}.exe`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+
+    setWinState("downloading");
+    setWinError(null);
+
+    try {
+      const res = await fetch(`/api/jarvis/download?arch=${arch}`);
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { instructions?: string };
+        const msg = json.instructions ?? `Installer not available (${res.status}).`;
+        setWinState("error");
+        setWinError(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `JarvisSetup-${arch}.exe`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setWinState("idle");
+    } catch {
+      setWinState("error");
+      setWinError("Download failed. Make sure the server is running.");
+    }
   }
 
   return (
@@ -44,31 +72,43 @@ export default function JarvisTab() {
             Keep your AssistantX assistant close at hand. Install Jarvis on Windows or Android and continue your workflows with the same account and ecosystem.
           </p>
 
-          <div className="mt-7 grid gap-3 sm:grid-cols-2">
+          <div className="mt-7 grid gap-4 sm:grid-cols-2">
+            {/* Windows */}
             <div className="flex flex-col gap-2">
               <button
                 onClick={downloadForWindows}
-                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                disabled={winState === "downloading"}
+                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
                 title="Download Jarvis for Windows"
               >
-                <span>Download for Windows</span>
+                {winState === "downloading" ? "Preparing download…" : "Download for Windows"}
               </button>
-              <p className="text-center text-[11px] font-medium text-green-600">
-                ✅ Auto-detects x64 or ARM64
-              </p>
+              {winState === "error" && winError ? (
+                <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] leading-5 text-orange-700">
+                  <p className="font-semibold">Installer not ready</p>
+                  <p className="mt-0.5">{winError}</p>
+                </div>
+              ) : (
+                <p className="text-center text-[11px] font-medium text-green-600">
+                  ✅ Auto-detects x64 or ARM64
+                </p>
+              )}
             </div>
 
+            {/* Android */}
             <div className="flex flex-col gap-2">
-              <button
-                disabled
-                className="inline-flex cursor-not-allowed items-center justify-center rounded-xl border border-slate-200 bg-white/60 px-5 py-3 text-sm font-semibold text-slate-400 shadow-sm opacity-60"
-                title="Android APK coming soon"
-              >
-                <span>Download for Android</span>
-              </button>
-              <p className="text-center text-[11px] font-medium text-amber-600">
-                🚧 Android APK not yet available — coming soon
-              </p>
+              <div className="rounded-xl border border-slate-200 bg-white/60 px-5 py-3 text-sm font-semibold text-slate-500 shadow-sm">
+                <p>Download for Android</p>
+                <p className="mt-1 text-[11px] font-normal text-slate-400">v0.1.0 · React Native 0.78</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-700">
+                <p className="font-semibold">Build from source</p>
+                <p className="mt-0.5">
+                  APK is not pre-built. Clone the repo, open{" "}
+                  <code className="rounded bg-amber-100 px-1">jarvis/android/</code> and run{" "}
+                  <code className="rounded bg-amber-100 px-1">npm install && npx react-native run-android</code>.
+                </p>
+              </div>
             </div>
           </div>
         </div>
