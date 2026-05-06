@@ -389,7 +389,7 @@ export const POST = async (req: Request) => {
       : FREE_CHAT_MODEL;
 
   const selectedModel = isAutoRouted
-    ? (costFilteredModels.find(id => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
+    ? (costFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
         ?? costFilteredModels[0]
         ?? (inferredCodeRequest ? FREE_CODING_MODEL : FREE_CHAT_MODEL))
     : costControlled.modelId;
