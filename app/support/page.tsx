@@ -59,6 +59,8 @@ export default function SupportPage() {
     // variable mutated inside a setMessages updater (which React may execute later).
     let assistantPlaceholderAppended = false;
 
+    let reply = "";
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -82,7 +84,6 @@ export default function SupportPage() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let reply = "";
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
       assistantPlaceholderAppended = true;
       setMessageCount((n) => n + 1);
