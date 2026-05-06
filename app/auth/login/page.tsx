@@ -32,6 +32,7 @@ export default function LoginPage() {
   const [submitState, setSubmitState] = useState<SubmitState>(initialLocationError ? "error" : "idle");
   const [feedback, setFeedback] = useState(initialLocationError);
   const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [authError, setAuthError] = useState(initialLocationError);
 
   function getSupabase() {
@@ -88,6 +89,40 @@ export default function LoginPage() {
     setPassword("");
     setConfirmPassword("");
     setAcceptedPolicy(false);
+  }
+
+  async function handleGuest() {
+    setGuestLoading(true);
+    setSubmitState("idle");
+    setAuthError("");
+    setFeedback("");
+
+    let supabase;
+    try {
+      supabase = getSupabase();
+    } catch (error) {
+      setGuestLoading(false);
+      setSubmitState("error");
+      setFeedback(error instanceof Error ? error.message : "Supabase client is not configured.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) {
+        setGuestLoading(false);
+        setSubmitState("error");
+        setFeedback(error.message);
+        return;
+      }
+    } catch (error) {
+      setGuestLoading(false);
+      setSubmitState("error");
+      setFeedback(error instanceof Error ? error.message : "Guest sign-in failed. Please try again.");
+      return;
+    }
+
+    window.location.href = "/";
   }
 
   async function handleOAuth(provider: OAuthProvider) {
@@ -240,7 +275,7 @@ export default function LoginPage() {
     setFeedback("Account created! Check your inbox to confirm your email address.");
   }
 
-  const isBusy = submitState === "submitting" || oauthLoading !== null;
+  const isBusy = submitState === "submitting" || oauthLoading !== null || guestLoading;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.28),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.22),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] px-5 py-8 text-slate-900 sm:px-8 sm:py-10">
@@ -313,6 +348,22 @@ export default function LoginPage() {
               ? "Sign in with a social provider or your email and password."
               : "Create your account with a social provider or an email and password."}
           </p>
+
+          {/* Guest access */}
+          <button
+            type="button"
+            onClick={() => void handleGuest()}
+            disabled={isBusy}
+            className="mb-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {guestLoading ? "Entering…" : "Continue as Guest"}
+          </button>
+
+          <div className="mb-4 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
+            <span className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+            <span>or sign in</span>
+            <span className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+          </div>
 
           {/* OAuth buttons */}
           <div className="grid gap-3 sm:grid-cols-2">
