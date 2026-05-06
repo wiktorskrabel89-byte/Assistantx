@@ -59,6 +59,7 @@ const AILearningTab = dynamic(
   () => import("./components/tabs/AILearningTab").then((m) => m.AILearningTab),
   { ssr: false, loading: () => <TabSkeleton /> },
 );
+// JarvisTab uses a default export, so no .then(m => m.X) destructuring is needed.
 const JarvisTab = dynamic(
   () => import("./components/tabs/JarvisTab"),
   { ssr: false, loading: () => <TabSkeleton /> },
