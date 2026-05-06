@@ -1,8 +1,11 @@
 "use client";
 
-import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp } from "lucide-react";
+import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp, Brain } from "lucide-react";
 import { useState } from "react";
-import { ALL_MODELS, isModelPremiumOnly, isModelProPlusOnly } from "@/lib/ai-config";
+import { ALL_MODELS, isModelPremiumOnly, isModelProPlusOnly, REASONING_MODEL_IDS } from "@/lib/ai-config";
+
+const THINKING_EFFORTS = ["Low", "Medium", "High", "Xhigh"] as const;
+export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
 
 type ModelSelectorProps = {
   dark: boolean;
@@ -10,10 +13,12 @@ type ModelSelectorProps = {
   isPremium: boolean;
   onSelectModel: (modelId: string | null) => void;
   isProPlus?: boolean;
+  thinkingEffort?: ThinkingEffort;
+  onThinkingEffortChange?: (effort: ThinkingEffort) => void;
 };
 
 
-export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false }: ModelSelectorProps) {
+export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel, isProPlus = false, thinkingEffort = "Medium", onThinkingEffortChange }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const isAuto = preferredModelId === null;
@@ -135,6 +140,27 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
                 </div>
               )}
             </>
+          )}
+
+          {/* Thinking effort selector — shown only when a reasoning-capable model is active */}
+          {preferredModelId && REASONING_MODEL_IDS.includes(preferredModelId) && onThinkingEffortChange && (
+            <div className="flex w-full items-center gap-2 pt-1 mt-1 border-t border-slate-200 dark:border-slate-700">
+              <span className={`flex items-center gap-1 ${sectionLabel}`}>
+                <Brain className="h-3 w-3" />
+                Thinking Effort:
+              </span>
+              {THINKING_EFFORTS.map((effort) => (
+                <button
+                  key={effort}
+                  onClick={() => onThinkingEffortChange(effort)}
+                  className={`${pillBase} ${thinkingEffort === effort ? pillActive : pillInactive}`}
+                  title={`Set thinking effort to ${effort}`}
+                  aria-pressed={thinkingEffort === effort}
+                >
+                  {effort}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       )}
