@@ -17,7 +17,6 @@ import {
   getFreePlanFallback,
   filterModelsByCostMode,
   getCheaperAlternative,
-  FREE_CODING_MODEL,
   FREE_CHAT_MODEL,
   AUTO_PREFERRED_CODING_MODEL,
   AUTO_PREFERRED_CHAT_MODEL,
@@ -384,14 +383,12 @@ export const POST = async (req: Request) => {
 
   const fallbackModel = rawMode === "search"
     ? SEARCH_MODEL
-    : inferredCodeRequest
-      ? FREE_CODING_MODEL
-      : FREE_CHAT_MODEL;
+    : getFreePlanFallback(inferredCodeRequest);
 
   const selectedModel = isAutoRouted
     ? (costFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
         ?? costFilteredModels[0]
-        ?? (inferredCodeRequest ? FREE_CODING_MODEL : FREE_CHAT_MODEL))
+        ?? getFreePlanFallback(inferredCodeRequest))
     : costControlled.modelId;
 
   // Determine if this is a search/DeepSeek/Gemini request for system prompt selection
@@ -665,7 +662,7 @@ export const POST = async (req: Request) => {
             if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
               throw new Error(`OpenRouter error ${status}: ${err}`);
             }
-            const freeModel = inferredCodeRequest ? FREE_CODING_MODEL : FREE_CHAT_MODEL;
+            const freeModel = getFreePlanFallback(inferredCodeRequest);
             const selectedFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
             fallbackReason = shouldCreditsFallback
               ? `${routeReason}. Insufficient credits detected, switched to free model.`

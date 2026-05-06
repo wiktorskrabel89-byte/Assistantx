@@ -34,6 +34,7 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
   const normalizedMessage = message.toLowerCase();
 
   const missingWorkspaceTable = code === "42P01"
+    || code === "PGRST200"
     || code === "PGRST205"
     || (normalizedMessage.includes("workspace_states") && (normalizedMessage.includes("does not exist") || normalizedMessage.includes("not found")));
 
@@ -44,6 +45,22 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
         code: "workspace_sync_not_configured",
         error: "Cloud sync is not configured in Supabase yet.",
         hint: "Run supabase/migrations/20260413_auth_workspace_sync.sql to create workspace_states and its RLS policies.",
+      },
+    };
+  }
+
+  const missingConfig = normalizedMessage.includes("supabaseurl is required")
+    || normalizedMessage.includes("supabasekey is required")
+    || normalizedMessage.includes("url is required")
+    || normalizedMessage.includes("invalid url");
+
+  if (missingConfig) {
+    return {
+      status: 503,
+      payload: {
+        code: "workspace_sync_not_configured",
+        error: "Supabase is not configured. Cloud sync is unavailable.",
+        hint: "Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are set in your .env file.",
       },
     };
   }
