@@ -26,10 +26,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
 // so components that use the Encoding API (e.g. SSE parsing) work in tests.
 if (typeof TextEncoder === "undefined") {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { TextEncoder, TextDecoder } = require("util") as {
-    TextEncoder: typeof globalThis.TextEncoder;
-    TextDecoder: typeof globalThis.TextDecoder;
-  };
-  global.TextEncoder = TextEncoder;
-  global.TextDecoder = TextDecoder;
+  const util = require("util") as typeof import("util");
+  global.TextEncoder = util.TextEncoder as unknown as typeof TextEncoder;
+  global.TextDecoder = util.TextDecoder as unknown as typeof TextDecoder;
 }

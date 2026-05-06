@@ -24,7 +24,7 @@ if (!("fetch" in globalThis)) {
 /** Creates a fake fetch response that simulates SSE tokens over a body stream. */
 function mockSSEFetch(tokens: string[]) {
   const lines = tokens.map((t) => `data: ${JSON.stringify({ token: t })}`).join("\n") + "\ndata: [DONE]\n";
-  const bytes = new Uint8Array(Buffer.from(lines, "utf-8"));
+  const bytes = new TextEncoder().encode(lines);
   let sent = false;
   const fakeBody = {
     getReader: () => ({
@@ -54,7 +54,7 @@ function mockErrorFetch(status: number, text = "Error") {
 
 /** Creates a fake fetch response with an empty SSE body (no tokens). */
 function mockEmptySSEFetch() {
-  const bytes = new Uint8Array(Buffer.from("data: [DONE]\n", "utf-8"));
+  const bytes = new TextEncoder().encode("data: [DONE]\n");
   let sent = false;
   const fakeBody = {
     getReader: () => ({

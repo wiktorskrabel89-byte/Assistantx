@@ -79,8 +79,10 @@ async function getAuthenticatedUser() {
     // Swallow expected auth errors (expired session, invalid JWT, missing session — typically
     // status 401/403). Re-throw unexpected operational failures so buildWorkspaceSyncError
     // can surface an appropriate 5xx instead of silently converting them into 401s.
-    const status = (error as { status?: number }).status;
-    if (status && status !== 401 && status !== 403) throw error;
+    const status = typeof error === "object" && error !== null && "status" in error
+      ? (error as { status: unknown }).status
+      : undefined;
+    if (typeof status === "number" && status !== 401 && status !== 403) throw error;
     return { supabase, user: null };
   }
   if (!data.user) return { supabase, user: null };

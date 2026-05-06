@@ -128,8 +128,8 @@ describe("POST /api/stripe/billing-portal", () => {
     const callArgs = mockPortalCreate.mock.calls[0]?.[0] as { return_url: string };
     // Should NOT use the cross-origin URL
     expect(callArgs?.return_url).not.toBe("https://evil.com/steal");
-    // Should fall back to a same-origin URL
-    expect(callArgs?.return_url.startsWith(ORIGIN)).toBe(true);
+    // Should fall back to a same-origin URL (check by comparing URL origins)
+    expect(new URL(callArgs?.return_url).origin).toBe(ORIGIN);
   });
 
   it("rejects an open-redirect bypass URL (https://app.example.com@evil.com)", async () => {
@@ -139,13 +139,13 @@ describe("POST /api/stripe/billing-portal", () => {
     await POST(makeReq({ returnUrl: bypassUrl }));
     const callArgs = mockPortalCreate.mock.calls[0]?.[0] as { return_url: string };
     expect(callArgs?.return_url).not.toBe(bypassUrl);
-    expect(callArgs?.return_url.startsWith(ORIGIN)).toBe(true);
+    expect(new URL(callArgs?.return_url).origin).toBe(ORIGIN);
   });
 
   it("handles a malformed returnUrl gracefully (falls back to default)", async () => {
     await POST(makeReq({ returnUrl: "not-a-valid-url" }));
     const callArgs = mockPortalCreate.mock.calls[0]?.[0] as { return_url: string };
-    expect(callArgs?.return_url.startsWith(ORIGIN)).toBe(true);
+    expect(new URL(callArgs?.return_url).origin).toBe(ORIGIN);
   });
 
   it("returns 500 when Stripe throws an error", async () => {
