@@ -233,6 +233,7 @@ export function ConversationsSidebar({
                           <Tag className="mt-1 h-3 w-3 flex-shrink-0 text-slate-400" />
                           <input
                             autoFocus
+                            id="tag-input"
                             name="tagInput"
                             value={tagInput}
                             onChange={(e) => setTagInput(e.target.value)}
