@@ -105,3 +105,92 @@ describe("POST /api/chat — free-model fallback behavior", () => {
   });
 });
 
+describe("POST /api/chat — 5xx free-model retry cascade", () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("retries with another free model when a free model returns 5xx, and succeeds", async () => {
+    let callCount = 0;
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // First call returns 503
+        return Promise.resolve(
+          new Response("Service Unavailable", {
+            status: 503,
+            headers: { "Content-Type": "text/plain" },
+          })
+        );
+      }
+      // Second call (retry with next free fallback) succeeds
+      return Promise.resolve(
+        new Response(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello!" } }] })}\ndata: [DONE]\n`,
+          { status: 200, headers: { "Content-Type": "text/event-stream" } }
+        )
+      );
+    });
+
+    // Use a free model directly to trigger the 5xx retry path
+    const req = makeRequest({
+      message: "Hello",
+      mode: "chat",
+      modelId: "meta-llama/llama-3.3-70b-instruct:free",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    // Consume the stream so the route's async start() logic fully completes
+    await res.text();
+
+    // Should have been called at least twice (initial + one retry)
+    expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+    // The retry should use another free model (endsWith :free)
+    const retryBody = JSON.parse(
+      mockFetch.mock.calls[1][1]?.body as string
+    ) as { model: string };
+    expect(retryBody.model.endsWith(":free")).toBe(true);
+  });
+
+  it("does not retry with paid models when a free model returns 5xx", async () => {
+    // All calls fail to exercise the exhausted-fallback code path
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("Service Unavailable", {
+        status: 503,
+        headers: { "Content-Type": "text/plain" },
+      })
+    );
+
+    const req = makeRequest({
+      message: "Hello",
+      mode: "chat",
+      modelId: "meta-llama/llama-3.3-70b-instruct:free",
+    });
+    const res = await POST(req);
+    // Consume the stream to let the async retry logic complete
+    await res.text();
+
+    // Every model tried must be a free model — no paid models should appear
+    for (const [, init] of mockFetch.mock.calls) {
+      const body = JSON.parse((init as RequestInit).body as string) as { model: string };
+      expect(body.model.endsWith(":free")).toBe(true);
+    }
+  });
+});
+

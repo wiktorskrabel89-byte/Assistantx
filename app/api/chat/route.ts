@@ -631,11 +631,15 @@ export const POST = async (req: Request) => {
           let found = false;
 
           // Try all models in order if 404 (no endpoint found) or 5xx (server error on a free model)
-          if (
-            (status === 404 && /No endpoints found|No models match/i.test(err)) ||
-            (status >= 500 && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free"))
-          ) {
-            const fallbackList = getModelFallbackList();
+          const is404NoEndpoint = status === 404 && /No endpoints found|No models match/i.test(err);
+          const is5xxFreeModel = status >= 500 && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free");
+          if (is404NoEndpoint || is5xxFreeModel) {
+            const allFallbackList = getModelFallbackList();
+            // When a free model returned 5xx, restrict retries to other free models only
+            // to avoid unexpected charges on paid models.
+            const fallbackList = is5xxFreeModel
+              ? allFallbackList.filter((id) => id.endsWith(":free"))
+              : allFallbackList;
             for (const modelId of fallbackList) {
               safeEnqueue(`data: ${JSON.stringify({ status: `Model ${triedModels.at(-1)} unavailable, trying ${modelId}...` })}\n\n`);
               const fallbackRequestBody: Record<string, unknown> = {
@@ -656,8 +660,10 @@ export const POST = async (req: Request) => {
               }
             }
             if (!found) {
-              throw new Error(`OpenRouter error 404: No available models. Tried: ${triedModels.join(", ")}. Last error: ${err}`);
+              throw new Error(`OpenRouter error ${status}: No available models. Tried: ${triedModels.join(", ")}. Last error: ${err}`);
             }
+            // Propagate the updated reason so the client sees the correct fallback info
+            effectiveRouteReason = fallbackReason;
           } else {
             // Credits fallback or other error
             const shouldAutoRouterFallback = isAutoRouted && status === 404 && /No models match your request and model restrictions/i.test(err);
