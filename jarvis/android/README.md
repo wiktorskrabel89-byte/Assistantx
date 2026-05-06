@@ -3,7 +3,8 @@
 Minimalny szkielet aplikacji mobilnej (React Native)
 
 ## Pliki:
-- App.js — główny plik aplikacji
+- index.js — punkt wejścia React Native (AppRegistry)
+- App.js — główny komponent aplikacji
 - package.json — zależności
 - backend.js — połączenie WebSocket z backendem Jarvis
 - auth.js — token urządzenia w AsyncStorage

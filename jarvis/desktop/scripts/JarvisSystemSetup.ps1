@@ -57,8 +57,26 @@ if (-not (Test-Path $InstallDir)) {
 }
 
 Write-Stage "[1/4] Downloading Jarvis installer"
-Invoke-WebRequest -Uri $DownloadUrl -OutFile $setupPath
-Write-Host "Download completed: $setupPath" -ForegroundColor Green
+try {
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $setupPath -ErrorAction Stop
+    if (-not (Test-Path $setupPath) -or (Get-Item $setupPath).Length -eq 0) {
+        Write-Host "ERROR: Installer file is empty or missing after download." -ForegroundColor Red
+        Write-Host "Make sure the server is running and the installer has been built and published." -ForegroundColor White
+        Write-Host "Expected file at: $DownloadUrl" -ForegroundColor White
+        exit 1
+    }
+    Write-Host "Download completed: $setupPath" -ForegroundColor Green
+} catch {
+    Write-Host "ERROR: Could not download the installer." -ForegroundColor Red
+    Write-Host "URL: $DownloadUrl" -ForegroundColor White
+    Write-Host "Details: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "" -ForegroundColor White
+    Write-Host "Possible causes:" -ForegroundColor White
+    Write-Host "  - The server at the base URL is not running." -ForegroundColor White
+    Write-Host "  - The installer has not been built yet. Run: npm run dist:win:all && npm run publish:download" -ForegroundColor White
+    Write-Host "  - Set the correct URL via -DownloadUrl or the JARVIS_BASE_URL environment variable." -ForegroundColor White
+    exit 1
+}
 
 if ($ApplyPowerTweaks) {
     Write-Stage "[2/4] Applying optional power tweaks"
@@ -82,8 +100,14 @@ Write-Stage "[4/4] Verifying installation"
 $finalAppPath = Join-Path $InstallDir $AppName
 
 if (-not (Test-Path $finalAppPath)) {
-    Write-Host "Verification failed. Expected app not found: $finalAppPath" -ForegroundColor Red
-    Write-Host "Check whether the installer used a nested subfolder or a different executable name." -ForegroundColor White
+    Write-Host "ERROR: Verification failed — installed application not found." -ForegroundColor Red
+    Write-Host "Expected: $finalAppPath" -ForegroundColor White
+    Write-Host "Installer exit code was: $($process.ExitCode)" -ForegroundColor Yellow
+    Write-Host "" -ForegroundColor White
+    Write-Host "Possible causes:" -ForegroundColor White
+    Write-Host "  - The installer exited before completing (check exit code above)." -ForegroundColor White
+    Write-Host "  - The installer placed the application in a different directory." -ForegroundColor White
+    Write-Host "  - Run the installer manually with: $setupPath" -ForegroundColor White
     exit 1
 }
 
