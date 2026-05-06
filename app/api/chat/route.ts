@@ -512,6 +512,15 @@ export const POST = async (req: Request) => {
     systemPrompt = `${systemPrompt} ${customSystemPrompt.trim()}`.trim();
   }
 
+  // Helper to convert client-side history pairs to role/content message format.
+  const clientHistoryToMessages = (h: unknown): Array<{ role: string; content: string }> =>
+    Array.isArray(h)
+      ? h.flatMap((entry: { user: string; ai: string }) => [
+          { role: "user", content: entry.user },
+          { role: "assistant", content: entry.ai },
+        ])
+      : [];
+
   // Build history: use Supabase memory when conversationId + authenticated user are both present,
   // otherwise fall back to client-supplied history (covers unauthenticated users and
   // cases where the DB is unavailable).
@@ -543,20 +552,12 @@ export const POST = async (req: Request) => {
 
     // If Supabase returned no history (e.g. first message or RPC not yet applied),
     // fall back to the client-supplied history so conversation context is never lost.
-    if (historyMessages.length === 0 && Array.isArray(history) && history.length > 0) {
-      historyMessages = history.flatMap((entry: { user: string; ai: string }) => [
-        { role: "user", content: entry.user },
-        { role: "assistant", content: entry.ai },
-      ]);
+    if (historyMessages.length === 0) {
+      historyMessages = clientHistoryToMessages(history);
     }
   } else {
     // Unauthenticated users or no conversationId: use client-provided history.
-    historyMessages = Array.isArray(history)
-      ? history.flatMap((entry: { user: string; ai: string }) => [
-          { role: "user", content: entry.user },
-          { role: "assistant", content: entry.ai },
-        ])
-      : [];
+    historyMessages = clientHistoryToMessages(history);
   }
 
 
