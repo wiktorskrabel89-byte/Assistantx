@@ -39,7 +39,7 @@ describe("ModelSelector", () => {
   });
 
   it("Auto button is inactive when a model is selected", () => {
-    openSelector({ preferredModelId: "openai/gpt-5.1" });
+    openSelector({ preferredModelId: "openai/gpt-5.2" });
     const autoButton = screen.getByRole("button", { name: /Auto/i });
     expect(autoButton.className).not.toContain("blue-950");
     // Inactive state uses slate border (positive check for inactive styling)
@@ -47,7 +47,7 @@ describe("ModelSelector", () => {
   });
 
   it("calls onSelectModel(null) when Auto is clicked", () => {
-    const { onSelectModel } = openSelector({ preferredModelId: "openai/gpt-5.1" });
+    const { onSelectModel } = openSelector({ preferredModelId: "openai/gpt-5.2" });
     fireEvent.click(screen.getByRole("button", { name: /Auto/i }));
     expect(onSelectModel).toHaveBeenCalledWith(null);
   });
@@ -56,8 +56,8 @@ describe("ModelSelector", () => {
     // Premium users see premium models up front; expand More models to see free ones
     openSelector();
     expect(screen.getByRole("button", { name: /Claude Opus 4\.6/i })).toBeInTheDocument();
-    // GPT-5.1 is a premium model (standard tier), also visible up front
-    expect(screen.getByRole("button", { name: /GPT-5\.1/i })).toBeInTheDocument();
+    // GPT-5.2 is a premium model, also visible up front
+    expect(screen.getByRole("button", { name: /GPT-5\.2/i })).toBeInTheDocument();
   });
 
   it("premium users see premium models up front and free models behind More models", () => {
@@ -80,8 +80,8 @@ describe("ModelSelector", () => {
 
   it("calls onSelectModel with the model id when a model button is clicked", () => {
     const { onSelectModel } = openSelector();
-    fireEvent.click(screen.getByRole("button", { name: /GPT-5\.1/i }));
-    expect(onSelectModel).toHaveBeenCalledWith("openai/gpt-5.1");
+    fireEvent.click(screen.getByRole("button", { name: /GPT-5\.2/i }));
+    expect(onSelectModel).toHaveBeenCalledWith("openai/gpt-5.2");
   });
 
   it("free users see only free models and a More models button after expanding", () => {
