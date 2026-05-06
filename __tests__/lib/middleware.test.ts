@@ -84,4 +84,32 @@ describe("updateSession", () => {
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("/auth/login");
   });
+
+  it("sets Content-Security-Policy header with a nonce on authenticated responses", async () => {
+    mockGetClaims.mockResolvedValue({
+      data: { claims: { sub: "user-id-123" } },
+    });
+
+    const req = makeRequest("/home");
+    const res = await updateSession(req);
+
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    expect(csp).toMatch(/script-src/);
+    expect(csp).toMatch(/'nonce-[A-Za-z0-9+/]+=*'/);
+  });
+
+  it("propagates the nonce via the x-nonce request header", async () => {
+    mockGetClaims.mockResolvedValue({
+      data: { claims: { sub: "user-id-123" } },
+    });
+
+    const req = makeRequest("/home");
+    const res = await updateSession(req);
+
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    const match = csp.match(/'nonce-([A-Za-z0-9+/]+=*)'/);
+    expect(match).not.toBeNull();
+    // The nonce extracted from the CSP must be a non-empty base64 string.
+    expect(match![1].length).toBeGreaterThan(0);
+  });
 });

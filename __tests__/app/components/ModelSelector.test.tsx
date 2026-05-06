@@ -2,6 +2,20 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ModelSelector } from "@/app/components/ModelSelector";
 
+// Mock fetchAllModels so tests don't hit the network
+jest.mock("@/app/api/openrouter/fetchAllModels", () => ({
+  fetchAllModels: jest.fn().mockResolvedValue([
+    { id: "openai/gpt-5", description: "" },
+    { id: "anthropic/claude-opus-4.6", description: "" },
+    { id: "openai/gpt-5-mini", description: "" },
+  ]),
+  LOCAL_FALLBACK_MODELS: [
+    { id: "openai/gpt-5", description: "" },
+    { id: "anthropic/claude-opus-4.6", description: "" },
+    { id: "openai/gpt-5-mini", description: "" },
+  ],
+}));
+
 describe("ModelSelector", () => {
   function renderSelector(overrides: Partial<Parameters<typeof ModelSelector>[0]> = {}) {
     const onSelectModel = overrides.onSelectModel ?? jest.fn();

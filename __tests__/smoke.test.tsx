@@ -20,6 +20,11 @@ jest.mock("@/lib/client", () => ({
   })),
 }));
 
+jest.mock("@/app/api/openrouter/fetchAllModels", () => ({
+  fetchAllModels: jest.fn().mockResolvedValue([]),
+  LOCAL_FALLBACK_MODELS: [],
+}));
+
 // Polyfill fetch for jsdom
 if (!global.fetch) {
   global.fetch = jest.fn().mockResolvedValue({
