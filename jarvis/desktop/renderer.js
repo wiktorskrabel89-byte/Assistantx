@@ -9,18 +9,34 @@ const {
 	getBackendUrl,
 } = require('./backend');
 
+// ipcRenderer for URL opening via main process
+let ipcRenderer;
+try {
+	ipcRenderer = require('electron').ipcRenderer;
+} catch {
+	ipcRenderer = null;
+}
+
 function appendMessage(log, title, body, tone = 'system') {
 	const item = document.createElement('div');
 	item.className = `message ${tone}`;
 
 	const heading = document.createElement('small');
-	heading.textContent = title;
+	heading.textContent = `${new Date().toLocaleTimeString()} — ${title}`;
 
 	const text = document.createElement('div');
 	text.textContent = body;
 
 	item.append(heading, text);
 	log.prepend(item);
+}
+
+function setStatusDot(status) {
+	const dot = document.getElementById('status-dot');
+	if (!dot) return;
+	dot.className = 'dot';
+	if (status === 'connected') dot.classList.add('connected');
+	if (status === 'error') dot.classList.add('error');
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -31,70 +47,177 @@ window.addEventListener('DOMContentLoaded', () => {
 	const tokenNode = document.getElementById('device-token');
 	const statusNode = document.getElementById('connection-status');
 	const backendUrlNode = document.getElementById('backend-url');
+	const appVersionNode = document.getElementById('app-version');
+	const updateStatusNode = document.getElementById('update-status');
+	const checkUpdatesButton = document.getElementById('check-updates');
+	const installUpdateButton = document.getElementById('install-update');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
+	const urlInput = document.getElementById('url-input');
+	const urlGo = document.getElementById('url-go');
+	const urlSearch = document.getElementById('url-search');
 
 	tokenNode.textContent = token;
 	backendUrlNode.textContent = getBackendUrl();
 
+	// ── Status ──────────────────────────────────────────────────────────────
 	function updateStatus(status, detail) {
 		statusNode.textContent = detail ? `${status}: ${detail}` : status;
+		setStatusDot(status);
 	}
 
-	function submitPrompt() {
-		const text = input.value.trim();
-		if (!text) {
-			return;
+	function updateAutoUpdateStatus(payload) {
+		if (!updateStatusNode) return;
+
+		const detail = payload?.detail ? `${payload.status}: ${payload.detail}` : payload?.status || 'idle';
+		updateStatusNode.textContent = detail;
+
+		if (installUpdateButton) {
+			installUpdateButton.hidden = !payload?.downloaded;
 		}
 
+		if (checkUpdatesButton) {
+			checkUpdatesButton.disabled = payload?.status === 'checking';
+		}
+	}
+
+	// ── Prompt submission ────────────────────────────────────────────────────
+	function submitPrompt() {
+		const text = input.value.trim();
+		if (!text) return;
+
 		const sent = sendDesktopPrompt(text);
-		appendMessage(log, sent ? 'Outgoing prompt' : 'Queued locally', text, sent ? 'system' : 'error');
+		appendMessage(log, sent ? 'Prompt sent' : 'Queued (offline)', text, sent ? 'system' : 'error');
 		input.value = '';
 	}
 
 	send.addEventListener('click', submitPrompt);
-	input.addEventListener('keydown', (event) => {
-		if (event.key === 'Enter') {
-			submitPrompt();
-		}
-	});
+	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPrompt(); });
 
+	// ── URL bar ──────────────────────────────────────────────────────────────
+	function doOpenUrl(rawUrl) {
+		let url = rawUrl.trim();
+		if (!url) return;
+		if (!url.startsWith('http://') && !url.startsWith('https://')) {
+			url = 'https://' + url;
+		}
+		if (ipcRenderer) {
+			ipcRenderer.invoke('open-url', url)
+				.then(() => appendMessage(log, 'URL opened', url))
+				.catch((err) => appendMessage(log, 'URL error', err.message, 'error'));
+		} else {
+			sendMessageToBackend({ type: 'command', command: 'openUrl', url, token });
+			appendMessage(log, 'openUrl sent', url);
+		}
+		urlInput.value = '';
+	}
+
+	function doSearch() {
+		const query = urlInput.value.trim();
+		if (!query) return;
+		sendMessageToBackend({ type: 'command', command: 'searchWeb', query, token });
+		appendMessage(log, 'Web search', query);
+		urlInput.value = '';
+	}
+
+	if (urlGo) urlGo.addEventListener('click', () => doOpenUrl(urlInput.value));
+	if (urlSearch) urlSearch.addEventListener('click', doSearch);
+	if (urlInput) {
+		urlInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') doOpenUrl(urlInput.value);
+		});
+	}
+
+	if (ipcRenderer && appVersionNode) {
+		ipcRenderer.invoke('get-app-meta').then((meta) => {
+			appVersionNode.textContent = meta.packaged
+				? `v${meta.version}`
+				: `v${meta.version} (dev mode, updater off)`;
+		}).catch(() => {
+			appVersionNode.textContent = 'Unknown';
+		});
+
+		ipcRenderer.on('app-meta', (_event, meta) => {
+			appVersionNode.textContent = meta.packaged
+				? `v${meta.version}`
+				: `v${meta.version} (dev mode, updater off)`;
+		});
+
+		ipcRenderer.on('auto-update-status', (_event, payload) => {
+			updateAutoUpdateStatus(payload);
+
+			if (['checking', 'up-to-date', 'ready-to-install', 'error'].includes(payload?.status)) {
+				appendMessage(log, 'Updater', payload.detail || payload.status, payload?.status === 'error' ? 'error' : 'system');
+			}
+		});
+	}
+
+	if (checkUpdatesButton && ipcRenderer) {
+		checkUpdatesButton.addEventListener('click', async () => {
+			const result = await ipcRenderer.invoke('check-for-updates');
+			if (result?.ok === false && result.reason === 'not-packaged') {
+				appendMessage(log, 'Updater', 'Auto-update works after installing the EXE build.', 'error');
+			}
+		});
+	}
+
+	if (installUpdateButton && ipcRenderer) {
+		installUpdateButton.addEventListener('click', async () => {
+			const result = await ipcRenderer.invoke('install-update');
+			if (!result?.ok) {
+				appendMessage(log, 'Updater', 'No downloaded update is ready yet.', 'error');
+			}
+		});
+	}
+
+	// ── Quick-action buttons ─────────────────────────────────────────────────
 	quickActionButtons.forEach((button) => {
 		button.addEventListener('click', () => {
 			const value = button.getAttribute('data-command');
-			if (!value) {
-				return;
-			}
+			if (!value) return;
 
 			const [kind, payload] = value.split(':', 2);
+
 			if (kind === 'open') {
 				sendMessageToBackend({ type: 'command', command: 'openApp', app: payload, token });
-				appendMessage(log, 'Quick action', `Requested app launch: ${payload}`);
+				appendMessage(log, 'Quick action', `Launch: ${payload}`);
 				return;
 			}
 
 			if (kind === 'command') {
 				sendMessageToBackend({ type: 'command', command: payload, token });
-				appendMessage(log, 'Quick action', `Requested command: ${payload}`);
+				appendMessage(log, 'Quick action', payload);
 				return;
 			}
 
-			if (kind === 'local' && payload === 'otworz-roblox') {
-				handlePhoneCommand('otwórz roblox');
-				appendMessage(log, 'Local phone command', 'Executed placeholder phone command: otwórz roblox');
+			if (kind === 'local') {
+				handlePhoneCommand(payload.replace(/-/g, ' '));
+				appendMessage(log, 'Local command', payload);
 			}
 		});
 	});
 
+	// ── Backend events ────────────────────────────────────────────────────────
 	onStatus(({ status, detail, url }) => {
 		updateStatus(status, detail);
-		appendMessage(log, 'Connection state', detail ? `${status} (${detail})` : `${status} (${url})`, status === 'error' ? 'error' : 'system');
+		const msg = detail ? `${status} (${detail})` : `${status} — ${url}`;
+		const tone = status === 'error' ? 'error' : 'system';
+		appendMessage(log, 'Connection', msg, tone);
 	});
 
 	onMessage((rawMessage) => {
-		appendMessage(log, 'Backend event', rawMessage, 'system');
+		try {
+			const parsed = JSON.parse(rawMessage);
+			// parsed.text is the human-readable content; fall back to stringifying the whole object
+			const body = typeof parsed.text === 'string' ? parsed.text : JSON.stringify(parsed);
+			const title = parsed.type === 'response' ? '✅ Jarvis' : `Backend (${parsed.type || '?'})`;
+			appendMessage(log, title, body, 'system');
+		} catch {
+			// rawMessage is not JSON — display as plain text
+			appendMessage(log, 'Backend event', rawMessage, 'system');
+		}
 	});
 
 	connectToBackend({ token });
 	updateStatus('ready');
-	appendMessage(log, 'Jarvis Desktop', 'Desktop shell initialized.');
+	appendMessage(log, 'Jarvis Desktop', 'Shell initialized. Connecting to backend…');
 });

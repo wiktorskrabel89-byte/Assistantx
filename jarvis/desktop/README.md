@@ -36,6 +36,13 @@ npm run dist:win:all
 
 Polecenia tworzą pliki `JarvisSetup-x64.exe` i/lub `JarvisSetup-arm64.exe` w katalogu `dist/` przy użyciu `electron-builder` i targetu `nsis`.
 
+W tym samym katalogu `dist/` Electron Builder tworzy też pliki auto-update:
+- `latest.yml`
+- `JarvisSetup-x64.exe.blockmap`
+- `JarvisSetup-arm64.exe.blockmap`
+
+Te pliki muszą być opublikowane razem z installerami na GitHub Release, jeśli chcesz mieć automatyczne aktualizacje w aplikacji.
+
 > **Uwaga:** Budowanie instalatora `.exe` działa najlepiej na Windows. Na Linux może wymagać Wine lub działać z ograniczeniami.
 
 Jeśli chcesz od razu skopiować gotowe instalatory do katalogu publicznego aplikacji Next.js (`public/jarvis/`), uruchom:
@@ -45,6 +52,21 @@ npm run dist:win:public
 ```
 
 Skrypt `publish:download` kopiuje `JarvisSetup-x64.exe` i `JarvisSetup-arm64.exe` do `public/jarvis/`.
+
+## Auto-update z GitHub Releases
+
+Desktop Jarvis wspiera auto-update przez `electron-updater`.
+
+Wymagania:
+1. build musi mieć `publish.provider = github`
+2. release na GitHub musi zawierać:
+   - `JarvisSetup-x64.exe`
+   - `JarvisSetup-arm64.exe`
+   - `latest.yml`
+   - pliki `*.blockmap`
+3. aplikacja musi działać z **prawdziwego zainstalowanego EXE**, nie z `npm run dev`
+
+W tym repo workflow `.github/workflows/build-jarvis.yml` publikuje te pliki automatycznie do release `jarvis-latest`.
 
 ## Bootstrap PowerShell
 
