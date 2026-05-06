@@ -259,10 +259,11 @@ describe("POST /api/chat — 429 provider rate-limit retry cascade", () => {
     expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(2);
 
     // The retry must use another free model
+    const retryCall = mockFetch.mock.calls[1];
     const retryBody = JSON.parse(
-      mockFetch.mock.calls[1][1]?.body as string
-    ) as { model: string };
-    expect(retryBody.model.endsWith(":free")).toBe(true);
+      (retryCall?.[1] as RequestInit | undefined)?.body as string ?? "{}"
+    ) as { model?: string };
+    expect(retryBody.model?.endsWith(":free")).toBe(true);
     // The retry must not reuse the rate-limited model
     expect(retryBody.model).not.toBe("meta-llama/llama-3.3-70b-instruct:free");
   });

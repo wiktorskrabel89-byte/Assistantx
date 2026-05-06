@@ -132,8 +132,7 @@ function isProviderRateLimit(status: number, body: string): boolean {
   if (status !== 429) return false;
   return (
     /rate.?limited upstream/i.test(body) ||
-    /temporarily rate.?limited/i.test(body) ||
-    /Provider returned error/i.test(body)
+    /temporarily rate.?limited/i.test(body)
   );
 }
 
