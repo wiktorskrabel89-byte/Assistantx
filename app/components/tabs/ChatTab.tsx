@@ -46,6 +46,7 @@ import type {
 } from "../../lib/chat-types";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
+import { useChatTransport } from "../../hooks/useChatTransport";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 
 export function ChatTab() {
@@ -60,6 +61,7 @@ export function ChatTab() {
     setChatSearch,
     updateWorkspace,
     updateChat,
+    updateLastMessage,
     setActiveChatId,
     setWorkspaceMode,
     setPreferredModelId,
@@ -93,6 +95,7 @@ export function ChatTab() {
     oauthLoading,
     cloudBootstrapped,
     signInWithProvider,
+    stateRef,
   } = useWorkspace();
 
   const [message, setMessage] = useState("");
@@ -112,7 +115,6 @@ export function ChatTab() {
   const [usageDashboardOpen, setUsageDashboardOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -122,7 +124,6 @@ export function ChatTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importedShareRef = useRef(false);
-  const googleContextRef = useRef<string>("");
 
   const currentConversationId = activeChat.id;
   const workspaceQueries = useWorkspaceQueries({
@@ -168,12 +169,51 @@ export function ChatTab() {
   const codeBg = state.dark ? "bg-slate-950" : "bg-slate-100";
   const googleLinked = linkedProviders.includes("google") || authProvider === "google";
   const latestEntry = activeChat.messages[activeChat.messages.length - 1];
-  const loading = workspaceQueries.updateConversationMutation.isPending;
-  const stopRequested = false;
 
-  const stopCurrentGeneration = useCallback(() => {
-    // Streaming cancel wiring is not currently available in this tab state slice.
-  }, []);
+  const {
+    loading,
+    stopRequested,
+    queuedMessages,
+    queueComposerMessage: transportQueueMessage,
+    removeQueuedMessage,
+    stopCurrentGeneration,
+    setGoogleContext,
+  } = useChatTransport({
+    activeWorkspaceId: activeWorkspace.id,
+    activeChatId: activeChat.id,
+    message,
+    mode,
+    file,
+    setMessage,
+    setFile,
+    setFilePreview,
+    setComposerPreview,
+    inputRef,
+    stateRef,
+    updateChat,
+    updateLastMessage,
+  });
+
+  const queueComposerMessage = useCallback((thinkingEffort: number) => {
+    // Block paid users who have exhausted their monthly request quota
+    const planLimit = state.userPlan === "pro"
+      ? PRO_PLAN.premiumRequestsPerMonth
+      : state.userPlan === "pro+"
+        ? PRO_PLUS_PLAN.premiumRequestsPerMonth
+        : null;
+    if (planLimit !== null && state.premiumRequestsUsed >= planLimit) {
+      return;
+    }
+
+    // Count each sent message against the plan request quota.
+    const selectedModelId = activeWorkspace.settings.preferredModelId;
+    if ((state.userPlan === "pro" || state.userPlan === "pro+") &&
+      (selectedModelId == null || isModelPremiumOnly(selectedModelId))) {
+      incrementPremiumRequests();
+    }
+
+    transportQueueMessage(thinkingEffort);
+  }, [activeWorkspace.settings.preferredModelId, incrementPremiumRequests, state.premiumRequestsUsed, state.userPlan, transportQueueMessage]);
 
   // Fork conversation at a specific message index
   const handleFork = useCallback((messageIndex: number) => {
@@ -190,52 +230,6 @@ export function ChatTab() {
     setMemoryNotes,
   });
 
-  const queueComposerMessage = useCallback((thinkingEffort: number) => {
-    const text = message.trim();
-    if (!text && !file) return;
-
-    // Block paid users who have exhausted their monthly request quota
-    const planLimit = state.userPlan === "pro"
-      ? PRO_PLAN.premiumRequestsPerMonth
-      : state.userPlan === "pro+"
-        ? PRO_PLUS_PLAN.premiumRequestsPerMonth
-        : null;
-    if (planLimit !== null && state.premiumRequestsUsed >= planLimit) {
-      return;
-    }
-
-    setQueuedMessages((prev) => [
-      ...prev,
-      {
-        id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        workspaceId: activeWorkspace.id,
-        chatId: activeChat.id,
-        text,
-        mode,
-        file,
-        filePreview,
-        createdAt: Date.now(),
-        thinkingEffort,
-      },
-    ]);
-
-    // Count each sent message against the plan request quota.
-    // Increment for explicitly selected premium models, or when Auto mode is active
-    // (Auto can still route to paid models behind the scenes).
-    const selectedModelId = activeWorkspace.settings.preferredModelId;
-    if ((state.userPlan === "pro" || state.userPlan === "pro+") &&
-      (selectedModelId == null || isModelPremiumOnly(selectedModelId))) {
-      incrementPremiumRequests();
-    }
-
-    setMessage("");
-    setFile(null);
-    setFilePreview(null);
-  }, [activeChat.id, activeWorkspace.id, activeWorkspace.settings.preferredModelId, file, filePreview, incrementPremiumRequests, message, mode, state.userPlan, state.premiumRequestsUsed]);
-
-  const removeQueuedMessage = useCallback((queueId: string) => {
-    setQueuedMessages((prev) => prev.filter((item) => item.id !== queueId));
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -965,7 +959,7 @@ export function ChatTab() {
         onImportFile={handleImportedFile}
         onCopyVsCodePrompt={() => void copyVsCodePrompt()}
         onDownloadVsCodeBundle={downloadVsCodeBundle}
-        onSendGoogleContext={(context) => { googleContextRef.current = context; }}
+        onSendGoogleContext={(context) => { setGoogleContext(context); }}
       />
       <WorkspaceToolsPanel
         open={workspaceToolsOpen}
