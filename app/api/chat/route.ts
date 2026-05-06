@@ -121,7 +121,24 @@ async function ensureConversation(conversationId: string, userId: string | null)
 // Default search model (constant — never needs dynamic update)
 const SEARCH_MODEL = "perplexity/sonar";
 
+/**
+ * Returns true when a 429 response is a provider-side upstream rate limit
+ * (e.g. "meta-llama/llama-3.3-70b-instruct:free is temporarily rate-limited
+ * upstream") rather than an OpenRouter credits / quota exhaustion.
+ * These should be treated like 5xx errors: mark the model as down and retry
+ * with the next model in the fallback chain.
+ */
+function isProviderRateLimit(status: number, body: string): boolean {
+  if (status !== 429) return false;
+  return (
+    /rate.?limited upstream/i.test(body) ||
+    /temporarily rate.?limited/i.test(body)
+  );
+}
+
 function isCreditsError(status: number, body: string): boolean {
+  // Upstream provider rate limits are not credits errors — handle them separately.
+  if (isProviderRateLimit(status, body)) return false;
   return (
     status === 402
     || status === 429
@@ -654,10 +671,12 @@ export const POST = async (req: Request) => {
           let fallbackReason = routeReason;
           let found = false;
 
-          // Try all models in order if 404 (no endpoint found) or 5xx (server error on a free model)
+          // Try all models in order if 404 (no endpoint found), 5xx (server error on a free model),
+          // or 429 upstream provider rate limit (e.g. "temporarily rate-limited upstream").
           if (
             (status === 404 && /No endpoints found|No models match/i.test(err)) ||
-            (status >= 500 && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free"))
+            (status >= 500 && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free")) ||
+            (isProviderRateLimit(status, err) && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free"))
           ) {
             // Mark the initial model as down when OpenRouter says it has no endpoint or is erroring.
             if (typeof requestBody.model === "string") {
@@ -682,7 +701,7 @@ export const POST = async (req: Request) => {
                 err = await response.text();
                 status = response.status;
                 // Mark each failing fallback model as down too.
-                if (status >= 500 || (status === 404 && /No endpoints found|No models match/i.test(err))) {
+                if (status >= 500 || (status === 404 && /No endpoints found|No models match/i.test(err)) || isProviderRateLimit(status, err)) {
                   markModelDown(modelId);
                 }
               }
