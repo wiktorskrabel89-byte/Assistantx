@@ -193,15 +193,17 @@ function FrameworkEditor({ labels, initial, onSave, onCancel }: FrameworkEditorP
     <div className="space-y-3 rounded-2xl border border-sky-200 bg-sky-50/60 p-4">
       <div>
         <label className="mb-1 block text-xs font-semibold text-slate-600">{labels.frameworkName}</label>
-        <input className={inputBase} value={name} onChange={(e) => setName(e.target.value)} />
+        <input id="clinical-framework-name" name="clinicalFrameworkName" className={inputBase} value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div>
         <label className="mb-1 block text-xs font-semibold text-slate-600">{labels.frameworkDesc}</label>
-        <input className={inputBase} value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <input id="clinical-framework-desc" name="clinicalFrameworkDesc" className={inputBase} value={desc} onChange={(e) => setDesc(e.target.value)} />
       </div>
       <div>
         <label className="mb-1 block text-xs font-semibold text-slate-600">{labels.frameworkPrompt}</label>
         <textarea
+          id="clinical-framework-prompt"
+          name="clinicalFrameworkPrompt"
           className={`${inputBase} min-h-[80px] resize-y`}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -640,6 +642,8 @@ export function ClinicalTab() {
             {showModels && (
               <div className="space-y-1">
                 <input
+                  id="clinical-model-search"
+                  name="clinicalModelSearch"
                   className={inputBase}
                   placeholder="Search models..."
                   value={modelSearch}
@@ -774,6 +778,8 @@ export function ClinicalTab() {
             )}
             <div className="mx-auto flex max-w-3xl items-end gap-2">
               <textarea
+                id="clinical-chat-input"
+                name="clinicalChatInput"
                 rows={2}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

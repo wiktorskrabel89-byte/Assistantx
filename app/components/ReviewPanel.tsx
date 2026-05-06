@@ -109,6 +109,8 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
       {expanded && rating ? (
         <div className="mt-3">
           <textarea
+            id="review-comment"
+            name="reviewComment"
             value={localText}
             onChange={(e) => setLocalText(e.target.value)}
             placeholder="Napisz komentarz (opcjonalnie)..."

@@ -616,7 +616,7 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
                   )}
                 </div>
                 <div className={`flex flex-shrink-0 gap-2 border-t p-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
-                  <input value={aiInput} onChange={(e) => setAiInput(e.target.value)}
+                  <input id="sandbox-ai-input" name="sandboxAiInput" value={aiInput} onChange={(e) => setAiInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCustomQuery(); } }}
                     placeholder="Zapytaj AI o swój kod..." disabled={aiLoading}
                     className={`flex-1 rounded-xl border px-3 py-1.5 text-xs outline-none transition-colors ${dark ? "border-slate-600 bg-slate-800 text-slate-200 placeholder-slate-500 focus:border-sky-500" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400 focus:border-sky-400"}`}

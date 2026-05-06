@@ -236,6 +236,8 @@ export default function SupportPage() {
         <div className="max-w-3xl mx-auto flex gap-3 items-end">
           <textarea
             ref={inputRef}
+            id="support-question"
+            name="question"
             className="flex-1 resize-none bg-gray-800 text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 max-h-40 min-h-[44px]"
             placeholder="Ask about AssistantX features, plans, or how to use the platform…"
             value={input}

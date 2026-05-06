@@ -923,7 +923,7 @@ ${js ? `<script>\n${js}\n<\/script>` : ""}
         {activeProject ? (
           <div className={`flex flex-shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2.5 ${dark2 ? "border-slate-700 bg-slate-900/60" : "border-slate-200 bg-white"}`}>
             {editingName ? (
-              <input autoFocus value={nameInput} onChange={(e) => setNameInput(e.target.value)}
+              <input autoFocus id="project-name-input" name="projectNameInput" value={nameInput} onChange={(e) => setNameInput(e.target.value)}
                 onBlur={async () => {
                   setEditingName(false);
                   if (nameInput.trim() && nameInput !== activeProject.name) {
@@ -1008,7 +1008,7 @@ ${js ? `<script>\n${js}\n<\/script>` : ""}
         {/* AI generation bar */}
         <div className={`flex flex-shrink-0 items-center gap-2 border-b px-4 py-2 ${dark2 ? "border-slate-700 bg-slate-900/40" : "border-slate-100 bg-slate-50/80"}`}>
           <Sparkles className="h-3.5 w-3.5 flex-shrink-0 text-amber-400" />
-          <input value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
+          <input id="website-ai-prompt" name="websiteAiPrompt" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && aiPrompt.trim()) { void generateCode(aiPrompt); setAiPrompt(""); } }}
             placeholder="Opisz stronę do wygenerowania... (np. strona portfolio dla fotografa)"
             className={`flex-1 bg-transparent text-xs outline-none ${dark2 ? "text-slate-300 placeholder-slate-600" : "text-slate-700 placeholder-slate-400"}`}
@@ -1095,14 +1095,14 @@ ${js ? `<script>\n${js}\n<\/script>` : ""}
             <div className="flex flex-col gap-2 px-4 pb-3">
               <div className="flex flex-col gap-1">
                 <label className={`text-[10px] font-medium ${dark2 ? "text-slate-400" : "text-slate-500"}`}>Tytuł strony (title)</label>
-                <input value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)}
+                <input id="seo-title" name="seoTitle" value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)}
                   placeholder="Tytuł widoczny w wynikach wyszukiwania"
                   className={`rounded-xl border px-3 py-1.5 text-xs outline-none transition-colors ${dark2 ? "border-slate-600 bg-slate-800 text-slate-200 placeholder-slate-600 focus:border-sky-500" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400 focus:border-sky-400"}`}
                 />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={`text-[10px] font-medium ${dark2 ? "text-slate-400" : "text-slate-500"}`}>Opis (meta description)</label>
-                <input value={seoDesc} onChange={(e) => setSeoDesc(e.target.value)}
+                <input id="seo-desc" name="seoDesc" value={seoDesc} onChange={(e) => setSeoDesc(e.target.value)}
                   placeholder="Krótki opis strony (ok. 160 znaków)"
                   className={`rounded-xl border px-3 py-1.5 text-xs outline-none transition-colors ${dark2 ? "border-slate-600 bg-slate-800 text-slate-200 placeholder-slate-600 focus:border-sky-500" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400 focus:border-sky-400"}`}
                 />
@@ -1258,7 +1258,7 @@ ${js ? `<script>\n${js}\n<\/script>` : ""}
             <div className={`flex-shrink-0 border-t p-3 ${dark2 ? "border-slate-700" : "border-slate-200"}`}>
               <p className={`mb-2 text-[10px] font-semibold uppercase tracking-wide ${dark2 ? "text-slate-500" : "text-slate-400"}`}>Własna domena</p>
               <div className="flex gap-2">
-                <input value={subdomainInput} onChange={(e) => setSubdomainInput(e.target.value)}
+                <input id="subdomain-input" name="subdomainInput" value={subdomainInput} onChange={(e) => setSubdomainInput(e.target.value)}
                   placeholder="twoja-subdomena"
                   className={`flex-1 rounded-xl border px-2.5 py-1.5 text-xs outline-none ${dark2 ? "border-slate-600 bg-slate-800 text-slate-200 placeholder-slate-600 focus:border-orange-500" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400 focus:border-orange-400"}`}
                 />
