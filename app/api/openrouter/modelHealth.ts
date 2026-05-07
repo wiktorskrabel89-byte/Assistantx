@@ -2,25 +2,25 @@
  * Server-side in-memory model health tracker.
  *
  * When a model returns a 5xx or "no endpoint" 404 error from OpenRouter, it is
- * marked as "down". Down models are excluded from auto-routing. After a 2-hour
+ * marked as "down". Down models are excluded from auto-routing. After a 60-second
  * cooling-off window the model is tentatively re-admitted: the next live request
  * acts as a natural health probe. A successful response clears the down state; a
- * new failure restarts the 2-hour window.
+ * new failure restarts the 60-second window.
  *
  * State lives in Node.js module scope — it persists across requests within a warm
  * server process and is intentionally reset on cold start (acceptable trade-off
  * for a stateless serverless environment).
  */
 
-/** Two-hour re-check window in milliseconds. */
-export const RECHECK_INTERVAL_MS = 2 * 60 * 60 * 1000;
+/** 60-second re-check window in milliseconds. */
+export const RECHECK_INTERVAL_MS = 60 * 1000;
 
 type HealthEntry = {
   /** Timestamp (ms) when the model was first marked down in the current window. */
   markedDownAt: number;
   /**
    * Timestamp (ms) of the last time the cooling-off status was evaluated.
-   * Updated to now when the 2h window expires so subsequent reads don't
+   * Updated to now when the 60s window expires so subsequent reads don't
    * immediately re-probe the same model multiple times.
    */
   lastCheckedAt: number;
@@ -31,7 +31,7 @@ const downModels = new Map<string, HealthEntry>();
 /**
  * Mark a model as down.
  * Only free models (those whose ID ends with ":free") are tracked.
- * Restarts (or initialises) the 2-hour cooling-off window.
+ * Restarts (or initialises) the 60-second cooling-off window.
  */
 export function markModelDown(modelId: string): void {
   if (!modelId.endsWith(":free")) return;
@@ -48,7 +48,7 @@ export function recordModelSuccess(modelId: string): void {
 }
 
 /**
- * Returns true if the model is currently inside its 2-hour cooling-off window.
+ * Returns true if the model is currently inside its 60-second cooling-off window.
  *
  * Once the window has elapsed the entry is refreshed and the function returns
  * false, allowing the next request to act as a live health probe without
@@ -77,7 +77,7 @@ export function filterHealthyModels(modelIds: string[]): string[] {
 }
 
 /**
- * Returns all model IDs that are currently within their 2-hour cooling-off
+ * Returns all model IDs that are currently within their 60-second cooling-off
  * window (i.e. excluded from auto-routing right now).
  */
 export function getDownModels(): string[] {
