@@ -2,8 +2,10 @@
  * @jest-environment node
  */
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { updateSession } from "@/lib/middleware";
 
+const mockCreateServerClient = createServerClient as jest.Mock;
 const mockGetClaims = jest.fn();
 const mockGetAll = jest.fn(() => []);
 
@@ -23,6 +25,8 @@ describe("updateSession", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetAll.mockReturnValue([]);
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "publishable-key";
   });
 
   it("redirects to /auth/login when there is no user and path is not /login or /auth", async () => {
@@ -111,5 +115,25 @@ describe("updateSession", () => {
     expect(match).not.toBeNull();
     // The nonce extracted from the CSP must be a non-empty base64 string.
     expect(match![1].length).toBeGreaterThan(0);
+  });
+
+  it("does not redirect manifest requests when there is no authenticated user", async () => {
+    mockGetClaims.mockResolvedValue({ data: { claims: null } });
+
+    const req = makeRequest("/manifest.json");
+    const res = await updateSession(req);
+
+    expect(res.status).not.toBe(307);
+  });
+
+  it("skips Supabase session refresh when Supabase env vars are missing", async () => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+    const req = makeRequest("/api/workspaces/state");
+    const res = await updateSession(req);
+
+    expect(res.status).toBe(200);
+    expect(mockCreateServerClient).not.toHaveBeenCalled();
   });
 });
