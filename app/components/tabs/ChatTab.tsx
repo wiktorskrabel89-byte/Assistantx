@@ -47,10 +47,10 @@ import type { ThinkingEffort } from "../ModelSelector";
 const MODEL_HEALTH_POLL_MS = 60_000; // 1 minute
 const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
-const THINKING_EFFORT_OPTIONS: readonly ThinkingEffort[] = ["Low", "Medium", "High", "Xhigh"];
+const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
 
 function isThinkingEffort(value: string | null): value is ThinkingEffort {
-  return value !== null && THINKING_EFFORT_OPTIONS.includes(value as ThinkingEffort);
+  return value === "Low" || value === "Medium" || value === "High" || value === "Xhigh";
 }
 
 /** Fetch the set of currently-down model IDs from the server. */
