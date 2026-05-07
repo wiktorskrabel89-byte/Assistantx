@@ -66,7 +66,7 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
       ? !isProPlus
       : requiresPremium && !isPremium);
     const lockReason = isDown
-      ? `${model.label} is currently unreachable — will retry automatically after 2 hours`
+      ? `${model.label} is currently unreachable — will retry automatically after 60 seconds`
       : requiresProPlus
         ? `Pro+ plan required for ${model.label}`
         : `Pro plan required for ${model.label}`;

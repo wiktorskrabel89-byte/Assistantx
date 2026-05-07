@@ -2,7 +2,7 @@
  * GET /api/model-health
  *
  * Returns the list of model IDs currently marked as "down" (within their
- * 2-hour cooling-off window). Clients use this to show a warning indicator
+ * 60-second cooling-off window). Clients use this to show a warning indicator
  * in the ModelSelector and to exclude the models from manual selection.
  */
 
