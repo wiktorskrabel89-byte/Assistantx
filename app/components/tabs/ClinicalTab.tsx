@@ -442,7 +442,7 @@ export function ClinicalTab() {
         setLoading(false);
       }
     },
-    [input, loading, messages, selectedFramework, selectedModelId, language],
+    [input, loading, messages, selectedFramework, language],
   );
 
   // ── Session actions ────────────────────────────────────────────────────────
