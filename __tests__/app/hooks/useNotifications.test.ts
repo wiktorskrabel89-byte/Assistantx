@@ -111,7 +111,7 @@ describe("useNotifications", () => {
     // Reset channel stub state
     mockChannel.on.mockImplementation(
       (_event: string, _filter: unknown, cb: ChannelCallback) => {
-        (mockChannel as { _cb?: ChannelCallback })._cb = cb;
+        (mockChannel as { _registeredCallback?: ChannelCallback })._registeredCallback = cb;
         return mockChannel;
       }
     );
