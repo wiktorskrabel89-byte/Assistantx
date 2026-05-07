@@ -38,7 +38,9 @@ function buildUnavailableNotificationsResponse(error: unknown): NotificationsRou
   const missingConfig = message.includes("supabaseurl is required")
     || message.includes("supabasekey is required")
     || message.includes("url is required")
-    || message.includes("invalid url");
+    || message.includes("invalid url")
+    || message.includes("your project's url and key are required")
+    || message.includes("required to create a supabase client");
   if (missingConfig) {
     return {
       notifications: [],

@@ -113,4 +113,4 @@ describe("POST /api/notifications", () => {
     expect(body.ok).toBe(true);
     expect(body.available).toBe(false);
   });
-}
+});
