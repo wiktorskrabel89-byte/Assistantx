@@ -1342,6 +1342,7 @@ ${js ? `<script>\n${js}\n<\/script>` : ""}
                     setAiPrompt("");
                   }
                 }}
+                aria-label="Website creator AI chat input"
                 placeholder="Napisz do AI..."
                 className={`flex-1 rounded-xl border px-3 py-1.5 text-xs outline-none ${dark2 ? "border-slate-600 bg-slate-800 text-slate-200 placeholder-slate-600 focus:border-orange-500" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400 focus:border-orange-400"}`}
               />

@@ -826,7 +826,7 @@ export const POST = async (req: Request) => {
           safeEnqueue(`data: ${JSON.stringify({ model: fallback, routeReason: effectiveRouteReason })}\n\n`);
         }
         if (!fullReply.trim()) {
-          safeEnqueue(`data: ${JSON.stringify({ token: "I couldn't produce a complete response this time. Please try again." })}\n\n`);
+          safeEnqueue(`data: ${JSON.stringify({ token: "The AI did not produce a complete response this time. Please try again." })}\n\n`);
         }
         // Stream completed without error — clear any down status for this model.
         recordModelSuccess(effectiveModel);

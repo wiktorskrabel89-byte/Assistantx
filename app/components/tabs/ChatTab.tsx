@@ -45,6 +45,7 @@ import type { ThinkingEffort } from "../ModelSelector";
 
 /** Poll interval for the model health endpoint (ms). */
 const MODEL_HEALTH_POLL_MS = 60_000; // 1 minute
+const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
 
 /** Fetch the set of currently-down model IDs from the server. */
 async function fetchDownModelIds(): Promise<Set<string>> {
@@ -126,7 +127,14 @@ export function ChatTab() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedMessageContent, setEditedMessageContent] = useState("");
   const [downModelIds, setDownModelIds] = useState<Set<string>>(new Set());
-  const [premiumBannerHidden, setPremiumBannerHidden] = useState(false);
+  const [premiumBannerHidden, setPremiumBannerHidden] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(PREMIUM_BANNER_HIDDEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,6 +156,14 @@ export function ChatTab() {
       clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PREMIUM_BANNER_HIDDEN_KEY, premiumBannerHidden ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [premiumBannerHidden]);
 
   const currentConversationId = activeChat.id;
   const workspaceQueries = useWorkspaceQueries({
