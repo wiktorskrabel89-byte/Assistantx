@@ -58,6 +58,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Anonymous users (created via signInAnonymously) must not publish permanent templates.
+  // The RLS policy also blocks this, but the service-role client bypasses RLS, so we
+  // enforce the check here explicitly.
+  if (user.is_anonymous) {
+    return NextResponse.json({ error: "Anonymous users cannot publish templates. Please sign up for a permanent account." }, { status: 403 });
+  }
+
   const body = await req.json() as { label?: string; content?: string; mode?: string; displayName?: string };
   const label = String(body.label ?? "").trim();
   const content = String(body.content ?? "").trim();

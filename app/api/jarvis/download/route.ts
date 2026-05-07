@@ -1,5 +1,6 @@
-import fs from "node:fs/promises";
+import fs from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 
 const REPO = "wiktorskrabel89-byte/nextjs-boilerplate";
 const RELEASE_TAG = "jarvis-latest";
@@ -32,13 +33,14 @@ export async function GET(request: Request): Promise<Response> {
   // 1. Try to serve a locally published file first (built via `npm run dist:win:public`)
   const localPath = path.join(process.cwd(), "public", "jarvis", filename);
   try {
-    await fs.access(localPath);
-    const fileBuffer = await fs.readFile(localPath);
-    return new Response(fileBuffer, {
+    await fs.promises.access(localPath);
+    // Stream the file to avoid buffering a large binary in memory
+    const fileStream = fs.createReadStream(localPath);
+    const webStream = Readable.toWeb(fileStream) as ReadableStream;
+    return new Response(webStream, {
       headers: {
         "Content-Type": "application/octet-stream",
         "Content-Disposition": `attachment; filename="${filename}"`,
-        "Content-Length": String(fileBuffer.byteLength),
       },
     });
   } catch {

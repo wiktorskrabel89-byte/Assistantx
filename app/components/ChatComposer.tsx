@@ -6,6 +6,7 @@ import { useLayoutEffect, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
 import { REASONING_MODEL_IDS } from "@/lib/ai-config";
+import type { ThinkingEffort } from "@/app/components/ModelSelector";
 
 // Minimal type stubs for the Web Speech API (not yet in TypeScript's lib.dom.d.ts)
 declare global {
@@ -77,7 +78,7 @@ export type ChatComposerProps = {
   onRemoveQueuedMessage: (queueId: string) => void;
   selectedModel: string;
   /** Current thinking effort level — controlled externally (from ModelSelector). */
-  thinkingEffort?: string;
+  thinkingEffort?: ThinkingEffort;
   premiumLimitReached?: boolean;
   planRequestLimit?: number;
 };

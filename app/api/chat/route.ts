@@ -341,10 +341,11 @@ export const POST = async (req: Request) => {
   } = await req.json();
 
   // Detect "websearch" trigger word at the very start of the message (any case).
+  // Require a word boundary after "websearch" so "websearching ..." is not matched.
   // When present, strip it so the model receives a clean prompt.
-  const websearchTrigger = /^websearch\s*/i.test(typeof message === "string" ? message : "");
+  const websearchTrigger = /^websearch(?=\s|$)/i.test(typeof message === "string" ? message : "");
   const effectiveMessage: string = websearchTrigger && typeof message === "string"
-    ? message.replace(/^websearch\s*/i, "").trim()
+    ? message.replace(/^websearch(?=\s|$)/i, "").trim()
     : (typeof message === "string" ? message : "");
 
   // Override addInternetContext if the workspace has web_search tool enabled
@@ -381,12 +382,21 @@ export const POST = async (req: Request) => {
     ? filterModelsByPlan(allowedModelsFinal, userPlan)
     : allowedModelsFinal;
 
+  // Remap deprecated / removed model IDs so users with stale workspace settings
+  // are automatically migrated to the current equivalent instead of hitting 404.
+  const DEPRECATED_MODEL_ALIASES: Record<string, string> = {
+    "openai/gpt-5.1": "openai/gpt-5.2",
+  };
+  const resolvedModelId = modelId
+    ? (DEPRECATED_MODEL_ALIASES[modelId as string] ?? modelId)
+    : modelId;
+
   // If user manually selected a model they don't have access to, override to an appropriate fallback
   const planEnforcedModelId = (() => {
-    if (!modelId) return modelId;
-    if (userPlan === "free" && isModelPremiumOnly(modelId)) return getFreePlanFallback(inferredCodeRequest);
-    if (userPlan === "pro" && isModelProPlusOnly(modelId)) return getFreePlanFallback(inferredCodeRequest);
-    return modelId;
+    if (!resolvedModelId) return resolvedModelId;
+    if (userPlan === "free" && isModelPremiumOnly(resolvedModelId)) return getFreePlanFallback(inferredCodeRequest);
+    if (userPlan === "pro" && isModelProPlusOnly(resolvedModelId)) return getFreePlanFallback(inferredCodeRequest);
+    return resolvedModelId;
   })();
 
   // Apply cost control: filter the allowed models list to respect the user's cost mode
@@ -563,7 +573,7 @@ export const POST = async (req: Request) => {
         headers: { "Content-Type": "application/json" },
       });
     }
-    await saveMessage(conversationId, "user", message);
+    await saveMessage(conversationId, "user", effectiveMessage);
     const [summaries, memMessages] = await Promise.all([
       getMemorySummaries(conversationId),
       getMemoryHistory(conversationId),
@@ -689,23 +699,35 @@ export const POST = async (req: Request) => {
 
           // Try all models in order if 404 (no endpoint found), 5xx (server error on a free model),
           // or 429 upstream provider rate limit (e.g. "temporarily rate-limited upstream").
+          const triggeredByFreeModel5xx =
+            (status >= 500 || isProviderRateLimit(status, err)) &&
+            typeof requestBody.model === "string" &&
+            (requestBody.model as string).endsWith(":free");
           if (
             (status === 404 && /No endpoints found|No models match/i.test(err)) ||
-            (status >= 500 && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free")) ||
-            (isProviderRateLimit(status, err) && typeof requestBody.model === "string" && (requestBody.model as string).endsWith(":free"))
+            triggeredByFreeModel5xx
           ) {
             // Mark the initial model as down when OpenRouter says it has no endpoint or is erroring.
             if (typeof requestBody.model === "string") {
               markModelDown(requestBody.model);
             }
-            const fallbackList = getModelFallbackList();
+            let fallbackList = getModelFallbackList();
+            // When the failure was a 5xx/rate-limit on a free model, only retry with other
+            // free models to avoid unexpectedly billing the user on paid endpoints.
+            if (triggeredByFreeModel5xx) {
+              fallbackList = fallbackList.filter((id) => id.endsWith(":free"));
+            }
             for (const modelId of fallbackList) {
               safeEnqueue(`data: ${JSON.stringify({ status: `Model ${triedModels.at(-1)} unavailable, trying ${modelId}...` })}\n\n`);
               const fallbackRequestBody: Record<string, unknown> = {
                 ...requestBody,
                 model: modelId,
               };
-              delete fallbackRequestBody.plugins;
+              // Preserve the web plugin when the user explicitly triggered websearch — dropping
+              // it silently would skip web browsing even after the retry succeeds.
+              if (!websearchTrigger) {
+                delete fallbackRequestBody.plugins;
+              }
               response = await sendOpenRouterRequest(fallbackRequestBody);
               triedModels.push(modelId);
               if (response.ok) {
