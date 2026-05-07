@@ -18,6 +18,8 @@ type GithubReleaseAsset = {
 };
 
 function getGithubToken(): string | null {
+  // Prefer a Jarvis-specific token, then fall back to common GitHub runtime
+  // token env vars used in different hosting environments.
   return process.env.JARVIS_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? null;
 }
 
