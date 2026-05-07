@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { createClient } from "@/lib/client";
-import { APP_FORCED_MODEL_ID, APP_FORCED_THINKING_EFFORT } from "@/lib/ai-config";
+import { ALL_MODELS } from "@/lib/ai-config";
 import { BUILT_IN_AGENTS, createId, createMessage, deriveTitle, NEW_CHAT_TITLE } from "../lib/chat-state";
 import { type ActiveRequestTarget, type ChatStreamChunk, isAbortLikeError } from "../lib/chat-transport";
 import type { ChatEntry, ChatThread, Mode, QueuedMessage, StoredState } from "../lib/chat-types";
@@ -19,6 +19,9 @@ const PROGRAMMING_LANGUAGE_HINTS: Array<{ name: string; patterns: RegExp[]; exte
   { name: "Go", patterns: [/\bgolang\b/i, /\bgo\b/i], extensions: ["go"] },
   { name: "Rust", patterns: [/\brust\b/i, /cargo/i], extensions: ["rs"] },
 ];
+
+const ALL_MODEL_IDS = ALL_MODELS.map((model) => model.id);
+const DEFAULT_THINKING_EFFORT = 2;
 
 function getFileExtension(name?: string | null) {
   if (!name) return "";
@@ -272,7 +275,9 @@ export function useChatTransport({
     const activeSettings = workspace.settings;
     const activeCustomAgent = activeSettings.customAgents.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
     const activeBuiltInAgent = BUILT_IN_AGENTS.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
-    const effectiveAllowedModels = [APP_FORCED_MODEL_ID];
+    // Null modelId intentionally enables chat auto-routing across the curated model list.
+    const userPreferredModelId = activeSettings.preferredModelId ?? null;
+    const effectiveAllowedModels = ALL_MODEL_IDS;
     const recentMessages = chat.messages.slice(-8);
     const history = activeSettings.memoryEnabled
       ? recentMessages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
@@ -380,7 +385,7 @@ export function useChatTransport({
       const chatBody = {
         message: userMsg,
         mode: queuedMessage.mode,
-        modelId: APP_FORCED_MODEL_ID,
+        modelId: userPreferredModelId,
         allowedModels: effectiveAllowedModels,
         history,
         conversationId: chatId,
@@ -395,7 +400,7 @@ export function useChatTransport({
         addInternetContext: queuedMessage.mode === "search" || (activeSettings.enabledTools ?? []).includes("web_search"),
         costMode: "performance",
         userPlan: stateRef.current.userPlan,
-        thinkingEffort: APP_FORCED_THINKING_EFFORT,
+        thinkingEffort: queuedMessage.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
         systemPrompt: activeSettings.systemPrompt ?? "",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,
@@ -423,7 +428,7 @@ export function useChatTransport({
           ai: "",
           status: "Retrying with fallback model...",
         }));
-        await doChatFetch({ modelId: APP_FORCED_MODEL_ID, allowedModels: [APP_FORCED_MODEL_ID] });
+        await doChatFetch({ modelId: null, allowedModels: effectiveAllowedModels });
       }
     } catch (error) {
       if (isAbortLikeError(error)) return;
