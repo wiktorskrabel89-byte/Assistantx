@@ -115,7 +115,11 @@ export function ChatTab() {
 
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
-  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>("Medium");
+  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>(() => {
+    if (typeof window === "undefined") return "Medium";
+    const saved = window.localStorage.getItem(THINKING_EFFORT_STORAGE_KEY);
+    return isThinkingEffort(saved) ? saved : "Medium";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [codeHistoryOpen, setCodeHistoryOpen] = useState(false);
@@ -278,15 +282,6 @@ export function ChatTab() {
     return () => {
       mediaQuery.removeEventListener("change", listener);
     };
-  }, []);
-
-  // Restore persisted thinking effort so it doesn't unexpectedly reset to Medium.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem(THINKING_EFFORT_STORAGE_KEY);
-    if (isThinkingEffort(saved)) {
-      setThinkingEffort(saved);
-    }
   }, []);
 
   useEffect(() => {
