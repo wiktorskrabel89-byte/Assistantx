@@ -57,6 +57,7 @@ export function useNotifications(): UseNotificationsReturn {
         const userId = session.user.id;
 
         const response = await fetch("/api/notifications", { cache: "no-store" });
+        if (!active) return;
         const payload = await response.json().catch(() => ({})) as NotificationsApiResponse;
         if (!response.ok || !active) return;
 
