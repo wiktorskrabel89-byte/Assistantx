@@ -6,7 +6,7 @@
  * starts fresh. All Date.now() calls are faked to allow time travel.
  */
 
-const RECHECK_MS = 2 * 60 * 60 * 1000; // 2 hours in ms
+const RECHECK_MS = 60 * 1000; // 60 seconds in ms
 
 describe("modelHealth", () => {
   let markModelDown: (id: string) => void;
@@ -46,13 +46,13 @@ describe("modelHealth", () => {
     expect(isModelDown("test/model-a:free")).toBe(true);
   });
 
-  it("isModelDown returns false after 2-hour window elapses", () => {
+  it("isModelDown returns false after 60-second window elapses", () => {
     markModelDown("test/model-a:free");
     jest.advanceTimersByTime(RECHECK_MS);
     expect(isModelDown("test/model-a:free")).toBe(false);
   });
 
-  it("isModelDown returns true just before the 2-hour window elapses", () => {
+  it("isModelDown returns true just before the 60-second window elapses", () => {
     markModelDown("test/model-a:free");
     jest.advanceTimersByTime(RECHECK_MS - 1);
     expect(isModelDown("test/model-a:free")).toBe(true);
