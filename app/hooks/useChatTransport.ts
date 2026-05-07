@@ -20,7 +20,8 @@ const PROGRAMMING_LANGUAGE_HINTS: Array<{ name: string; patterns: RegExp[]; exte
   { name: "Rust", patterns: [/\brust\b/i, /cargo/i], extensions: ["rs"] },
 ];
 
-const AUTO_ALLOWED_MODEL_IDS = ALL_MODELS.map((model) => model.id);
+const ALL_MODEL_IDS = ALL_MODELS.map((model) => model.id);
+const DEFAULT_THINKING_EFFORT = 2;
 
 function getFileExtension(name?: string | null) {
   if (!name) return "";
@@ -274,8 +275,9 @@ export function useChatTransport({
     const activeSettings = workspace.settings;
     const activeCustomAgent = activeSettings.customAgents.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
     const activeBuiltInAgent = BUILT_IN_AGENTS.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
-    const selectedModelId = activeSettings.preferredModelId ?? null;
-    const effectiveAllowedModels = AUTO_ALLOWED_MODEL_IDS;
+    // Null modelId intentionally enables chat auto-routing across the curated model list.
+    const userPreferredModelId = activeSettings.preferredModelId ?? null;
+    const effectiveAllowedModels = ALL_MODEL_IDS;
     const recentMessages = chat.messages.slice(-8);
     const history = activeSettings.memoryEnabled
       ? recentMessages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
@@ -383,7 +385,7 @@ export function useChatTransport({
       const chatBody = {
         message: userMsg,
         mode: queuedMessage.mode,
-        modelId: selectedModelId,
+        modelId: userPreferredModelId,
         allowedModels: effectiveAllowedModels,
         history,
         conversationId: chatId,
@@ -398,7 +400,7 @@ export function useChatTransport({
         addInternetContext: queuedMessage.mode === "search" || (activeSettings.enabledTools ?? []).includes("web_search"),
         costMode: "performance",
         userPlan: stateRef.current.userPlan,
-        thinkingEffort: queuedMessage.thinkingEffort,
+        thinkingEffort: queuedMessage.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
         systemPrompt: activeSettings.systemPrompt ?? "",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,
