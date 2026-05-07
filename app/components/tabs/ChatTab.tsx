@@ -49,7 +49,7 @@ const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
 const THINKING_EFFORT_OPTIONS: ThinkingEffort[] = ["Low", "Medium", "High", "Xhigh"];
 
 function isThinkingEffort(value: string | null): value is ThinkingEffort {
-  return value !== null && THINKING_EFFORT_OPTIONS.includes(value as ThinkingEffort);
+  return value !== null && (THINKING_EFFORT_OPTIONS as readonly string[]).includes(value);
 }
 
 /** Fetch the set of currently-down model IDs from the server. */

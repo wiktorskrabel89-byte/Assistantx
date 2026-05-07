@@ -42,10 +42,10 @@ export async function GET(request: Request): Promise<Response> {
   const target: DownloadTarget = platform === "android"
     ? {
         platform: "android",
-        filenames: ["Jarvis-android.apk", "JarvisAndroid.apk", "app-release.apk"],
+        filenames: ["Jarvis-android.apk", "JarvisAndroid.apk"],
         contentType: "application/vnd.android.package-archive",
         missingError: "Android installer not yet available",
-        instructions: `Build and publish the Android APK first:\n  ${ANDROID_BUILD_COMMAND}\nThen upload the APK as one of: Jarvis-android.apk, JarvisAndroid.apk, app-release.apk\n(or copy it to public/jarvis/ locally).`,
+        instructions: `Build and publish the Android APK first:\n  ${ANDROID_BUILD_COMMAND}\nThen upload/copy it as Jarvis-android.apk (or JarvisAndroid.apk) to the jarvis-latest release or public/jarvis/.`,
       }
     : (() => {
         const rawArch = searchParams.get("arch");
