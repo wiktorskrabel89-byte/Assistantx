@@ -825,6 +825,9 @@ export const POST = async (req: Request) => {
           const fallback = MODEL_LABELS[effectiveModel] ?? effectiveModel.split("/").pop() ?? "AI";
           safeEnqueue(`data: ${JSON.stringify({ model: fallback, routeReason: effectiveRouteReason })}\n\n`);
         }
+        if (!fullReply.trim()) {
+          safeEnqueue(`data: ${JSON.stringify({ token: "The AI did not produce a complete response this time. Please try again." })}\n\n`);
+        }
         // Stream completed without error — clear any down status for this model.
         recordModelSuccess(effectiveModel);
         safeEnqueue(`data: ${JSON.stringify({ status: "Done" })}\n\n`);

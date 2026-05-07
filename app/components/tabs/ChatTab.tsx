@@ -45,12 +45,7 @@ import type { ThinkingEffort } from "../ModelSelector";
 
 /** Poll interval for the model health endpoint (ms). */
 const MODEL_HEALTH_POLL_MS = 60_000; // 1 minute
-const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
-const THINKING_EFFORT_OPTIONS: ThinkingEffort[] = ["Low", "Medium", "High", "Xhigh"];
-
-function isThinkingEffort(value: string | null): value is ThinkingEffort {
-  return value !== null && (THINKING_EFFORT_OPTIONS as readonly string[]).includes(value);
-}
+const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
 
 /** Fetch the set of currently-down model IDs from the server. */
 async function fetchDownModelIds(): Promise<Set<string>> {
@@ -81,7 +76,6 @@ export function ChatTab() {
     setWorkspaceMode,
     setPreferredModelId,
     setCostMode,
-    setUserPlan,
     incrementPremiumRequests,
     createChatAction,
     renameChat,
@@ -137,6 +131,14 @@ export function ChatTab() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedMessageContent, setEditedMessageContent] = useState("");
   const [downModelIds, setDownModelIds] = useState<Set<string>>(new Set());
+  const [premiumBannerHidden, setPremiumBannerHidden] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(PREMIUM_BANNER_HIDDEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -158,6 +160,14 @@ export function ChatTab() {
       clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PREMIUM_BANNER_HIDDEN_KEY, premiumBannerHidden ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [premiumBannerHidden]);
 
   const currentConversationId = activeChat.id;
   const workspaceQueries = useWorkspaceQueries({
@@ -677,12 +687,23 @@ export function ChatTab() {
 
           <div className={`min-h-0 flex-1 px-3 py-4 transition-colors duration-200 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
             <div className="mx-auto flex h-full max-w-5xl flex-col">
-              <PremiumPlanBanner
-                dark={state.dark}
-                userPlan={state.userPlan}
-                premiumRequestsUsed={state.premiumRequestsUsed}
-                onSetUserPlan={setUserPlan}
-              />
+              {!premiumBannerHidden ? (
+                <PremiumPlanBanner
+                  dark={state.dark}
+                  userPlan={state.userPlan}
+                  premiumRequestsUsed={state.premiumRequestsUsed}
+                  onDismiss={() => setPremiumBannerHidden(true)}
+                />
+              ) : null}
+              {premiumBannerHidden ? (
+                <button
+                  type="button"
+                  onClick={() => setPremiumBannerHidden(false)}
+                  className={`mb-3 self-start rounded-lg border px-2.5 py-1 text-[11px] ${state.dark ? "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}
+                >
+                  Show premium banner
+                </button>
+              ) : null}
 
               <GoogleIntegrationBanner
                 dark={state.dark}

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { KeyboardEvent } from "react";
 import { Send, Bot, User, Mail } from "lucide-react";
+import { APP_FORCED_MODEL_ID, APP_FORCED_THINKING_EFFORT } from "@/lib/ai-config";
 
 interface Message {
   role: "assistant" | "user";
@@ -14,7 +15,7 @@ const SUPPORT_INSTRUCTIONS =
   "Never generate code, essays, stories, or any content unrelated to AssistantX support topics. " +
   "Be friendly, concise, and helpful.";
 
-const SUPPORT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+const SUPPORT_MODEL = APP_FORCED_MODEL_ID;
 
 export default function SupportPage() {
   const [messages, setMessages] = useState<Message[]>([
@@ -72,6 +73,8 @@ export default function SupportPage() {
           assistantInstructions: SUPPORT_INSTRUCTIONS,
           history,
           style: "concise",
+          thinkingEffort: APP_FORCED_THINKING_EFFORT,
+          allowedModels: [APP_FORCED_MODEL_ID],
         }),
       });
 

@@ -21,7 +21,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SandboxEditor } from "../SandboxEditor";
-import { LANGUAGE_OPTIONS } from "@/lib/ai-config";
+import { APP_FORCED_MODEL_ID, APP_FORCED_THINKING_EFFORT, LANGUAGE_OPTIONS } from "@/lib/ai-config";
 
 // ─── Language mode types ───────────────────────────────────────────────────────
 
@@ -101,7 +101,15 @@ async function streamChatRequest(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal,
-    body: JSON.stringify({ message: prompt, mode: "code", userPlan: "free", history: [] }),
+    body: JSON.stringify({
+      message: prompt,
+      mode: "code",
+      userPlan: "free",
+      history: [],
+      modelId: APP_FORCED_MODEL_ID,
+      thinkingEffort: APP_FORCED_THINKING_EFFORT,
+      allowedModels: [APP_FORCED_MODEL_ID],
+    }),
   });
   if (!res.body) return;
   const reader = res.body.getReader();

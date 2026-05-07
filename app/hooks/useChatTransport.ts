@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { createClient } from "@/lib/client";
-import { BUILT_IN_AGENTS, createId, createMessage, deriveTitle, getAllowedModels, NEW_CHAT_TITLE } from "../lib/chat-state";
+import { APP_FORCED_MODEL_ID, APP_FORCED_THINKING_EFFORT } from "@/lib/ai-config";
+import { BUILT_IN_AGENTS, createId, createMessage, deriveTitle, NEW_CHAT_TITLE } from "../lib/chat-state";
 import { type ActiveRequestTarget, type ChatStreamChunk, isAbortLikeError } from "../lib/chat-transport";
 import type { ChatEntry, ChatThread, Mode, QueuedMessage, StoredState } from "../lib/chat-types";
 import { isImageRequest } from "@/lib/detect";
@@ -271,11 +272,7 @@ export function useChatTransport({
     const activeSettings = workspace.settings;
     const activeCustomAgent = activeSettings.customAgents.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
     const activeBuiltInAgent = BUILT_IN_AGENTS.find((agent) => agent.id === activeSettings.activeAgentId) ?? null;
-    const allowedModels = getAllowedModels(queuedMessage.mode);
-    const preferredModelId = activeSettings.preferredModelId ?? null;
-    const effectiveAllowedModels = preferredModelId
-      ? [preferredModelId]
-      : allowedModels;
+    const effectiveAllowedModels = [APP_FORCED_MODEL_ID];
     const recentMessages = chat.messages.slice(-8);
     const history = activeSettings.memoryEnabled
       ? recentMessages.filter((entry) => entry.ai && !entry.imageUrl).map((entry) => ({ user: entry.user, ai: entry.ai }))
@@ -383,7 +380,7 @@ export function useChatTransport({
       const chatBody = {
         message: userMsg,
         mode: queuedMessage.mode,
-        modelId: preferredModelId ?? undefined,
+        modelId: APP_FORCED_MODEL_ID,
         allowedModels: effectiveAllowedModels,
         history,
         conversationId: chatId,
@@ -398,7 +395,7 @@ export function useChatTransport({
         addInternetContext: queuedMessage.mode === "search" || (activeSettings.enabledTools ?? []).includes("web_search"),
         costMode: "performance",
         userPlan: stateRef.current.userPlan,
-        thinkingEffort: queuedMessage.thinkingEffort,
+        thinkingEffort: APP_FORCED_THINKING_EFFORT,
         systemPrompt: activeSettings.systemPrompt ?? "",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,
@@ -426,7 +423,7 @@ export function useChatTransport({
           ai: "",
           status: "Retrying with fallback model...",
         }));
-        await doChatFetch({ modelId: undefined, allowedModels: getAllowedModels(queuedMessage.mode) });
+        await doChatFetch({ modelId: APP_FORCED_MODEL_ID, allowedModels: [APP_FORCED_MODEL_ID] });
       }
     } catch (error) {
       if (isAbortLikeError(error)) return;

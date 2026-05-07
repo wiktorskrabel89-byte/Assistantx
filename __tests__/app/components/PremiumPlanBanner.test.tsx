@@ -2,7 +2,6 @@ import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { PremiumPlanBanner } from "@/app/components/PremiumPlanBanner";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
-import type { UserPlan } from "@/lib/ai-config";
 
 // Spy on fetch for billing-portal calls
 const mockFetch = jest.fn();
@@ -13,19 +12,25 @@ beforeEach(() => {
 });
 
 function renderBanner(overrides: Partial<Parameters<typeof PremiumPlanBanner>[0]> = {}) {
-  const onSetUserPlan = overrides.onSetUserPlan ?? jest.fn();
   return render(
     <PremiumPlanBanner
       dark={overrides.dark ?? false}
       userPlan={overrides.userPlan ?? "free"}
       premiumRequestsUsed={overrides.premiumRequestsUsed ?? 0}
-      onSetUserPlan={onSetUserPlan}
+      onDismiss={overrides.onDismiss}
     />
   );
 }
 
 describe("PremiumPlanBanner", () => {
   describe("free plan", () => {
+    it("can be dismissed when hide action is provided", () => {
+      const onDismiss = jest.fn();
+      renderBanner({ userPlan: "free", onDismiss });
+      fireEvent.click(screen.getByRole("button", { name: /Hide premium banner/i }));
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
     it("shows 'Upgrade your plan' heading for free users", () => {
       renderBanner({ userPlan: "free" });
       expect(screen.getByText("Upgrade your plan")).toBeInTheDocument();

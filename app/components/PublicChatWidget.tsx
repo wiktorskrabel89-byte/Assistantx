@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef } from "react";
+import { APP_FORCED_MODEL_ID, APP_FORCED_THINKING_EFFORT } from "@/lib/ai-config";
 
 export default function PublicChatWidget() {
   const [messages, setMessages] = useState([
@@ -24,6 +25,9 @@ export default function PublicChatWidget() {
           history: messages.filter((m) => m.role === "user").map((m) => ({ user: m.content, ai: "" })),
           assistantInstructions: "You are a helpful website assistant. Only answer questions about AssistantX, its features, usage, and policies. If the question is unrelated, politely decline.",
           style: "concise",
+          modelId: APP_FORCED_MODEL_ID,
+          thinkingEffort: APP_FORCED_THINKING_EFFORT,
+          allowedModels: [APP_FORCED_MODEL_ID],
         }),
       });
       let reply = "";
