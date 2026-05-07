@@ -45,6 +45,12 @@ import type { ThinkingEffort } from "../ModelSelector";
 
 /** Poll interval for the model health endpoint (ms). */
 const MODEL_HEALTH_POLL_MS = 60_000; // 1 minute
+const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
+const THINKING_EFFORT_OPTIONS: ThinkingEffort[] = ["Low", "Medium", "High", "Xhigh"];
+
+function isThinkingEffort(value: string | null): value is ThinkingEffort {
+  return value !== null && (THINKING_EFFORT_OPTIONS as readonly string[]).includes(value);
+}
 
 /** Fetch the set of currently-down model IDs from the server. */
 async function fetchDownModelIds(): Promise<Set<string>> {
@@ -109,7 +115,11 @@ export function ChatTab() {
 
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
-  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>("Medium");
+  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>(() => {
+    if (typeof window === "undefined") return "Medium";
+    const saved = window.localStorage.getItem(THINKING_EFFORT_STORAGE_KEY);
+    return isThinkingEffort(saved) ? saved : "Medium";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [codeHistoryOpen, setCodeHistoryOpen] = useState(false);
@@ -273,6 +283,11 @@ export function ChatTab() {
       mediaQuery.removeEventListener("change", listener);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(THINKING_EFFORT_STORAGE_KEY, thinkingEffort);
+  }, [thinkingEffort]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !sidebarOpen) return;
