@@ -104,7 +104,7 @@ const nextConfig = {
           value: [
             "default-src 'self'",
             "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-            "style-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "img-src 'self' blob: data: https:",
             "font-src 'self' https://fonts.gstatic.com",
             "connect-src *",

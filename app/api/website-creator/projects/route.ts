@@ -1,6 +1,31 @@
 import { createClient } from "@/lib/server";
 import { NextRequest } from "next/server";
 
+function getErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const value = (error as Record<string, unknown>)["code"];
+  return typeof value === "string" ? value : null;
+}
+
+function isMissingTableError(error: unknown): boolean {
+  const code = getErrorCode(error);
+  // PostgreSQL/PostgREST codes indicating the table doesn't exist or isn't accessible:
+  // 42P01  — PostgreSQL "relation does not exist"
+  // PGRST116 — result contains 0 rows (can indicate missing table with maybeSingle)
+  // PGRST200–PGRST205 — relationship/column/schema-cache not found
+  const missingCodes = new Set(["42P01", "PGRST116", "PGRST200", "PGRST201", "PGRST202", "PGRST204", "PGRST205"]);
+  if (code !== null && missingCodes.has(code)) return true;
+  const msg = error instanceof Error ? error.message.toLowerCase() : "";
+  return msg.includes("does not exist") || (msg.includes("website_creator_projects") && msg.includes("not found"));
+}
+
+function websiteCreatorNotConfiguredResponse(extraFields?: Record<string, unknown>): Response {
+  return Response.json(
+    { ...extraFields, code: "website_creator_not_configured", error: "Website Creator is not configured. Run the website-creator migration in Supabase." },
+    { status: 503 }
+  );
+}
+
 async function getAuthenticatedUser(req: NextRequest) {
   const supabase = await createClient();
   const authHeader = req.headers.get("authorization");
@@ -30,6 +55,9 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error("[GET /api/website-creator/projects]", error);
+    if (isMissingTableError(error)) {
+      return websiteCreatorNotConfiguredResponse({ projects: [], available: false });
+    }
     return Response.json({ error: error.message }, { status: 500 });
   }
 
@@ -67,6 +95,9 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     console.error("[POST /api/website-creator/projects]", error);
+    if (isMissingTableError(error)) {
+      return websiteCreatorNotConfiguredResponse();
+    }
     return Response.json({ error: error.message }, { status: 500 });
   }
 
