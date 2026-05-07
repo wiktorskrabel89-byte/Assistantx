@@ -196,6 +196,10 @@ describe("useNotifications", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).not.toHaveBeenCalledWith(
+      "/api/notifications",
+      expect.objectContaining({ method: "POST" })
+    );
   });
 
   it("unsubscribes the realtime channel on unmount", async () => {
