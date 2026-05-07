@@ -10,20 +10,25 @@ Write-Host "   JARVIS POST-INSTALL CONFIGURATION         " -ForegroundColor Cyan
 Write-Host "----------------------------------------------" -ForegroundColor Cyan
 
 # ── 1. Autostart shortcut ─────────────────────────────────────────────────
-$appPath     = Join-Path $InstallDir $AppName
-$startupDir  = [Environment]::GetFolderPath("Startup")
+$appPath      = Join-Path $InstallDir $AppName
+$startupDir   = [Environment]::GetFolderPath("Startup")
 $shortcutPath = Join-Path $startupDir "Jarvis.lnk"
 
-try {
-    $shell    = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath       = $appPath
-    $shortcut.WorkingDirectory = $InstallDir
-    $shortcut.Description      = "Jarvis AI Assistant"
-    $shortcut.Save()
-    Write-Host "[OK] Autostart shortcut created: $shortcutPath" -ForegroundColor Green
-} catch {
-    Write-Host "[WARN] Could not create autostart shortcut: $_" -ForegroundColor Yellow
+if (-not (Test-Path $appPath)) {
+    Write-Host "[WARN] Application not found at: $appPath" -ForegroundColor Yellow
+    Write-Host "[WARN] Startup shortcut will NOT be created." -ForegroundColor Yellow
+} else {
+    try {
+        $shell    = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath       = $appPath
+        $shortcut.WorkingDirectory = $InstallDir
+        $shortcut.Description      = "Jarvis AI Assistant"
+        $shortcut.Save()
+        Write-Host "[OK] Autostart shortcut created: $shortcutPath" -ForegroundColor Green
+    } catch {
+        Write-Host "[WARN] Could not create autostart shortcut: $_" -ForegroundColor Yellow
+    }
 }
 
 # ── 2. Disable fast startup (HiberbootEnabled) ────────────────────────────
