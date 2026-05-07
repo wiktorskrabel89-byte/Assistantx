@@ -5,24 +5,58 @@ param(
 
 $ErrorActionPreference = "SilentlyContinue"
 
+function Get-JarvisExecutablePath {
+    param(
+        [string]$SearchRoot,
+        [string]$PreferredName
+    )
+
+    $preferredPath = Join-Path $SearchRoot $PreferredName
+    if (Test-Path $preferredPath) {
+        return $preferredPath
+    }
+
+    $jarvisExe = Get-ChildItem -Path $SearchRoot -Filter "Jarvis*.exe" -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -notmatch "^(JarvisSetup.*|unins.*|uninstall.*)$"
+        } |
+        Select-Object -First 1
+
+    if ($jarvisExe) {
+        return $jarvisExe.FullName
+    }
+
+    $fallbackExe = Get-ChildItem -Path $SearchRoot -Filter "*.exe" -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -notmatch "^(JarvisSetup.*|unins.*|uninstall.*)$"
+        } |
+        Select-Object -First 1
+
+    if ($fallbackExe) {
+        return $fallbackExe.FullName
+    }
+
+    return $null
+}
+
 Write-Host "----------------------------------------------" -ForegroundColor Cyan
 Write-Host "   JARVIS POST-INSTALL CONFIGURATION         " -ForegroundColor Cyan
 Write-Host "----------------------------------------------" -ForegroundColor Cyan
 
 # ── 1. Autostart shortcut ─────────────────────────────────────────────────
-$appPath      = Join-Path $InstallDir $AppName
+$appPath      = Get-JarvisExecutablePath -SearchRoot $InstallDir -PreferredName $AppName
 $startupDir   = [Environment]::GetFolderPath("Startup")
 $shortcutPath = Join-Path $startupDir "Jarvis.lnk"
 
-if (-not (Test-Path $appPath)) {
-    Write-Host "[WARN] Application not found at: $appPath" -ForegroundColor Yellow
+if ([string]::IsNullOrWhiteSpace($appPath)) {
+    Write-Host "[WARN] Application executable was not found under: $InstallDir" -ForegroundColor Yellow
     Write-Host "[WARN] Startup shortcut will NOT be created." -ForegroundColor Yellow
 } else {
     try {
         $shell    = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($shortcutPath)
         $shortcut.TargetPath       = $appPath
-        $shortcut.WorkingDirectory = $InstallDir
+        $shortcut.WorkingDirectory = Split-Path -Path $appPath -Parent
         $shortcut.Description      = "Jarvis AI Assistant"
         $shortcut.Save()
         Write-Host "[OK] Autostart shortcut created: $shortcutPath" -ForegroundColor Green

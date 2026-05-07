@@ -34,6 +34,40 @@ function Write-Stage {
     Write-Host "`n$Message" -ForegroundColor Yellow
 }
 
+function Get-JarvisExecutablePath {
+    param(
+        [string]$SearchRoot,
+        [string]$PreferredName
+    )
+
+    $preferredPath = Join-Path $SearchRoot $PreferredName
+    if (Test-Path $preferredPath) {
+        return $preferredPath
+    }
+
+    $jarvisExe = Get-ChildItem -Path $SearchRoot -Filter "Jarvis*.exe" -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -notmatch "^(JarvisSetup.*|unins.*|uninstall.*)$"
+        } |
+        Select-Object -First 1
+
+    if ($jarvisExe) {
+        return $jarvisExe.FullName
+    }
+
+    $fallbackExe = Get-ChildItem -Path $SearchRoot -Filter "*.exe" -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -notmatch "^(JarvisSetup.*|unins.*|uninstall.*)$"
+        } |
+        Select-Object -First 1
+
+    if ($fallbackExe) {
+        return $fallbackExe.FullName
+    }
+
+    return $null
+}
+
 if (-not (Test-IsAdministrator)) {
     Write-Host "ERROR: Run this script as Administrator." -ForegroundColor Red
     exit 1
@@ -97,11 +131,11 @@ if ($process.ExitCode -ne 0) {
 }
 
 Write-Stage "[4/4] Verifying installation"
-$finalAppPath = Join-Path $InstallDir $AppName
+$finalAppPath = Get-JarvisExecutablePath -SearchRoot $InstallDir -PreferredName $AppName
 
-if (-not (Test-Path $finalAppPath)) {
+if ([string]::IsNullOrWhiteSpace($finalAppPath)) {
     Write-Host "ERROR: Verification failed — installed application not found." -ForegroundColor Red
-    Write-Host "Expected: $finalAppPath" -ForegroundColor White
+    Write-Host "Expected executable somewhere under: $InstallDir" -ForegroundColor White
     Write-Host "Installer exit code was: $($process.ExitCode)" -ForegroundColor Yellow
     Write-Host "" -ForegroundColor White
     Write-Host "Possible causes:" -ForegroundColor White
@@ -118,7 +152,7 @@ if (-not $SkipAutostart) {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = $finalAppPath
-    $shortcut.WorkingDirectory = $InstallDir
+    $shortcut.WorkingDirectory = Split-Path -Path $finalAppPath -Parent
     $shortcut.Save()
     Write-Host "Autostart shortcut created: $shortcutPath" -ForegroundColor Green
 } else {
