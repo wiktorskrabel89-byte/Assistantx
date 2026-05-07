@@ -36,6 +36,8 @@ npm run dist:win:all
 
 Polecenia tworzą pliki `JarvisSetup-x64.exe` i/lub `JarvisSetup-arm64.exe` w katalogu `dist/` przy użyciu `electron-builder` i targetu `nsis`.
 
+Skrypty budujące ustawiają też `--publish never`, więc sam build nie próbuje wysyłać artefaktów do GitHub Releases i nie wymaga ustawionego `GH_TOKEN`. Publikacja release pozostaje obsługiwana osobno przez workflow `.github/workflows/build-jarvis.yml`.
+
 W tym samym katalogu `dist/` Electron Builder tworzy też pliki auto-update:
 - `latest.yml`
 - `JarvisSetup-x64.exe.blockmap`
