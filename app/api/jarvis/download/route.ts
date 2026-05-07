@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 const REPO = "wiktorskrabel89-byte/Assistantx";
 const RELEASE_TAG = "jarvis-latest";
 const RELEASE_DOWNLOAD_BASE = `https://github.com/${REPO}/releases/download/${RELEASE_TAG}`;
+const RELEASE_DOWNLOAD_TIMEOUT_MS = 30_000;
 const BUILD_COMMAND =
   "cd jarvis/desktop && npm install && npm run dist:win:all && npm run publish:download";
 const ANDROID_BUILD_COMMAND =
@@ -52,7 +53,7 @@ async function proxyGithubReleaseAsset(asset: GithubReleaseAsset): Promise<Respo
         Authorization: `Bearer ${token}`,
         "X-GitHub-Api-Version": "2022-11-28",
       },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(RELEASE_DOWNLOAD_TIMEOUT_MS),
       redirect: "follow",
     });
 

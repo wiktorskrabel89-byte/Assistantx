@@ -16,9 +16,19 @@ function Get-JarvisExecutablePath {
         return $preferredPath
     }
 
+    $jarvisExe = Get-ChildItem -Path $SearchRoot -Filter "Jarvis*.exe" -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -notmatch "^(JarvisSetup.*|unins.*|uninstall.*)$"
+        } |
+        Select-Object -First 1
+
+    if ($jarvisExe) {
+        return $jarvisExe.FullName
+    }
+
     $fallbackExe = Get-ChildItem -Path $SearchRoot -Filter "*.exe" -File -Recurse -ErrorAction SilentlyContinue |
         Where-Object {
-            $_.Name -notmatch "^(unins.*|uninstall.*|JarvisSetup.*)$"
+            $_.Name -notmatch "^(JarvisSetup.*|unins.*|uninstall.*)$"
         } |
         Select-Object -First 1
 
