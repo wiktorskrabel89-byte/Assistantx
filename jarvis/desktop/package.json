@@ -11,11 +11,11 @@
   "scripts": {
     "dev": "electron .",
     "start": "electron .",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "dist:win": "electron-builder --win nsis --x64",
-    "dist:win:arm64": "electron-builder --win nsis --arm64",
-    "dist:win:all": "electron-builder --win nsis --x64 --arm64",
+    "pack": "electron-builder --dir --publish never",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --publish never --win nsis --x64",
+    "dist:win:arm64": "electron-builder --publish never --win nsis --arm64",
+    "dist:win:all": "electron-builder --publish never --win nsis --x64 --arm64",
     "bootstrap:windows": "powershell -ExecutionPolicy Bypass -File scripts/JarvisSystemSetup.ps1",
     "publish:download": "node scripts/publish-installer.js",
     "dist:win:public": "npm run dist:win:all && npm run publish:download"
