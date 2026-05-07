@@ -1,6 +1,15 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const PUBLIC_METADATA_PATHS = new Set(['/manifest.json', '/manifest.webmanifest'])
+
+function hasSupabaseConfig() {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+    && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  )
+}
+
 /**
  * Builds a per-request Content-Security-Policy header value.
  *
@@ -55,6 +64,11 @@ export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request: { headers: requestHeaders },
   })
+
+  if (PUBLIC_METADATA_PATHS.has(request.nextUrl.pathname) || !hasSupabaseConfig()) {
+    supabaseResponse.headers.set('Content-Security-Policy', csp)
+    return supabaseResponse
+  }
 
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.

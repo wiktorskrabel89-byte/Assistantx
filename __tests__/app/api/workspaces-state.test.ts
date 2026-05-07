@@ -97,6 +97,14 @@ describe("GET /api/workspaces/state", () => {
     expect(body.code).toBe("workspace_sync_not_configured");
   });
 
+  it("returns 503 with workspace_sync_not_configured when Supabase env is missing", async () => {
+    mockCreateClient.mockRejectedValue(new Error("Your project's URL and Key are required to create a Supabase client!"));
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const body = await res.json() as { code: string };
+    expect(body.code).toBe("workspace_sync_not_configured");
+  });
+
   it("returns 500 on generic supabase error", async () => {
     const supabase = makeSupabase({ stateError: Object.assign(new Error("Generic error"), { code: "99999" }) });
     mockCreateClient.mockResolvedValue(supabase);

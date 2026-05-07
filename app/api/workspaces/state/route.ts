@@ -60,7 +60,9 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
   const missingConfig = normalizedMessage.includes("supabaseurl is required")
     || normalizedMessage.includes("supabasekey is required")
     || normalizedMessage.includes("url is required")
-    || normalizedMessage.includes("invalid url");
+    || normalizedMessage.includes("invalid url")
+    || normalizedMessage.includes("your project's url and key are required")
+    || normalizedMessage.includes("required to create a supabase client");
 
   if (missingConfig) {
     return {

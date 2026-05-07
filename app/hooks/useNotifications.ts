@@ -18,6 +18,12 @@ export type UseNotificationsReturn = {
   markAllRead: () => Promise<void>;
 };
 
+type NotificationsApiResponse = {
+  notifications?: Record<string, unknown>[];
+  available?: boolean;
+  ok?: boolean;
+};
+
 function rowToNotification(row: Record<string, unknown>): AppNotification {
   return {
     id: String(row.id),
@@ -50,20 +56,16 @@ export function useNotifications(): UseNotificationsReturn {
 
         const userId = session.user.id;
 
-        // Initial fetch
-        const { data } = await supabase
-          .from("notifications")
-          .select("*")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(50);
+        const response = await fetch("/api/notifications", { cache: "no-store" });
+        if (!active) return;
+        const payload = await response.json().catch(() => ({})) as NotificationsApiResponse;
+        if (!response.ok || !active) return;
 
-        if (active && data) {
-          setNotifications((data as Record<string, unknown>[]).map(rowToNotification));
-        }
+        const rows = Array.isArray(payload.notifications) ? payload.notifications : [];
+        setNotifications(rows.map(rowToNotification));
 
         // Guard against unmount during the async fetch above.
-        if (!active) return;
+        if (!active || payload.available === false) return;
 
         // Realtime subscription
         const channel = supabase
@@ -128,11 +130,12 @@ export function useNotifications(): UseNotificationsReturn {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-    await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("user_id", session.user.id)
-      .eq("read", false);
+    const response = await fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "markAllRead" }),
+    });
+    if (!response.ok) return;
 
     // Optimistic update — realtime will also fire, but this is faster.
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));

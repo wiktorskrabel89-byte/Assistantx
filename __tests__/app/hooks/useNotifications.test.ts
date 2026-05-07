@@ -33,30 +33,8 @@ function makeChannelStub() {
 }
 
 const mockChannel = makeChannelStub();
-const mockSelect = jest.fn();
-const mockUpdate = jest.fn();
-const mockEq = jest.fn();
-const mockOrder = jest.fn();
-const mockLimit = jest.fn();
 const mockGetSession = jest.fn();
-
-// Chain-able query builder that resolves to { data: [], error: null } by default
-function makeQueryChain(resolvedData: unknown = []) {
-  const chain: Record<string, jest.Mock> = {};
-  const resolve = () => Promise.resolve({ data: resolvedData, error: null });
-  chain.select = jest.fn().mockReturnValue(chain);
-  chain.update = jest.fn().mockReturnValue(chain);
-  chain.eq = jest.fn().mockReturnValue(chain);
-  chain.order = jest.fn().mockReturnValue(chain);
-  chain.limit = jest.fn().mockImplementation(resolve);
-  // Allow .eq(...).eq(...) patterns for markAllRead
-  chain.eq.mockImplementation(() => chain);
-  // update().eq().eq() ends with a resolved promise
-  chain.update.mockImplementation(() => ({
-    eq: jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) }),
-  }));
-  return chain;
-}
+const mockFetch = jest.fn();
 
 jest.mock("@/lib/client", () => ({
   createClient: jest.fn(),
@@ -70,37 +48,32 @@ function setupMockClient(options: {
   userId?: string | null;
   notifications?: Record<string, unknown>[];
   sessionError?: boolean;
+  available?: boolean;
 } = {}) {
   const userId = options.userId ?? "user-abc";
   const notifications = options.notifications ?? [];
   const sessionError = options.sessionError ?? false;
-
-  const queryChain = makeQueryChain(notifications);
-  // Re-wire select so the full chain resolves properly
-  queryChain.select.mockReturnValue({
-    eq: jest.fn().mockReturnValue({
-      order: jest.fn().mockReturnValue({
-        limit: jest.fn().mockResolvedValue({ data: notifications, error: null }),
-      }),
-    }),
-  });
+  const available = options.available ?? true;
 
   const session = sessionError
     ? { data: { session: null }, error: new Error("Session error") }
     : { data: { session: userId ? { user: { id: userId } } : null } };
 
   mockGetSession.mockResolvedValue(session);
+  mockFetch.mockResolvedValue({
+    ok: true,
+    json: jest.fn().mockResolvedValue({ notifications, available }),
+  });
 
   const clientStub = {
     auth: {
       getSession: mockGetSession,
     },
-    from: jest.fn().mockReturnValue(queryChain),
     channel: jest.fn().mockReturnValue(mockChannel),
   };
 
   mockCreateClient.mockReturnValue(clientStub);
-  return { clientStub, queryChain };
+  return { clientStub };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -108,6 +81,7 @@ function setupMockClient(options: {
 describe("useNotifications", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    global.fetch = mockFetch as typeof fetch;
     // Reset channel stub state
     mockChannel.on.mockImplementation(
       (_event: string, _filter: unknown, cb: ChannelCallback) => {
@@ -169,32 +143,25 @@ describe("useNotifications", () => {
   });
 
   it("markAllRead updates all notifications to read (optimistic update)", async () => {
-    // Set up with the update chain resolving correctly
     const userId = "user-abc";
     mockGetSession.mockResolvedValue({ data: { session: { user: { id: userId } } } });
-
-    const updateChain = {
-      eq: jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) }),
-    };
-    const fromChain = {
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue({
-              data: [
-                { id: "n1", kind: "info", title: "T", body: "B", read: false, created_at: "2024-01-01" },
-              ],
-              error: null,
-            }),
-          }),
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          notifications: [
+            { id: "n1", kind: "info", title: "T", body: "B", read: false, created_at: "2024-01-01" },
+          ],
+          available: true,
         }),
-      }),
-      update: jest.fn().mockReturnValue(updateChain),
-    };
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ ok: true, available: true }),
+      });
 
     mockCreateClient.mockReturnValue({
       auth: { getSession: mockGetSession },
-      from: jest.fn().mockReturnValue(fromChain),
       channel: jest.fn().mockReturnValue(mockChannel),
     });
 
@@ -212,20 +179,12 @@ describe("useNotifications", () => {
   it("markAllRead is a no-op when there are no unread notifications", async () => {
     const userId = "user-abc";
     mockGetSession.mockResolvedValue({ data: { session: { user: { id: userId } } } });
-
-    const fromChain = {
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        }),
-      }),
-      update: jest.fn(),
-    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({ notifications: [], available: true }),
+    });
     mockCreateClient.mockReturnValue({
       auth: { getSession: mockGetSession },
-      from: jest.fn().mockReturnValue(fromChain),
       channel: jest.fn().mockReturnValue(mockChannel),
     });
 
@@ -236,7 +195,11 @@ describe("useNotifications", () => {
       await result.current.markAllRead();
     });
 
-    expect(fromChain.update).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).not.toHaveBeenCalledWith(
+      "/api/notifications",
+      expect.objectContaining({ method: "POST" })
+    );
   });
 
   it("unsubscribes the realtime channel on unmount", async () => {
@@ -253,5 +216,14 @@ describe("useNotifications", () => {
     await waitFor(() => expect(mockGetSession).toHaveBeenCalled());
     // Should remain in initial empty state
     expect(result.current.notifications).toEqual([]);
+  });
+
+  it("does not subscribe to realtime when notifications are unavailable", async () => {
+    const { clientStub } = setupMockClient({ userId: "user-abc", available: false });
+    renderHook(() => useNotifications());
+
+    await waitFor(() => expect(mockGetSession).toHaveBeenCalled());
+
+    expect(clientStub.channel).not.toHaveBeenCalled();
   });
 });
