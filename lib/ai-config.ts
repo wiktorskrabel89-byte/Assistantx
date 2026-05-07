@@ -267,6 +267,8 @@ export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.2";
 
 export const FREE_CODING_MODEL = "openai/gpt-oss-120b:free";
 export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+export const APP_FORCED_MODEL_ID = "openai/gpt-oss-120b:free";
+export const APP_FORCED_THINKING_EFFORT = 4;
 
 /**
  * Maps model IDs to cost tiers for the cost control system.

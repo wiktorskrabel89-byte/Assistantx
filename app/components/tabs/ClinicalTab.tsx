@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/client";
-import { ALL_MODELS } from "@/lib/ai-config";
+import { ALL_MODELS, APP_FORCED_MODEL_ID, APP_FORCED_THINKING_EFFORT } from "@/lib/ai-config";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -390,13 +390,15 @@ export function ClinicalTab() {
           body: JSON.stringify({
             message: text,
             mode: "chat",
-            modelId: selectedModelId,
+            modelId: APP_FORCED_MODEL_ID,
+            allowedModels: [APP_FORCED_MODEL_ID],
             history,
             assistantName: "Clinical AI",
             assistantInstructions: buildClinicalSystemPrompt(selectedFramework, language),
             style: "detailed",
             languageLock: language,
             userPlan: "free",
+            thinkingEffort: APP_FORCED_THINKING_EFFORT,
           }),
         });
 

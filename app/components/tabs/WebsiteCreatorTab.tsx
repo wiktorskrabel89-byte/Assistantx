@@ -35,6 +35,7 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SandboxEditor } from "../SandboxEditor";
 import { createClient } from "@/lib/client";
+import { APP_FORCED_MODEL_ID, APP_FORCED_THINKING_EFFORT } from "@/lib/ai-config";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -75,8 +76,8 @@ const TEMPLATES: Template[] = [
     id: "blank",
     label: "Pusta strona",
     description: "Zacznij od zera",
-    html: "<h1>Moja strona</h1>\n<p>Zacznij budować tutaj...</p>",
-    css: "body { font-family: system-ui; padding: 40px; max-width: 800px; margin: 0 auto; }",
+    html: "",
+    css: "",
     js: "",
   },
   {
@@ -192,7 +193,15 @@ async function streamChat(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal,
-    body: JSON.stringify({ message: prompt, mode: "code", userPlan: "free", history: [] }),
+    body: JSON.stringify({
+      message: prompt,
+      mode: "code",
+      userPlan: "free",
+      history: [],
+      modelId: APP_FORCED_MODEL_ID,
+      thinkingEffort: APP_FORCED_THINKING_EFFORT,
+      allowedModels: [APP_FORCED_MODEL_ID],
+    }),
   });
   if (!res.body) return;
   const reader = res.body.getReader();
@@ -725,7 +734,7 @@ export function WebsiteCreatorTab({ dark, onOpenInSandbox }: { dark: boolean; on
   function addPage() {
     const id = `page-${Date.now()}`;
     const name = `page-${pages.length + 2}.html`;
-    const starterHtml = `<h1>${name}</h1>\n<p>Treść strony...</p>`;
+    const starterHtml = "";
     const newPage: Page = { id, name, html: starterHtml };
     // Persist the HTML of the currently-active page before switching
     if (activePageId === null) {
@@ -1319,6 +1328,36 @@ ${js ? `<script>\n${js}\n<\/script>` : ""}
                   <X className="h-3.5 w-3.5" />Stop
                 </button>
               )}
+            </div>
+            <div className={`flex flex-shrink-0 gap-2 border-t p-2 ${dark2 ? "border-slate-700" : "border-slate-200"}`}>
+              <input
+                id="website-ai-chat-input"
+                name="websiteAiChatInput"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && aiPrompt.trim() && !aiLoading) {
+                    e.preventDefault();
+                    void generateCode(aiPrompt);
+                    setAiPrompt("");
+                  }
+                }}
+                placeholder="Napisz do AI..."
+                className={`flex-1 rounded-xl border px-3 py-1.5 text-xs outline-none ${dark2 ? "border-slate-600 bg-slate-800 text-slate-200 placeholder-slate-600 focus:border-orange-500" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400 focus:border-orange-400"}`}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (aiPrompt.trim() && !aiLoading) {
+                    void generateCode(aiPrompt);
+                    setAiPrompt("");
+                  }
+                }}
+                disabled={aiLoading || !aiPrompt.trim()}
+                className={`${pri} disabled:opacity-40`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         )}

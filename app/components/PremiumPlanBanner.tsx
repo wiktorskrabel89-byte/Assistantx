@@ -9,10 +9,10 @@ type PremiumPlanBannerProps = {
   dark: boolean;
   userPlan: UserPlan;
   premiumRequestsUsed: number;
-  onSetUserPlan: (plan: UserPlan) => void;
+  onDismiss?: () => void;
 };
 
-export function PremiumPlanBanner({ dark, userPlan, premiumRequestsUsed }: PremiumPlanBannerProps) {
+export function PremiumPlanBanner({ dark, userPlan, premiumRequestsUsed, onDismiss }: PremiumPlanBannerProps) {
   const planInfo = userPlan === "pro+" ? PRO_PLUS_PLAN : userPlan === "pro" ? PRO_PLAN : null;
   const remaining = planInfo ? Math.max(0, planInfo.premiumRequestsPerMonth - premiumRequestsUsed) : 0;
   const [portalLoading, setPortalLoading] = useState(false);
@@ -51,9 +51,22 @@ export function PremiumPlanBanner({ dark, userPlan, premiumRequestsUsed }: Premi
 
     return (
       <div className={`rounded-2xl border p-4 ${dark ? accentDark : accentLight}`}>
-        <div className="flex items-center gap-2">
-          <Crown className={`h-5 w-5 ${iconColor}`} />
-          <span className={`text-sm font-bold ${textColor}`}>{label}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Crown className={`h-5 w-5 ${iconColor}`} />
+            <span className={`text-sm font-bold ${textColor}`}>{label}</span>
+          </div>
+          {onDismiss ? (
+            <button
+              type="button"
+              onClick={onDismiss}
+              title="Hide premium banner"
+              aria-label="Hide premium banner"
+              className={`rounded-md p-1 ${dark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"}`}
+            >
+              ×
+            </button>
+          ) : null}
         </div>
         <p className={`mt-1.5 text-xs ${subtextColor}`}>
           Unlimited chats &middot; {remaining} premium requests remaining &middot; All models{userPlan === "pro+" ? " incl. Claude Opus 4.7" : ""}
@@ -87,9 +100,22 @@ export function PremiumPlanBanner({ dark, userPlan, premiumRequestsUsed }: Premi
 
   return (
     <div className={`rounded-2xl border p-4 ${dark ? "border-slate-700 bg-gradient-to-br from-slate-800 to-slate-900" : "border-slate-200 bg-gradient-to-br from-white to-slate-50"}`}>
-      <div className="flex items-center gap-2">
-        <Sparkles className={`h-5 w-5 ${dark ? "text-sky-400" : "text-sky-500"}`} />
-        <span className={`text-sm font-bold ${dark ? "text-white" : "text-slate-900"}`}>Upgrade your plan</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className={`h-5 w-5 ${dark ? "text-sky-400" : "text-sky-500"}`} />
+          <span className={`text-sm font-bold ${dark ? "text-white" : "text-slate-900"}`}>Upgrade your plan</span>
+        </div>
+        {onDismiss ? (
+          <button
+            type="button"
+            onClick={onDismiss}
+            title="Hide premium banner"
+            aria-label="Hide premium banner"
+            className={`rounded-md p-1 ${dark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"}`}
+          >
+            ×
+          </button>
+        ) : null}
       </div>
       <p className={`mt-1.5 text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>
         Unlock premium models and more requests

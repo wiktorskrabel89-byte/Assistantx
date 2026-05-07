@@ -75,7 +75,6 @@ export function ChatTab() {
     setWorkspaceMode,
     setPreferredModelId,
     setCostMode,
-    setUserPlan,
     incrementPremiumRequests,
     createChatAction,
     renameChat,
@@ -127,6 +126,7 @@ export function ChatTab() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedMessageContent, setEditedMessageContent] = useState("");
   const [downModelIds, setDownModelIds] = useState<Set<string>>(new Set());
+  const [premiumBannerHidden, setPremiumBannerHidden] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -662,12 +662,23 @@ export function ChatTab() {
 
           <div className={`min-h-0 flex-1 px-3 py-4 transition-colors duration-200 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
             <div className="mx-auto flex h-full max-w-5xl flex-col">
-              <PremiumPlanBanner
-                dark={state.dark}
-                userPlan={state.userPlan}
-                premiumRequestsUsed={state.premiumRequestsUsed}
-                onSetUserPlan={setUserPlan}
-              />
+              {!premiumBannerHidden ? (
+                <PremiumPlanBanner
+                  dark={state.dark}
+                  userPlan={state.userPlan}
+                  premiumRequestsUsed={state.premiumRequestsUsed}
+                  onDismiss={() => setPremiumBannerHidden(true)}
+                />
+              ) : null}
+              {premiumBannerHidden ? (
+                <button
+                  type="button"
+                  onClick={() => setPremiumBannerHidden(false)}
+                  className={`mb-3 self-start rounded-lg border px-2.5 py-1 text-[11px] ${state.dark ? "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}
+                >
+                  Show premium banner
+                </button>
+              ) : null}
 
               <GoogleIntegrationBanner
                 dark={state.dark}
