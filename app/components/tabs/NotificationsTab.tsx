@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Bell, CheckCircle, Info } from "lucide-react";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import type { AppNotification, UseNotificationsReturn } from "../../hooks/useNotifications";
@@ -27,6 +27,7 @@ const KIND_BORDER: Record<NotificationKind, { dark: string; light: string }> = {
   warning: { dark: "border-amber-900/50 bg-amber-950/30", light: "border-amber-200 bg-amber-50" },
   success: { dark: "border-emerald-900/50 bg-emerald-950/30", light: "border-emerald-200 bg-emerald-50" },
 };
+const NOTIFICATION_PERMISSION_EVENT = "assistantx:notification-permission-change";
 
 function toNotificationKind(kind: string): NotificationKind {
   if (kind === "info" || kind === "warning" || kind === "success") return kind;
@@ -41,16 +42,18 @@ export function NotificationsTab({
   notificationsHook?: UseNotificationsReturn;
 }) {
   const { state } = useWorkspace();
-  const [permissionVersion, setPermissionVersion] = useState(0);
-  const isClient = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false
+  const notificationPermission = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") {
+        return () => undefined;
+      }
+
+      window.addEventListener(NOTIFICATION_PERMISSION_EVENT, onStoreChange);
+      return () => window.removeEventListener(NOTIFICATION_PERMISSION_EVENT, onStoreChange);
+    },
+    () => (typeof Notification !== "undefined" ? Notification.permission : null),
+    () => null
   );
-  const notificationPermission = useMemo(() => {
-    void permissionVersion;
-    return isClient && typeof Notification !== "undefined" ? Notification.permission : null;
-  }, [isClient, permissionVersion]);
 
   // Derive system event notifications from live workspace state
   const systemNotifications = useMemo<SystemNotification[]>(() => {
@@ -132,7 +135,7 @@ export function NotificationsTab({
 
     if (Notification.permission === "default") {
       const permission = await Notification.requestPermission();
-      setPermissionVersion((version) => version + 1);
+      window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
       if (permission !== "granted") {
         return;
       }
@@ -144,7 +147,7 @@ export function NotificationsTab({
 
     let registration = await navigator.serviceWorker.getRegistration();
     if (!registration) {
-      registration = await navigator.serviceWorker.register("/push-sw.js");
+      registration = await navigator.serviceWorker.register("/service-worker.js");
     }
 
     await registration.showNotification("Testowa notyfikacja", {
@@ -160,12 +163,12 @@ export function NotificationsTab({
 
     if (Notification.permission === "default") {
       await Notification.requestPermission();
-      setPermissionVersion((version) => version + 1);
+      window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
     }
 
     if (Notification.permission === "granted") {
-      await navigator.serviceWorker.register("/push-sw.js");
-      setPermissionVersion((version) => version + 1);
+      await navigator.serviceWorker.register("/service-worker.js");
+      window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
     }
   };
 
