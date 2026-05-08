@@ -75,8 +75,7 @@ export const ChatList = memo(function ChatList({
     { label: "Generuj Obraz", hint: "AI tworzy obrazy", prompt: "Wygeneruj obraz przedstawiajacy: ", mode: "image", icon: ImageIcon },
   ];
   const visibleStartIndex = Math.max(0, chat.length - visibleCount);
-  const hiddenCount = visibleStartIndex;
-  const revealCount = Math.min(MESSAGE_LOAD_BATCH_SIZE, hiddenCount);
+  const revealCount = Math.min(MESSAGE_LOAD_BATCH_SIZE, visibleStartIndex);
   const visibleMessages = useMemo(() => chat.slice(visibleStartIndex), [chat, visibleStartIndex]);
 
   return (
@@ -121,7 +120,7 @@ export const ChatList = memo(function ChatList({
         </div>
       ) : null}
 
-      {hiddenCount > 0 ? (
+      {visibleStartIndex > 0 ? (
         <div className="sticky top-0 z-10 flex justify-center py-1">
           <button
             type="button"
