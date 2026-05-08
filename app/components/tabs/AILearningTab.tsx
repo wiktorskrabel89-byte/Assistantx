@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/client";
+import { KnowledgeTab } from "./KnowledgeTab";
+import { MemoryTab } from "./MemoryTab";
+import { WebResearchTab } from "./WebResearchTab";
 
 function useIsAdmin() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -25,8 +28,12 @@ function useIsAdmin() {
   return isAdmin;
 }
 
-export function AILearningTab() {
+type AdminTool = "memory" | "knowledge" | "research";
+
+export function AILearningTab({ dark }: { dark: boolean }) {
   const isAdmin = useIsAdmin();
+  const [activeTool, setActiveTool] = useState<AdminTool>("knowledge");
+
   if (!isAdmin) {
     return (
       <section className="flex h-full min-h-0 items-center justify-center overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
@@ -36,110 +43,56 @@ export function AILearningTab() {
           </div>
           <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-900">Tylko dla administratora</h2>
           <p className="mt-2 text-sm leading-7 text-slate-600">
-            Ten obszar zawiera roadmap rozwoju AI, routing modeli i tuning OpenRouter.
+            Ten obszar zawiera narzędzia do kontroli pamięci, live RAG i tuningu AI.
           </p>
         </div>
       </section>
     );
   }
 
-  const phases = [
-    { title: "Phase 1", items: ["chat system", "auth", "memory", "RAG", "image generation", "Tavily integration"] },
-    { title: "Phase 2", items: ["routing improvements", "caching", "summaries", "analytics", "performance optimization"] },
-    { title: "Phase 3", items: ["agents", "workflows", "advanced tool calling", "autonomous systems"] },
+  const tools: { id: AdminTool; label: string; description: string }[] = [
+    { id: "knowledge", label: "RAG knowledge", description: "Pliki, indeksowanie i stan retrieval" },
+    { id: "research", label: "Live web RAG", description: "Zapytania Tavily, cache i źródła" },
+    { id: "memory", label: "Memory", description: "Notatki, profile memory i podsumowania" },
   ];
 
-  const featureBlocks = [
-    {
-      title: "Core stack",
-      items: [
-        "Next.js + React + TailwindCSS",
-        "Supabase (PostgreSQL, Auth, Storage, Edge Functions, pgvector)",
-        "OpenRouter for text routing",
-        "fal.ai (FLUX) for image generation",
-        "Tavily for advanced live web search",
-      ],
-    },
-    {
-      title: "Core capabilities",
-      items: [
-        "Conversational AI with streaming responses",
-        "Coding assistant with markdown and syntax highlighting",
-        "Memory system (short-term, long-term, and summarization)",
-        "RAG knowledge system with semantic retrieval",
-        "Live web RAG with routing and caching",
-        "Admin research workflows for surfing the web with RAG context",
-        "Provider routing across OpenRouter, Tavily, and fal.ai",
-      ],
-    },
-    {
-      title: "Performance and security",
-      items: [
-        "Response streaming, caching, deduplication, async/background processing",
-        "Rate limiting, token tracking, and cost tracking",
-        "Server-side AI provider calls only",
-        "Protected API keys and secure file uploads",
-        "Admin observability tabs for memory, knowledge, research, and image history",
-      ],
-    },
-  ];
+  const headerCard = dark
+    ? "border-slate-800 bg-slate-900 text-slate-100"
+    : "border-sky-200/80 bg-white/90 text-slate-900";
 
-  const adminTabs = [
-    "Memory tab with workspace notes, profile memories, and summaries",
-    "Knowledge tab for uploaded files and vector indexing status",
-    "Web Research tab for Tavily searches, caching, and source review",
-    "Image Studio tab for fal.ai FLUX generations and history",
-    "AI Learning tab as the admin roadmap and architecture control surface",
-  ];
+  const muted = dark ? "text-slate-400" : "text-slate-600";
+  const buttonBase = dark
+    ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100";
+  const buttonActive = "border-sky-500 bg-sky-600 text-white hover:bg-sky-600";
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-y-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto w-full max-w-6xl space-y-4">
-        <div className="rounded-3xl border border-sky-200/80 bg-white/90 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.24)] backdrop-blur">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">AI App Development Requirements</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Scalable AI platform roadmap</h2>
-          <p className="mt-2 text-sm leading-7 text-slate-600">
-            Priorytet: szybkie odpowiedzi, niski koszt AI, modularna architektura i nowoczesny UX.
-          </p>
-          <div className="mt-3 rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-3 text-sm text-fuchsia-900">
-            Admin scope includes web browsing with RAG, provider routing, memory visibility, knowledge ingestion, and image generation history.
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          {featureBlocks.map((block) => (
-            <article key={block.title} className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-700">{block.title}</h3>
-              <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                {block.items.map((item) => (
-                  <li key={item} className="leading-6">• {item}</li>
-                ))}
-              </ul>
-            </article>
+    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
+      <div className={`rounded-3xl border p-5 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.24)] backdrop-blur ${headerCard}`}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">AI Learning controls</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight">Memory + RAG + tuning surface</h2>
+        <p className={`mt-2 text-sm leading-7 ${muted}`}>
+          Zastąpiono roadmapę. Tutaj są narzędzia do kontroli pamięci, wiedzy i live web RAG.
+        </p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {tools.map((tool) => (
+            <button
+              key={tool.id}
+              type="button"
+              onClick={() => setActiveTool(tool.id)}
+              className={`rounded-2xl border px-3 py-3 text-left transition-colors ${activeTool === tool.id ? buttonActive : buttonBase}`}
+            >
+              <div className="text-sm font-semibold">{tool.label}</div>
+              <div className="mt-1 text-xs opacity-90">{tool.description}</div>
+            </button>
           ))}
         </div>
+      </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          {phases.map((phase) => (
-            <article key={phase.title} className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
-              <h3 className="text-base font-semibold text-slate-900">{phase.title}</h3>
-              <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                {phase.items.map((item) => (
-                  <li key={item} className="leading-6">• {item}</li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </div>
-
-        <article className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
-          <h3 className="text-base font-semibold text-slate-900">Admin tabs to ship</h3>
-          <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            {adminTabs.map((item) => (
-              <li key={item} className="leading-6">• {item}</li>
-            ))}
-          </ul>
-        </article>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {activeTool === "memory" ? <MemoryTab dark={dark} /> : null}
+        {activeTool === "knowledge" ? <KnowledgeTab dark={dark} /> : null}
+        {activeTool === "research" ? <WebResearchTab dark={dark} /> : null}
       </div>
     </section>
   );
