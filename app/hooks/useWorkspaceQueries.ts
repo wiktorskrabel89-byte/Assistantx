@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { extractArtifacts, stripMarkdown } from "../lib/chat-state";
 import type { ChatThread, Workspace, WorkspaceSettings } from "../lib/chat-types";
 
-type PreferencesPatch = Partial<Pick<WorkspaceSettings, "styleMode" | "languageLock" | "memoryEnabled" | "memoryNotes">>;
+type PreferencesPatch = Partial<Pick<WorkspaceSettings, "styleMode" | "languageLock" | "memoryEnabled" | "memoryNotes" | "temperature" | "topP" | "repetitionPenalty" | "modelProfile">>;
 
 type FeedbackRecord = {
   chatId: string;

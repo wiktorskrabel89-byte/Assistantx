@@ -14,6 +14,11 @@ export type ChatEntry = {
   ai: string;
   model: string | null;
   imageUrl?: string;
+  imageGeneration?: {
+    provider: string;
+    model: string;
+    stages: string[];
+  };
   filePreview?: string;
   fileName?: string;
   reasoning?: string;
@@ -63,6 +68,10 @@ export type WorkspaceSettings = {
   styleMode: StyleMode;
   languageLock: string;
   preferredModelId: string | null;
+  modelProfile: "default" | "gpt-oss-chat" | "gpt-oss-code";
+  temperature: number;
+  topP: number;
+  repetitionPenalty: number;
   costMode: CostMode;
   systemPrompt: string;
   enabledTools: string[];

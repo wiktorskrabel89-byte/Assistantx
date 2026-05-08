@@ -323,12 +323,23 @@ export function useChatTransport({
           signal: requestAbortController.signal,
           body: JSON.stringify({ prompt: userMsg }),
         });
+        updateLastMessage(workspaceId, chatId, (entry) => ({
+          ...entry,
+          status: "Finalizing image response...",
+        }));
         const data = await response.json();
         updateLastMessage(workspaceId, chatId, (entry) => ({
           ...entry,
           ai: data.error ?? "",
           model: data.model ?? entry.model,
           imageUrl: data.url ?? undefined,
+          imageGeneration: data.model
+            ? {
+                provider: data.provider ?? "Unknown",
+                model: data.model,
+                stages: Array.isArray(data.stages) ? data.stages.map((item: unknown) => String(item)) : [],
+              }
+            : entry.imageGeneration,
           status: undefined,
         }));
         return;
@@ -401,6 +412,10 @@ export function useChatTransport({
         costMode: "performance",
         userPlan: stateRef.current.userPlan,
         thinkingEffort: queuedMessage.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
+        modelProfile: activeSettings.modelProfile ?? "default",
+        temperature: typeof activeSettings.temperature === "number" ? activeSettings.temperature : 0.7,
+        topP: typeof activeSettings.topP === "number" ? activeSettings.topP : 0.9,
+        repetitionPenalty: typeof activeSettings.repetitionPenalty === "number" ? activeSettings.repetitionPenalty : 1,
         systemPrompt: activeSettings.systemPrompt ?? "",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,

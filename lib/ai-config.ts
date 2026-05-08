@@ -67,6 +67,11 @@ export const CHAT_MODELS: ModelOption[] = [
     description: "Free OpenAI open-source 120B model.",
   },
   {
+    id: "openai/gpt-oss-120b",
+    label: "GPT OSS 120B (Chat)",
+    description: "120B profile tuned for chat-style answers.",
+  },
+  {
     id: "z-ai/glm-4.5-air:free",
     label: "GLM 4.5 Air (Free)",
     description: "Free lightweight GLM chat model.",
@@ -119,6 +124,11 @@ export const CODE_MODELS: ModelOption[] = [
     id: "openai/gpt-oss-120b:free",
     label: "GPT OSS 120B (Free)",
     description: "Free OpenAI open-source 120B coding model.",
+  },
+  {
+    id: "openai/gpt-oss-120b",
+    label: "GPT OSS 120B (Code)",
+    description: "120B profile tuned for coding workflows.",
   },
   {
     id: "minimax/minimax-m2.5:free",
@@ -240,6 +250,7 @@ export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
+  { id: "coding-gpt-oss-120b-profile", label: "GPT OSS 120B (Code Profile)", modelId: "openai/gpt-oss-120b", costTier: "standard" },
   { id: "coding-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
   { id: "coding-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
   { id: "coding-nemotron-super-free", label: "Nemotron 3 Super (Free)", modelId: "nvidia/nemotron-3-super-120b-a12b:free", costTier: "free" },
@@ -252,6 +263,7 @@ export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
 ];
 
 export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
+  { id: "chat-gpt-oss-120b-profile", label: "GPT OSS 120B (Chat Profile)", modelId: "openai/gpt-oss-120b", costTier: "standard" },
   { id: "chat-llama-3.3-free", label: "Llama 3.3 70B (Free)", modelId: "meta-llama/llama-3.3-70b-instruct:free", costTier: "free" },
   { id: "chat-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
   { id: "chat-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
@@ -291,6 +303,7 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "meta-llama/llama-3.3-70b-instruct": "cheap",
   // Standard models — good quality, moderate cost
   "deepseek/deepseek-r1": "standard",
+  "openai/gpt-oss-120b": "standard",
   "deepseek/deepseek-v3.2": "standard",
   "anthropic/claude-sonnet-4.5": "standard",
   "openai/gpt-5": "standard",

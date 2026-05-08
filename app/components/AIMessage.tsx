@@ -126,8 +126,24 @@ export function AIMessage({
         ) : null}
 
         {entry.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={entry.imageUrl} alt={entry.user} className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700" />
+          <div className="space-y-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={entry.imageUrl} alt={entry.user} className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700" />
+            {entry.imageGeneration ? (
+              <div className={`rounded-xl border px-3 py-2 text-xs ${dark ? "border-slate-800 bg-slate-900 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                <div className="font-medium">
+                  {entry.imageGeneration.provider} • {entry.imageGeneration.model}
+                </div>
+                {entry.imageGeneration.stages?.length > 0 ? (
+                  <ul className="mt-1 list-inside list-disc space-y-0.5 opacity-90">
+                    {entry.imageGeneration.stages.map((stage, index) => (
+                      <li key={`${stage}-${index}`}>{stage}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         ) : (
           <div className={`${cardBg} rounded-2xl rounded-tl-sm border px-4 py-3 text-sm`}>
             {!entry.ai && isStreaming ? (

@@ -14,6 +14,12 @@ export async function POST(req: Request) {
     // Try OpenAI DALL-E 3 if API key is present, otherwise fallback to Pollinations.ai
     if (process.env.OPENAI_API_KEY) {
       try {
+        const stages = [
+          "Validating prompt",
+          "Preparing image generation request",
+          "Rendering image",
+          "Finalizing output",
+        ];
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const response = await openai.images.generate({
           model: "dall-e-3",
@@ -22,7 +28,12 @@ export async function POST(req: Request) {
           quality: "standard",
           n: 1,
         });
-        return Response.json({ url: response.data?.[0]?.url ?? null, model: "DALL-E 3" });
+        return Response.json({
+          url: response.data?.[0]?.url ?? null,
+          model: "DALL-E 3",
+          provider: "OpenAI",
+          stages,
+        });
       } catch (err) {
         // If OpenAI fails, fallback to Pollinations
         console.warn("OpenAI image generation failed, falling back to Pollinations.ai:", err);
@@ -31,7 +42,17 @@ export async function POST(req: Request) {
     // Pollinations.ai (free, no API key required)
     const encoded = encodeURIComponent(prompt);
     const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&enhance=true`;
-    return Response.json({ url, model: "Pollinations.ai (Free)" });
+    return Response.json({
+      url,
+      model: "Pollinations.ai (Free)",
+      provider: "Pollinations",
+      stages: [
+        "Normalizing prompt",
+        "Sending prompt to Pollinations",
+        "Generating image",
+        "Publishing image URL",
+      ],
+    });
   } catch (error) {
     console.error("Image generation error:", error);
     return Response.json({ url: null, model: null, error: "Image generation failed." });

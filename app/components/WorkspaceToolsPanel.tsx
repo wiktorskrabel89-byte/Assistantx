@@ -10,7 +10,7 @@ type ToolDefinition = {
 };
 
 const TOOLS: ToolDefinition[] = [
-  { id: "web_search", label: "Web Search", description: "Enable real-time web access in all queries" },
+  { id: "web_search", label: "Web Search", description: "Enable OpenRouter web tool for real-time browsing in all queries" },
   { id: "image_generation", label: "Image Generation", description: "Allow auto-generating images from prompts" },
 ];
 
