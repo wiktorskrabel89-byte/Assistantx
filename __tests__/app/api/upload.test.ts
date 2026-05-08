@@ -330,7 +330,7 @@ describe("POST /api/upload", () => {
 
     const res = await POST(req);
     const events = await readSseEvents(res);
-    expect(events.some((e) => e.model === "Gemini 2.5 Flash (Document)")).toBe(true);
+    expect(events.some((e) => e.model === "GPT OSS 120B (Free Document)")).toBe(true);
     const tokens = events.filter((e) => "token" in e).map((e) => e.token);
     expect(tokens).toContain("Summary: test content.");
   });
@@ -356,6 +356,6 @@ describe("POST /api/upload", () => {
 
     const res = await POST(req);
     const events = await readSseEvents(res);
-    expect(events.some((e) => e.model === "Gemini 2.5 Flash (Document)")).toBe(true);
+    expect(events.some((e) => e.model === "GPT OSS 120B (Free Document)")).toBe(true);
   });
 });
