@@ -126,6 +126,14 @@ export async function createOpenRouterEmbedding(input: string) {
   if (!Array.isArray(embedding) || embedding.length === 0) {
     throw new Error("OpenRouter embedding response missing vector");
   }
+  if (embedding.length !== KNOWLEDGE_EMBEDDING_DIMENSIONS) {
+    throw new Error(
+      `Embedding dimension mismatch: expected ${KNOWLEDGE_EMBEDDING_DIMENSIONS}, got ${embedding.length}`
+    );
+  }
+  if (!embedding.every((v) => Number.isFinite(v))) {
+    throw new Error("Embedding contains non-finite values");
+  }
   return embedding;
 }
 

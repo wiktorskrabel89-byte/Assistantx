@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import { PDFParse } from "pdf-parse";
 import { createClient } from "@/lib/server";
 import { chunkTextByApproxTokens, createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
-import { FREE_CHAT_MODEL } from "@/lib/ai-config";
+import { ALL_MODELS, FREE_CHAT_MODEL } from "@/lib/ai-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,13 +10,34 @@ export const maxDuration = 60;
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 // Safety cap to limit embedding cost and latency during ingestion.
 const MAX_INGESTION_CHUNKS = 60;
+// Maximum concurrent embedding API calls during ingestion to balance latency and rate limits.
+const EMBEDDING_CONCURRENCY = 5;
 const IMAGE_ANALYSIS_MODEL = "google/gemini-2.5-flash";
 const DOCUMENT_ANALYSIS_MODEL = FREE_CHAT_MODEL;
 
-const UPLOAD_MODEL_LABELS: Record<string, string> = {
-  [IMAGE_ANALYSIS_MODEL]: "Gemini 2.5 Flash (Vision)",
-  [DOCUMENT_ANALYSIS_MODEL]: "GPT OSS 120B (Free Document)",
-};
+function getUploadModelLabel(modelId: string, isImage: boolean): string {
+  if (isImage && modelId === IMAGE_ANALYSIS_MODEL) return "Gemini 2.5 Flash (Vision)";
+  const found = ALL_MODELS.find((m) => m.id === modelId);
+  const base = found?.label ?? modelId;
+  return isImage ? base : `${base} (Document)`;
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
 
 type KnowledgeStorageClient = {
   from: (bucket: string) => {
@@ -146,6 +167,18 @@ export async function POST(req: Request) {
             .select("id")
             .single();
 
+          if (inserted.error || !inserted.data) {
+            // Clean up orphaned storage object so the bucket stays consistent.
+            try {
+              const storageClient = getKnowledgeStorageClient(supabase);
+              if (storageClient) {
+                await (storageClient.from("knowledge") as unknown as { remove: (paths: string[]) => Promise<unknown> }).remove([storagePath]);
+              }
+            } catch {
+              // best effort
+            }
+            throw new Error(`Failed to record knowledge file: ${inserted.error?.message ?? "Unknown error"}`);
+          }
           ingestionFileId = (inserted.data as { id?: string } | null)?.id ?? null;
           if (!ingestionFileId) return;
 
@@ -156,26 +189,19 @@ export async function POST(req: Request) {
           }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: `Indexing ${chunks.length} chunks into memory...` })}\n\n`));
 
-          const rows: Array<{
-            user_id: string;
-            file_id: string;
-            chunk_index: number;
-            content: string;
-            token_count: number;
-            embedding: string;
-          }> = [];
-
-          for (const chunk of chunks) {
+          const fileIdForEmbedding = ingestionFileId;
+          const embeddingRows = await runWithConcurrency(chunks, EMBEDDING_CONCURRENCY, async (chunk) => {
             const embedding = await createOpenRouterEmbedding(chunk.content);
-            rows.push({
+            return {
               user_id: user.id,
-              file_id: ingestionFileId,
+              file_id: fileIdForEmbedding,
               chunk_index: chunk.chunkIndex,
               content: chunk.content,
               token_count: chunk.tokenCount,
               embedding: toPgVectorLiteral(embedding),
-            });
-          }
+            };
+          });
+          const rows = embeddingRows;
 
           if (rows.length > 0) {
             await supabase.from("knowledge_chunks").insert(rows);
@@ -190,7 +216,7 @@ export async function POST(req: Request) {
 
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: isImage ? "Preparing image analysis..." : "Extracting document text..." })}\n\n`));
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: UPLOAD_MODEL_LABELS[analysisModel] ?? analysisModel })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: getUploadModelLabel(analysisModel, isImage) })}\n\n`));
 
           if (!isImage && !extractedText) {
             throw new Error("Unsupported file type. Upload an image, PDF, or text-like document.");

@@ -194,18 +194,8 @@ async function saveCachedAnswer(userId: string, question: string, answer: string
 async function incrementCachedAnswerUsage(answerId: string, userId: string) {
   try {
     const supabase = await getSupabase();
-    const { data } = await supabase
-      .from("knowledge_qa_cache")
-      .select("usage_count")
-      .eq("id", answerId)
-      .eq("user_id", userId)
-      .single();
-    const nextUsage = ((data as { usage_count?: number } | null)?.usage_count ?? 0) + 1;
-    await supabase
-      .from("knowledge_qa_cache")
-      .update({ usage_count: nextUsage })
-      .eq("id", answerId)
-      .eq("user_id", userId);
+    // Atomic increment: a single UPDATE avoids the read-then-write race.
+    await supabase.rpc("increment_qa_cache_usage", { answer_id: answerId, answer_user_id: userId });
   } catch {
     // best effort
   }
@@ -511,11 +501,15 @@ export const POST = async (req: Request) => {
   const authUserId = await getAuthUserId(req);
   const userPlan = await getServerSideUserPlan(authUserId, clientPlan);
 
+  const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
+  const inferredImageRequest = rawMode === "image" || isImageRequest(message);
+
   let queryEmbedding: number[] | null = null;
   let retrievedKnowledgeContext = "";
   let cachedAnswerCandidate: { answer: string; similarity: number; answerId?: string } | null = null;
   let liveWebSearch: WebSearchResponsePayload | null = null;
-  if (authUserId && typeof effectiveMessage === "string" && effectiveMessage.trim().length > 0) {
+  // Skip embedding/RAG work for image requests — they return early before any RAG context is used.
+  if (!inferredImageRequest && authUserId && typeof effectiveMessage === "string" && effectiveMessage.trim().length > 0) {
     try {
       queryEmbedding = await createOpenRouterEmbedding(effectiveMessage);
       const [knowledgeContext, cacheCandidate] = await Promise.all([
@@ -565,9 +559,6 @@ export const POST = async (req: Request) => {
       liveWebSearch = null;
     }
   }
-
-  const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
-  const inferredImageRequest = rawMode === "image" || isImageRequest(message);
 
   // Apply plan-based model filtering: free users only see :free models, pro users cannot use pro+-only models
   const planFilteredAllowedModels = Array.isArray(allowedModelsFinal)

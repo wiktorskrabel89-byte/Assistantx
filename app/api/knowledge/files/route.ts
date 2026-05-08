@@ -1,6 +1,26 @@
 import { createClient } from "@/lib/server";
 import { createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
 
+// Maximum concurrent embedding API calls during reindex.
+const REINDEX_EMBEDDING_CONCURRENCY = 5;
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
+
 type KnowledgeStorageClient = {
   from: (bucket: string) => {
     remove: (paths: string[]) => Promise<{ error?: { message?: string } | null }>;
@@ -107,14 +127,21 @@ export async function POST(req: Request) {
   }
 
   try {
-    for (const chunk of chunks as Array<{ id: string; content: string }>) {
-      const embedding = await createOpenRouterEmbedding(chunk.content);
-      await supabase
-        .from("knowledge_chunks")
-        .update({ embedding: toPgVectorLiteral(embedding) })
-        .eq("id", chunk.id)
-        .eq("user_id", user.id);
-    }
+    const typedChunks = chunks as Array<{ id: string; content: string }>;
+    const embeddingResults = await runWithConcurrency(typedChunks, REINDEX_EMBEDDING_CONCURRENCY, async (chunk) => ({
+      id: chunk.id,
+      embedding: toPgVectorLiteral(await createOpenRouterEmbedding(chunk.content)),
+    }));
+    // Batch all embedding updates using upsert to minimise round-trips.
+    await Promise.all(
+      embeddingResults.map(({ id, embedding }) =>
+        supabase
+          .from("knowledge_chunks")
+          .update({ embedding })
+          .eq("id", id)
+          .eq("user_id", user.id),
+      ),
+    );
     await supabase
       .from("knowledge_files")
       .update({ status: "ready", chunk_count: chunks.length, error_message: null })

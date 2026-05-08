@@ -17,14 +17,22 @@ type KnowledgeFile = {
 export function KnowledgeTab({ dark }: { dark: boolean }) {
   const [files, setFiles] = useState<KnowledgeFile[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await fetch("/api/knowledge/files");
+      if (!response.ok) {
+        setError(`Failed to load files (${response.status})`);
+        return;
+      }
       const payload = await response.json() as { files?: KnowledgeFile[] };
       setFiles(Array.isArray(payload.files) ? payload.files : []);
+    } catch {
+      setError("Network error — could not load knowledge files.");
     } finally {
       setLoading(false);
     }
@@ -39,8 +47,14 @@ export function KnowledgeTab({ dark }: { dark: boolean }) {
   const removeFile = useCallback(async (id: string) => {
     setBusyId(id);
     try {
-      await fetch(`/api/knowledge/files?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const response = await fetch(`/api/knowledge/files?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        setError(`Failed to delete file (${response.status})`);
+        return;
+      }
       await load();
+    } catch {
+      setError("Network error — could not delete file.");
     } finally {
       setBusyId(null);
     }
@@ -49,12 +63,18 @@ export function KnowledgeTab({ dark }: { dark: boolean }) {
   const reindexFile = useCallback(async (id: string) => {
     setBusyId(id);
     try {
-      await fetch("/api/knowledge/files", {
+      const response = await fetch("/api/knowledge/files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileId: id }),
       });
+      if (!response.ok) {
+        setError(`Failed to reindex file (${response.status})`);
+        return;
+      }
       await load();
+    } catch {
+      setError("Network error — could not reindex file.");
     } finally {
       setBusyId(null);
     }
@@ -75,7 +95,12 @@ export function KnowledgeTab({ dark }: { dark: boolean }) {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {loading ? <div className="text-sm opacity-70">Loading knowledge files...</div> : null}
-        {!loading && files.length === 0 ? (
+        {!loading && error ? (
+          <div className={`rounded-xl border p-4 text-sm ${dark ? "border-red-900 text-red-400" : "border-red-200 text-red-600"}`}>
+            {error}
+          </div>
+        ) : null}
+        {!loading && !error && files.length === 0 ? (
           <div className={`rounded-xl border p-4 text-sm ${dark ? "border-slate-800 text-slate-400" : "border-slate-200 text-slate-600"}`}>
             No indexed files yet. Upload a document in chat file mode to teach the assistant.
           </div>

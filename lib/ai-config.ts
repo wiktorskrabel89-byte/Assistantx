@@ -68,8 +68,8 @@ export const CHAT_MODELS: ModelOption[] = [
   },
   {
     id: "openai/gpt-oss-120b",
-    label: "GPT OSS 120B (Chat)",
-    description: "120B profile tuned for chat-style answers.",
+    label: "GPT OSS 120B",
+    description: "OpenAI open-source 120B model.",
   },
   {
     id: "z-ai/glm-4.5-air:free",
@@ -125,11 +125,7 @@ export const CODE_MODELS: ModelOption[] = [
     label: "GPT OSS 120B (Free)",
     description: "Free OpenAI open-source 120B coding model.",
   },
-  {
-    id: "openai/gpt-oss-120b",
-    label: "GPT OSS 120B (Code)",
-    description: "120B profile tuned for coding workflows.",
-  },
+  // openai/gpt-oss-120b (non-free) is already in CHAT_MODELS; it is deduplicated in ALL_MODELS.
   {
     id: "minimax/minimax-m2.5:free",
     label: "MiniMax M2.5 (Free)",
