@@ -478,8 +478,7 @@
     const emptyEl = document.getElementById('log-empty');
     if (logEl && emptyEl) {
       const obs = new MutationObserver(() => {
-        const hasMessages = logEl.querySelector('.message');
-        if (emptyEl) emptyEl.hidden = !!hasMessages;
+        emptyEl.hidden = !!logEl.querySelector('.message');
       });
       obs.observe(logEl, { childList: true });
     }
