@@ -156,6 +156,7 @@ export function useChatTransport({
   const queueComposerMessage = useCallback((thinkingEffort: number) => {
     const text = message.trim();
     if (!text && !file) return;
+    const shouldShowImmediateLoader = !processingQueueRef.current && queuedMessagesRef.current.length === 0;
 
     const queuedMessage: QueuedMessage = {
       id: createId(),
@@ -169,6 +170,10 @@ export function useChatTransport({
       thinkingEffort,
     };
 
+    if (shouldShowImmediateLoader) {
+      setLoading(true);
+      setStopRequested(false);
+    }
     setQueuedMessages((prev) => [...prev, queuedMessage]);
     setMessage("");
     setFile(null);
