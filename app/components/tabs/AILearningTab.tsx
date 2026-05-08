@@ -88,7 +88,7 @@ export function AILearningTab() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">AI App Development Requirements</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Scalable AI platform roadmap</h2>
           <p className="mt-2 text-sm leading-7 text-slate-600">
-            Priorytet: szybkie odpowiedzi, niski koszt AI, modularna architektura i nowoczesny UX. Knowledge tab został wycofany — workflow dodawania plików do "uczenia modelu" nie jest już wspierany.
+            Priorytet: szybkie odpowiedzi, niski koszt AI, modularna architektura i nowoczesny UX. Knowledge tab został wycofany — workflow dodawania plików do uczenia modelu nie jest już wspierany.
           </p>
           <div className="mt-4 rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-3 text-sm text-fuchsia-900">
             Model tuning: używamy tylko konfiguracji i tuningu modeli przez OpenRouter (bez uczenia modeli przez upload plików).
