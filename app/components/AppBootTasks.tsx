@@ -3,15 +3,16 @@
 import { useEffect } from "react";
 
 function runWhenIdle(callback: () => void) {
-  if (typeof window === "undefined") return () => undefined;
+  if (typeof window === "undefined") return () => {};
+  const browserWindow = window;
 
-  if ("requestIdleCallback" in window) {
-    const idleId = window.requestIdleCallback(callback, { timeout: 2_000 });
-    return () => window.cancelIdleCallback(idleId);
+  if ("requestIdleCallback" in browserWindow) {
+    const idleId = browserWindow.requestIdleCallback(callback, { timeout: 2_000 });
+    return () => browserWindow.cancelIdleCallback(idleId);
   }
 
-  const timeoutId = window.setTimeout(callback, 1_500);
-  return () => window.clearTimeout(timeoutId);
+  const timeoutId = globalThis.setTimeout(callback, 1_500);
+  return () => globalThis.clearTimeout(timeoutId);
 }
 
 export function AppBootTasks() {
@@ -20,7 +21,7 @@ export function AppBootTasks() {
       return;
     }
 
-    let cleanupIdle = () => undefined;
+    let cleanupIdle: () => void = () => {};
 
     const registerServiceWorker = () => {
       void navigator.serviceWorker.register("/service-worker.js").catch(() => undefined);

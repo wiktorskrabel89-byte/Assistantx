@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Bell, CheckCircle, Info } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import type { AppNotification, UseNotificationsReturn } from "../../hooks/useNotifications";
@@ -41,15 +41,14 @@ export function NotificationsTab({
   notificationsHook?: UseNotificationsReturn;
 }) {
   const { state } = useWorkspace();
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | null>(null);
-
-  useEffect(() => {
-    if (typeof Notification === "undefined") {
-      return;
-    }
-
-    setNotificationPermission(Notification.permission);
-  }, []);
+  const [, setPermissionVersion] = useState(0);
+  const isClient = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  );
+  const notificationPermission =
+    isClient && typeof Notification !== "undefined" ? Notification.permission : null;
 
   // Derive system event notifications from live workspace state
   const systemNotifications = useMemo<SystemNotification[]>(() => {
@@ -131,7 +130,7 @@ export function NotificationsTab({
 
     if (Notification.permission === "default") {
       const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
+      setPermissionVersion((version) => version + 1);
       if (permission !== "granted") {
         return;
       }
@@ -156,13 +155,13 @@ export function NotificationsTab({
     }
 
     if (Notification.permission === "default") {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
+      await Notification.requestPermission();
+      setPermissionVersion((version) => version + 1);
     }
 
     if (Notification.permission === "granted") {
       await navigator.serviceWorker.register("/push-sw.js");
-      setNotificationPermission("granted");
+      setPermissionVersion((version) => version + 1);
     }
   };
 
