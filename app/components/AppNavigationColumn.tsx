@@ -9,6 +9,7 @@ import {
   FolderKanban,
   Globe2,
   Grid2x2,
+  Image as ImageIcon,
   LibraryBig,
   MessageSquareText,
   Plus,
@@ -27,6 +28,10 @@ import { useWorkspace } from "../providers/WorkspaceProvider";
 export type AppNavigationTab =
   | "chat"
   | "clinical"
+  | "memory"
+  | "knowledge"
+  | "research"
+  | "image-studio"
   | "sandbox"
   | "learning"
   | "projects"
@@ -66,6 +71,10 @@ type AddOnItem = {
 
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
+  { id: "memory",           label: "Memory",          description: "Pamięć i podsumowania", icon: BrainCircuit, color: "from-violet-500 to-indigo-600" },
+  { id: "knowledge",        label: "Knowledge",       description: "Pliki i RAG",            icon: Database,     color: "from-cyan-500 to-sky-600" },
+  { id: "research",         label: "Web Research",    description: "Tavily + live web RAG", icon: Search,       color: "from-teal-500 to-cyan-600" },
+  { id: "image-studio",     label: "Image Studio",    description: "fal.ai FLUX obrazy",    icon: ImageIcon,    color: "from-emerald-500 to-lime-600" },
   { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",   icon: BrainCircuit, color: "from-violet-500 to-purple-600", beta: true },
   { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",   icon: Stethoscope,  color: "from-emerald-500 to-teal-600" },
   { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen,     color: "from-sky-500 to-blue-600" },

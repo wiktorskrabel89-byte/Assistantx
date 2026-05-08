@@ -29,6 +29,15 @@ import {
   extractUserProfileFacts,
   toPgVectorLiteral,
 } from "@/app/lib/knowledge";
+import {
+  formatWebSearchContext,
+  getCachedWebSearch,
+  logUsageEvent,
+  runTavilySearch,
+  saveWebSearchCache,
+  shouldUseLiveWebSearch,
+  type WebSearchResponsePayload,
+} from "@/app/lib/ai-platform";
 
 async function getAuthUserId(req: Request): Promise<string | null> {
   try {
@@ -505,6 +514,7 @@ export const POST = async (req: Request) => {
   let queryEmbedding: number[] | null = null;
   let retrievedKnowledgeContext = "";
   let cachedAnswerCandidate: { answer: string; similarity: number; answerId?: string } | null = null;
+  let liveWebSearch: WebSearchResponsePayload | null = null;
   if (authUserId && typeof effectiveMessage === "string" && effectiveMessage.trim().length > 0) {
     try {
       queryEmbedding = await createOpenRouterEmbedding(effectiveMessage);
@@ -519,6 +529,40 @@ export const POST = async (req: Request) => {
       queryEmbedding = null;
       retrievedKnowledgeContext = "";
       cachedAnswerCandidate = null;
+    }
+  }
+
+  const shouldSearchLiveWeb = typeof effectiveMessage === "string" && effectiveMessage.trim().length > 0 && shouldUseLiveWebSearch({
+    requested: effectiveAddInternetContext,
+    mode: typeof rawMode === "string" ? rawMode : "auto",
+    message: effectiveMessage,
+    retrievedKnowledgeContext,
+    cachedAnswerExists: Boolean(cachedAnswerCandidate),
+  });
+
+  if (shouldSearchLiveWeb) {
+    try {
+      if (authUserId) {
+        const supabase = await getSupabase();
+        liveWebSearch = await getCachedWebSearch({ supabase, userId: authUserId, query: effectiveMessage });
+        if (!liveWebSearch) {
+          liveWebSearch = await runTavilySearch(effectiveMessage);
+          const expiresAt = await saveWebSearchCache({ supabase, userId: authUserId, payload: liveWebSearch });
+          liveWebSearch = { ...liveWebSearch, expiresAt };
+        }
+        await logUsageEvent({
+          supabase,
+          userId: authUserId,
+          eventType: "web_search",
+          provider: liveWebSearch.provider,
+          route: "/api/chat",
+          metadata: { cached: liveWebSearch.cached, resultCount: liveWebSearch.results.length },
+        });
+      } else {
+        liveWebSearch = await runTavilySearch(effectiveMessage);
+      }
+    } catch {
+      liveWebSearch = null;
     }
   }
 
@@ -636,7 +680,9 @@ export const POST = async (req: Request) => {
   const planDowngradeNote = (modelId && planEnforcedModelId !== modelId) ? " (switched to free model — premium plan required)" : "";
   const routeReason = isSearchMode
     ? (websearchTrigger || toolWebSearchEnabled
-      ? `Web Search enabled — browsing with ${MODEL_LABELS[selectedModel] ?? selectedModel}`
+      ? (liveWebSearch
+        ? `Tavily live web search enabled — answering with ${MODEL_LABELS[selectedModel] ?? selectedModel}`
+        : `Web Search enabled — browsing with ${MODEL_LABELS[selectedModel] ?? selectedModel}`)
       : (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model"))
     : isAutoRouted
       ? rawMode === "code"
@@ -682,6 +728,12 @@ export const POST = async (req: Request) => {
   }
   if (retrievedKnowledgeContext) {
     ragContext = `${ragContext}\n\nRetrieved memory context:\n${retrievedKnowledgeContext}`.trim();
+  }
+  if (liveWebSearch) {
+    const liveWebContext = formatWebSearchContext(liveWebSearch.answer, liveWebSearch.results);
+    if (liveWebContext) {
+      ragContext = `${ragContext}\n\nRetrieved live web context:\n${liveWebContext}`.trim();
+    }
   }
 
   let systemPrompt: string;
@@ -766,7 +818,7 @@ export const POST = async (req: Request) => {
   };
 
   // Web search toggle/prefix always routes through OpenRouter web plugin.
-  if (websearchTrigger || toolWebSearchEnabled) {
+  if ((websearchTrigger || toolWebSearchEnabled) && !liveWebSearch) {
     requestBody.plugins = [{ id: "web" }];
   }
 

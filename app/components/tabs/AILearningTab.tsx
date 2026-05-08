@@ -68,6 +68,8 @@ export function AILearningTab() {
         "Memory system (short-term, long-term, and summarization)",
         "RAG knowledge system with semantic retrieval",
         "Live web RAG with routing and caching",
+        "Admin research workflows for surfing the web with RAG context",
+        "Provider routing across OpenRouter, Tavily, and fal.ai",
       ],
     },
     {
@@ -77,8 +79,17 @@ export function AILearningTab() {
         "Rate limiting, token tracking, and cost tracking",
         "Server-side AI provider calls only",
         "Protected API keys and secure file uploads",
+        "Admin observability tabs for memory, knowledge, research, and image history",
       ],
     },
+  ];
+
+  const adminTabs = [
+    "Memory tab with workspace notes, profile memories, and summaries",
+    "Knowledge tab for uploaded files and vector indexing status",
+    "Web Research tab for Tavily searches, caching, and source review",
+    "Image Studio tab for fal.ai FLUX generations and history",
+    "AI Learning tab as the admin roadmap and architecture control surface",
   ];
 
   return (
@@ -90,11 +101,8 @@ export function AILearningTab() {
           <p className="mt-2 text-sm leading-7 text-slate-600">
             Priorytet: szybkie odpowiedzi, niski koszt AI, modularna architektura i nowoczesny UX.
           </p>
-          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Knowledge tab został wycofany — workflow dodawania plików do uczenia modelu nie jest już wspierany.
-          </div>
-          <div className="mt-4 rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-3 text-sm text-fuchsia-900">
-            Model tuning: używamy tylko konfiguracji i tuningu modeli przez OpenRouter (bez uczenia modeli przez upload plików).
+          <div className="mt-3 rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-3 text-sm text-fuchsia-900">
+            Admin scope includes web browsing with RAG, provider routing, memory visibility, knowledge ingestion, and image generation history.
           </div>
         </div>
 
@@ -123,6 +131,15 @@ export function AILearningTab() {
             </article>
           ))}
         </div>
+
+        <article className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
+          <h3 className="text-base font-semibold text-slate-900">Admin tabs to ship</h3>
+          <ul className="mt-3 space-y-2 text-sm text-slate-600">
+            {adminTabs.map((item) => (
+              <li key={item} className="leading-6">• {item}</li>
+            ))}
+          </ul>
+        </article>
       </div>
     </section>
   );
