@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Bell, CheckCircle, Info } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import type { AppNotification, UseNotificationsReturn } from "../../hooks/useNotifications";
@@ -27,6 +27,7 @@ const KIND_BORDER: Record<NotificationKind, { dark: string; light: string }> = {
   warning: { dark: "border-amber-900/50 bg-amber-950/30", light: "border-amber-200 bg-amber-50" },
   success: { dark: "border-emerald-900/50 bg-emerald-950/30", light: "border-emerald-200 bg-emerald-50" },
 };
+const NOTIFICATION_PERMISSION_EVENT = "assistantx:notification-permission-change";
 
 function toNotificationKind(kind: string): NotificationKind {
   if (kind === "info" || kind === "warning" || kind === "success") return kind;
@@ -41,6 +42,18 @@ export function NotificationsTab({
   notificationsHook?: UseNotificationsReturn;
 }) {
   const { state } = useWorkspace();
+  const notificationPermission = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") {
+        return () => undefined;
+      }
+
+      window.addEventListener(NOTIFICATION_PERMISSION_EVENT, onStoreChange);
+      return () => window.removeEventListener(NOTIFICATION_PERMISSION_EVENT, onStoreChange);
+    },
+    () => (typeof Notification !== "undefined" ? Notification.permission : null),
+    () => null
+  );
 
   // Derive system event notifications from live workspace state
   const systemNotifications = useMemo<SystemNotification[]>(() => {
@@ -116,14 +129,46 @@ export function NotificationsTab({
   const hasUnread = (notificationsHook?.unreadCount ?? 0) > 0;
 
   const sendTestNotification = async () => {
-    if ("serviceWorker" in navigator) {
-      const reg = await navigator.serviceWorker.getRegistration("/push-sw.js");
-      if (reg) {
-        reg.showNotification("Testowa notyfikacja", {
-          body: "To jest przykładowe powiadomienie push.",
-          icon: "/icon-192.png",
-        });
+    if (!("serviceWorker" in navigator) || typeof Notification === "undefined") {
+      return;
+    }
+
+    if (Notification.permission === "default") {
+      const permission = await Notification.requestPermission();
+      window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
+      if (permission !== "granted") {
+        return;
       }
+    }
+
+    if (Notification.permission !== "granted") {
+      return;
+    }
+
+    let registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
+      registration = await navigator.serviceWorker.register("/service-worker.js");
+    }
+
+    await registration.showNotification("Testowa notyfikacja", {
+      body: "To jest przykładowe powiadomienie push.",
+      icon: "/icon-192.png",
+    });
+  };
+
+  const handleEnablePush = async () => {
+    if (!("serviceWorker" in navigator) || typeof Notification === "undefined") {
+      return;
+    }
+
+    if (Notification.permission === "default") {
+      await Notification.requestPermission();
+      window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
+    }
+
+    if (Notification.permission === "granted") {
+      await navigator.serviceWorker.register("/service-worker.js");
+      window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
     }
   };
 
@@ -160,9 +205,21 @@ export function NotificationsTab({
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
+            {notificationPermission && notificationPermission !== "granted" ? (
+              <button
+                className={`inline-flex items-center rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                  dark
+                    ? "border-sky-800/50 text-sky-200 hover:bg-sky-900/40"
+                    : "border-sky-200 text-sky-700 hover:bg-sky-50"
+                }`}
+                onClick={() => void handleEnablePush()}
+              >
+                Włącz powiadomienia push
+              </button>
+            ) : null}
             <button
               className="inline-flex items-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700"
-              onClick={sendTestNotification}
+              onClick={() => void sendTestNotification()}
             >
               Wyślij testowe powiadomienie push
             </button>
