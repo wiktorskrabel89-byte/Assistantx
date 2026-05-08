@@ -145,6 +145,10 @@ export function toPgVectorLiteral(embedding: number[]) {
  * Build the final prompt for the LLM.
  * @param query   User question.
  * @param chunks  Array of retrieved chunks (already token-budgeted).
+ *                `source_id` maps to the knowledge file's UUID (`file_id`).
+ *
+ * The LLM is instructed to return a JSON object of the form:
+ *   { "answer": "<text>", "source_ids": ["<file_id>", ...] }
  */
 export function buildPrompt(
   query: string,

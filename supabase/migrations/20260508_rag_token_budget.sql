@@ -47,6 +47,8 @@ begin
     where kc.user_id = p_user_id
       and (1 - (kc.embedding <=> p_query_embedding)) >= 0.72
     order by kc.embedding <=> p_query_embedding
+    -- Hard cap at 20 rows to bound scan cost; the token-budget loop will
+    -- typically exit even earlier once max_total_tokens is reached.
     limit greatest(1, least(match_count, 20))
   loop
     -- Stop before exceeding the token budget.
