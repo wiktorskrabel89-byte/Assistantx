@@ -69,7 +69,7 @@ function createWindow() {
 
 async function checkForUpdates() {
   if (!app.isPackaged) {
-    emitUpdateStatus('disabled', 'Auto-update works only in the packaged EXE.');
+    emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
     return { ok: false, reason: 'not-packaged' };
   }
 
@@ -84,7 +84,7 @@ async function checkForUpdates() {
 
 function setupAutoUpdater() {
   if (!app.isPackaged) {
-    emitUpdateStatus('disabled', 'Auto-update works only in the packaged EXE.');
+    emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
     return;
   }
 
