@@ -1,24 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AIToolsPanel } from "../AIToolsPanel";
 import { ChatComposer } from "../ChatComposer";
 import { ChatHeader } from "../ChatHeader";
 import { ChatList } from "../ChatList";
-import { ChatSessionsPanel } from "../ChatSessionsPanel";
-import { CodeHistoryPanel } from "../CodeHistoryPanel";
 import { ConversationToolbar } from "../ConversationToolbar";
-import { ConversationsSidebar } from "../ConversationsSidebar";
-import { CustomAgentManager } from "../CustomAgentManager";
-import { GitHubPanel } from "../GitHubPanel";
 import { GoogleIntegrationBanner } from "../GoogleIntegrationBanner";
 import { ModelSelector } from "../ModelSelector";
+import dynamic from "next/dynamic";
 import { PremiumPlanBanner } from "../PremiumPlanBanner";
-import { PromptManager } from "../PromptManager";
-import { ShareConversationDialog } from "../ShareConversationDialog";
 import { ThinkingIndicator } from "../ThinkingIndicator";
-import { UsageDashboard } from "../UsageDashboard";
-import { WorkspaceToolsPanel } from "../WorkspaceToolsPanel";
 import { useWorkspaceQueries } from "../../hooks/useWorkspaceQueries";
 import {
   buildChatSessionItems,
@@ -46,6 +37,36 @@ import type { ThinkingEffort } from "../ModelSelector";
 /** Poll interval for the model health endpoint (ms). */
 const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
+const ConversationsSidebar = dynamic(
+  () => import("../ConversationsSidebar").then((mod) => mod.ConversationsSidebar),
+);
+const PromptManager = dynamic(
+  () => import("../PromptManager").then((mod) => mod.PromptManager),
+);
+const CustomAgentManager = dynamic(
+  () => import("../CustomAgentManager").then((mod) => mod.CustomAgentManager),
+);
+const ShareConversationDialog = dynamic(
+  () => import("../ShareConversationDialog").then((mod) => mod.ShareConversationDialog),
+);
+const ChatSessionsPanel = dynamic(
+  () => import("../ChatSessionsPanel").then((mod) => mod.ChatSessionsPanel),
+);
+const AIToolsPanel = dynamic(
+  () => import("../AIToolsPanel").then((mod) => mod.AIToolsPanel),
+);
+const CodeHistoryPanel = dynamic(
+  () => import("../CodeHistoryPanel").then((mod) => mod.CodeHistoryPanel),
+);
+const GitHubPanel = dynamic(
+  () => import("../GitHubPanel").then((mod) => mod.GitHubPanel),
+);
+const WorkspaceToolsPanel = dynamic(
+  () => import("../WorkspaceToolsPanel").then((mod) => mod.WorkspaceToolsPanel),
+);
+const UsageDashboard = dynamic(
+  () => import("../UsageDashboard").then((mod) => mod.UsageDashboard),
+);
 
 function isThinkingEffort(value: string | null): value is ThinkingEffort {
   return value === "Low" || value === "Medium" || value === "High" || value === "Xhigh";
@@ -623,25 +644,27 @@ export function ChatTab() {
   return (
     <>
       <div className="xl:hidden">
-        <ConversationsSidebar
-          open={sidebarOpen}
-          dark={state.dark}
-          cardBg={cardBg}
-          inputBg={inputBg}
-          workspaceName={activeWorkspace.name}
-          chatSearch={chatSearch}
-          chats={filteredConversations}
-          activeChatId={currentConversationId}
-          systemPrompt={activeWorkspace.settings.systemPrompt ?? ""}
-          onClose={() => setSidebarOpen(false)}
-          onSearchChange={setChatSearch}
-          onCreateChat={createChatAction}
-          onSelectChat={(chatId) => setActiveChatId(activeWorkspace.id, chatId)}
-          onRenameChat={renameChat}
-          onDeleteChat={deleteChat}
-          onSetChatTags={setChatTags}
-          onSetSystemPrompt={setSystemPrompt}
-        />
+        {sidebarOpen ? (
+          <ConversationsSidebar
+            open={sidebarOpen}
+            dark={state.dark}
+            cardBg={cardBg}
+            inputBg={inputBg}
+            workspaceName={activeWorkspace.name}
+            chatSearch={chatSearch}
+            chats={filteredConversations}
+            activeChatId={currentConversationId}
+            systemPrompt={activeWorkspace.settings.systemPrompt ?? ""}
+            onClose={() => setSidebarOpen(false)}
+            onSearchChange={setChatSearch}
+            onCreateChat={createChatAction}
+            onSelectChat={(chatId) => setActiveChatId(activeWorkspace.id, chatId)}
+            onRenameChat={renameChat}
+            onDeleteChat={deleteChat}
+            onSetChatTags={setChatTags}
+            onSetSystemPrompt={setSystemPrompt}
+          />
+        ) : null}
       </div>
 
       <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
@@ -804,133 +827,152 @@ export function ChatTab() {
         </section>
       </main>
 
-      <PromptManager
-        key={`${activeWorkspace.id}-${promptManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.promptTemplates.length}`}
-        open={promptManagerOpen}
-        dark={state.dark}
-        templates={activeWorkspace.settings.promptTemplates}
-        modeOptions={MODE_PANEL_OPTIONS.map((option) => ({ id: option.id, label: option.label }))}
-        onClose={() => setPromptManagerOpen(false)}
-        onApply={applyPromptTemplate}
-        onCreate={createPromptTemplate}
-        onUpdate={updatePromptTemplate}
-        onDelete={deletePromptTemplate}
-      />
+      {promptManagerOpen ? (
+        <PromptManager
+          key={`${activeWorkspace.id}-${promptManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.promptTemplates.length}`}
+          open={promptManagerOpen}
+          dark={state.dark}
+          templates={activeWorkspace.settings.promptTemplates}
+          modeOptions={MODE_PANEL_OPTIONS.map((option) => ({ id: option.id, label: option.label }))}
+          onClose={() => setPromptManagerOpen(false)}
+          onApply={applyPromptTemplate}
+          onCreate={createPromptTemplate}
+          onUpdate={updatePromptTemplate}
+          onDelete={deletePromptTemplate}
+        />
+      ) : null}
 
-      <CustomAgentManager
-        key={`${activeWorkspace.id}-${customAgentManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.customAgents.length}`}
-        open={customAgentManagerOpen}
-        dark={state.dark}
-        agents={customAgents}
-        modeOptions={MODE_PANEL_OPTIONS.filter((option) => option.id === "chat" || option.id === "code").map((option) => ({ id: option.id, label: option.label }))}
-        onClose={() => setCustomAgentManagerOpen(false)}
-        onCreate={(agent) => workspaceQueries.createCustomAgentMutation.mutate(agent)}
-        onUpdate={(agentId, agent) => workspaceQueries.updateCustomAgentMutation.mutate({ agentId, agent })}
-        onDelete={deleteCustomAgent}
-      />
+      {customAgentManagerOpen ? (
+        <CustomAgentManager
+          key={`${activeWorkspace.id}-${customAgentManagerOpen ? "open" : "closed"}-${activeWorkspace.settings.customAgents.length}`}
+          open={customAgentManagerOpen}
+          dark={state.dark}
+          agents={customAgents}
+          modeOptions={MODE_PANEL_OPTIONS.filter((option) => option.id === "chat" || option.id === "code").map((option) => ({ id: option.id, label: option.label }))}
+          onClose={() => setCustomAgentManagerOpen(false)}
+          onCreate={(agent) => workspaceQueries.createCustomAgentMutation.mutate(agent)}
+          onUpdate={(agentId, agent) => workspaceQueries.updateCustomAgentMutation.mutate({ agentId, agent })}
+          onDelete={deleteCustomAgent}
+        />
+      ) : null}
 
-      <ShareConversationDialog
-        open={shareDialogOpen}
-        dark={state.dark}
-        title={activeChat.title}
-        copied={copied}
-        onClose={() => setShareDialogOpen(false)}
-        onCopyShareLink={() => void copyShareLink()}
-        onExportMarkdown={exportMarkdown}
-        onExportJson={exportJson}
-        onCopyVsCodePrompt={() => void copyVsCodePrompt()}
-        onDownloadVsCodeBundle={downloadVsCodeBundle}
-      />
+      {shareDialogOpen ? (
+        <ShareConversationDialog
+          open={shareDialogOpen}
+          dark={state.dark}
+          title={activeChat.title}
+          copied={copied}
+          onClose={() => setShareDialogOpen(false)}
+          onCopyShareLink={() => void copyShareLink()}
+          onExportMarkdown={exportMarkdown}
+          onExportJson={exportJson}
+          onCopyVsCodePrompt={() => void copyVsCodePrompt()}
+          onDownloadVsCodeBundle={downloadVsCodeBundle}
+        />
+      ) : null}
 
-      <ChatSessionsPanel
-        open={sessionsOpen}
-        dark={state.dark}
-        workspaceName={activeWorkspace.name}
-        searchValue={chatSearch}
-        sessions={sessionItems}
-        onSearchChange={setChatSearch}
-        onCreateSession={createChatAction}
-        onSelectSession={(chatId) => {
-          setActiveChatId(activeWorkspace.id, chatId);
-          closePanels();
-        }}
-        onRenameSession={renameChat}
-        onDeleteSession={deleteChat}
-        onClose={closePanels}
-      />
+      {sessionsOpen ? (
+        <ChatSessionsPanel
+          open={sessionsOpen}
+          dark={state.dark}
+          workspaceName={activeWorkspace.name}
+          searchValue={chatSearch}
+          sessions={sessionItems}
+          onSearchChange={setChatSearch}
+          onCreateSession={createChatAction}
+          onSelectSession={(chatId) => {
+            setActiveChatId(activeWorkspace.id, chatId);
+            closePanels();
+          }}
+          onRenameSession={renameChat}
+          onDeleteSession={deleteChat}
+          onClose={closePanels}
+        />
+      ) : null}
 
-      <AIToolsPanel
-        open={aiToolsOpen}
-        dark={state.dark}
-        showModes={false}
-        mode={mode}
-        modeOptions={MODE_PANEL_OPTIONS}
-        quickChips={QUICK_CHIPS}
-        settings={{
-          styleMode: userPreferences.styleMode,
-          languageLock: userPreferences.languageLock,
-          memoryEnabled: userPreferences.memoryEnabled,
-          memoryNotes: userPreferences.memoryNotes,
-        }}
-        languageOptions={TEXT_LANGUAGE_OPTIONS}
-        onClose={closePanels}
-        onModeChange={(modeId) => setWorkspaceMode(modeId as Mode)}
-        onQuickChip={(chip) => {
-          if (chip.mode) setWorkspaceMode(chip.mode as Mode);
-          setComposerText(chip.text);
-          closePanels();
-        }}
-        onStyleChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ styleMode: value as StyleMode })}
-        onLanguageChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ languageLock: value })}
-        onMemoryToggle={(enabled) => workspaceQueries.updatePreferencesMutation.mutate({ memoryEnabled: enabled })}
-        onMemoryNotesChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: value })}
-        onClearMemory={() => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: "" })}
-        onClearChat={() => {
-          clearActiveChat();
-          closePanels();
-        }}
-      />
+      {aiToolsOpen ? (
+        <AIToolsPanel
+          open={aiToolsOpen}
+          dark={state.dark}
+          showModes={false}
+          mode={mode}
+          modeOptions={MODE_PANEL_OPTIONS}
+          quickChips={QUICK_CHIPS}
+          settings={{
+            styleMode: userPreferences.styleMode,
+            languageLock: userPreferences.languageLock,
+            memoryEnabled: userPreferences.memoryEnabled,
+            memoryNotes: userPreferences.memoryNotes,
+          }}
+          languageOptions={TEXT_LANGUAGE_OPTIONS}
+          onClose={closePanels}
+          onModeChange={(modeId) => setWorkspaceMode(modeId as Mode)}
+          onQuickChip={(chip) => {
+            if (chip.mode) setWorkspaceMode(chip.mode as Mode);
+            setComposerText(chip.text);
+            closePanels();
+          }}
+          onStyleChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ styleMode: value as StyleMode })}
+          onLanguageChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ languageLock: value })}
+          onMemoryToggle={(enabled) => workspaceQueries.updatePreferencesMutation.mutate({ memoryEnabled: enabled })}
+          onMemoryNotesChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: value })}
+          onClearMemory={() => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: "" })}
+          onClearChat={() => {
+            clearActiveChat();
+            closePanels();
+          }}
+        />
+      ) : null}
 
-      <CodeHistoryPanel
-        open={codeHistoryOpen}
-        dark={state.dark}
-        artifacts={artifacts}
-        copied={copied}
-        onCopyCode={copyCode}
-        onClose={closePanels}
-      />
+      {codeHistoryOpen ? (
+        <CodeHistoryPanel
+          open={codeHistoryOpen}
+          dark={state.dark}
+          artifacts={artifacts}
+          copied={copied}
+          onCopyCode={copyCode}
+          onClose={closePanels}
+        />
+      ) : null}
 
-      <GitHubPanel
-        open={appsOpen}
-        dark={state.dark}
-        linkedProviders={linkedProviders}
-        authProvider={authProvider}
-        oauthLoading={oauthLoading}
-        copied={copied}
-        hasArtifacts={artifacts.length > 0}
-        onClose={closePanels}
-        onConnectProvider={(provider) => void signInWithProvider(provider)}
-        onImportFile={handleImportedFile}
-        onCopyVsCodePrompt={() => void copyVsCodePrompt()}
-        onDownloadVsCodeBundle={downloadVsCodeBundle}
-        onSendGoogleContext={(context) => { setGoogleContext(context); }}
-      />
-      <WorkspaceToolsPanel
-        open={workspaceToolsOpen}
-        dark={state.dark}
-        enabledTools={activeWorkspace.settings.enabledTools ?? []}
-        onToggleTool={setEnabledTools}
-        onClose={() => setWorkspaceToolsOpen(false)}
-      />
+      {appsOpen ? (
+        <GitHubPanel
+          open={appsOpen}
+          dark={state.dark}
+          linkedProviders={linkedProviders}
+          authProvider={authProvider}
+          oauthLoading={oauthLoading}
+          copied={copied}
+          hasArtifacts={artifacts.length > 0}
+          onClose={closePanels}
+          onConnectProvider={(provider) => void signInWithProvider(provider)}
+          onImportFile={handleImportedFile}
+          onCopyVsCodePrompt={() => void copyVsCodePrompt()}
+          onDownloadVsCodeBundle={downloadVsCodeBundle}
+          onSendGoogleContext={(context) => { setGoogleContext(context); }}
+        />
+      ) : null}
 
-      <UsageDashboard
-        open={usageDashboardOpen}
-        dark={state.dark}
-        userPlan={state.userPlan}
-        premiumRequestsUsed={state.premiumRequestsUsed}
-        workspaces={state.workspaces}
-        onClose={() => setUsageDashboardOpen(false)}
-      />
+      {workspaceToolsOpen ? (
+        <WorkspaceToolsPanel
+          open={workspaceToolsOpen}
+          dark={state.dark}
+          enabledTools={activeWorkspace.settings.enabledTools ?? []}
+          onToggleTool={setEnabledTools}
+          onClose={() => setWorkspaceToolsOpen(false)}
+        />
+      ) : null}
+
+      {usageDashboardOpen ? (
+        <UsageDashboard
+          open={usageDashboardOpen}
+          dark={state.dark}
+          userPlan={state.userPlan}
+          premiumRequestsUsed={state.premiumRequestsUsed}
+          workspaces={state.workspaces}
+          onClose={() => setUsageDashboardOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

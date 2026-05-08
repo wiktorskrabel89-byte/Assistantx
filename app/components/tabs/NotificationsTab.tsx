@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Bell, CheckCircle, Info } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import type { AppNotification, UseNotificationsReturn } from "../../hooks/useNotifications";
@@ -41,6 +41,15 @@ export function NotificationsTab({
   notificationsHook?: UseNotificationsReturn;
 }) {
   const { state } = useWorkspace();
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | null>(null);
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") {
+      return;
+    }
+
+    setNotificationPermission(Notification.permission);
+  }, []);
 
   // Derive system event notifications from live workspace state
   const systemNotifications = useMemo<SystemNotification[]>(() => {
@@ -116,14 +125,44 @@ export function NotificationsTab({
   const hasUnread = (notificationsHook?.unreadCount ?? 0) > 0;
 
   const sendTestNotification = async () => {
-    if ("serviceWorker" in navigator) {
-      const reg = await navigator.serviceWorker.getRegistration("/push-sw.js");
-      if (reg) {
-        reg.showNotification("Testowa notyfikacja", {
-          body: "To jest przykładowe powiadomienie push.",
-          icon: "/icon-192.png",
-        });
+    if (!("serviceWorker" in navigator) || typeof Notification === "undefined") {
+      return;
+    }
+
+    if (Notification.permission === "default") {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission !== "granted") {
+        return;
       }
+    }
+
+    if (Notification.permission !== "granted") {
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.getRegistration()
+      ?? await navigator.serviceWorker.register("/push-sw.js");
+
+    await registration.showNotification("Testowa notyfikacja", {
+      body: "To jest przykładowe powiadomienie push.",
+      icon: "/icon-192.png",
+    });
+  };
+
+  const handleEnablePush = async () => {
+    if (!("serviceWorker" in navigator) || typeof Notification === "undefined") {
+      return;
+    }
+
+    if (Notification.permission === "default") {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+    }
+
+    if (Notification.permission === "granted") {
+      await navigator.serviceWorker.register("/push-sw.js");
+      setNotificationPermission("granted");
     }
   };
 
@@ -160,9 +199,21 @@ export function NotificationsTab({
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
+            {notificationPermission && notificationPermission !== "granted" ? (
+              <button
+                className={`inline-flex items-center rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                  dark
+                    ? "border-sky-800/50 text-sky-200 hover:bg-sky-900/40"
+                    : "border-sky-200 text-sky-700 hover:bg-sky-50"
+                }`}
+                onClick={() => void handleEnablePush()}
+              >
+                Włącz powiadomienia push
+              </button>
+            ) : null}
             <button
               className="inline-flex items-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700"
-              onClick={sendTestNotification}
+              onClick={() => void sendTestNotification()}
             >
               Wyślij testowe powiadomienie push
             </button>

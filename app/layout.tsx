@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
-import { headers } from "next/headers";
-import Script from "next/script";
+import { AppBootTasks } from "./components/AppBootTasks";
 import { QueryProvider } from "./components/QueryProvider";
 import "./globals.css";
 
@@ -20,12 +19,11 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -37,25 +35,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>
-        {/* Register service workers for PWA and push notifications */}
-        <Script
-          id="sw-register"
-          strategy="afterInteractive"
-          nonce={nonce}
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/service-worker.js');
-                  navigator.serviceWorker.register('/push-sw.js');
-                });
-              }
-              if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-                Notification.requestPermission();
-              }
-            `,
-          }}
-        />
+        <AppBootTasks />
       </body>
     </html>
   );
