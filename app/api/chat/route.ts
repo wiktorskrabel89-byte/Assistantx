@@ -17,13 +17,18 @@ import {
   getFreePlanFallback,
   filterModelsByCostMode,
   getCheaperAlternative,
-  FREE_CHAT_MODEL,
   AUTO_PREFERRED_CODING_MODEL,
   AUTO_PREFERRED_CHAT_MODEL,
   REASONING_MODEL_IDS,
   getModelMaxTokens,
 } from "@/lib/ai-config";
 import { isCodeRequest, isImageRequest } from "@/lib/detect";
+import {
+  createOpenRouterEmbedding,
+  formatKnowledgeContext,
+  extractUserProfileFacts,
+  toPgVectorLiteral,
+} from "@/app/lib/knowledge";
 
 async function getAuthUserId(req: Request): Promise<string | null> {
   try {
@@ -117,9 +122,124 @@ async function ensureConversation(conversationId: string, userId: string | null)
   );
 }
 
+async function findKnowledgeContext(userId: string, queryEmbedding: number[]) {
+  try {
+    const supabase = await getSupabase();
+    const vector = toPgVectorLiteral(queryEmbedding);
+    const [chunkResult, profileResult] = await Promise.all([
+      supabase.rpc("match_knowledge_chunks", {
+        p_user_id: userId,
+        p_query_embedding: vector,
+        p_match_count: 6,
+        p_min_similarity: 0.72,
+      }),
+      supabase.rpc("match_user_profile_memories", {
+        p_user_id: userId,
+        p_query_embedding: vector,
+        p_match_count: 4,
+      }),
+    ]);
 
-// Default search model (constant — never needs dynamic update)
-const SEARCH_MODEL = "perplexity/sonar";
+    const chunks = Array.isArray(chunkResult.data) ? chunkResult.data as Array<{ file_name: string; content: string; similarity: number }> : [];
+    const profileMemories = Array.isArray(profileResult.data) ? profileResult.data as Array<{ memory_key: string; memory_value: string }> : [];
+    return formatKnowledgeContext(chunks, profileMemories);
+  } catch {
+    return "";
+  }
+}
+
+async function findCachedAnswer(userId: string, queryEmbedding: number[]) {
+  try {
+    const supabase = await getSupabase();
+    const vector = toPgVectorLiteral(queryEmbedding);
+    const { data } = await supabase.rpc("match_cached_answers", {
+      p_user_id: userId,
+      p_query_embedding: vector,
+      p_match_count: 1,
+      p_min_similarity: CACHED_ANSWER_SIMILARITY_THRESHOLD,
+    });
+    const first = Array.isArray(data) ? data[0] as { answer?: string; similarity?: number; answer_id?: string } : null;
+    if (!first?.answer || typeof first.similarity !== "number") return null;
+    return { answer: first.answer, similarity: first.similarity, answerId: first.answer_id };
+  } catch {
+    return null;
+  }
+}
+
+async function saveCachedAnswer(userId: string, question: string, answer: string, queryEmbedding: number[]) {
+  try {
+    const supabase = await getSupabase();
+    await supabase.from("knowledge_qa_cache").insert({
+      user_id: userId,
+      question,
+      answer,
+      question_embedding: toPgVectorLiteral(queryEmbedding),
+      similarity_hint: null,
+      usage_count: 0,
+    });
+  } catch {
+    // best effort
+  }
+}
+
+async function incrementCachedAnswerUsage(answerId: string, userId: string) {
+  try {
+    const supabase = await getSupabase();
+    const { data } = await supabase
+      .from("knowledge_qa_cache")
+      .select("usage_count")
+      .eq("id", answerId)
+      .eq("user_id", userId)
+      .single();
+    const nextUsage = ((data as { usage_count?: number } | null)?.usage_count ?? 0) + 1;
+    await supabase
+      .from("knowledge_qa_cache")
+      .update({ usage_count: nextUsage })
+      .eq("id", answerId)
+      .eq("user_id", userId);
+  } catch {
+    // best effort
+  }
+}
+
+async function saveUserProfileFacts(userId: string, message: string, queryEmbedding: number[]) {
+  const facts = extractUserProfileFacts(message);
+  if (facts.length === 0) return;
+  try {
+    const supabase = await getSupabase();
+    for (const fact of facts) {
+      const existing = await supabase
+        .from("user_profile_memories")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("memory_key", fact.key)
+        .maybeSingle();
+
+      if ((existing.data as { id?: string } | null)?.id) {
+        await supabase
+          .from("user_profile_memories")
+          .update({
+            memory_value: fact.value,
+            source_message: message.slice(0, 1000),
+            embedding: toPgVectorLiteral(queryEmbedding),
+          })
+          .eq("id", (existing.data as { id: string }).id)
+          .eq("user_id", userId);
+      } else {
+        await supabase.from("user_profile_memories").insert({
+          user_id: userId,
+          memory_key: fact.key,
+          memory_value: fact.value,
+          source_message: message.slice(0, 1000),
+          embedding: toPgVectorLiteral(queryEmbedding),
+        });
+      }
+    }
+  } catch {
+    // best effort
+  }
+}
+
 
 /**
  * Returns true when a 429 response is a provider-side upstream rate limit
@@ -301,6 +421,10 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
+const CACHED_ANSWER_SIMILARITY_THRESHOLD = 0.9;
+// Knowledge retrieval keeps a lower threshold for context breadth while cache reuse
+// intentionally requires a high threshold to avoid returning the wrong prior answer.
+
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
 import { filterHealthyModels, markModelDown, recordModelSuccess } from "@/app/api/openrouter/modelHealth";
@@ -335,6 +459,10 @@ export const POST = async (req: Request) => {
     costMode: rawCostMode,
     userPlan: rawUserPlan,
     thinkingEffort, // New: reasoning depth (Low, Medium, High, Xhigh)
+    modelProfile = "default",
+    temperature = 0.7,
+    topP = 0.9,
+    repetitionPenalty = 1,
     systemPrompt: customSystemPrompt,
     enabledTools,
     googleContext,
@@ -373,6 +501,26 @@ export const POST = async (req: Request) => {
   // Verify the user's plan server-side from Supabase instead of trusting the client
   const authUserId = await getAuthUserId(req);
   const userPlan = await getServerSideUserPlan(authUserId, clientPlan);
+
+  let queryEmbedding: number[] | null = null;
+  let retrievedKnowledgeContext = "";
+  let cachedAnswerCandidate: { answer: string; similarity: number; answerId?: string } | null = null;
+  if (authUserId && typeof effectiveMessage === "string" && effectiveMessage.trim().length > 0) {
+    try {
+      queryEmbedding = await createOpenRouterEmbedding(effectiveMessage);
+      const [knowledgeContext, cacheCandidate] = await Promise.all([
+        findKnowledgeContext(authUserId, queryEmbedding),
+        findCachedAnswer(authUserId, queryEmbedding),
+      ]);
+      retrievedKnowledgeContext = knowledgeContext;
+      cachedAnswerCandidate = cacheCandidate;
+      void saveUserProfileFacts(authUserId, effectiveMessage, queryEmbedding);
+    } catch {
+      queryEmbedding = null;
+      retrievedKnowledgeContext = "";
+      cachedAnswerCandidate = null;
+    }
+  }
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
@@ -423,27 +571,23 @@ export const POST = async (req: Request) => {
 
 
 
-  // When the web_search tool is enabled, treat the request as search mode so Perplexity
-  // Sonar (which has real internet access) is used instead of a plain text instruction.
   const toolWebSearchEnabled = Array.isArray(enabledTools) && enabledTools.includes("web_search");
-  // "websearch" prefix trigger forces search mode but keeps the user's selected model
-  // (web browsing is added via the OpenRouter web plugin instead of switching to Perplexity).
-  const effectiveRawMode = toolWebSearchEnabled ? "search" : rawMode;
+  const effectiveRawMode = rawMode;
 
-  const fallbackModel = effectiveRawMode === "search"
-    ? SEARCH_MODEL
-    : getFreePlanFallback(inferredCodeRequest);
+  const fallbackModel = getFreePlanFallback(inferredCodeRequest);
 
-  const selectedModel = toolWebSearchEnabled
-    ? SEARCH_MODEL
-    : isAutoRouted
-      ? (healthyFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
-          ?? healthyFilteredModels[0]
-          ?? getFreePlanFallback(inferredCodeRequest))
-      : costControlled.modelId;
+  let selectedModel = isAutoRouted
+    ? (healthyFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
+        ?? healthyFilteredModels[0]
+        ?? getFreePlanFallback(inferredCodeRequest))
+    : costControlled.modelId;
+
+  if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
+    selectedModel = userPlan === "free" ? "openai/gpt-oss-120b:free" : "openai/gpt-oss-120b";
+  }
 
   // Determine if this is a search/DeepSeek/Gemini request for system prompt selection
-  const isSearchMode = websearchTrigger || effectiveRawMode === "search" || (!isAutoRouted && typeof selectedModel === "string" && selectedModel.includes("perplexity"));
+  const isSearchMode = websearchTrigger || toolWebSearchEnabled || effectiveRawMode === "search";
   const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(effectiveMessage);
@@ -471,6 +615,11 @@ export const POST = async (req: Request) => {
   const interactionProfileInstruction = typeof interactionProfile === "string" && interactionProfile.trim()
     ? `Tailor the response using this local interaction profile: ${interactionProfile.trim()}`
     : "";
+  const modelProfileInstruction = modelProfile === "gpt-oss-code"
+    ? "Use the GPT OSS 120B coding profile: prioritize correctness, code quality, tests, and concise engineering explanations."
+    : modelProfile === "gpt-oss-chat"
+      ? "Use the GPT OSS 120B chat profile: prioritize friendly tone, clarity, and concise practical responses."
+      : "";
   const internetContextInstruction = effectiveAddInternetContext
     ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
@@ -486,7 +635,9 @@ export const POST = async (req: Request) => {
   const costDowngradeNote = costControlled.downgraded ? ` (downgraded by ${costMode} cost mode)` : "";
   const planDowngradeNote = (modelId && planEnforcedModelId !== modelId) ? " (switched to free model — premium plan required)" : "";
   const routeReason = isSearchMode
-    ? (websearchTrigger && !toolWebSearchEnabled ? `Web search triggered by "websearch" prefix — browsing the web with ${MODEL_LABELS[selectedModel] ?? selectedModel}` : toolWebSearchEnabled ? "Web Search tool active — using search model with internet access" : (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model"))
+    ? (websearchTrigger || toolWebSearchEnabled
+      ? `Web Search enabled — browsing with ${MODEL_LABELS[selectedModel] ?? selectedModel}`
+      : (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model"))
     : isAutoRouted
       ? rawMode === "code"
         ? `Auto router choosing the best coding model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
@@ -525,23 +676,25 @@ export const POST = async (req: Request) => {
 
   // --- RAG logic: inject relevant context into the system prompt ---
   let ragContext = "";
-  // Use memoryNotes as RAG context if available (or fetch from Supabase/vector store here)
+  // Include explicit user notes and retrieved vector context.
   if (typeof memoryNotes === "string" && memoryNotes.trim()) {
     ragContext = `\n\nRelevant context:\n${memoryNotes.trim()}`;
   }
-  // You can extend this to fetch from a vector store if needed
+  if (retrievedKnowledgeContext) {
+    ragContext = `${ragContext}\n\nRetrieved memory context:\n${retrievedKnowledgeContext}`.trim();
+  }
 
   let systemPrompt: string;
   if (isSearchMode) {
-      systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
   } else if (isDeepSeek) {
-      systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
   } else if (isGemini) {
-      systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
   } else if (inferredCodeRequest) {
-      systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
   } else {
-      systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction}${ragContext}`.trim();
+      systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
   }
 
   // Append any custom workspace system prompt
@@ -602,6 +755,9 @@ export const POST = async (req: Request) => {
     model: selectedModel,
     stream: true,
     max_tokens: getModelMaxTokens(selectedModel),
+    temperature: typeof temperature === "number" ? Math.min(2, Math.max(0, temperature)) : 0.7,
+    top_p: typeof topP === "number" ? Math.min(1, Math.max(0, topP)) : 0.9,
+    repetition_penalty: typeof repetitionPenalty === "number" ? Math.min(2, Math.max(0.8, repetitionPenalty)) : 1,
     messages: [
       { role: "system", content: systemPrompt },
       ...historyMessages,
@@ -609,9 +765,8 @@ export const POST = async (req: Request) => {
     ],
   };
 
-  // When the "websearch" prefix was used, ask OpenRouter to add live web browsing
-  // to whichever model the user has selected (works for any model via the web plugin).
-  if (websearchTrigger && !toolWebSearchEnabled) {
+  // Web search toggle/prefix always routes through OpenRouter web plugin.
+  if (websearchTrigger || toolWebSearchEnabled) {
     requestBody.plugins = [{ id: "web" }];
   }
 
@@ -622,6 +777,34 @@ export const POST = async (req: Request) => {
     const effortMap: Record<number, string> = { 1: "low", 2: "medium", 3: "high", 4: "xhigh" };
     const effortNum = typeof thinkingEffort === "number" ? thinkingEffort : 2;
     requestBody.reasoning_level = effortMap[effortNum] ?? "medium";
+  }
+
+  if (cachedAnswerCandidate && cachedAnswerCandidate.similarity >= CACHED_ANSWER_SIMILARITY_THRESHOLD) {
+    const stream = new ReadableStream({
+      async start(controller) {
+        const enqueue = (payload: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        };
+        enqueue({ status: "Reusing a previously solved answer..." });
+        enqueue({
+          model: MODEL_LABELS[selectedModel] ?? selectedModel,
+          routeReason: `Answer cache hit (${(cachedAnswerCandidate.similarity * 100).toFixed(1)}% similarity)`,
+        });
+        enqueue({ token: cachedAnswerCandidate.answer });
+        enqueue({ status: "Done" });
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        if (conversationId && authUserId) {
+          await saveMessage(conversationId, "assistant", cachedAnswerCandidate.answer.trim());
+        }
+        if (authUserId && cachedAnswerCandidate.answerId) {
+          await incrementCachedAnswerUsage(cachedAnswerCandidate.answerId, authUserId);
+        }
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
+    });
   }
 
 
@@ -653,15 +836,18 @@ export const POST = async (req: Request) => {
         } catch {}
         controller.enqueue(encoder.encode(payload));
       };
-      const safeClose = async () => {
-        if (closed) return;
-        closed = true;
-        // Save assistant reply to Supabase memory (only for authenticated users)
-        if (conversationId && authUserId && fullReply.trim()) {
-          await saveMessage(conversationId, "assistant", fullReply.trim());
-        }
-        controller.close();
-      };
+        const safeClose = async () => {
+          if (closed) return;
+          closed = true;
+          // Save assistant reply to Supabase memory (only for authenticated users)
+          if (conversationId && authUserId && fullReply.trim()) {
+            await saveMessage(conversationId, "assistant", fullReply.trim());
+          }
+          if (authUserId && queryEmbedding && effectiveMessage.trim() && fullReply.trim()) {
+            await saveCachedAnswer(authUserId, effectiveMessage.trim(), fullReply.trim(), queryEmbedding);
+          }
+          controller.close();
+        };
       const handleAbort = () => {
         void safeClose();
       };
@@ -725,7 +911,7 @@ export const POST = async (req: Request) => {
               };
               // Preserve the web plugin when the user explicitly triggered websearch — dropping
               // it silently would skip web browsing even after the retry succeeds.
-              if (!websearchTrigger) {
+              if (!websearchTrigger && !toolWebSearchEnabled) {
                 delete fallbackRequestBody.plugins;
               }
               response = await sendOpenRouterRequest(fallbackRequestBody);
@@ -770,7 +956,9 @@ export const POST = async (req: Request) => {
               ...requestBody,
               model: selectedFallbackModel,
             };
-            delete fallbackRequestBody.plugins;
+            if (!websearchTrigger && !toolWebSearchEnabled) {
+              delete fallbackRequestBody.plugins;
+            }
             response = await sendOpenRouterRequest(fallbackRequestBody);
             effectiveModel = selectedFallbackModel;
             effectiveRouteReason = fallbackReason;

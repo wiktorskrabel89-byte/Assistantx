@@ -900,6 +900,10 @@ export function ChatTab() {
           languageLock: userPreferences.languageLock,
           memoryEnabled: userPreferences.memoryEnabled,
           memoryNotes: userPreferences.memoryNotes,
+          modelProfile: userPreferences.modelProfile ?? "default",
+          temperature: typeof userPreferences.temperature === "number" ? userPreferences.temperature : 0.7,
+          topP: typeof userPreferences.topP === "number" ? userPreferences.topP : 0.9,
+          repetitionPenalty: typeof userPreferences.repetitionPenalty === "number" ? userPreferences.repetitionPenalty : 1,
         }}
         languageOptions={TEXT_LANGUAGE_OPTIONS}
         onClose={closePanels}
@@ -914,6 +918,10 @@ export function ChatTab() {
         onMemoryToggle={(enabled) => workspaceQueries.updatePreferencesMutation.mutate({ memoryEnabled: enabled })}
         onMemoryNotesChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: value })}
         onClearMemory={() => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: "" })}
+        onModelProfileChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ modelProfile: value })}
+        onTemperatureChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ temperature: value })}
+        onTopPChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ topP: value })}
+        onRepetitionPenaltyChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ repetitionPenalty: value })}
         onClearChat={() => {
           clearActiveChat();
           closePanels();

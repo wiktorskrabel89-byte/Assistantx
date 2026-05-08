@@ -27,6 +27,7 @@ import { useWorkspace } from "../providers/WorkspaceProvider";
 export type AppNavigationTab =
   | "chat"
   | "clinical"
+  | "knowledge"
   | "sandbox"
   | "learning"
   | "projects"
@@ -68,6 +69,7 @@ type AddOnItem = {
 const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",   icon: BrainCircuit, color: "from-violet-500 to-purple-600", beta: true },
   { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",   icon: Stethoscope,  color: "from-emerald-500 to-teal-600" },
+  { id: "knowledge",        label: "Knowledge",       description: "Pliki i pamięć wektorowa", icon: Database,   color: "from-cyan-500 to-sky-600" },
   { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen,     color: "from-sky-500 to-blue-600" },
   { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig,   color: "from-pink-500 to-rose-600" },
   { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2,       color: "from-indigo-500 to-violet-600" },
@@ -732,4 +734,3 @@ export function AppNavigationColumn({
     </>
   );
 }
-

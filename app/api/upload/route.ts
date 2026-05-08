@@ -1,11 +1,30 @@
 import JSZip from "jszip";
 import { PDFParse } from "pdf-parse";
 import { createClient } from "@/lib/server";
+import { chunkTextByApproxTokens, createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
+// Safety cap to limit embedding cost and latency during ingestion.
+const MAX_INGESTION_CHUNKS = 60;
+
+type KnowledgeStorageClient = {
+  from: (bucket: string) => {
+    upload: (
+      path: string,
+      body: File,
+      options: { contentType: string; upsert: boolean }
+    ) => Promise<{ error?: { message?: string } | null }>;
+  };
+};
+
+function getKnowledgeStorageClient(client: unknown): KnowledgeStorageClient | null {
+  const storage = (client as { storage?: unknown }).storage;
+  if (!storage || typeof (storage as { from?: unknown }).from !== "function") return null;
+  return storage as KnowledgeStorageClient;
+}
 
 // SVG is intentionally omitted from TEXT_EXTENSIONS: SVG files can embed
 // <script> tags and should not be treated as safe plain text for extraction.
@@ -87,12 +106,104 @@ export async function POST(req: Request) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        let ingestionFileId: string | null = null;
+        const persistKnowledge = async () => {
+          if (isImage || !extractedText.trim()) return;
+          const storage = getKnowledgeStorageClient(supabase);
+          if (!storage) return;
+
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const storagePath = `${user.id}/${Date.now()}-${safeName}`;
+
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Saving file to knowledge bucket..." })}\n\n`));
+          const uploadResult = await storage.from("knowledge").upload(storagePath, file, {
+            contentType: mimeType || "application/octet-stream",
+            upsert: false,
+          });
+          if (uploadResult.error) {
+            throw new Error(`Knowledge storage upload failed: ${uploadResult.error.message ?? "Unknown error"}`);
+          }
+
+          const inserted = await supabase
+            .from("knowledge_files")
+            .insert({
+              user_id: user.id,
+              bucket_path: storagePath,
+              file_name: file.name,
+              mime_type: mimeType || null,
+              file_size: file.size,
+              status: "processing",
+            })
+            .select("id")
+            .single();
+
+          ingestionFileId = (inserted.data as { id?: string } | null)?.id ?? null;
+          if (!ingestionFileId) return;
+
+          const allChunks = chunkTextByApproxTokens(extractedText);
+          const chunks = allChunks.slice(0, MAX_INGESTION_CHUNKS);
+          if (allChunks.length > MAX_INGESTION_CHUNKS) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: `Large document detected: indexed first ${MAX_INGESTION_CHUNKS} chunks.` })}\n\n`));
+          }
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: `Indexing ${chunks.length} chunks into memory...` })}\n\n`));
+
+          const rows: Array<{
+            user_id: string;
+            file_id: string;
+            chunk_index: number;
+            content: string;
+            token_count: number;
+            embedding: string;
+          }> = [];
+
+          for (const chunk of chunks) {
+            const embedding = await createOpenRouterEmbedding(chunk.content);
+            rows.push({
+              user_id: user.id,
+              file_id: ingestionFileId,
+              chunk_index: chunk.chunkIndex,
+              content: chunk.content,
+              token_count: chunk.tokenCount,
+              embedding: toPgVectorLiteral(embedding),
+            });
+          }
+
+          if (rows.length > 0) {
+            await supabase.from("knowledge_chunks").insert(rows);
+          }
+
+          await supabase
+            .from("knowledge_files")
+            .update({ status: "ready", chunk_count: rows.length, error_message: null })
+            .eq("id", ingestionFileId)
+            .eq("user_id", user.id);
+        };
+
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: isImage ? "Preparing image analysis..." : "Extracting document text..." })}\n\n`));
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: isImage ? "Gemini 2.5 Flash (Vision)" : "Gemini 2.5 Flash (Document)" })}\n\n`));
 
           if (!isImage && !extractedText) {
             throw new Error("Unsupported file type. Upload an image, PDF, or text-like document.");
+          }
+
+          if (!isImage) {
+            try {
+              await persistKnowledge();
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Knowledge memory updated." })}\n\n`));
+            } catch (ingestionError) {
+              if (ingestionFileId) {
+                await supabase
+                  .from("knowledge_files")
+                  .update({
+                    status: "error",
+                    error_message: (ingestionError as Error).message.slice(0, 500),
+                  })
+                  .eq("id", ingestionFileId)
+                  .eq("user_id", user.id);
+              }
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Knowledge ingestion failed, continuing with temporary analysis." })}\n\n`));
+            }
           }
 
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: isImage ? "Analyzing image..." : "Reading document..." })}\n\n`));

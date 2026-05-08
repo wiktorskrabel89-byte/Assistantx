@@ -27,6 +27,10 @@ const LearningTab = dynamic(
   () => import("./components/tabs/LearningTab").then((m) => m.LearningTab),
   { ssr: false, loading: () => <TabSkeleton /> },
 );
+const KnowledgeTab = dynamic(
+  () => import("./components/tabs/KnowledgeTab").then((m) => m.KnowledgeTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
 const ProjectsTab = dynamic(
   () => import("./components/tabs/ProjectsTab").then((m) => m.ProjectsTab),
   { ssr: false, loading: () => <TabSkeleton /> },
@@ -92,6 +96,8 @@ function TabContent({
       return <SandboxTab dark={state.dark} initialCode={sandboxInitCode ?? undefined} />;
     case "learning":
       return <LearningTab dark={state.dark} />;
+    case "knowledge":
+      return <KnowledgeTab dark={state.dark} />;
     case "projects":
       return <ProjectsTab dark={state.dark} />;
     case "codebase":
