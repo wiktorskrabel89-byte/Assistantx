@@ -20,6 +20,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import Image from "next/image";
 import { useState } from "react";
 import type { AppMode } from "../lib/chat-types";
 import { useWorkspace } from "../providers/WorkspaceProvider";
@@ -176,7 +177,17 @@ export function AppNavigationColumn({
       {/* ── Logo ── */}
       <div className={`border-b px-4 py-4 ${dividerClassName}`}>
         <div className="rounded-2xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 px-4 py-4 text-white shadow-sm">
-          <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
+          <div className="flex items-center gap-2">
+            <Image
+              src="/icon-192.png"
+              alt="AssistantX logo"
+              width={28}
+              height={28}
+              fetchPriority="high"
+              className="rounded-md"
+            />
+            <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
+          </div>
           <div className="mt-1 text-xs text-white/90">Powered by AI</div>
         </div>
 
