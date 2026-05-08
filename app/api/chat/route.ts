@@ -136,11 +136,11 @@ async function findKnowledgeContext(userId: string, queryEmbedding: number[]) {
     const supabase = await getSupabase();
     const vector = toPgVectorLiteral(queryEmbedding);
     const [chunkResult, profileResult] = await Promise.all([
-      supabase.rpc("match_knowledge_chunks", {
+      supabase.rpc("match_documents", {
         p_user_id: userId,
         p_query_embedding: vector,
-        p_match_count: 6,
-        p_min_similarity: 0.72,
+        match_count: 10,
+        max_total_tokens: 1500,
       }),
       supabase.rpc("match_user_profile_memories", {
         p_user_id: userId,

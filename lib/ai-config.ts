@@ -480,29 +480,12 @@ export const REASONING_MODEL_IDS: string[] = [
 
 /**
  * Per-model max_tokens overrides.
- * Models not listed fall back to the DEFAULT_MAX_TOKENS value.
+ * All models use DEFAULT_MAX_TOKENS (400); this map is kept for future
+ * per-model adjustments if needed.
  */
-export const DEFAULT_MAX_TOKENS = 4096;
+export const DEFAULT_MAX_TOKENS = 400;
 
-export const MODEL_MAX_TOKENS: Record<string, number> = {
-  // Frontier models support very long outputs
-  "anthropic/claude-opus-4.7": 8192,
-  "anthropic/claude-opus-4.6": 8192,
-  "anthropic/claude-opus-4.5": 8192,
-  "anthropic/claude-sonnet-4.5": 8192,
-  "openai/gpt-5.4": 8192,
-  "openai/gpt-5.5": 8192,
-  "openai/gpt-5.2": 8192,
-  "openai/gpt-5.2-pro": 8192,
-  "openai/gpt-5.3": 8192,
-  "openai/gpt-5": 8192,
-  "google/gemini-3-pro-preview": 8192,
-  "google/gemini-3-flash-preview": 8192,
-  // Standard models
-  "deepseek/deepseek-r1": 8192,
-  "deepseek/deepseek-v3.2": 8192,
-  "moonshotai/kimi-k2-thinking": 8192,
-};
+export const MODEL_MAX_TOKENS: Record<string, number> = {};
 
 /** Returns the max_tokens value for a given model ID. */
 export function getModelMaxTokens(modelId: string): number {

@@ -140,3 +140,21 @@ export async function createOpenRouterEmbedding(input: string) {
 export function toPgVectorLiteral(embedding: number[]) {
   return `[${embedding.map((value) => value.toFixed(7)).join(",")}]`;
 }
+
+/**
+ * Build the final prompt for the LLM.
+ * @param query   User question.
+ * @param chunks  Array of retrieved chunks (already token-budgeted).
+ */
+export function buildPrompt(
+  query: string,
+  chunks: { content: string; source_id: string }[],
+) {
+  const system =
+    `You are a helpful assistant. Answer the question using ONLY the provided excerpts. ` +
+    `Cite sources with their IDs. Return JSON: {"answer": "...", "source_ids": [...]}.`;
+  const chunkTexts = chunks
+    .map((c) => `Excerpt (${c.source_id}):\n${c.content}`)
+    .join("\n\n");
+  return `${system}\n\nQuestion: ${query}\n\n${chunkTexts}`;
+}
