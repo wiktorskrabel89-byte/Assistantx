@@ -27,7 +27,6 @@ import { useWorkspace } from "../providers/WorkspaceProvider";
 export type AppNavigationTab =
   | "chat"
   | "clinical"
-  | "knowledge"
   | "sandbox"
   | "learning"
   | "projects"
@@ -69,12 +68,11 @@ type AddOnItem = {
 const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",   icon: BrainCircuit, color: "from-violet-500 to-purple-600", beta: true },
   { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",   icon: Stethoscope,  color: "from-emerald-500 to-teal-600" },
-  { id: "knowledge",        label: "Knowledge",       description: "Pliki i pamięć wektorowa", icon: Database,   color: "from-cyan-500 to-sky-600" },
   { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen,     color: "from-sky-500 to-blue-600" },
   { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig,   color: "from-pink-500 to-rose-600" },
   { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2,       color: "from-indigo-500 to-violet-600" },
   { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2,  color: "from-orange-500 to-amber-600" },
-  { id: "ai-learning",      label: "AI Learning",     description: "Trenuj modele AI",      icon: BrainCircuit, color: "from-fuchsia-500 to-pink-600", adminOnly: true },
+  { id: "ai-learning",      label: "AI Learning",     description: "Roadmapa, routing i tuning OpenRouter", icon: BrainCircuit, color: "from-fuchsia-500 to-pink-600", adminOnly: true },
 ];
 
 /** Core AI Code mode tabs — always visible in the sidebar when in AI Code mode */

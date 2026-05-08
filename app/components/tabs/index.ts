@@ -1,7 +1,6 @@
 export { AILearningTab } from "./AILearningTab";
 export { ClinicalTab } from "./ClinicalTab";
 export { CodebaseTab } from "./CodebaseTab";
-export { KnowledgeTab } from "./KnowledgeTab";
 export { KnowledgeExportTab } from "./KnowledgeExportTab";
 export { LearningTab } from "./LearningTab";
 export { NotificationsTab } from "./NotificationsTab";
