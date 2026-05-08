@@ -19,22 +19,6 @@ const ClinicalTab = dynamic(
   () => import("./components/tabs/ClinicalTab").then((m) => m.ClinicalTab),
   { ssr: false, loading: () => <TabSkeleton /> },
 );
-const MemoryTab = dynamic(
-  () => import("./components/tabs/MemoryTab").then((m) => m.MemoryTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const KnowledgeTab = dynamic(
-  () => import("./components/tabs/KnowledgeTab").then((m) => m.KnowledgeTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const WebResearchTab = dynamic(
-  () => import("./components/tabs/WebResearchTab").then((m) => m.WebResearchTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const ImageStudioTab = dynamic(
-  () => import("./components/tabs/ImageStudioTab").then((m) => m.ImageStudioTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
 const SandboxTab = dynamic(
   () => import("./components/tabs/SandboxTab").then((m) => m.SandboxTab),
   { ssr: false, loading: () => <TabSkeleton /> },
@@ -104,14 +88,6 @@ function TabContent({
       return <ChatTab />;
     case "clinical":
       return <ClinicalTab />;
-    case "memory":
-      return <MemoryTab dark={state.dark} />;
-    case "knowledge":
-      return <KnowledgeTab dark={state.dark} />;
-    case "research":
-      return <WebResearchTab dark={state.dark} />;
-    case "image-studio":
-      return <ImageStudioTab dark={state.dark} />;
     case "sandbox":
       return <SandboxTab dark={state.dark} initialCode={sandboxInitCode ?? undefined} />;
     case "learning":
@@ -131,7 +107,7 @@ function TabContent({
     case "notifications":
       return <NotificationsTab dark={state.dark} notificationsHook={notificationsHook} />;
     case "ai-learning":
-      return <AILearningTab />;
+      return <AILearningTab dark={state.dark} />;
     case "jarvis":
       return <JarvisTab />;
     default:
