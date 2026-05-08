@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import { PDFParse } from "pdf-parse";
 import { createClient } from "@/lib/server";
 import { chunkTextByApproxTokens, createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
+import { FREE_CHAT_MODEL } from "@/lib/ai-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -9,6 +10,13 @@ export const maxDuration = 60;
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 // Safety cap to limit embedding cost and latency during ingestion.
 const MAX_INGESTION_CHUNKS = 60;
+const IMAGE_ANALYSIS_MODEL = "google/gemini-2.5-flash";
+const DOCUMENT_ANALYSIS_MODEL = FREE_CHAT_MODEL;
+
+const UPLOAD_MODEL_LABELS: Record<string, string> = {
+  [IMAGE_ANALYSIS_MODEL]: "Gemini 2.5 Flash (Vision)",
+  [DOCUMENT_ANALYSIS_MODEL]: "GPT OSS 120B (Free Document)",
+};
 
 type KnowledgeStorageClient = {
   from: (bucket: string) => {
@@ -102,6 +110,7 @@ export async function POST(req: Request) {
     const base64 = Buffer.from(bytes).toString("base64");
     const mimeType = file.type;
     const isImage = mimeType.startsWith("image/");
+    const analysisModel = isImage ? IMAGE_ANALYSIS_MODEL : DOCUMENT_ANALYSIS_MODEL;
     const extractedText = isImage ? "" : await extractDocumentText(file, bytes);
 
     const stream = new ReadableStream({
@@ -181,7 +190,7 @@ export async function POST(req: Request) {
 
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: isImage ? "Preparing image analysis..." : "Extracting document text..." })}\n\n`));
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: isImage ? "Gemini 2.5 Flash (Vision)" : "Gemini 2.5 Flash (Document)" })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: UPLOAD_MODEL_LABELS[analysisModel] ?? analysisModel })}\n\n`));
 
           if (!isImage && !extractedText) {
             throw new Error("Unsupported file type. Upload an image, PDF, or text-like document.");
@@ -219,7 +228,7 @@ export async function POST(req: Request) {
               "X-Title": "AssistantX",
             },
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
+              model: analysisModel,
               stream: true,
               messages: [
                 {
