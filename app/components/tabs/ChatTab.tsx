@@ -462,6 +462,11 @@ export function ChatTab() {
     setComposerText(prompt);
   }, [setComposerText, setWorkspaceMode]);
 
+  const handleQuickStart = useCallback((text: string, nextMode?: Mode) => {
+    if (nextMode) setWorkspaceMode(nextMode);
+    setComposerText(text);
+  }, [setComposerText, setWorkspaceMode]);
+
   const handleFile = useCallback((nextFile: File) => {
     if (filePreview?.startsWith("blob:")) URL.revokeObjectURL(filePreview);
     setFile(nextFile);
@@ -755,10 +760,7 @@ export function ChatTab() {
                   onSetFeedback={setMessageFeedback}
                   onSetReviewText={setMessageReviewText}
                   onFork={handleFork}
-                  onQuickStart={(text, nextMode) => {
-                    if (nextMode) setWorkspaceMode(nextMode);
-                    setComposerText(text);
-                  }}
+                  onQuickStart={handleQuickStart}
                   assistantName={assistantName}
                   assistantDescription={assistantDescription}
                   assistantIcon={assistantIcon}
