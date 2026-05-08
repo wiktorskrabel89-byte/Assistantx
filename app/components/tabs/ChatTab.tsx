@@ -39,33 +39,43 @@ const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
 const ConversationsSidebar = dynamic(
   () => import("../ConversationsSidebar").then((mod) => mod.ConversationsSidebar),
+  { ssr: false },
 );
 const PromptManager = dynamic(
   () => import("../PromptManager").then((mod) => mod.PromptManager),
+  { ssr: false },
 );
 const CustomAgentManager = dynamic(
   () => import("../CustomAgentManager").then((mod) => mod.CustomAgentManager),
+  { ssr: false },
 );
 const ShareConversationDialog = dynamic(
   () => import("../ShareConversationDialog").then((mod) => mod.ShareConversationDialog),
+  { ssr: false },
 );
 const ChatSessionsPanel = dynamic(
   () => import("../ChatSessionsPanel").then((mod) => mod.ChatSessionsPanel),
+  { ssr: false },
 );
 const AIToolsPanel = dynamic(
   () => import("../AIToolsPanel").then((mod) => mod.AIToolsPanel),
+  { ssr: false },
 );
 const CodeHistoryPanel = dynamic(
   () => import("../CodeHistoryPanel").then((mod) => mod.CodeHistoryPanel),
+  { ssr: false },
 );
 const GitHubPanel = dynamic(
   () => import("../GitHubPanel").then((mod) => mod.GitHubPanel),
+  { ssr: false },
 );
 const WorkspaceToolsPanel = dynamic(
   () => import("../WorkspaceToolsPanel").then((mod) => mod.WorkspaceToolsPanel),
+  { ssr: false },
 );
 const UsageDashboard = dynamic(
   () => import("../UsageDashboard").then((mod) => mod.UsageDashboard),
+  { ssr: false },
 );
 
 function isThinkingEffort(value: string | null): value is ThinkingEffort {

@@ -41,14 +41,16 @@ export function NotificationsTab({
   notificationsHook?: UseNotificationsReturn;
 }) {
   const { state } = useWorkspace();
-  const [, setPermissionVersion] = useState(0);
+  const [permissionVersion, setPermissionVersion] = useState(0);
   const isClient = useSyncExternalStore(
     () => () => undefined,
     () => true,
     () => false
   );
-  const notificationPermission =
-    isClient && typeof Notification !== "undefined" ? Notification.permission : null;
+  const notificationPermission = useMemo(() => {
+    void permissionVersion;
+    return isClient && typeof Notification !== "undefined" ? Notification.permission : null;
+  }, [isClient, permissionVersion]);
 
   // Derive system event notifications from live workspace state
   const systemNotifications = useMemo<SystemNotification[]>(() => {
@@ -140,8 +142,10 @@ export function NotificationsTab({
       return;
     }
 
-    const registration = await navigator.serviceWorker.getRegistration()
-      ?? await navigator.serviceWorker.register("/push-sw.js");
+    let registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
+      registration = await navigator.serviceWorker.register("/push-sw.js");
+    }
 
     await registration.showNotification("Testowa notyfikacja", {
       body: "To jest przykładowe powiadomienie push.",
