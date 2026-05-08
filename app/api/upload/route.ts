@@ -7,7 +7,24 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
+// Safety cap to limit embedding cost and latency during ingestion.
 const MAX_INGESTION_CHUNKS = 60;
+
+type KnowledgeStorageClient = {
+  from: (bucket: string) => {
+    upload: (
+      path: string,
+      body: File,
+      options: { contentType: string; upsert: boolean }
+    ) => Promise<{ error?: { message?: string } | null }>;
+  };
+};
+
+function getKnowledgeStorageClient(client: unknown): KnowledgeStorageClient | null {
+  const storage = (client as { storage?: unknown }).storage;
+  if (!storage || typeof (storage as { from?: unknown }).from !== "function") return null;
+  return storage as KnowledgeStorageClient;
+}
 
 // SVG is intentionally omitted from TEXT_EXTENSIONS: SVG files can embed
 // <script> tags and should not be treated as safe plain text for extraction.
@@ -92,8 +109,8 @@ export async function POST(req: Request) {
         let ingestionFileId: string | null = null;
         const persistKnowledge = async () => {
           if (isImage || !extractedText.trim()) return;
-          const storage = (supabase as unknown as { storage?: { from: (bucket: string) => { upload: (...args: unknown[]) => Promise<{ error?: { message?: string } | null }> } } }).storage;
-          if (!storage?.from) return;
+          const storage = getKnowledgeStorageClient(supabase);
+          if (!storage) return;
 
           const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
           const storagePath = `${user.id}/${Date.now()}-${safeName}`;
@@ -123,7 +140,11 @@ export async function POST(req: Request) {
           ingestionFileId = (inserted.data as { id?: string } | null)?.id ?? null;
           if (!ingestionFileId) return;
 
-          const chunks = chunkTextByApproxTokens(extractedText).slice(0, MAX_INGESTION_CHUNKS);
+          const allChunks = chunkTextByApproxTokens(extractedText);
+          const chunks = allChunks.slice(0, MAX_INGESTION_CHUNKS);
+          if (allChunks.length > MAX_INGESTION_CHUNKS) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: `Large document detected: indexed first ${MAX_INGESTION_CHUNKS} chunks.` })}\n\n`));
+          }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: `Indexing ${chunks.length} chunks into memory...` })}\n\n`));
 
           const rows: Array<{

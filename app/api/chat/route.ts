@@ -17,7 +17,6 @@ import {
   getFreePlanFallback,
   filterModelsByCostMode,
   getCheaperAlternative,
-  FREE_CHAT_MODEL,
   AUTO_PREFERRED_CODING_MODEL,
   AUTO_PREFERRED_CHAT_MODEL,
   REASONING_MODEL_IDS,
@@ -157,7 +156,7 @@ async function findCachedAnswer(userId: string, queryEmbedding: number[]) {
       p_user_id: userId,
       p_query_embedding: vector,
       p_match_count: 1,
-      p_min_similarity: 0.9,
+      p_min_similarity: CACHED_ANSWER_SIMILARITY_THRESHOLD,
     });
     const first = Array.isArray(data) ? data[0] as { answer?: string; similarity?: number; answer_id?: string } : null;
     if (!first?.answer || typeof first.similarity !== "number") return null;
@@ -422,6 +421,10 @@ const MODEL_LABELS: Record<string, string> = {
   "perplexity/sonar": "Perplexity Sonar",
 };
 
+const CACHED_ANSWER_SIMILARITY_THRESHOLD = 0.9;
+// Knowledge retrieval keeps a lower threshold for context breadth while cache reuse
+// intentionally requires a high threshold to avoid returning the wrong prior answer.
+
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
 import { filterHealthyModels, markModelDown, recordModelSuccess } from "@/app/api/openrouter/modelHealth";
@@ -505,9 +508,13 @@ export const POST = async (req: Request) => {
   if (authUserId && typeof effectiveMessage === "string" && effectiveMessage.trim().length > 0) {
     try {
       queryEmbedding = await createOpenRouterEmbedding(effectiveMessage);
-      retrievedKnowledgeContext = await findKnowledgeContext(authUserId, queryEmbedding);
-      cachedAnswerCandidate = await findCachedAnswer(authUserId, queryEmbedding);
-      await saveUserProfileFacts(authUserId, effectiveMessage, queryEmbedding);
+      const [knowledgeContext, cacheCandidate] = await Promise.all([
+        findKnowledgeContext(authUserId, queryEmbedding),
+        findCachedAnswer(authUserId, queryEmbedding),
+      ]);
+      retrievedKnowledgeContext = knowledgeContext;
+      cachedAnswerCandidate = cacheCandidate;
+      void saveUserProfileFacts(authUserId, effectiveMessage, queryEmbedding);
     } catch {
       queryEmbedding = null;
       retrievedKnowledgeContext = "";
@@ -772,7 +779,7 @@ export const POST = async (req: Request) => {
     requestBody.reasoning_level = effortMap[effortNum] ?? "medium";
   }
 
-  if (cachedAnswerCandidate && cachedAnswerCandidate.similarity >= 0.9) {
+  if (cachedAnswerCandidate && cachedAnswerCandidate.similarity >= CACHED_ANSWER_SIMILARITY_THRESHOLD) {
     const stream = new ReadableStream({
       async start(controller) {
         const enqueue = (payload: Record<string, unknown>) => {

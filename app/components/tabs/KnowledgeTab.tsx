@@ -31,7 +31,9 @@ export function KnowledgeTab({ dark }: { dark: boolean }) {
   }, []);
 
   useEffect(() => {
-    void load();
+    (async () => {
+      await load();
+    })();
   }, [load]);
 
   const removeFile = useCallback(async (id: string) => {

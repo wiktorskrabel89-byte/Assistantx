@@ -232,6 +232,7 @@ export function AIToolsPanel({
                     onChange={(event) => onRepetitionPenaltyChange(Number(event.target.value))}
                     className="w-full"
                   />
+                  <p className="mt-1 text-[11px] text-slate-500">1.00 is neutral. Higher values reduce repetition.</p>
                 </div>
 
                 <div>

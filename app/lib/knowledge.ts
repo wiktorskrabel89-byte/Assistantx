@@ -3,7 +3,9 @@ export const KNOWLEDGE_EMBEDDING_DIMENSIONS = 768;
 export const CHUNK_TARGET_TOKENS = 500;
 export const CHUNK_OVERLAP_TOKENS = 80;
 
-function tokenizeApprox(text: string): string[] {
+// Approximate tokenization by whitespace.
+// This is intentionally lightweight and does not match model-specific tokenizers exactly.
+function tokenizeApproximately(text: string): string[] {
   return text
     .replace(/\s+/g, " ")
     .trim()
@@ -16,7 +18,7 @@ export function chunkTextByApproxTokens(
   chunkSize = CHUNK_TARGET_TOKENS,
   overlap = CHUNK_OVERLAP_TOKENS,
 ) {
-  const tokens = tokenizeApprox(text);
+  const tokens = tokenizeApproximately(text);
   if (tokens.length === 0) return [];
   const chunks: Array<{ content: string; tokenCount: number; chunkIndex: number }> = [];
   let start = 0;
@@ -128,5 +130,5 @@ export async function createOpenRouterEmbedding(input: string) {
 }
 
 export function toPgVectorLiteral(embedding: number[]) {
-  return `[${embedding.map((value) => Number(value).toFixed(8)).join(",")}]`;
+  return `[${embedding.map((value) => value.toFixed(7)).join(",")}]`;
 }

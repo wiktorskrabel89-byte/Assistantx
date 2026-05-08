@@ -195,7 +195,7 @@ describe("POST /api/chat — 5xx free-model retry cascade", () => {
 });
 
 
-describe("POST /api/chat — web_search tool routes to Perplexity", () => {
+describe("POST /api/chat — web_search tool enables OpenRouter web plugin", () => {
   let POST: (req: Request) => Promise<Response>;
 
   beforeAll(async () => {
@@ -214,7 +214,7 @@ describe("POST /api/chat — web_search tool routes to Perplexity", () => {
     });
   }
 
-  it("uses perplexity/sonar when enabledTools includes web_search", async () => {
+  it("keeps selected routing but enables the OpenRouter web plugin when web_search is enabled", async () => {
     const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
@@ -230,11 +230,15 @@ describe("POST /api/chat — web_search tool routes to Perplexity", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).toBe("perplexity/sonar");
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      model: string;
+      plugins?: Array<{ id: string }>;
+    };
+    expect(calledBody.plugins).toEqual([{ id: "web" }]);
+    expect(calledBody.model).not.toBe("perplexity/sonar");
   });
 
-  it("does NOT use perplexity/sonar when enabledTools does not include web_search", async () => {
+  it("does not attach the web plugin when web_search is not enabled", async () => {
     const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
@@ -250,8 +254,11 @@ describe("POST /api/chat — web_search tool routes to Perplexity", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).not.toBe("perplexity/sonar");
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      model: string;
+      plugins?: Array<{ id: string }>;
+    };
+    expect(calledBody.plugins ?? []).toHaveLength(0);
   });
 });
 

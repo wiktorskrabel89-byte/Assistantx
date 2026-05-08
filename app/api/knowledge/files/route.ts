@@ -1,6 +1,18 @@
 import { createClient } from "@/lib/server";
 import { createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
 
+type KnowledgeStorageClient = {
+  from: (bucket: string) => {
+    remove: (paths: string[]) => Promise<{ error?: { message?: string } | null }>;
+  };
+};
+
+function getKnowledgeStorageClient(client: unknown): KnowledgeStorageClient | null {
+  const storage = (client as { storage?: unknown }).storage;
+  if (!storage || typeof (storage as { from?: unknown }).from !== "function") return null;
+  return storage as KnowledgeStorageClient;
+}
+
 async function getAuth() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -43,8 +55,8 @@ export async function DELETE(req: Request) {
   }
 
   try {
-    const storage = (supabase as unknown as { storage?: { from: (bucket: string) => { remove: (paths: string[]) => Promise<{ error?: { message?: string } | null }> } } }).storage;
-    if (storage?.from) {
+    const storage = getKnowledgeStorageClient(supabase);
+    if (storage) {
       await storage.from("knowledge").remove([fileData.bucket_path]);
     }
   } catch {
@@ -64,7 +76,12 @@ export async function POST(req: Request) {
   const { supabase, user } = await getAuth();
   if (!user) return Response.json({ ok: false }, { status: 401 });
 
-  const body = await req.json().catch(() => ({})) as { fileId?: string };
+  let body: { fileId?: string };
+  try {
+    body = await req.json() as { fileId?: string };
+  } catch {
+    return Response.json({ ok: false, error: "Invalid JSON in request body" }, { status: 400 });
+  }
   if (!body.fileId) return Response.json({ ok: false, error: "Missing fileId" }, { status: 400 });
 
   await supabase
