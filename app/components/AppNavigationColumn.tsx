@@ -72,7 +72,7 @@ const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig,   color: "from-pink-500 to-rose-600" },
   { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2,       color: "from-indigo-500 to-violet-600" },
   { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2,  color: "from-orange-500 to-amber-600" },
-  { id: "ai-learning",      label: "AI Learning",     description: "Roadmapa, routing i tuning OpenRouter", icon: BrainCircuit, color: "from-fuchsia-500 to-pink-600", adminOnly: true },
+  { id: "ai-learning",      label: "AI Learning",     description: "Roadmap, routing i tuning OpenRouter", icon: BrainCircuit, color: "from-fuchsia-500 to-pink-600", adminOnly: true },
 ];
 
 /** Core AI Code mode tabs — always visible in the sidebar when in AI Code mode */
