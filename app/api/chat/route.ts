@@ -139,8 +139,8 @@ async function findKnowledgeContext(userId: string, queryEmbedding: number[]) {
       supabase.rpc("match_documents", {
         p_user_id: userId,
         p_query_embedding: vector,
-        match_count: 10,
-        max_total_tokens: 1500,
+        match_count: KNOWLEDGE_MATCH_COUNT,
+        max_total_tokens: KNOWLEDGE_MAX_TOTAL_TOKENS,
       }),
       supabase.rpc("match_user_profile_memories", {
         p_user_id: userId,
@@ -423,10 +423,13 @@ const MODEL_LABELS: Record<string, string> = {
 const CACHED_ANSWER_SIMILARITY_THRESHOLD = 0.9;
 // Knowledge retrieval keeps a lower threshold for context breadth while cache reuse
 // intentionally requires a high threshold to avoid returning the wrong prior answer.
+const KNOWLEDGE_MATCH_COUNT = 10;
+const KNOWLEDGE_MAX_TOTAL_TOKENS = 1500;
+const GPT_OSS_CHAT_TEMPERATURE = 0.6;
+const GPT_OSS_CODE_TEMPERATURE = 0.1;
 
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
-import { filterHealthyModels, markModelDown, recordModelSuccess } from "@/app/api/openrouter/modelHealth";
 
 export const POST = async (req: Request) => {
   // Rate limit: 30 chat requests per minute per user/IP
@@ -459,9 +462,6 @@ export const POST = async (req: Request) => {
     userPlan: rawUserPlan,
     thinkingEffort, // New: reasoning depth (Low, Medium, High, Xhigh)
     modelProfile = "default",
-    temperature = 0.7,
-    topP = 0.9,
-    repetitionPenalty = 1,
     systemPrompt: customSystemPrompt,
     enabledTools,
     googleContext,
@@ -592,13 +592,7 @@ export const POST = async (req: Request) => {
     ? filterModelsByCostMode(planFilteredAllowedModels, costMode)
     : planFilteredAllowedModels;
 
-  // Exclude models that are currently marked as down from auto-routing.
-  // filterHealthyModels falls back to the full list if all models are marked down.
-  const healthyFilteredModels = Array.isArray(costFilteredModels)
-    ? filterHealthyModels(costFilteredModels)
-    : costFilteredModels;
-
-  const isAutoRouted = usingAutoRouter(healthyFilteredModels, planEnforcedModelId, inferredImageRequest);
+  const isAutoRouted = usingAutoRouter(costFilteredModels, planEnforcedModelId, inferredImageRequest);
 
   // Apply cost control to manually selected or default model
   const defaultModel = userPlan === "free"
@@ -617,8 +611,8 @@ export const POST = async (req: Request) => {
   const fallbackModel = getFreePlanFallback(inferredCodeRequest);
 
   let selectedModel = isAutoRouted
-    ? (healthyFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
-        ?? healthyFilteredModels[0]
+    ? (costFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
+        ?? costFilteredModels[0]
         ?? getFreePlanFallback(inferredCodeRequest))
     : costControlled.modelId;
 
@@ -802,10 +796,12 @@ export const POST = async (req: Request) => {
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
     stream: true,
-    max_tokens: getModelMaxTokens(selectedModel),
-    temperature: typeof temperature === "number" ? Math.min(2, Math.max(0, temperature)) : 0.7,
-    top_p: typeof topP === "number" ? Math.min(1, Math.max(0, topP)) : 0.9,
-    repetition_penalty: typeof repetitionPenalty === "number" ? Math.min(2, Math.max(0.8, repetitionPenalty)) : 1,
+    max_tokens: getModelMaxTokens(selectedModel, inferredCodeRequest),
+    temperature: modelProfile === "gpt-oss-code"
+      ? GPT_OSS_CODE_TEMPERATURE
+      : modelProfile === "gpt-oss-chat"
+        ? GPT_OSS_CHAT_TEMPERATURE
+        : (inferredCodeRequest ? GPT_OSS_CODE_TEMPERATURE : GPT_OSS_CHAT_TEMPERATURE),
     messages: [
       { role: "system", content: systemPrompt },
       ...historyMessages,
@@ -941,10 +937,6 @@ export const POST = async (req: Request) => {
             (status === 404 && /No endpoints found|No models match/i.test(err)) ||
             triggeredByFreeModel5xx
           ) {
-            // Mark the initial model as down when OpenRouter says it has no endpoint or is erroring.
-            if (typeof requestBody.model === "string") {
-              markModelDown(requestBody.model);
-            }
             let fallbackList = getModelFallbackList();
             // When the failure was a 5xx/rate-limit on a free model, only retry with other
             // free models to avoid unexpectedly billing the user on paid endpoints.
@@ -972,10 +964,6 @@ export const POST = async (req: Request) => {
               } else {
                 err = await response.text();
                 status = response.status;
-                // Mark each failing fallback model as down too.
-                if (status >= 500 || (status === 404 && /No endpoints found|No models match/i.test(err)) || isProviderRateLimit(status, err)) {
-                  markModelDown(modelId);
-                }
               }
             }
             if (!found) {
@@ -987,10 +975,6 @@ export const POST = async (req: Request) => {
             // Credits fallback or other error
             const shouldAutoRouterFallback = isAutoRouted && status === 404 && /No models match your request and model restrictions/i.test(err);
             const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(status, err);
-            // Mark the model as down on 5xx errors that are NOT credits-related.
-            if (status >= 500 && !shouldCreditsFallback && typeof requestBody.model === "string") {
-              markModelDown(requestBody.model);
-            }
             if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
               throw new Error(`OpenRouter error ${status}: ${err}`);
             }
@@ -1064,8 +1048,6 @@ export const POST = async (req: Request) => {
         if (!fullReply.trim()) {
           safeEnqueue(`data: ${JSON.stringify({ token: "The AI did not produce a complete response this time. Please try again." })}\n\n`);
         }
-        // Stream completed without error — clear any down status for this model.
-        recordModelSuccess(effectiveModel);
         safeEnqueue(`data: ${JSON.stringify({ status: "Done" })}\n\n`);
         safeEnqueue("data: [DONE]\n\n");
       } catch (error) {

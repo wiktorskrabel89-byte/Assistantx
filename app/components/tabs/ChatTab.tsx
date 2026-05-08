@@ -44,24 +44,11 @@ import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 import type { ThinkingEffort } from "../ModelSelector";
 
 /** Poll interval for the model health endpoint (ms). */
-const MODEL_HEALTH_POLL_MS = 60_000; // 1 minute
 const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
 
 function isThinkingEffort(value: string | null): value is ThinkingEffort {
   return value === "Low" || value === "Medium" || value === "High" || value === "Xhigh";
-}
-
-/** Fetch the set of currently-down model IDs from the server. */
-async function fetchDownModelIds(): Promise<Set<string>> {
-  try {
-    const res = await fetch("/api/model-health");
-    if (!res.ok) return new Set();
-    const data = await res.json() as { downModels?: string[] };
-    return new Set(Array.isArray(data.downModels) ? data.downModels : []);
-  } catch {
-    return new Set();
-  }
 }
 
 export function ChatTab() {
@@ -135,7 +122,6 @@ export function ChatTab() {
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedMessageContent, setEditedMessageContent] = useState("");
-  const [downModelIds, setDownModelIds] = useState<Set<string>>(new Set());
   const [premiumBannerHidden, setPremiumBannerHidden] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -149,22 +135,6 @@ export function ChatTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importedShareRef = useRef(false);
-
-  // Poll the model-health endpoint to keep the down-model set up to date.
-  useEffect(() => {
-    let cancelled = false;
-    const poll = () => {
-      void fetchDownModelIds().then((ids) => {
-        if (!cancelled) setDownModelIds(ids);
-      });
-    };
-    poll();
-    const timer = setInterval(poll, MODEL_HEALTH_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, []);
 
   useEffect(() => {
     try {
@@ -788,7 +758,6 @@ export function ChatTab() {
                 thinkingEffort={thinkingEffort}
                 onThinkingEffortChange={setThinkingEffort}
                 appMode={state.appMode}
-                downModelIds={downModelIds}
               />
             </div>
           </div>
@@ -902,10 +871,6 @@ export function ChatTab() {
           languageLock: userPreferences.languageLock,
           memoryEnabled: userPreferences.memoryEnabled,
           memoryNotes: userPreferences.memoryNotes,
-          modelProfile: userPreferences.modelProfile ?? "default",
-          temperature: typeof userPreferences.temperature === "number" ? userPreferences.temperature : 0.7,
-          topP: typeof userPreferences.topP === "number" ? userPreferences.topP : 0.9,
-          repetitionPenalty: typeof userPreferences.repetitionPenalty === "number" ? userPreferences.repetitionPenalty : 1,
         }}
         languageOptions={TEXT_LANGUAGE_OPTIONS}
         onClose={closePanels}
@@ -920,10 +885,6 @@ export function ChatTab() {
         onMemoryToggle={(enabled) => workspaceQueries.updatePreferencesMutation.mutate({ memoryEnabled: enabled })}
         onMemoryNotesChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: value })}
         onClearMemory={() => workspaceQueries.updatePreferencesMutation.mutate({ memoryNotes: "" })}
-        onModelProfileChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ modelProfile: value })}
-        onTemperatureChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ temperature: value })}
-        onTopPChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ topP: value })}
-        onRepetitionPenaltyChange={(value) => workspaceQueries.updatePreferencesMutation.mutate({ repetitionPenalty: value })}
         onClearChat={() => {
           clearActiveChat();
           closePanels();

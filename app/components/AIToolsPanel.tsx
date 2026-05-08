@@ -25,10 +25,6 @@ type ToolSettings = {
   languageLock: string;
   memoryEnabled: boolean;
   memoryNotes: string;
-  modelProfile: "default" | "gpt-oss-chat" | "gpt-oss-code";
-  temperature: number;
-  topP: number;
-  repetitionPenalty: number;
 };
 
 export function AIToolsPanel({
@@ -49,10 +45,6 @@ export function AIToolsPanel({
   onMemoryNotesChange,
   onClearMemory,
   onClearChat,
-  onModelProfileChange,
-  onTemperatureChange,
-  onTopPChange,
-  onRepetitionPenaltyChange,
 }: {
   open: boolean;
   dark: boolean;
@@ -71,10 +63,6 @@ export function AIToolsPanel({
   onMemoryNotesChange: (value: string) => void;
   onClearMemory: () => void;
   onClearChat: () => void;
-  onModelProfileChange: (value: "default" | "gpt-oss-chat" | "gpt-oss-code") => void;
-  onTemperatureChange: (value: number) => void;
-  onTopPChange: (value: number) => void;
-  onRepetitionPenaltyChange: (value: number) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -172,67 +160,6 @@ export function AIToolsPanel({
                     <option value="detailed">Detailed</option>
                     <option value="step-by-step">Step by step</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">GPT OSS 120B profile</label>
-                  <select
-                    id="model-profile"
-                    name="modelProfile"
-                    value={settings.modelProfile}
-                    onChange={(event) => onModelProfileChange(event.target.value as "default" | "gpt-oss-chat" | "gpt-oss-code")}
-                    className={`w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`}
-                  >
-                    <option value="default">Default model behavior</option>
-                    <option value="gpt-oss-chat">GPT OSS 120B — Chat profile</option>
-                    <option value="gpt-oss-code">GPT OSS 120B — Coding profile</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">
-                    Temperature ({settings.temperature.toFixed(2)})
-                  </label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={2}
-                    step={0.05}
-                    value={settings.temperature}
-                    onChange={(event) => onTemperatureChange(Number(event.target.value))}
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">
-                    Top P ({settings.topP.toFixed(2)})
-                  </label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={settings.topP}
-                    onChange={(event) => onTopPChange(Number(event.target.value))}
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">
-                    Repetition Penalty ({settings.repetitionPenalty.toFixed(2)})
-                  </label>
-                  <input
-                    type="range"
-                    min={0.8}
-                    max={2}
-                    step={0.01}
-                    value={settings.repetitionPenalty}
-                    onChange={(event) => onRepetitionPenaltyChange(Number(event.target.value))}
-                    className="w-full"
-                  />
-                  <p className="mt-1 text-[11px] text-slate-500">1.00 is neutral. Higher values reduce repetition.</p>
                 </div>
 
                 <div>

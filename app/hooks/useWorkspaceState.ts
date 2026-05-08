@@ -26,7 +26,13 @@ import type {
   StyleMode,
   Workspace,
 } from "../lib/chat-types";
-import type { UserPlan } from "@/lib/ai-config";
+import {
+  AUTO_PREFERRED_CHAT_MODEL,
+  AUTO_PREFERRED_CODING_MODEL,
+  FREE_CHAT_MODEL,
+  FREE_CODING_MODEL,
+  type UserPlan,
+} from "@/lib/ai-config";
 
 export function useWorkspaceState() {
   const [state, setState] = useState<StoredState>(createDefaultState());
@@ -320,15 +326,27 @@ export function useWorkspaceState() {
     // Capture workspace snapshot before the async setState to avoid any race.
     const snap = stateRef.current;
     const ws = snap.workspaces.find((w) => w.id === snap.activeWorkspaceId) ?? snap.workspaces[0];
+    const isFreePlan = snap.userPlan === "free";
+    const targetModelId = appMode === "ai-chat"
+      ? (isFreePlan ? FREE_CHAT_MODEL : AUTO_PREFERRED_CHAT_MODEL)
+      : (isFreePlan ? FREE_CODING_MODEL : AUTO_PREFERRED_CODING_MODEL);
+    const targetModelProfile = appMode === "ai-chat" ? "gpt-oss-chat" : "gpt-oss-code";
+    const targetTemperature = appMode === "ai-chat" ? 0.6 : 0.1;
     setState((prev) => ({ ...prev, appMode }));
     // Auto-switch built-in agent to match mode (only when no custom agent is currently active)
     const isCustomAgent = ws.settings.customAgents.some((a) => a.id === ws.settings.activeAgentId);
+    const targetId = appMode === "ai-chat" ? "builtin-chat" : "builtin-code";
+    updateWorkspace(ws.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        activeAgentId: isCustomAgent ? workspace.settings.activeAgentId : targetId,
+        preferredModelId: targetModelId,
+        modelProfile: targetModelProfile,
+        temperature: targetTemperature,
+      },
+    }));
     if (!isCustomAgent) {
-      const targetId = appMode === "ai-chat" ? "builtin-chat" : "builtin-code";
-      updateWorkspace(ws.id, (workspace) => ({
-        ...workspace,
-        settings: { ...workspace.settings, activeAgentId: targetId },
-      }));
       const builtIn = BUILT_IN_AGENTS.find((a) => a.id === targetId);
       if (builtIn) setWorkspaceMode(builtIn.preferredMode);
     }

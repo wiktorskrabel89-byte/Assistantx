@@ -480,16 +480,26 @@ export const REASONING_MODEL_IDS: string[] = [
 
 /**
  * Per-model max_tokens overrides.
- * All models use DEFAULT_MAX_TOKENS (400); this map is kept for future
- * per-model adjustments if needed.
+ * GPT OSS 120B has separate chat/code ceilings; all other models use DEFAULT_MAX_TOKENS.
  */
-export const DEFAULT_MAX_TOKENS = 400;
+export const DEFAULT_MAX_TOKENS = 4096;
 
-export const MODEL_MAX_TOKENS: Record<string, number> = {};
+export const MODEL_MAX_TOKENS_CHAT: Record<string, number> = {
+  "openai/gpt-oss-120b": 1024,
+  "openai/gpt-oss-120b:free": 1024,
+};
+
+export const MODEL_MAX_TOKENS_CODE: Record<string, number> = {
+  "openai/gpt-oss-120b": 8000,
+  "openai/gpt-oss-120b:free": 8000,
+};
 
 /** Returns the max_tokens value for a given model ID. */
-export function getModelMaxTokens(modelId: string): number {
-  return MODEL_MAX_TOKENS[modelId] ?? DEFAULT_MAX_TOKENS;
+export function getModelMaxTokens(modelId: string, isCodeRequest = false): number {
+  if (isCodeRequest) {
+    return MODEL_MAX_TOKENS_CODE[modelId] ?? DEFAULT_MAX_TOKENS;
+  }
+  return MODEL_MAX_TOKENS_CHAT[modelId] ?? DEFAULT_MAX_TOKENS;
 }
 
 /**
