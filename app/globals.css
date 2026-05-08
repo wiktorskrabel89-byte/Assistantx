@@ -134,6 +134,11 @@
   img, svg, video, canvas {
     image-rendering: -webkit-optimize-contrast;
   }
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
 }
 
 /* Smooth scrollbar for chat and content areas */

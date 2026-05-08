@@ -84,21 +84,17 @@ describe("GET /api/jarvis/download", () => {
     );
   });
 
-  it("returns an actionable 503 when the authenticated release lookup finds no installer", async () => {
+  it("falls back to deterministic release URL when authenticated release lookup finds no installer", async () => {
     process.env.JARVIS_GITHUB_TOKEN = "secret-token";
     const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
 
     fetchMock.mockResolvedValueOnce(Response.json({ assets: [] }));
 
     const res = await GET(new Request("http://localhost/api/jarvis/download?arch=arm64"));
-    const body = (await res.json()) as { error: string; platform: string; arch: string; instructions: string };
 
-    expect(res.status).toBe(503);
-    expect(body).toMatchObject({
-      error: "Installer not yet available",
-      platform: "windows",
-      arch: "arm64",
-    });
-    expect(body.instructions).toContain('Build Jarvis Desktop');
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(
+      "https://github.com/wiktorskrabel89-byte/Assistantx/releases/download/jarvis-latest/JarvisSetup-arm64.exe"
+    );
   });
 });

@@ -24,7 +24,12 @@ function getGithubToken(): string | null {
 }
 
 /** Fetch the GitHub Release asset metadata for the given filename. */
-async function getGithubReleaseAsset(filenames: string[]): Promise<GithubReleaseAsset | null> {
+type ReleaseLookupResult = {
+  asset: GithubReleaseAsset | null;
+  lookupFailed: boolean;
+};
+
+async function getGithubReleaseAsset(filenames: string[]): Promise<ReleaseLookupResult> {
   try {
     const token = getGithubToken();
     const apiUrl = `https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}`;
@@ -36,11 +41,16 @@ async function getGithubReleaseAsset(filenames: string[]): Promise<GithubRelease
       },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return { asset: null, lookupFailed: true };
+    }
     const release = (await res.json()) as { assets: GithubReleaseAsset[] };
-    return release.assets.find((asset) => filenames.includes(asset.name)) ?? null;
+    return {
+      asset: release.assets.find((asset) => filenames.includes(asset.name)) ?? null,
+      lookupFailed: false,
+    };
   } catch {
-    return null;
+    return { asset: null, lookupFailed: true };
   }
 }
 
@@ -127,7 +137,8 @@ export async function GET(request: Request): Promise<Response> {
 
   // 2. Try to stream the latest GitHub Release asset when the runtime has
   // access to a GitHub token (required for private releases).
-  const releaseAsset = await getGithubReleaseAsset(target.filenames);
+  const releaseLookup = await getGithubReleaseAsset(target.filenames);
+  const releaseAsset = releaseLookup.asset;
   if (releaseAsset) {
     const proxiedAsset = await proxyGithubReleaseAsset(releaseAsset);
     if (proxiedAsset) {
@@ -137,11 +148,15 @@ export async function GET(request: Request): Promise<Response> {
     return Response.redirect(releaseAsset.browser_download_url, 302);
   }
 
+  if (releaseLookup.lookupFailed && getGithubToken()) {
+    console.warn(`[jarvis/download] Release lookup failed for ${target.filenames.join(", ")}; using deterministic fallback URL.`);
+  }
+
   // 3. Fall back to the deterministic GitHub Releases URL so logged-in users
-  // can still download assets from the private repository even when the server
-  // runtime does not have a GitHub token configured.
+  // can still download assets from the private repository even when release
+  // metadata lookup fails in the runtime.
   const fallbackFilename = target.filenames[0];
-  if (!getGithubToken() && fallbackFilename) {
+  if (fallbackFilename) {
     return Response.redirect(`${RELEASE_DOWNLOAD_BASE}/${encodeURIComponent(fallbackFilename)}`, 302);
   }
 
