@@ -138,10 +138,10 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   // 3. Fall back to the deterministic GitHub Releases URL so logged-in users
-  // can still download assets from the private repository even when the server
-  // runtime does not have a GitHub token configured.
+  // can still download assets from the private repository even when release
+  // metadata lookup fails in the runtime.
   const fallbackFilename = target.filenames[0];
-  if (!getGithubToken() && fallbackFilename) {
+  if (fallbackFilename) {
     return Response.redirect(`${RELEASE_DOWNLOAD_BASE}/${encodeURIComponent(fallbackFilename)}`, 302);
   }
 
