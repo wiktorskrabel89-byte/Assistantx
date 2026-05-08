@@ -155,7 +155,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		checkUpdatesButton.addEventListener('click', async () => {
 			const result = await ipcRenderer.invoke('check-for-updates');
 			if (result?.ok === false && result.reason === 'not-packaged') {
-				appendMessage(log, 'Updater', 'Auto-update works after installing the EXE build.', 'error');
+				appendMessage(log, 'Updater', 'Running in dev mode — download and install the EXE to get automatic updates.', 'system');
 			}
 		});
 	}
