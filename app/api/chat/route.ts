@@ -509,7 +509,12 @@ export const POST = async (req: Request) => {
   let cachedAnswerCandidate: { answer: string; similarity: number; answerId?: string } | null = null;
   let liveWebSearch: WebSearchResponsePayload | null = null;
   // Skip embedding/RAG work for image requests — they return early before any RAG context is used.
-  if (!inferredImageRequest && authUserId && typeof effectiveMessage === "string" && effectiveMessage.trim().length > 0) {
+  const shouldPerformRagLookup =
+    !inferredImageRequest &&
+    authUserId !== null &&
+    typeof effectiveMessage === "string" &&
+    effectiveMessage.trim().length > 0;
+  if (shouldPerformRagLookup) {
     try {
       queryEmbedding = await createOpenRouterEmbedding(effectiveMessage);
       const [knowledgeContext, cacheCandidate] = await Promise.all([

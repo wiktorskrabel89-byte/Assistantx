@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import { PDFParse } from "pdf-parse";
 import { createClient } from "@/lib/server";
 import { chunkTextByApproxTokens, createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
+import { runWithConcurrency } from "@/app/lib/concurrency";
 import { ALL_MODELS, FREE_CHAT_MODEL } from "@/lib/ai-config";
 
 export const runtime = "nodejs";
@@ -20,23 +21,6 @@ function getUploadModelLabel(modelId: string, isImage: boolean): string {
   const found = ALL_MODELS.find((m) => m.id === modelId);
   const base = found?.label ?? modelId;
   return isImage ? base : `${base} (Document)`;
-}
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const idx = next++;
-      results[idx] = await fn(items[idx]);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
-  return results;
 }
 
 type KnowledgeStorageClient = {

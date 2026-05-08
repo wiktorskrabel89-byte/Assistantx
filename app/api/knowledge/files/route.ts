@@ -1,25 +1,9 @@
 import { createClient } from "@/lib/server";
 import { createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
+import { runWithConcurrency } from "@/app/lib/concurrency";
 
 // Maximum concurrent embedding API calls during reindex.
 const REINDEX_EMBEDDING_CONCURRENCY = 5;
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const idx = next++;
-      results[idx] = await fn(items[idx]);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
-  return results;
-}
 
 type KnowledgeStorageClient = {
   from: (bucket: string) => {
@@ -132,7 +116,7 @@ export async function POST(req: Request) {
       id: chunk.id,
       embedding: toPgVectorLiteral(await createOpenRouterEmbedding(chunk.content)),
     }));
-    // Batch all embedding updates using upsert to minimise round-trips.
+    // Batch all embedding updates using upsert to minimize round-trips.
     await Promise.all(
       embeddingResults.map(({ id, embedding }) =>
         supabase
