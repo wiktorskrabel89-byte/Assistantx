@@ -4,6 +4,10 @@ const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 const FAL_FLUX_FAST_URL = "https://fal.run/fal-ai/flux/schnell";
 const FAL_FLUX_HIGH_URL = "https://fal.run/fal-ai/flux/dev";
 const WEB_CACHE_TTL_MS = 1000 * 60 * 30;
+const DEFAULT_IMAGE_WIDTH = 1024;
+const DEFAULT_IMAGE_HEIGHT = 1024;
+const PORTRAIT_IMAGE_WIDTH = 832;
+const PORTRAIT_IMAGE_HEIGHT = 1216;
 
 type JsonRecord = Record<string, unknown>;
 type SupabaseLikeClient = { from: (table: string) => unknown };
@@ -58,7 +62,7 @@ export function shouldUseLiveWebSearch(params: {
   if (params.mode === "search") return true;
   if (!params.retrievedKnowledgeContext.trim()) return true;
   if (params.cachedAnswerExists) return false;
-  return /\b(today|latest|current|recent|news|price|release|version|202[5-9]|live)\b/i.test(params.message);
+  return /\b(today|latest|current|recent|news|price|release|version|20\d{2}|live)\b/i.test(params.message);
 }
 
 export function formatWebSearchContext(answer: string, results: TavilySearchResult[]) {
@@ -100,7 +104,7 @@ export async function getCachedWebSearch(params: {
 
   return {
     answer: typeof data.answer === "string" ? data.answer : "",
-    provider: data.provider === "tavily" ? "tavily" : "tavily",
+    provider: "tavily",
     query: typeof data.query === "string" ? data.query : params.query,
     results: Array.isArray(data.results) ? data.results as TavilySearchResult[] : [],
     cached: true,
@@ -143,6 +147,8 @@ export async function runTavilySearch(query: string, maxResults = 5): Promise<We
       api_key: apiKey,
       query,
       max_results: maxResults,
+      // Tavily "advanced" depth trades slightly more latency for higher-quality
+      // source gathering, which is a better fit for RAG-style answer synthesis.
       search_depth: "advanced",
       include_answer: true,
       include_raw_content: false,
@@ -183,7 +189,7 @@ export function buildEnhancedImagePrompt(prompt: string, enhancePrompt = false) 
 export function buildPollinationsFallbackUrl(prompt: string, quality: "fast" | "high") {
   const encoded = encodeURIComponent(prompt);
   const model = quality === "high" ? "flux" : "turbo";
-  return `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&enhance=true&model=${model}`;
+  return `https://image.pollinations.ai/prompt/${encoded}?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}&nologo=true&enhance=true&model=${model}`;
 }
 
 export async function generateImageWithFal(options: ImageGenerationOptions): Promise<ImageGenerationResult> {
@@ -210,7 +216,9 @@ export async function generateImageWithFal(options: ImageGenerationOptions): Pro
     },
     body: JSON.stringify({
       prompt: promptUsed || options.prompt,
-      image_size: options.aspectRatio === "portrait" ? { width: 832, height: 1216 } : { width: 1024, height: 1024 },
+      image_size: options.aspectRatio === "portrait"
+        ? { width: PORTRAIT_IMAGE_WIDTH, height: PORTRAIT_IMAGE_HEIGHT }
+        : { width: DEFAULT_IMAGE_WIDTH, height: DEFAULT_IMAGE_HEIGHT },
       sync_mode: true,
     }),
   });

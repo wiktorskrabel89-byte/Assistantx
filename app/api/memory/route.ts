@@ -5,6 +5,8 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ memories: [], summaries: [], knowledgeStats: null }, { status: 401 });
 
+  // Sample the most recent conversations to surface recent summary snapshots
+  // without issuing an unbounded query for every chat the user has ever opened.
   const conversations = await supabase
     .from("conversations")
     .select("id")

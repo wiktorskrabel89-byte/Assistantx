@@ -32,6 +32,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // Web research is more expensive than normal chat prompts, so keep a tighter
+  // per-minute cap while still allowing iterative search refinement.
   const rlKey = getRateLimitKey(req, "web-search");
   const rl = checkRateLimit(rlKey, 20, 60_000);
   if (!rl.allowed) return rateLimitedResponse(rl.retryAfterMs);
