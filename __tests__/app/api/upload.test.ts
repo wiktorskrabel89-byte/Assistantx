@@ -2,6 +2,11 @@
  * @jest-environment node
  */
 import { POST } from "@/app/api/upload/route";
+import { ALL_MODELS, FREE_CHAT_MODEL } from "@/lib/ai-config";
+
+// Derive the expected document model label the same way the route does.
+const freeModelEntry = ALL_MODELS.find((m) => m.id === FREE_CHAT_MODEL);
+const EXPECTED_DOCUMENT_LABEL = `${freeModelEntry?.label ?? FREE_CHAT_MODEL} (Document)`;
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -330,7 +335,7 @@ describe("POST /api/upload", () => {
 
     const res = await POST(req);
     const events = await readSseEvents(res);
-    expect(events.some((e) => e.model === "GPT OSS 120B (Free Document)")).toBe(true);
+    expect(events.some((e) => e.model === EXPECTED_DOCUMENT_LABEL)).toBe(true);
     const tokens = events.filter((e) => "token" in e).map((e) => e.token);
     expect(tokens).toContain("Summary: test content.");
   });
@@ -356,6 +361,6 @@ describe("POST /api/upload", () => {
 
     const res = await POST(req);
     const events = await readSseEvents(res);
-    expect(events.some((e) => e.model === "GPT OSS 120B (Free Document)")).toBe(true);
+    expect(events.some((e) => e.model === EXPECTED_DOCUMENT_LABEL)).toBe(true);
   });
 });

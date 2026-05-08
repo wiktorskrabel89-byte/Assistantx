@@ -327,6 +327,16 @@ export function useChatTransport({
           ...entry,
           status: "Finalizing image response...",
         }));
+        if (!response.ok) {
+          let errorText = `Image generation failed (${response.status})`;
+          try { errorText = (await response.json() as { error?: string }).error ?? errorText; } catch { /* ignore */ }
+          updateLastMessage(workspaceId, chatId, (entry) => ({
+            ...entry,
+            ai: errorText,
+            status: undefined,
+          }));
+          return;
+        }
         const data = await response.json();
         updateLastMessage(workspaceId, chatId, (entry) => ({
           ...entry,
