@@ -29,10 +29,17 @@ function useIsAdmin() {
 }
 
 type AdminTool = "memory" | "knowledge" | "research";
+const DEFAULT_TOOL: AdminTool = "knowledge";
 
 export function AILearningTab({ dark }: { dark: boolean }) {
   const isAdmin = useIsAdmin();
-  const [activeTool, setActiveTool] = useState<AdminTool>("knowledge");
+  const [activeTool, setActiveTool] = useState<AdminTool>(DEFAULT_TOOL);
+  const [visitedTools, setVisitedTools] = useState<AdminTool[]>([DEFAULT_TOOL]);
+
+  const handleSelectTool = (tool: AdminTool) => {
+    setActiveTool(tool);
+    setVisitedTools((current) => (current.includes(tool) ? current : [...current, tool]));
+  };
 
   if (!isAdmin) {
     return (
@@ -79,7 +86,7 @@ export function AILearningTab({ dark }: { dark: boolean }) {
             <button
               key={tool.id}
               type="button"
-              onClick={() => setActiveTool(tool.id)}
+              onClick={() => handleSelectTool(tool.id)}
               className={`rounded-2xl border px-3 py-3 text-left transition-colors ${activeTool === tool.id ? buttonActive : buttonBase}`}
             >
               <div className="text-sm font-semibold">{tool.label}</div>
@@ -90,9 +97,21 @@ export function AILearningTab({ dark }: { dark: boolean }) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {activeTool === "memory" ? <MemoryTab dark={dark} /> : null}
-        {activeTool === "knowledge" ? <KnowledgeTab dark={dark} /> : null}
-        {activeTool === "research" ? <WebResearchTab dark={dark} /> : null}
+        {visitedTools.includes("memory") ? (
+          <div className={activeTool === "memory" ? "h-full" : "hidden"}>
+            <MemoryTab dark={dark} />
+          </div>
+        ) : null}
+        {visitedTools.includes("knowledge") ? (
+          <div className={activeTool === "knowledge" ? "h-full" : "hidden"}>
+            <KnowledgeTab dark={dark} />
+          </div>
+        ) : null}
+        {visitedTools.includes("research") ? (
+          <div className={activeTool === "research" ? "h-full" : "hidden"}>
+            <WebResearchTab dark={dark} />
+          </div>
+        ) : null}
       </div>
     </section>
   );
