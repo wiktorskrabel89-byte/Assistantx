@@ -480,33 +480,26 @@ export const REASONING_MODEL_IDS: string[] = [
 
 /**
  * Per-model max_tokens overrides.
- * Models not listed fall back to the DEFAULT_MAX_TOKENS value.
+ * GPT OSS 120B has separate chat/code ceilings; all other models use DEFAULT_MAX_TOKENS.
  */
 export const DEFAULT_MAX_TOKENS = 4096;
 
-export const MODEL_MAX_TOKENS: Record<string, number> = {
-  // Frontier models support very long outputs
-  "anthropic/claude-opus-4.7": 8192,
-  "anthropic/claude-opus-4.6": 8192,
-  "anthropic/claude-opus-4.5": 8192,
-  "anthropic/claude-sonnet-4.5": 8192,
-  "openai/gpt-5.4": 8192,
-  "openai/gpt-5.5": 8192,
-  "openai/gpt-5.2": 8192,
-  "openai/gpt-5.2-pro": 8192,
-  "openai/gpt-5.3": 8192,
-  "openai/gpt-5": 8192,
-  "google/gemini-3-pro-preview": 8192,
-  "google/gemini-3-flash-preview": 8192,
-  // Standard models
-  "deepseek/deepseek-r1": 8192,
-  "deepseek/deepseek-v3.2": 8192,
-  "moonshotai/kimi-k2-thinking": 8192,
+export const MODEL_MAX_TOKENS_CHAT: Record<string, number> = {
+  "openai/gpt-oss-120b": 1024,
+  "openai/gpt-oss-120b:free": 1024,
+};
+
+export const MODEL_MAX_TOKENS_CODE: Record<string, number> = {
+  "openai/gpt-oss-120b": 8000,
+  "openai/gpt-oss-120b:free": 8000,
 };
 
 /** Returns the max_tokens value for a given model ID. */
-export function getModelMaxTokens(modelId: string): number {
-  return MODEL_MAX_TOKENS[modelId] ?? DEFAULT_MAX_TOKENS;
+export function getModelMaxTokens(modelId: string, isCodeRequest = false): number {
+  if (isCodeRequest) {
+    return MODEL_MAX_TOKENS_CODE[modelId] ?? DEFAULT_MAX_TOKENS;
+  }
+  return MODEL_MAX_TOKENS_CHAT[modelId] ?? DEFAULT_MAX_TOKENS;
 }
 
 /**
