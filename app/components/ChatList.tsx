@@ -5,6 +5,8 @@ import { memo, useMemo, useState, type RefObject } from "react";
 import { AIMessage } from "./AIMessage";
 import type { ChatEntry, MessageFeedback, Mode, ResponseAction } from "../lib/chat-types";
 
+const MESSAGE_LOAD_BATCH_SIZE = 80;
+
 export type ChatListProps = {
   chat: ChatEntry[];
   loading: boolean;
@@ -64,7 +66,7 @@ export const ChatList = memo(function ChatList({
   assistantDescription,
   assistantIcon: AssistantIcon,
 }: ChatListProps) {
-  const [visibleCount, setVisibleCount] = useState(80);
+  const [visibleCount, setVisibleCount] = useState(MESSAGE_LOAD_BATCH_SIZE);
   const quickStarters: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
     { label: "Generuj Kod", hint: "Kompletne rozwiązania", prompt: "Napisz mi kompletny przykład kodu dla: ", mode: "code", icon: Code2 },
     { label: "Zadanie", hint: "Daj AI zadanie", prompt: "Pomoz mi z zadaniem kodowania: ", mode: "chat", icon: ClipboardCheck },
@@ -74,6 +76,7 @@ export const ChatList = memo(function ChatList({
   ];
   const visibleStartIndex = Math.max(0, chat.length - visibleCount);
   const hiddenCount = visibleStartIndex;
+  const revealCount = Math.min(MESSAGE_LOAD_BATCH_SIZE, hiddenCount);
   const visibleMessages = useMemo(() => chat.slice(visibleStartIndex), [chat, visibleStartIndex]);
 
   return (
@@ -122,14 +125,14 @@ export const ChatList = memo(function ChatList({
         <div className="sticky top-0 z-10 flex justify-center py-1">
           <button
             type="button"
-            onClick={() => setVisibleCount((current) => current + 80)}
+            onClick={() => setVisibleCount((current) => current + MESSAGE_LOAD_BATCH_SIZE)}
             className={`rounded-full border px-3 py-1 text-xs backdrop-blur ${
               dark
                 ? "border-slate-700 bg-slate-900/80 text-slate-200 hover:bg-slate-800"
                 : "border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-50"
             }`}
           >
-            Show {Math.min(80, hiddenCount)} older message{hiddenCount === 1 ? "" : "s"}
+            Show {revealCount} older message{revealCount === 1 ? "" : "s"}
           </button>
         </div>
       ) : null}
