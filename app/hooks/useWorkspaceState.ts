@@ -327,9 +327,12 @@ export function useWorkspaceState() {
     const snap = stateRef.current;
     const ws = snap.workspaces.find((w) => w.id === snap.activeWorkspaceId) ?? snap.workspaces[0];
     const isFreePlan = snap.userPlan === "free";
-    const targetModelId = appMode === "ai-chat"
-      ? (isFreePlan ? FREE_CHAT_MODEL : AUTO_PREFERRED_CHAT_MODEL)
-      : (isFreePlan ? FREE_CODING_MODEL : AUTO_PREFERRED_CODING_MODEL);
+    let targetModelId: string;
+    if (appMode === "ai-chat") {
+      targetModelId = isFreePlan ? FREE_CHAT_MODEL : AUTO_PREFERRED_CHAT_MODEL;
+    } else {
+      targetModelId = isFreePlan ? FREE_CODING_MODEL : AUTO_PREFERRED_CODING_MODEL;
+    }
     const targetModelProfile = appMode === "ai-chat" ? "gpt-oss-chat" : "gpt-oss-code";
     const targetTemperature = appMode === "ai-chat" ? 0.6 : 0.1;
     setState((prev) => ({ ...prev, appMode }));

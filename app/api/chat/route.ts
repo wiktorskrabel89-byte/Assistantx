@@ -792,16 +792,15 @@ export const POST = async (req: Request) => {
     historyMessages = clientHistoryToMessages(history);
   }
 
+  const resolvedTemperature = modelProfile === "gpt-oss-code"
+    ? GPT_OSS_CODE_TEMPERATURE
+    : GPT_OSS_CHAT_TEMPERATURE;
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,
     stream: true,
     max_tokens: getModelMaxTokens(selectedModel, inferredCodeRequest),
-    temperature: modelProfile === "gpt-oss-code"
-      ? GPT_OSS_CODE_TEMPERATURE
-      : modelProfile === "gpt-oss-chat"
-        ? GPT_OSS_CHAT_TEMPERATURE
-        : (inferredCodeRequest ? GPT_OSS_CODE_TEMPERATURE : GPT_OSS_CHAT_TEMPERATURE),
+    temperature: resolvedTemperature,
     messages: [
       { role: "system", content: systemPrompt },
       ...historyMessages,
