@@ -1,12 +1,15 @@
 export { AILearningTab } from "./AILearningTab";
 export { ClinicalTab } from "./ClinicalTab";
 export { CodebaseTab } from "./CodebaseTab";
+export { ImageStudioTab } from "./ImageStudioTab";
 export { KnowledgeTab } from "./KnowledgeTab";
 export { KnowledgeExportTab } from "./KnowledgeExportTab";
 export { LearningTab } from "./LearningTab";
+export { MemoryTab } from "./MemoryTab";
 export { NotificationsTab } from "./NotificationsTab";
 export { ProjectsTab } from "./ProjectsTab";
 export { PromptLibraryTab } from "./PromptLibraryTab";
 export { SandboxTab } from "./SandboxTab";
 export { SettingsTab } from "./SettingsTab";
+export { WebResearchTab } from "./WebResearchTab";
 export { WebsiteCreatorTab } from "./WebsiteCreatorTab";

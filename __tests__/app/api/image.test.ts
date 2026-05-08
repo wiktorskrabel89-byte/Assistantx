@@ -23,7 +23,7 @@ describe("POST /api/image", () => {
     const json = await res.json();
 
     expect(json.url).toContain("image.pollinations.ai");
-    expect(json.model).toBe("Pollinations.ai (Free)");
+    expect(json.model).toBe("Pollinations Turbo");
   });
 
   it("encodes the prompt in the Pollinations URL", async () => {
