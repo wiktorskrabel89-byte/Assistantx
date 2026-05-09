@@ -6,7 +6,6 @@ import { ChatHeader } from "../ChatHeader";
 import { ChatList } from "../ChatList";
 import { ConversationToolbar } from "../ConversationToolbar";
 import { GoogleIntegrationBanner } from "../GoogleIntegrationBanner";
-import { ModelSelector } from "../ModelSelector";
 import dynamic from "next/dynamic";
 import { PremiumPlanBanner } from "../PremiumPlanBanner";
 import { ThinkingIndicator } from "../ThinkingIndicator";
@@ -780,21 +779,6 @@ export function ChatTab() {
             </div>
           </div>
 
-          <div className={`border-t border-slate-200 px-4 py-2 dark:border-slate-800 ${state.dark ? "bg-slate-900/90" : "bg-white/90"}`}>
-            <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3">
-              <ModelSelector
-                dark={state.dark}
-                preferredModelId={activeWorkspace.settings.preferredModelId ?? null}
-                isPremium={state.userPlan !== "free"}
-                isProPlus={state.userPlan === "pro+"}
-                onSelectModel={setPreferredModelId}
-                thinkingEffort={thinkingEffort}
-                onThinkingEffortChange={setThinkingEffort}
-                appMode={state.appMode}
-              />
-            </div>
-          </div>
-
           <ChatComposer
             dark={state.dark}
             message={message}
@@ -816,7 +800,7 @@ export function ChatTab() {
             onStopGeneration={stopCurrentGeneration}
             onQueueMessage={queueComposerMessage}
             onRemoveQueuedMessage={removeQueuedMessage}
-            selectedModel={activeWorkspace.settings.preferredModelId ?? "openai/gpt-5.4"}
+            selectedModel={activeWorkspace.settings.preferredModelId ?? "qwen/qwen3-32b"}
             thinkingEffort={thinkingEffort}
             premiumLimitReached={(() => {
               const limit = state.userPlan === "pro"
