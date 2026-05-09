@@ -227,6 +227,27 @@ describe("POST /api/upload", () => {
     expect(textPart?.text).toBe("What do you see in this image?");
   });
 
+  it("sends vision temperature 0.3 and multimodal analysis prompt for image uploads", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeSseResponse(["data: [DONE]"])
+    );
+
+    const formData = makeFileFormData("fake image", "image/png", "Analyze this screenshot");
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    await POST(req);
+
+    const requestBody = JSON.parse(
+      mockFetch.mock.calls[0][1].body as string
+    ) as { temperature?: number; messages: Array<{ role: string; content: string }> };
+
+    expect(requestBody.temperature).toBe(0.3);
+    expect(requestBody.messages[0].content).toContain("multimodal analysis");
+  });
+
   it("returns 401 when the user is not authenticated", async () => {
     const { createClient } = jest.requireMock("@/lib/server") as {
       createClient: jest.Mock;

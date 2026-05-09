@@ -22,12 +22,45 @@ export function isCodeRequest(message: string): boolean {
   return false;
 }
 
+/**
+ * Returns true when a coding request is complex enough to warrant high reasoning effort.
+ * Complex = debugging, refactoring, architecture, code review, multi-step implementation.
+ * Simple = write a small helper, autocomplete, explain a snippet.
+ */
+export function isComplexCodingRequest(message: string): boolean {
+  const text = message.trim();
+  if (!text) return false;
+
+  return COMPLEX_CODING_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 export function isImageRequest(message: string): boolean {
   const text = message.trim().toLowerCase();
   if (!text) return false;
 
-  return /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/.test(text)
-    || /^\s*\/image\b/.test(text)
-    || /\bimage of\b/.test(text)
-    || /\bplease.*\b(image|picture|photo)\b/.test(text);
+  return IMAGE_INTENT.test(text)
+    || IMAGE_COMMAND.test(text)
+    || IMAGE_OF.test(text)
+    || IMAGE_PLEASE.test(text);
+}
+
+/**
+ * Returns true for messages that require deep analytical or multi-step reasoning:
+ * planning, agent design, complex workflows, logic-heavy problems.
+ */
+export function isHeavyReasoningRequest(message: string): boolean {
+  const text = message.trim();
+  if (!text) return false;
+
+  return HEAVY_REASONING_KEYWORDS.test(text)
+    || HEAVY_REASONING_HOW.test(text)
+    || HEAVY_REASONING_COMPARE.test(text);
+}
+
+/**
+ * Returns true when the combined message + context is very long (> 6000 chars),
+ * making a long-context model like Gemini 2.5 Flash more suitable.
+ */
+export function isVeryLongContext(message: string, additionalContextLength = 0): boolean {
+  return message.length + additionalContextLength > 6000;
 }

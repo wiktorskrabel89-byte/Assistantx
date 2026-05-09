@@ -461,3 +461,78 @@ describe('POST /api/chat — "websearch" prefix enables web plugin on current mo
     expect(calledBody.model).toBe("openai/gpt-oss-120b:free");
   });
 });
+
+describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("uses Gemini fallback temperature 0.7 and balanced prompt for manual Gemini chat", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Hi there",
+      mode: "chat",
+      userPlan: "pro",
+      modelId: "google/gemini-2.5-flash",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      temperature: number;
+      messages: Array<{ role: string; content: string }>;
+    };
+    const systemMessage = calledBody.messages.find((m) => m.role === "system");
+    expect(calledBody.temperature).toBe(0.7);
+    expect(systemMessage?.content).toContain("You are a balanced assistant.");
+  });
+
+  it("uses Gemini long-context temperature 0.4 and long-context prompt", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const longMessage = "A".repeat(7000);
+    const req = makeRequest({
+      message: longMessage,
+      mode: "chat",
+      userPlan: "pro",
+      allowedModels: ["qwen/qwen3-32b", "openai/gpt-oss-120b", "google/gemini-2.5-flash"],
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      model: string;
+      temperature: number;
+      messages: Array<{ role: string; content: string }>;
+    };
+    const systemMessage = calledBody.messages.find((m) => m.role === "system");
+    expect(calledBody.model).toBe("google/gemini-2.5-flash");
+    expect(calledBody.temperature).toBe(0.4);
+    expect(systemMessage?.content).toContain("Analyze long documents and large context efficiently.");
+  });
+});
