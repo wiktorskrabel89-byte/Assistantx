@@ -13,7 +13,6 @@ const MESSAGE_LOAD_BATCH_SIZE = 80;
 export type ChatListProps = {
   chat: ChatEntry[];
   loading: boolean;
-  dark: boolean;
   copied: string | null;
   scrollRef: RefObject<HTMLDivElement | null>;
   chatEndRef: RefObject<HTMLDivElement | null>;
@@ -41,7 +40,6 @@ export type ChatListProps = {
 export const ChatList = memo(function ChatList({
   chat,
   loading,
-  dark,
   copied,
   scrollRef,
   chatEndRef,
@@ -186,7 +184,6 @@ export const ChatList = memo(function ChatList({
 
           <AIMessage
             entry={entry}
-            dark={dark}
             copied={copied}
             isStreaming={loading && index === chat.length - 1}
             reasoningOpen={openReasoning.has(entry.id)}

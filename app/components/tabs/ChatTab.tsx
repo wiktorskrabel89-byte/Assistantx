@@ -715,7 +715,6 @@ export function ChatTab() {
                 <ChatList
                   chat={activeChat.messages}
                   loading={loading}
-                  dark={state.dark}
                   copied={copied}
                   scrollRef={chatScrollRef}
                   chatEndRef={chatEndRef}

@@ -5,7 +5,6 @@ import { Star } from "lucide-react";
 import type { MessageFeedback } from "../lib/chat-types";
 
 type ReviewPanelProps = {
-  dark: boolean;
   rating?: MessageFeedback;
   reviewText?: string;
   onRatingChange: (rating: MessageFeedback | null) => void;
@@ -14,7 +13,7 @@ type ReviewPanelProps = {
 
 const MAX_REVIEW_LENGTH = 500;
 
-export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReviewTextChange }: ReviewPanelProps) {
+export function ReviewPanel({ rating, reviewText, onRatingChange, onReviewTextChange }: ReviewPanelProps) {
   const [hovered, setHovered] = useState<number | null>(null);
   const [localText, setLocalText] = useState(reviewText ?? "");
   const [expanded, setExpanded] = useState(false);
@@ -57,9 +56,9 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
   }
 
   return (
-    <div className={`mt-3 rounded-2xl border px-4 py-3 ${dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+    <div className="mt-3 rounded-xl border border-border bg-card px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
+        <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
           Oceń odpowiedź
         </span>
         <div
@@ -79,9 +78,7 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
                 className={`h-5 w-5 transition-colors ${
                   star <= displayRating
                     ? "fill-amber-400 text-amber-400"
-                    : dark
-                    ? "fill-slate-700 text-slate-600"
-                    : "fill-slate-200 text-slate-300"
+                    : "fill-muted text-muted-foreground"
                 }`}
               />
             </button>
@@ -91,11 +88,7 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
           <button
             type="button"
             onClick={handleToggleExpanded}
-            className={`text-xs transition-colors ${
-              dark
-                ? "text-slate-400 hover:text-slate-200"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             {expanded
               ? "Ukryj komentarz"
@@ -116,21 +109,17 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
             placeholder="Napisz komentarz (opcjonalnie)..."
             rows={3}
             maxLength={MAX_REVIEW_LENGTH}
-            className={`w-full resize-none rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${
-              dark
-                ? "border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500 focus:border-sky-600"
-                : "border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:border-sky-400"
-            }`}
+            className="w-full resize-none rounded-xl border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
           />
           <div className="mt-2 flex items-center justify-between">
-            <span className={`text-xs ${dark ? "text-slate-500" : "text-slate-400"}`}>
+            <span className="text-xs text-muted-foreground">
               {localText.length}/{MAX_REVIEW_LENGTH} znaków
             </span>
             <button
               type="button"
               onClick={handleSave}
               disabled={localText.length > MAX_REVIEW_LENGTH}
-              className="rounded-lg bg-gradient-to-r from-sky-700 to-cyan-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700 disabled:opacity-50"
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
             >
               {saved ? "Zapisano ✓" : "Zapisz recenzję"}
             </button>
@@ -139,7 +128,7 @@ export function ReviewPanel({ dark, rating, reviewText, onRatingChange, onReview
       ) : null}
 
       {rating && !expanded && reviewText ? (
-        <div className={`mt-2 text-xs italic ${dark ? "text-slate-400" : "text-slate-500"}`}>
+        <div className="mt-2 text-xs italic text-muted-foreground">
           &ldquo;{reviewText}&rdquo;
         </div>
       ) : null}

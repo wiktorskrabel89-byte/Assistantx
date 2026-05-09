@@ -25,6 +25,16 @@ function parseCitations(text: string): { cleanText: string; citations: Citation[
   return { cleanText, citations };
 }
 
+// ── Dark mode detection ─────────────────────────────────────────────────────
+function subscribeDarkMode(callback: () => void) {
+  const observer = new MutationObserver(callback);
+  observer.observe(document.documentElement, { attributeFilter: ["class"] });
+  return () => observer.disconnect();
+}
+function getDarkSnapshot() {
+  return document.documentElement.classList.contains("dark");
+}
+
 // ── TTS helpers (useSyncExternalStore) ─────────────────────────────────────
 function getTtsSupportSnapshot() {
   return typeof window !== "undefined" && "speechSynthesis" in window;
@@ -35,7 +45,6 @@ function subscribeTtsSupport() {
 
 type AIMessageProps = {
   entry: ChatEntry;
-  dark: boolean;
   copied: string | null;
   isStreaming: boolean;
   reasoningOpen: boolean;
@@ -52,7 +61,6 @@ type AIMessageProps = {
 
 export function AIMessage({
   entry,
-  dark,
   copied,
   isStreaming,
   reasoningOpen,
@@ -69,6 +77,7 @@ export function AIMessage({
   let codeBlockIndex = 0;
   const responseCopyId = `${entry.id}-response`;
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const isDark = useSyncExternalStore(subscribeDarkMode, getDarkSnapshot, () => false);
 
   const ttsSupported = useSyncExternalStore(subscribeTtsSupport, getTtsSupportSnapshot, () => false);
 
@@ -173,7 +182,7 @@ export function AIMessage({
                               {copied === blockId ? "Copied" : "Copy"}
                             </button>
                           </div>
-                          <SyntaxHighlighter style={dark ? oneDark : oneLight} language={match?.[1] ?? "text"} PreTag="div">
+                          <SyntaxHighlighter style={isDark ? oneDark : oneLight} language={match?.[1] ?? "text"} PreTag="div">
                             {codeText}
                           </SyntaxHighlighter>
                         </div>
@@ -273,10 +282,9 @@ export function AIMessage({
           ) : null}
         </div>
 
-        <CodeReviewPanel dark={dark} blocks={codeBlocks} onCreateFollowUp={onCreateFollowUp} />
+        <CodeReviewPanel blocks={codeBlocks} onCreateFollowUp={onCreateFollowUp} />
         {entry.ai ? (
           <ReviewPanel
-            dark={dark}
             rating={rating}
             reviewText={reviewText}
             onRatingChange={onRatingChange}

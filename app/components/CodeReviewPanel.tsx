@@ -6,7 +6,6 @@ type CodeReviewBlock = {
 };
 
 type CodeReviewPanelProps = {
-  dark: boolean;
   blocks: CodeReviewBlock[];
   onCreateFollowUp: (prompt: string) => void;
 };
@@ -16,7 +15,7 @@ function summarizeLanguages(blocks: CodeReviewBlock[]) {
   return languages.length > 0 ? languages.join(", ") : "mixed";
 }
 
-export function CodeReviewPanel({ dark, blocks, onCreateFollowUp }: CodeReviewPanelProps) {
+export function CodeReviewPanel({ blocks, onCreateFollowUp }: CodeReviewPanelProps) {
   if (blocks.length === 0) return null;
 
   const combinedCode = blocks.map((block, index) => `Block ${index + 1} (${block.language || "text"}):\n${block.code}`).join("\n\n");
@@ -38,10 +37,10 @@ export function CodeReviewPanel({ dark, blocks, onCreateFollowUp }: CodeReviewPa
   ];
 
   return (
-    <div className={`mt-3 rounded-2xl border px-4 py-3 ${dark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+    <div className="mt-3 rounded-xl border border-border bg-card px-4 py-3">
       <div>
-        <div className="text-sm font-semibold">Code analysis</div>
-        <div className="mt-1 text-xs text-slate-500">{blocks.length} block{blocks.length === 1 ? "" : "s"} • {lineCount} lines • {summarizeLanguages(blocks)}</div>
+        <div className="text-sm font-semibold text-foreground">Code analysis</div>
+        <div className="mt-1 text-xs text-muted-foreground">{blocks.length} block{blocks.length === 1 ? "" : "s"} • {lineCount} lines • {summarizeLanguages(blocks)}</div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {actions.map((action) => (
@@ -49,7 +48,7 @@ export function CodeReviewPanel({ dark, blocks, onCreateFollowUp }: CodeReviewPa
             key={action.label}
             type="button"
             onClick={() => onCreateFollowUp(action.prompt)}
-            className={`rounded-full border px-3 py-2 text-sm font-medium transition-colors ${dark ? "border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"}`}
+            className="rounded-full border border-border bg-muted px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
             {action.label}
           </button>
