@@ -64,32 +64,33 @@ export type LanguageOption = {
 };
 
 export const CHAT_MODELS: ModelOption[] = [
-  // Only include models referenced in RECOMMENDED_CHAT_MODELS or as free fallbacks
+  // Free-plan models — only those in the routing plan
   {
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    label: "Llama 3.3 70B (Free)",
-    description: "Best free open model for chat and reasoning.",
+    id: "qwen/qwen3-32b:free",
+    label: "Qwen3 32B (Free)",
+    description: "Main conversational AI — natural chat, fast replies.",
   },
   {
     id: "openai/gpt-oss-120b:free",
     label: "GPT OSS 120B (Free)",
-    description: "Free OpenAI open-source 120B model.",
+    description: "Free GPT OSS 120B — coding, reasoning, and heavy tasks.",
   },
   {
     id: "openai/gpt-oss-120b",
     label: "GPT OSS 120B",
-    description: "OpenAI open-source 120B model.",
+    description: "GPT OSS 120B — coding, reasoning, and heavy tasks.",
   },
   {
-    id: "z-ai/glm-4.5-air:free",
-    label: "GLM 4.5 Air (Free)",
-    description: "Free lightweight GLM chat model.",
+    id: "google/gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
+    description: "Fallback AI — balanced chat, long context, and vision.",
   },
   {
-    id: "minimax/minimax-m2.5:free",
-    label: "MiniMax M2.5 (Free)",
-    description: "Free MiniMax general-purpose model.",
+    id: "meta-llama/llama-4-scout",
+    label: "Llama 4 Scout",
+    description: "Vision analysis — screenshots, OCR, and UI analysis.",
   },
+  // Premium models (Pro / Pro+ plans)
   {
     id: "openai/gpt-5.2",
     label: "GPT-5.2",
@@ -120,26 +121,17 @@ export const CHAT_MODELS: ModelOption[] = [
     label: "Claude Opus 4.7",
     description: "Latest premium Claude model for chat and code.",
   },
-  {
-    id: "google/gemini-3-flash-preview",
-    label: "Gemini 3 Flash",
-    description: "Fast general-purpose chat.",
-  },
 ];
 
 export const CODE_MODELS: ModelOption[] = [
-  // Only include models referenced in RECOMMENDED_CODING_MODELS or as free fallbacks
+  // Free-plan models — only those in the routing plan
   {
     id: "openai/gpt-oss-120b:free",
     label: "GPT OSS 120B (Free)",
-    description: "Free OpenAI open-source 120B coding model.",
+    description: "Free GPT OSS 120B — coding and reasoning.",
   },
   // openai/gpt-oss-120b (non-free) is already in CHAT_MODELS; it is deduplicated in ALL_MODELS.
-  {
-    id: "minimax/minimax-m2.5:free",
-    label: "MiniMax M2.5 (Free)",
-    description: "Free MiniMax model for code tasks.",
-  },
+  // Premium models (Pro / Pro+ plans)
   {
     id: "anthropic/claude-opus-4.6",
     label: "Claude Opus 4.6",
@@ -164,11 +156,6 @@ export const CODE_MODELS: ModelOption[] = [
     id: "deepseek/deepseek-r1",
     label: "DeepSeek R1",
     description: "Reasoning-heavy coding model.",
-  },
-  {
-    id: "nvidia/nemotron-3-super-120b-a12b:free",
-    label: "Nemotron 3 Super (Free)",
-    description: "NVIDIA's free code model (alternative free option).",
   },
 ];
 
@@ -251,7 +238,7 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
 ];
 
 export const DEFAULT_CHAT_MODEL = CHAT_MODELS[0].id;
-export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
+export const DEFAULT_CODE_MODEL = "openai/gpt-oss-120b:free";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
 // ─── Smart-routing model IDs ──────────────────────────────────────────────────
@@ -273,8 +260,6 @@ export const ROUTING_CODE_MODEL_FREE = "openai/gpt-oss-120b:free";
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
   { id: "coding-gpt-oss-120b-profile", label: "GPT OSS 120B (Code Profile)", modelId: "openai/gpt-oss-120b", costTier: "standard" },
   { id: "coding-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
-  { id: "coding-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
-  { id: "coding-nemotron-super-free", label: "Nemotron 3 Super (Free)", modelId: "nvidia/nemotron-3-super-120b-a12b:free", costTier: "free" },
   // Locked/paid models below
   { id: "coding-claude-opus", label: "Claude Opus 4.6", modelId: "anthropic/claude-opus-4.6", costTier: "premium" },
   { id: "coding-claude-opus-4.7", label: "Claude Opus 4.7", modelId: "anthropic/claude-opus-4.7", costTier: "premium" },
@@ -285,14 +270,13 @@ export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
 
 export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
   { id: "chat-gpt-oss-120b-profile", label: "GPT OSS 120B (Chat Profile)", modelId: "openai/gpt-oss-120b", costTier: "standard" },
-  { id: "chat-llama-3.3-free", label: "Llama 3.3 70B (Free)", modelId: "meta-llama/llama-3.3-70b-instruct:free", costTier: "free" },
+  { id: "chat-qwen3-32b-free", label: "Qwen3 32B (Free)", modelId: "qwen/qwen3-32b:free", costTier: "free" },
   { id: "chat-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
-  { id: "chat-minimax-m2.5-free", label: "MiniMax M2.5 (Free)", modelId: "minimax/minimax-m2.5:free", costTier: "free" },
+  { id: "chat-gemini-2.5-flash", label: "Gemini 2.5 Flash", modelId: "google/gemini-2.5-flash", costTier: "cheap" },
   // Locked/paid models below
   { id: "chat-gpt-5.2", label: "GPT-5.2", modelId: "openai/gpt-5.2", costTier: "premium" },
   { id: "chat-gpt-5.3", label: "GPT-5.3", modelId: "openai/gpt-5.3", costTier: "premium" },
   { id: "chat-claude-sonnet", label: "Claude Sonnet 4.5", modelId: "anthropic/claude-sonnet-4.5", costTier: "standard" },
-  { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview", costTier: "cheap" },
 ];
 
 export const AUTO_PREFERRED_CODING_MODEL = "openai/gpt-oss-120b";
@@ -361,10 +345,10 @@ export const MODEL_BEHAVIOR_PROFILES: Record<string, ModelBehaviorProfile> = {
     codePromptText: "Generate correct, minimal, production-ready code and explain briefly.",
   },
   "openai/gpt-oss-120b:free": {
-    defaultTemperature: 0.8,
+    defaultTemperature: 0.3,
     codeTemperature: 0.15,
-    promptText: "Use a friendly, clear, practical chat style.",
-    codePromptText: "Prioritize correctness, code quality, and concise engineering explanations.",
+    promptText: "You are an analytical reasoning model.\n\nFocus on:\n- logic\n- planning\n- accuracy\n- structured thinking\n- step-by-step reasoning",
+    codePromptText: "You are a senior software engineer.\n\nRules:\n- prioritize correctness\n- preserve architecture\n- minimal diffs\n- production-ready code\n- avoid hallucinations\n- complete implementations\n- explain briefly",
   },
   "minimax/minimax-m2.5:free": {
     defaultTemperature: 0.7,
@@ -386,9 +370,9 @@ export const MODEL_BEHAVIOR_PROFILES: Record<string, ModelBehaviorProfile> = {
   },
   "qwen/qwen3-32b:free": {
     defaultTemperature: 0.8,
-    codeTemperature: 0.2,
-    promptText: "Use natural conversation with concise practical outputs.",
-    codePromptText: "Provide production-minded code and concise rationale.",
+    codeTemperature: 0.15,
+    promptText: "You are a helpful AI assistant.\n\nRules:\n- natural conversation\n- concise responses\n- fast replies\n- good formatting\n- helpful explanations",
+    codePromptText: "You are a senior software engineer.\n\nRules:\n- prioritize correctness\n- preserve architecture\n- minimal diffs\n- production-ready code\n- avoid hallucinations\n- complete implementations\n- explain briefly",
   },
   "google/gemini-2.5-flash-lite": {
     defaultTemperature: 0.6,
@@ -406,10 +390,10 @@ export const MODEL_BEHAVIOR_PROFILES: Record<string, ModelBehaviorProfile> = {
   },
   "google/gemini-2.5-flash": {
     defaultTemperature: 0.7,
-    codeTemperature: 0.2,
     longContextTemperature: 0.4,
-    promptText: "Handle broad chat tasks with balanced quality and speed.",
-    codePromptText: "Keep coding answers actionable and implementation-focused.",
+    visionTemperature: 0.3,
+    promptText: "You are a balanced assistant.\n\nRules:\n- natural conversation\n- concise responses\n- accurate answers\n- practical structure",
+    codePromptText: "Analyze long documents and large context efficiently.\n\nFocus on:\n- summarization\n- context retention\n- accurate extraction",
   },
   "openai/gpt-5-mini": {
     defaultTemperature: 0.6,
@@ -442,10 +426,10 @@ export const MODEL_BEHAVIOR_PROFILES: Record<string, ModelBehaviorProfile> = {
     codePromptText: "Prioritize rigorous reasoning, correctness, and clear code decisions.",
   },
   "openai/gpt-oss-120b": {
-    defaultTemperature: 0.8,
+    defaultTemperature: 0.3,
     codeTemperature: 0.15,
-    promptText: "Use the GPT OSS 120B chat profile: friendly, clear, and practical.",
-    codePromptText: "Use the GPT OSS 120B coding profile: correctness, code quality, and concise engineering explanations.",
+    promptText: "You are an analytical reasoning model.\n\nFocus on:\n- logic\n- planning\n- accuracy\n- structured thinking\n- step-by-step reasoning",
+    codePromptText: "You are a senior software engineer.\n\nRules:\n- prioritize correctness\n- preserve architecture\n- minimal diffs\n- production-ready code\n- avoid hallucinations\n- complete implementations\n- explain briefly",
   },
   "deepseek/deepseek-v3.2": {
     defaultTemperature: 0.55,
@@ -467,9 +451,9 @@ export const MODEL_BEHAVIOR_PROFILES: Record<string, ModelBehaviorProfile> = {
   },
   "qwen/qwen3-32b": {
     defaultTemperature: 0.8,
-    codeTemperature: 0.2,
-    promptText: "Use natural conversational flow with concise practical guidance.",
-    codePromptText: "Deliver minimal-diff, production-oriented coding support.",
+    codeTemperature: 0.15,
+    promptText: "You are a helpful AI assistant.\n\nRules:\n- natural conversation\n- concise responses\n- fast replies\n- good formatting\n- helpful explanations",
+    codePromptText: "You are a senior software engineer.\n\nRules:\n- prioritize correctness\n- preserve architecture\n- minimal diffs\n- production-ready code\n- avoid hallucinations\n- complete implementations\n- explain briefly",
   },
   "qwen/qwen3-235b-a22b": {
     defaultTemperature: 0.7,
@@ -497,7 +481,7 @@ export const MODEL_BEHAVIOR_PROFILES: Record<string, ModelBehaviorProfile> = {
   "meta-llama/llama-4-scout": {
     defaultTemperature: 0.3,
     visionTemperature: 0.3,
-    promptText: "Analyze multimodal inputs carefully and report concrete observations.",
+    promptText: "Analyze images accurately.\n\nFocus on:\n- screenshots\n- OCR\n- UI analysis\n- visual understanding",
     codePromptText: "Use careful analysis before proposing code changes.",
   },
   "openai/gpt-5.3": {
@@ -628,8 +612,8 @@ export function getCheaperAlternative(modelId: string, costMode: CostMode, isCod
 
   // Pick the best model within budget for the request type
   const candidates = isCodeRequest
-    ? ["deepseek/deepseek-r1", "deepseek/deepseek-v3.2"]
-    : ["google/gemini-3-flash-preview", "openai/gpt-5-mini", "meta-llama/llama-3.3-70b-instruct:free"];
+    ? ["openai/gpt-oss-120b:free"]
+    : ["google/gemini-2.5-flash", "qwen/qwen3-32b:free"];
 
   for (const candidate of candidates) {
     if (isModelAllowedByCostMode(candidate, costMode)) {
@@ -694,14 +678,10 @@ export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): stri
 // Top free models for chat and coding
 export const TOP_FREE_CHAT_MODELS = [
   "qwen/qwen3-32b:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
   "openai/gpt-oss-120b:free",
-  "minimax/minimax-m2.5:free",
 ];
 export const TOP_FREE_CODE_MODELS = [
   "openai/gpt-oss-120b:free",
-  "minimax/minimax-m2.5:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
 ];
 
 /**
