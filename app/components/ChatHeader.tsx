@@ -6,8 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 
 type ChatHeaderProps = {
-  dark: boolean;
-  inputBg: string;
   assistantIcon: LucideIcon;
   assistantName: string;
   activeChatTitle: string;
@@ -25,8 +23,6 @@ type ChatHeaderProps = {
 };
 
 export function ChatHeader({
-  dark,
-  inputBg,
   assistantIcon: AssistantIcon,
   assistantName,
   activeChatTitle,
@@ -42,10 +38,10 @@ export function ChatHeader({
   onOpenWorkspaceTools,
   onOpenUsage,
 }: ChatHeaderProps) {
-  const iconBtnCn = `hidden h-10 w-10 lg:flex ${dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-slate-100" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`;
+  const iconBtnCn = "hidden h-10 w-10 lg:flex border-border bg-background text-foreground/70 hover:bg-accent hover:text-foreground";
 
   return (
-    <div className="border-b border-slate-200 bg-white/85 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+    <div className="border-b border-border bg-background/95 px-4 py-3 backdrop-blur-sm">
       <TooltipProvider>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -53,16 +49,16 @@ export function ChatHeader({
               variant="outline"
               size="icon"
               onClick={onOpenSidebar}
-              className="h-10 w-10 rounded-xl border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300 xl:hidden"
+              className="h-10 w-10 rounded-lg border-border text-foreground/70 xl:hidden"
             >
               <Menu className="h-4 w-4" />
             </Button>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 text-white shadow-sm">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground/70">
               <AssistantIcon className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-base font-semibold text-slate-900 dark:text-white">{assistantName}</div>
-              <div className="truncate text-xs text-slate-500">{activeChatTitle}</div>
+              <div className="truncate text-base font-semibold text-foreground">{assistantName}</div>
+              <div className="truncate text-xs text-muted-foreground">{activeChatTitle}</div>
             </div>
           </div>
 
@@ -124,7 +120,7 @@ export function ChatHeader({
             <Button
               variant="outline"
               onClick={onOpenAgentManager}
-              className={`hidden rounded-xl text-sm font-medium md:flex ${dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700"}`}
+              className="hidden rounded-lg text-sm font-medium md:flex border-border bg-background text-foreground/70 hover:bg-accent"
             >
               New agent
             </Button>
@@ -132,7 +128,7 @@ export function ChatHeader({
             <Button
               variant="outline"
               onClick={onOpenShare}
-              className={`hidden rounded-xl text-sm font-medium sm:flex ${dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700"}`}
+              className="hidden rounded-lg text-sm font-medium sm:flex border-border bg-background text-foreground/70 hover:bg-accent"
             >
               Share
             </Button>
@@ -140,7 +136,7 @@ export function ChatHeader({
             <Button
               variant="outline"
               onClick={onOpenPrompts}
-              className={cn("hidden rounded-xl text-sm font-medium sm:flex", dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700")}
+              className={cn("hidden rounded-lg text-sm font-medium sm:flex border-border bg-background text-foreground/70 hover:bg-accent")}
             >
               Prompts
             </Button>
@@ -151,7 +147,7 @@ export function ChatHeader({
                   variant="outline"
                   size="icon"
                   onClick={onCreateChat}
-                  className={cn("h-10 w-10 rounded-xl", dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700")}
+                  className={cn("h-10 w-10 rounded-lg border-border bg-background text-foreground/70 hover:bg-accent")}
                   aria-label="New chat"
                 >
                   <Plus className="h-4 w-4" />

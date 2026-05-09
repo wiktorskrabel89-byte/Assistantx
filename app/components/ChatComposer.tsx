@@ -61,7 +61,6 @@ declare global {
 }
 
 export type ChatComposerProps = {
-  dark: boolean;
   message: string;
   file: File | null;
   filePreview: string | null;
@@ -84,7 +83,6 @@ export type ChatComposerProps = {
 const DEFAULT_THINKING_EFFORT = 2;
 
 export function ChatComposer({
-  dark,
   message,
   file,
   filePreview,
@@ -177,12 +175,12 @@ export function ChatComposer({
   }, [onSelectFile]);
 
   return (
-    <div className="border-t border-slate-200 bg-white/85 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+    <div className="border-t border-border bg-background/95 px-4 py-3 backdrop-blur-sm">
       <div className="mx-auto max-w-5xl space-y-2">
         {premiumLimitReached ? (
           <div className={cn(
-            "rounded-xl border px-4 py-2.5 text-xs font-medium",
-            dark ? "border-amber-800/50 bg-amber-950/30 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"
+            "rounded-lg border px-4 py-2.5 text-xs font-medium",
+            "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300"
           )}>
             You have used all {planRequestLimit ?? "your"} premium requests for this month. Your quota will reset next month.
           </div>
@@ -191,8 +189,8 @@ export function ChatComposer({
         {file ? (
           <div className="flex flex-wrap gap-2">
             <div className={cn(
-              "flex items-center gap-2 rounded-xl border px-3 py-2 text-xs",
-              dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"
+              "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+              "border-border bg-muted text-foreground"
             )}>
               {filePreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -222,10 +220,10 @@ export function ChatComposer({
                 <div
                   key={queuedMessage.id}
                   className={cn(
-                    "flex max-w-full items-start gap-2 rounded-xl border px-3 py-2 text-xs",
+                    "flex max-w-full items-start gap-2 rounded-lg border px-3 py-2 text-xs",
                     isActive
-                      ? dark ? "border-cyan-800 bg-cyan-950/30 text-cyan-100" : "border-sky-200 bg-sky-50 text-sky-800"
-                      : dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"
+                      ? "border-border bg-accent text-accent-foreground"
+                      : "border-border bg-muted text-muted-foreground"
                   )}
                 >
                   <div className="min-w-0 flex-1">
@@ -251,10 +249,7 @@ export function ChatComposer({
         ) : null}
 
         {composerPreview && message.trim() ? (
-          <div className={cn(
-            "rounded-2xl border px-4 py-3 text-sm",
-            dark ? "border-slate-800 bg-slate-950 text-slate-200" : "border-slate-200 bg-slate-50 text-slate-700"
-          )}>
+          <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
             <ReactMarkdown>{message}</ReactMarkdown>
           </div>
         ) : null}
@@ -273,18 +268,12 @@ export function ChatComposer({
           }}
         />
 
-        <div className={cn(
-          "flex items-end gap-2 rounded-2xl border p-2 shadow-sm",
-          dark ? "border-slate-800 bg-slate-950" : "border-sky-200/60 bg-white/95"
-        )}>
+        <div className="flex items-end gap-2 rounded-2xl border border-border bg-background p-2 shadow-sm">
           <Button
             variant="outline"
             size="icon"
             onClick={() => fileInputRef.current?.click()}
-            className={cn(
-              "h-11 w-11 flex-shrink-0 rounded-xl",
-              dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-slate-100" : ""
-            )}
+            className="h-11 w-11 flex-shrink-0 rounded-xl border-border bg-background text-foreground/70 hover:bg-accent"
             title="Attach file"
             aria-label="Attach file"
           >
@@ -299,8 +288,8 @@ export function ChatComposer({
               className={cn(
                 "h-11 w-11 flex-shrink-0 rounded-xl transition-colors",
                 micActive
-                  ? dark ? "border-red-800 bg-red-950/40 text-red-300 hover:bg-red-950/60" : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
-                  : dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : ""
+                  ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60"
+                  : "border-border bg-background text-foreground/70 hover:bg-accent"
               )}
               title={micActive ? "Stop recording" : "Start voice input"}
               aria-label={micActive ? "Stop recording" : "Start voice input"}
@@ -329,8 +318,7 @@ export function ChatComposer({
             placeholder="Wiadomość... (Enter to send)"
             rows={1}
             className={cn(
-              "flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm shadow-none focus-visible:ring-0",
-              dark ? "text-slate-100 placeholder:text-slate-500" : "text-slate-900 placeholder:text-slate-400"
+              "flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground"
             )}
             style={{ minHeight: 44, maxHeight: 180 }}
           />
@@ -342,8 +330,8 @@ export function ChatComposer({
             className={cn(
               "h-11 w-11 flex-shrink-0 rounded-xl",
               composerPreview
-                ? dark ? "border-blue-800 bg-blue-950/40 text-blue-200 hover:bg-blue-950/60" : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                : dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : ""
+                ? "border-border bg-accent text-accent-foreground hover:bg-accent/80"
+                : "border-border bg-background text-foreground/70 hover:bg-accent"
             )}
             title="Preview message"
             aria-label="Preview message"
@@ -358,7 +346,7 @@ export function ChatComposer({
               onClick={onStopGeneration}
               className={cn(
                 "h-11 w-11 flex-shrink-0 rounded-xl",
-                dark ? "border-red-900 bg-red-950/40 text-red-200 hover:bg-red-950/60" : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                "border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950/60"
               )}
               title="Stop generation"
               aria-label="Stop generation"
@@ -371,7 +359,7 @@ export function ChatComposer({
             onClick={() => onQueueMessage(2)}
             disabled={premiumLimitReached || (!message.trim() && !file)}
             size="icon"
-            className="h-11 w-11 flex-shrink-0 rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 text-white hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-11 w-11 flex-shrink-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
             title={premiumLimitReached ? "Premium request limit reached" : loading ? "Add to queue" : "Send message"}
             aria-label={premiumLimitReached ? "Premium request limit reached" : loading ? "Add to queue" : "Send message"}
           >

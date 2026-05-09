@@ -47,7 +47,6 @@ export type AppNavigationTab =
   | "website-creator";
 
 type AppNavigationColumnProps = {
-  dark: boolean;
   activeTab: AppNavigationTab;
   onSelectTab: (tab: AppNavigationTab) => void;
   notificationUnread?: number;
@@ -73,13 +72,13 @@ type AddOnItem = {
 
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
-  { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",   icon: BrainCircuit, color: "from-violet-500 to-purple-600", beta: true },
-  { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",   icon: Stethoscope,  color: "from-emerald-500 to-teal-600" },
-  { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen,     color: "from-sky-500 to-blue-600" },
-  { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig,   color: "from-pink-500 to-rose-600" },
-  { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2,       color: "from-indigo-500 to-violet-600" },
-  { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2,  color: "from-orange-500 to-amber-600" },
-  { id: "ai-learning",      label: "AI Learning",     description: "Memory + RAG + tuning controls", icon: BrainCircuit, color: "from-fuchsia-500 to-pink-600", adminOnly: true },
+  { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",   icon: BrainCircuit, color: "", beta: true },
+  { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",   icon: Stethoscope,  color: "" },
+  { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen,     color: "" },
+  { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig,   color: "" },
+  { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2,       color: "" },
+  { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2,  color: "" },
+  { id: "ai-learning",      label: "AI Learning",     description: "Memory + RAG + tuning controls", icon: BrainCircuit, color: "", adminOnly: true },
 ];
 
 /** Core AI Code mode tabs — always visible in the sidebar when in AI Code mode */
@@ -100,7 +99,6 @@ function getInitials(email: string | null | undefined): string {
 }
 
 export function AppNavigationColumn({
-  dark,
   activeTab,
   onSelectTab,
   notificationUnread = 0,
@@ -134,10 +132,8 @@ export function AppNavigationColumn({
     onSelectTab("chat");
   }
 
-  const shellClassName = dark
-    ? "border-slate-800 bg-slate-900 text-slate-100"
-    : "border-sky-200/60 bg-white/92 text-slate-900 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.28)]";
-  const dividerClassName = dark ? "border-slate-800" : "border-slate-200/80";
+  const shellClassName = "border-sidebar-border bg-sidebar text-sidebar-foreground";
+  const dividerClassName = "border-sidebar-border";
 
   /** Eligible add-ons for this user / mode */
   const eligibleAddOns = ADD_ON_ITEMS.filter((item) => {
@@ -170,35 +166,37 @@ export function AppNavigationColumn({
   const isAddOnActive = ADD_ON_IDS.has(activeTab);
 
   function navButtonClass(isActive: boolean) {
-    return `flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+    return `flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
       isActive
-        ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-r from-sky-700 to-cyan-600 text-white shadow-sm"
-        : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-700 hover:bg-sky-50"
+        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
     }`;
   }
 
   return (
     <>
-    <aside className={`hidden min-h-0 overflow-hidden rounded-[26px] border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
+    <aside className={`hidden min-h-0 overflow-hidden rounded-lg border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
       {/* ── Logo ── */}
       <div className={`border-b px-4 py-4 ${dividerClassName}`}>
-        <div className="rounded-2xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 px-4 py-4 text-white shadow-sm">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 px-1 py-2">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-sidebar-accent">
             <Image
               src="/icon-192.png"
               alt="AssistantX logo"
-              width={28}
-              height={28}
+              width={22}
+              height={22}
               fetchPriority="high"
-              className="rounded-md"
+              className="rounded-sm"
             />
-            <div className="text-[1.35rem] font-bold tracking-tight">AssistantX</div>
           </div>
-          <div className="mt-1 text-xs text-white/90">Powered by AI</div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold tracking-tight">AssistantX</div>
+            <div className="text-[10px] text-sidebar-foreground/50">Powered by AI</div>
+          </div>
         </div>
 
         {/* AI Chat / AI Code mode switcher */}
-        <div className={`mt-3 flex rounded-xl border p-0.5 ${dark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-slate-100"}`}>
+        <div className={`mt-3 flex rounded-lg border p-0.5 ${dividerClassName} bg-sidebar-accent/40`}>
           {(["ai-chat", "ai-code"] as AppMode[]).map((m) => {
             const isActive = appMode === m;
             return (
@@ -206,10 +204,10 @@ export function AppNavigationColumn({
                 key={m}
                 type="button"
                 onClick={() => onSetAppMode(m)}
-                className={`flex-1 rounded-[10px] py-1.5 text-xs font-semibold transition-all duration-150 ${
+                className={`flex-1 rounded-[8px] py-1.5 text-xs font-semibold transition-all duration-150 ${
                   isActive
-                    ? dark ? "bg-slate-600 text-white shadow-sm" : "bg-white text-sky-700 shadow-sm"
-                    : dark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-sidebar-foreground/50 hover:text-sidebar-foreground"
                 }`}
               >
                 {m === "ai-chat" ? "AI Chat" : "AI Code"}
@@ -266,15 +264,15 @@ export function AppNavigationColumn({
                   onClick={() => onSelectTab(item.id)}
                   aria-current={isActive ? "page" : undefined}
                   title={item.beta ? `${item.label} (Beta)` : item.label}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2.5 text-[10px] font-medium transition-all duration-200 ${
+                  className={`flex flex-col items-center justify-center gap-1 rounded-lg py-2.5 text-[10px] font-medium transition-all duration-200 ${
                     isActive
-                      ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
-                      : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
                   }`}
                 >
                   <div className="relative flex-shrink-0">
-                    <div className={`flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br ${item.color} shadow-sm`}>
-                      <Icon className="h-3.5 w-3.5 text-white" />
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sidebar-accent">
+                      <Icon className="h-3.5 w-3.5 text-sidebar-foreground" />
                     </div>
                     {item.beta && (
                       <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-violet-500 text-[6px] font-bold text-white ring-1 ring-white">β</span>
@@ -296,12 +294,12 @@ export function AppNavigationColumn({
         <button
           type="button"
           onClick={() => setAppsOpen((v: boolean) => !v)}
-          className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
             isAddOnActive && !pinnedAddOns.includes(activeTab)
-              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-r from-sky-700 to-cyan-600 text-white shadow-sm"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : appsOpen
-                ? dark ? "bg-slate-800/60 text-white" : "bg-sky-50 text-sky-700"
-                : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-700 hover:bg-sky-50"
+                ? "bg-sidebar-accent/60 text-sidebar-accent-foreground"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
           }`}
         >
           <Grid2x2 className="h-4 w-4 flex-shrink-0" />
@@ -315,9 +313,9 @@ export function AppNavigationColumn({
 
         {/* ── Apps drawer ── */}
         {appsOpen && (
-          <div className={`mt-2 overflow-hidden rounded-2xl border ${dark ? "border-slate-700 bg-slate-800/60" : "border-slate-200 bg-slate-50"}`}>
+          <div className={`mt-2 overflow-hidden rounded-lg border ${dividerClassName} bg-background`}>
             {/* Search */}
-            <div className={`flex items-center gap-2 border-b px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+            <div className={`flex items-center gap-2 border-b px-3 py-2 ${dividerClassName}`}>
               <Search className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
               <Input
                 id="apps-search-desktop"
@@ -325,7 +323,7 @@ export function AppNavigationColumn({
                 value={appsSearch}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
                 placeholder="Szukaj aplikacji..."
-                className={`flex-1 border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0 ${dark ? "placeholder:text-slate-500 text-slate-200" : "placeholder:text-slate-400 text-slate-700"}`}
+                className="flex-1 border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground"
               />
               {appsSearch && (
                 <Button type="button" variant="ghost" size="icon" onClick={() => setAppsSearch("")} className="h-5 w-5 opacity-40 hover:opacity-70">
@@ -347,31 +345,29 @@ export function AppNavigationColumn({
                   <div
                     key={item.id}
                     className={`flex items-center gap-2 px-2 py-1.5 ${
-                      isActive
-                        ? dark ? "bg-slate-700/50" : "bg-sky-50/80"
-                        : ""
+                      isActive ? "bg-accent/50" : ""
                     }`}
                   >
                     {/* Clickable: navigate to tab */}
                     <button
                       type="button"
                       onClick={() => handleSelectAddOn(item.id)}
-                      className="flex flex-1 min-w-0 items-center gap-2.5 rounded-xl px-1 py-1 text-left transition-colors hover:opacity-80"
+                      className="flex flex-1 min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left transition-colors hover:opacity-80"
                     >
-                      <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${item.color} shadow-sm`}>
-                        <Icon className="h-3.5 w-3.5 text-white" />
+                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <Icon className="h-3.5 w-3.5 text-foreground/70" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className={`truncate text-xs font-semibold ${dark ? "text-slate-200" : "text-slate-700"}`}>{item.label}</span>
+                          <span className="truncate text-xs font-semibold text-foreground">{item.label}</span>
                           {item.beta && (
-                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700">Beta</span>
+                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-muted text-muted-foreground">Beta</span>
                           )}
                           {item.adminOnly && (
-                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700">Admin</span>
+                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-muted text-muted-foreground">Admin</span>
                           )}
                         </div>
-                        <div className={`truncate text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{item.description}</div>
+                        <div className="truncate text-[10px] text-muted-foreground">{item.description}</div>
                       </div>
                     </button>
 
@@ -385,8 +381,8 @@ export function AppNavigationColumn({
                       className={cn(
                         "h-6 w-6 flex-shrink-0 rounded-lg",
                         isPinned
-                          ? dark ? "border-sky-600 bg-sky-900/50 text-sky-400 hover:bg-sky-900" : "border-sky-300 bg-sky-50 text-sky-600 hover:bg-sky-100"
-                          : dark ? "border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200" : "border-slate-300 text-slate-400 hover:border-slate-500 hover:text-slate-600"
+                          ? "border-border bg-accent text-accent-foreground hover:bg-accent/80"
+                          : "border-border text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {isPinned
@@ -400,8 +396,8 @@ export function AppNavigationColumn({
             </div>
 
             {/* Footer hint */}
-            <div className={`border-t px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
-              <p className={`text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>
+            <div className={`border-t px-3 py-2 ${dividerClassName}`}>
+              <p className="text-[10px] text-muted-foreground">
                 Kliknij <Plus className="inline h-2.5 w-2.5" /> aby przypiąć aplikację do paska bocznego.
               </p>
             </div>
@@ -436,7 +432,7 @@ export function AppNavigationColumn({
               value={chatSearchLocal}
               onChange={(e) => setChatSearchLocal(e.target.value)}
               placeholder="Search chats…"
-              className={cn("w-full rounded-lg py-1 pl-6 pr-7 text-[11px] h-7", dark ? "border-slate-700 bg-slate-800 text-slate-200 placeholder:text-slate-500" : "border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400")}
+              className="w-full rounded-lg py-1 pl-6 pr-7 text-[11px] h-7 border-border bg-background/50 placeholder:text-muted-foreground"
             />
             {chatSearchLocal && (
               <Button
@@ -470,8 +466,8 @@ export function AppNavigationColumn({
                     title={chat.title}
                     className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-left transition-colors ${
                       isActive
-                        ? dark ? "bg-slate-800 text-white" : "bg-sky-50 text-sky-800"
-                        : dark ? "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                     }`}
                   >
                     <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight">{chat.title}</span>
@@ -491,7 +487,7 @@ export function AppNavigationColumn({
           /* Settings mini-panel */
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <span className={`text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`}>Konto & ustawienia</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Konto & ustawienia</span>
               <Button variant="ghost" size="icon" type="button" onClick={() => setSettingsOpen(false)} className="h-6 w-6 rounded-lg">
                 <X className="h-3.5 w-3.5" />
               </Button>
@@ -505,10 +501,10 @@ export function AppNavigationColumn({
                   key={tab}
                   type="button"
                   onClick={() => { onSelectTab(tab); setSettingsOpen(false); }}
-                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                     activeTab === tab
-                      ? dark ? "bg-slate-700 text-white" : "bg-sky-100 text-sky-800"
-                      : dark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground/70 hover:bg-accent/60 hover:text-accent-foreground"
                   }`}
                 >
                   <Icon className="h-4 w-4 flex-shrink-0" />
@@ -527,16 +523,14 @@ export function AppNavigationColumn({
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className={`flex w-full items-center gap-2.5 rounded-2xl px-3 py-2 transition-colors ${
-              dark ? "hover:bg-slate-800" : "hover:bg-slate-100"
-            }`}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-sidebar-accent/60"
           >
             <Avatar className="h-8 w-8 flex-shrink-0 text-xs font-bold">
-              <AvatarFallback className={dark ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-600"}>
+              <AvatarFallback className="bg-muted text-muted-foreground">
                 {getInitials(userEmail)}
               </AvatarFallback>
             </Avatar>
-            <span className={`flex-1 truncate text-left text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>
+            <span className="flex-1 truncate text-left text-sm text-sidebar-foreground/60">
               {userEmail ? userEmail.split("@")[0] : "Konto"}
             </span>
             {notificationUnread > 0 && (
@@ -553,7 +547,7 @@ export function AppNavigationColumn({
       <TooltipProvider>
       <nav
         aria-label="App navigation"
-        className={`xl:hidden flex flex-shrink-0 flex-col items-center gap-1 py-3 w-14 min-h-0 rounded-[26px] border ${shellClassName}`}
+        className={`xl:hidden flex flex-shrink-0 flex-col items-center gap-1 py-3 w-14 min-h-0 rounded-lg border ${shellClassName}`}
       >
         {/* Chat */}
         <Tooltip>
@@ -565,10 +559,10 @@ export function AppNavigationColumn({
               onClick={() => onSelectTab("chat")}
               aria-label="Chat"
               className={cn(
-                "h-10 w-10 rounded-2xl",
+                "h-10 w-10 rounded-lg",
                 isChatActive
-                  ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
-                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60"
               )}
             >
               <MessageSquareText className="h-5 w-5" />
@@ -591,10 +585,10 @@ export function AppNavigationColumn({
                   onClick={() => onSelectTab(item.id)}
                   aria-label={item.label}
                   className={cn(
-                    "h-10 w-10 rounded-2xl",
+                    "h-10 w-10 rounded-lg",
                     isActive
-                      ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
-                      : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
+                      : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60"
                   )}
                 >
                   <Icon className="h-5 w-5" />
@@ -615,10 +609,10 @@ export function AppNavigationColumn({
               onClick={() => setAppsOpen((v: boolean) => !v)}
               aria-label="Aplikacje"
               className={cn(
-                "h-10 w-10 rounded-2xl",
+                "h-10 w-10 rounded-lg",
                 appsOpen || (isAddOnActive && !pinnedAddOns.includes(activeTab))
-                  ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
-                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60"
               )}
             >
               <Grid2x2 className="h-5 w-5" />
@@ -639,10 +633,10 @@ export function AppNavigationColumn({
               onClick={() => onSelectTab("settings")}
               aria-label="Ustawienia"
               className={cn(
-                "h-10 w-10 rounded-2xl",
+                "h-10 w-10 rounded-lg",
                 activeTab === "settings"
-                  ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
-                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60"
               )}
             >
               <Settings2 className="h-5 w-5" />
@@ -661,10 +655,10 @@ export function AppNavigationColumn({
               onClick={() => onSelectTab("notifications")}
               aria-label="Powiadomienia"
               className={cn(
-                "relative h-10 w-10 rounded-2xl",
+                "relative h-10 w-10 rounded-lg",
                 activeTab === "notifications"
-                  ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
-                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/60"
               )}
             >
               <Bell className="h-5 w-5" />
@@ -687,8 +681,8 @@ export function AppNavigationColumn({
               aria-label={userEmail ?? "Konto"}
               className="mt-1"
             >
-              <Avatar className={cn("h-9 w-9 text-[11px] font-bold transition-colors", dark ? "hover:ring-2 hover:ring-slate-600" : "hover:ring-2 hover:ring-slate-300")}>
-                <AvatarFallback className={dark ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-600"}>
+              <Avatar className={cn("h-9 w-9 text-[11px] font-bold transition-colors", "hover:ring-2 hover:ring-border")}>
+                <AvatarFallback className="bg-muted text-muted-foreground">
                   {getInitials(userEmail)}
                 </AvatarFallback>
               </Avatar>
@@ -706,13 +700,11 @@ export function AppNavigationColumn({
           onClick={() => setAppsOpen(false)}
         >
           <div
-            className={`max-h-[70vh] w-72 overflow-hidden rounded-2xl border shadow-2xl ${
-              dark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
-            }`}
+            className="max-h-[70vh] w-72 overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
           >
             {/* Search */}
-            <div className={`flex items-center gap-2 border-b px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
               <Search className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
               <Input
                 id="apps-search-mobile"
@@ -720,9 +712,7 @@ export function AppNavigationColumn({
                 value={appsSearch}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
                 placeholder="Szukaj aplikacji..."
-                className={`flex-1 border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0 ${
-                  dark ? "placeholder:text-slate-500 text-slate-200" : "placeholder:text-slate-400 text-slate-700"
-                }`}
+                className="flex-1 border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground"
               />
               {appsSearch && (
                 <Button type="button" variant="ghost" size="icon" onClick={() => setAppsSearch("")} className="h-5 w-5 opacity-40 hover:opacity-70">
@@ -742,27 +732,27 @@ export function AppNavigationColumn({
                 return (
                   <div
                     key={item.id}
-                    className={`flex items-center gap-2 px-2 py-1.5 ${isActive ? (dark ? "bg-slate-700/50" : "bg-sky-50/80") : ""}`}
+                    className={`flex items-center gap-2 px-2 py-1.5 ${isActive ? "bg-accent/50" : ""}`}
                   >
                     <button
                       type="button"
                       onClick={() => handleSelectAddOn(item.id)}
-                      className="flex flex-1 min-w-0 items-center gap-2.5 rounded-xl px-1 py-1 text-left transition-colors hover:opacity-80"
+                      className="flex flex-1 min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left transition-colors hover:opacity-80"
                     >
-                      <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${item.color} shadow-sm`}>
-                        <Icon className="h-3.5 w-3.5 text-white" />
+                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <Icon className="h-3.5 w-3.5 text-foreground/70" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className={`truncate text-xs font-semibold ${dark ? "text-slate-200" : "text-slate-700"}`}>{item.label}</span>
+                          <span className="truncate text-xs font-semibold text-foreground">{item.label}</span>
                           {item.beta && (
-                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700">Beta</span>
+                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-muted text-muted-foreground">Beta</span>
                           )}
                           {item.adminOnly && (
-                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700">Admin</span>
+                            <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide bg-muted text-muted-foreground">Admin</span>
                           )}
                         </div>
-                        <div className={`truncate text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{item.description}</div>
+                        <div className="truncate text-[10px] text-muted-foreground">{item.description}</div>
                       </div>
                     </button>
                     <Button
@@ -774,8 +764,8 @@ export function AppNavigationColumn({
                       className={cn(
                         "h-6 w-6 flex-shrink-0 rounded-lg",
                         isPinned
-                          ? dark ? "border-sky-600 bg-sky-900/50 text-sky-400 hover:bg-sky-900" : "border-sky-300 bg-sky-50 text-sky-600 hover:bg-sky-100"
-                          : dark ? "border-slate-600 text-slate-400 hover:border-slate-400" : "border-slate-300 text-slate-400 hover:border-slate-500"
+                          ? "border-border bg-accent text-accent-foreground hover:bg-accent/80"
+                          : "border-border text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {isPinned ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
@@ -784,8 +774,8 @@ export function AppNavigationColumn({
                 );
               })}
             </div>
-            <div className={`border-t px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
-              <p className={`text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>
+            <div className="border-t border-border px-3 py-2">
+              <p className="text-[10px] text-muted-foreground">
                 Kliknij <Plus className="inline h-2.5 w-2.5" /> aby przypiąć do paska bocznego.
               </p>
             </div>

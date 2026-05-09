@@ -278,36 +278,36 @@ export default function LoginPage() {
   const isBusy = submitState === "submitting" || oauthLoading !== null || guestLoading;
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.28),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.22),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] px-5 py-8 text-slate-900 sm:px-8 sm:py-10">
+    <main className="min-h-screen bg-background px-5 py-8 text-foreground sm:px-8 sm:py-10">
       <div className="mx-auto grid min-h-[86vh] w-full max-w-6xl items-center gap-10 lg:grid-cols-[1.1fr,0.9fr]">
         <section className="hidden lg:block">
-          <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800 shadow-sm backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-sky-500 to-amber-400" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground/70">
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground/40" />
             AssistantX Workspace
           </div>
-          <h1 className="mt-6 max-w-xl text-5xl font-semibold leading-tight tracking-tight text-slate-900">
+          <h1 className="mt-6 max-w-xl text-5xl font-semibold leading-tight tracking-tight text-foreground">
             Build faster with
-            <span className="block bg-gradient-to-r from-sky-700 via-cyan-600 to-amber-500 bg-clip-text text-transparent">AssistantX Cloud</span>
+            <span className="block text-foreground/80">AssistantX Cloud</span>
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-700">
+          <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
             Resume your sessions, memory, and tools with one login. Designed for focused work with a clean, reliable auth flow.
           </p>
 
           <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-sky-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
-              <div className="text-sm font-semibold text-slate-900">Persistent sessions</div>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Workspace state and chat history are tied to your account, not only one browser tab.</p>
+            <div className="rounded-xl border border-border bg-card px-5 py-4">
+              <div className="text-sm font-semibold text-foreground">Persistent sessions</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">Workspace state and chat history are tied to your account, not only one browser tab.</p>
             </div>
-            <div className="rounded-2xl border border-amber-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
-              <div className="text-sm font-semibold text-slate-900">Secure login flow</div>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Sign in with your email and password or use a social provider.</p>
+            <div className="rounded-xl border border-border bg-card px-5 py-4">
+              <div className="text-sm font-semibold text-foreground">Secure login flow</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">Sign in with your email and password or use a social provider.</p>
             </div>
           </div>
         </section>
 
-        <section className="rounded-3xl border border-sky-200/60 bg-white/92 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.45)] backdrop-blur sm:p-8">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
           {/* Tab switcher */}
-          <div role="tablist" aria-label="Authentication options" className="mb-6 flex rounded-xl border border-slate-200 bg-slate-100 p-1">
+          <div role="tablist" aria-label="Authentication options" className="mb-6 flex rounded-xl border border-border bg-muted p-1">
             <button
               type="button"
               role="tab"
@@ -317,8 +317,8 @@ export default function LoginPage() {
               onClick={() => switchTab("login")}
               className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
                 tab === "login"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Sign In
@@ -332,18 +332,18 @@ export default function LoginPage() {
               onClick={() => switchTab("register")}
               className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
                 tab === "register"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Create Account
             </button>
           </div>
 
-          <h2 className="mb-1 text-2xl font-semibold tracking-tight text-slate-900">
+          <h2 className="mb-1 text-2xl font-semibold tracking-tight text-foreground">
             {tab === "login" ? "Welcome back" : "Join AssistantX"}
           </h2>
-          <p className="mb-5 text-sm leading-6 text-slate-600">
+          <p className="mb-5 text-sm leading-6 text-muted-foreground">
             {tab === "login"
               ? "Sign in with a social provider or your email and password."
               : "Create your account with a social provider or an email and password."}
@@ -354,15 +354,15 @@ export default function LoginPage() {
             type="button"
             onClick={() => void handleGuest()}
             disabled={isBusy}
-            className="mb-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mb-4 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {guestLoading ? "Entering…" : "Continue as Guest"}
           </button>
 
-          <div className="mb-4 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
-            <span className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+          <div className="mb-4 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
             <span>or sign in</span>
-            <span className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+            <span className="h-px flex-1 bg-border" />
           </div>
 
           {/* OAuth buttons */}
@@ -371,7 +371,7 @@ export default function LoginPage() {
               type="button"
               onClick={() => void handleOAuth("google")}
               disabled={isBusy}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:bg-sky-50/50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               {oauthLoading === "google" ? "Redirecting to Google..." : "Continue with Google"}
             </button>
@@ -379,38 +379,38 @@ export default function LoginPage() {
               type="button"
               onClick={() => void handleOAuth("github")}
               disabled={isBusy}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-amber-300 hover:bg-amber-50/60 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               {oauthLoading === "github" ? "Redirecting to GitHub..." : "Continue with GitHub"}
             </button>
           </div>
 
           {oauthLoading && (
-            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50/70 px-4 py-3 text-xs leading-5 text-slate-700">
+            <div className="mt-4 rounded-xl border border-border bg-muted px-4 py-3 text-xs leading-5 text-foreground">
               <div>
                 Back from {getProviderLabel(oauthLoading)} without finishing sign-in? Reset this attempt and choose another method.
               </div>
               <button
                 type="button"
                 onClick={() => recoverFromInterruptedOAuth(oauthLoading)}
-                className="mt-3 rounded-lg border border-sky-300 px-3 py-2 font-medium text-sky-800 transition hover:bg-white"
+                className="mt-3 rounded-lg border border-border px-3 py-2 font-medium text-foreground transition hover:bg-accent"
               >
                 Use another sign-in method
               </button>
             </div>
           )}
 
-          <div className="mt-5 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
-            <span className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+          <div className="mt-5 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
             <span>or email</span>
-            <span className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+            <span className="h-px flex-1 bg-border" />
           </div>
 
           {/* Login form */}
           {tab === "login" && (
             <form id="panel-login" role="tabpanel" aria-labelledby="tab-login" onSubmit={(event) => void handleLogin(event)} className="mt-5 space-y-4">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Email address</span>
+                <span className="mb-2 block text-sm font-medium text-foreground">Email address</span>
                 <input
                   type="email"
                   id="login-email"
@@ -419,12 +419,12 @@ export default function LoginPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="you@example.com"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Password</span>
+                <span className="mb-2 block text-sm font-medium text-foreground">Password</span>
                 <input
                   type="password"
                   id="login-password"
@@ -433,14 +433,14 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
                 />
               </label>
 
               <button
                 type="submit"
                 disabled={isBusy}
-                className="w-full rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-3 text-sm font-semibold text-white transition hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitState === "submitting" ? "Signing in…" : "Sign In"}
               </button>
@@ -451,7 +451,7 @@ export default function LoginPage() {
           {tab === "register" && (
             <form id="panel-register" role="tabpanel" aria-labelledby="tab-register" onSubmit={(event) => void handleRegister(event)} className="mt-5 space-y-4">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Email address</span>
+                <span className="mb-2 block text-sm font-medium text-foreground">Email address</span>
                 <input
                   type="email"
                   id="register-email"
@@ -460,12 +460,12 @@ export default function LoginPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="you@example.com"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Password</span>
+                <span className="mb-2 block text-sm font-medium text-foreground">Password</span>
                 <input
                   type="password"
                   id="register-password"
@@ -474,12 +474,12 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Confirm password</span>
+                <span className="mb-2 block text-sm font-medium text-foreground">Confirm password</span>
                 <input
                   type="password"
                   id="register-confirm-password"
@@ -488,7 +488,7 @@ export default function LoginPage() {
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
                 />
               </label>
 
@@ -501,15 +501,15 @@ export default function LoginPage() {
                   aria-required="true"
                   checked={acceptedPolicy}
                   onChange={(event) => setAcceptedPolicy(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer rounded border-slate-300 text-sky-600 focus:ring-sky-400"
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer rounded border-border text-primary focus:ring-ring"
                 />
-                <span className="text-sm leading-6 text-slate-600">
+                <span className="text-sm leading-6 text-muted-foreground">
                   I agree to the{" "}
-                  <Link href="/terms" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-900">
+                  <Link href="/terms" className="font-medium text-foreground underline decoration-border underline-offset-4 hover:text-foreground/80">
                     Terms of Service
                   </Link>{" "}
                   and{" "}
-                  <Link href="/privacy" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-900">
+                  <Link href="/privacy" className="font-medium text-foreground underline decoration-border underline-offset-4 hover:text-foreground/80">
                     Privacy Policy
                   </Link>
                   . <span aria-label="required" className="text-rose-500">*</span>
@@ -519,22 +519,22 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isBusy}
-                className="w-full rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-3 text-sm font-semibold text-white transition hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitState === "submitting" ? "Creating account…" : "Create Account"}
               </button>
             </form>
           )}
 
-          <div className={`mt-4 min-h-6 text-sm ${submitState === "error" || authError ? "text-rose-600" : "text-cyan-700"}`}>
+          <div className={`mt-4 min-h-6 text-sm ${submitState === "error" || authError ? "text-rose-600" : "text-emerald-600"}`}>
             {feedback || authError}
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-500">
-            <Link href="/privacy" className="hover:text-slate-900">
+          <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <Link href="/privacy" className="hover:text-foreground">
               Privacy Policy
             </Link>
-            <Link href="/terms" className="hover:text-slate-900">
+            <Link href="/terms" className="hover:text-foreground">
               Terms of Service
             </Link>
           </div>

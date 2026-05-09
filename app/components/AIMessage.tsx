@@ -36,8 +36,6 @@ function subscribeTtsSupport() {
 type AIMessageProps = {
   entry: ChatEntry;
   dark: boolean;
-  cardBg: string;
-  codeBg: string;
   copied: string | null;
   isStreaming: boolean;
   reasoningOpen: boolean;
@@ -55,8 +53,6 @@ type AIMessageProps = {
 export function AIMessage({
   entry,
   dark,
-  cardBg,
-  codeBg,
   copied,
   isStreaming,
   reasoningOpen,
@@ -110,7 +106,7 @@ export function AIMessage({
     <div className="flex justify-start">
       <div className="max-w-[88%] space-y-1">
         {entry.reasoning ? (
-          <div className={`mb-1 rounded-xl border px-3 py-2 text-xs ${dark ? "border-purple-800/30 bg-purple-950/30 text-purple-300" : "border-purple-200 bg-purple-50 text-purple-700"}`}>
+          <div className={`mb-1 rounded-lg border px-3 py-2 text-xs border-border bg-muted/50 text-muted-foreground`}>
             <button onClick={() => onToggleReasoning(entry.id)} className="flex w-full items-center gap-2 text-left font-medium">
               <span>Reasoning</span>
               {isStreaming
@@ -130,7 +126,7 @@ export function AIMessage({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={entry.imageUrl} alt={entry.user} className="max-w-full rounded-xl border border-gray-200 dark:border-gray-700" />
             {entry.imageGeneration ? (
-              <div className={`rounded-xl border px-3 py-2 text-xs ${dark ? "border-slate-800 bg-slate-900 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+              <div className={`rounded-lg border px-3 py-2 text-xs border-border bg-muted/50 text-muted-foreground`}>
                 <div className="font-medium">
                   {entry.imageGeneration.provider} • {entry.imageGeneration.model}
                 </div>
@@ -145,7 +141,7 @@ export function AIMessage({
             ) : null}
           </div>
         ) : (
-          <div className={`${cardBg} rounded-2xl rounded-tl-sm border px-4 py-3 text-sm`}>
+          <div className="rounded-2xl rounded-tl-sm py-3 text-sm">
             {!entry.ai && isStreaming ? (
               <div className="space-y-2">
                 <span className="flex items-center gap-2 py-1 text-xs text-gray-400">
@@ -171,7 +167,7 @@ export function AIMessage({
                       const blockId = `${entry.id}-code-${codeBlockIndex++}`;
                       return (
                         <div className="relative my-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-                          <div className={`flex items-center justify-between px-3 py-1 text-xs text-gray-400 ${dark ? "bg-gray-900" : "bg-gray-200"}`}>
+                          <div className="flex items-center justify-between px-3 py-1 text-xs text-muted-foreground bg-muted">
                             <span>{match?.[1] ?? "code"}</span>
                             <button onClick={() => onCopyText(codeText, blockId)} className="transition-colors hover:text-white">
                               {copied === blockId ? "Copied" : "Copy"}
@@ -184,7 +180,7 @@ export function AIMessage({
                       );
                     }
 
-                    return <code className={`${codeBg} rounded px-1 text-xs`} {...props}>{children}</code>;
+                    return <code className="bg-muted rounded px-1 text-xs" {...props}>{children}</code>;
                   },
                   p({ children }) {
                     return <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{children}</p>;
@@ -196,7 +192,7 @@ export function AIMessage({
                     return <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>;
                   },
                   blockquote({ children }) {
-                    return <blockquote className={`my-2 border-l-4 border-gray-400 pl-3 italic ${dark ? "text-gray-400" : "text-gray-600"}`}>{children}</blockquote>;
+                    return <blockquote className="my-2 border-l-4 border-border pl-3 italic text-muted-foreground">{children}</blockquote>;
                   },
                   h1({ children }) {
                     return <h1 className="mb-2 text-xl font-bold">{children}</h1>;
@@ -215,12 +211,12 @@ export function AIMessage({
 
             {/* Inline citations — shown for search responses that include footnotes */}
             {citations.length > 0 && !isStreaming ? (
-              <div className={`mt-3 border-t pt-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
-                <div className={`mb-1 text-[11px] font-semibold uppercase tracking-wide ${dark ? "text-slate-500" : "text-slate-400"}`}>Sources</div>
+              <div className="mt-3 border-t border-border pt-2">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Sources</div>
                 <ol className="space-y-0.5">
                   {citations.map((c) => (
                     <li key={c.index} className="flex items-start gap-1.5 text-xs">
-                      <span className={`flex-shrink-0 font-medium ${dark ? "text-slate-400" : "text-slate-500"}`}>[{c.index}]</span>
+                      <span className="flex-shrink-0 font-medium text-muted-foreground">[{c.index}]</span>
                       <a
                         href={c.url}
                         target="_blank"
