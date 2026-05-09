@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/server";
+import { hasSupabaseConfig, workspaceSyncNotConfiguredResponse } from "@/lib/supabase-config";
 
 export const maxDuration = 60;
 
@@ -13,13 +14,6 @@ type StoredStatePayload = {
   activeWorkspaceId: string;
   dark: boolean;
 };
-
-function hasSupabaseConfig() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-    && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  );
-}
 
 function isStoredStatePayload(value: unknown): value is StoredStatePayload {
   if (!value || typeof value !== "object") return false;
@@ -125,14 +119,7 @@ async function getAuthenticatedUser() {
 
 export async function GET() {
   if (!hasSupabaseConfig()) {
-    return Response.json(
-      {
-        code: "workspace_sync_not_configured",
-        error: "Supabase is not configured. Cloud sync is unavailable.",
-        hint: "Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are set in your .env file.",
-      },
-      { status: 503 }
-    );
+    return workspaceSyncNotConfiguredResponse();
   }
 
   try {
@@ -166,14 +153,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   if (!hasSupabaseConfig()) {
-    return Response.json(
-      {
-        code: "workspace_sync_not_configured",
-        error: "Supabase is not configured. Cloud sync is unavailable.",
-        hint: "Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are set in your .env file.",
-      },
-      { status: 503 }
-    );
+    return workspaceSyncNotConfiguredResponse();
   }
 
   try {
