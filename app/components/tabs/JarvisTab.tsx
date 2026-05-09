@@ -35,7 +35,7 @@ export default function JarvisTab() {
 
   const highlights = [
     {
-      title: "Nowe modele czatu",
+      title: "New chat models",
       description: "Jarvis Desktop wspiera nową generację modeli (np. GPT-5.x i Claude 4.x) w konfiguracji klienta.",
       icon: Sparkles,
     },

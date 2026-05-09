@@ -58,6 +58,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const chatModelSelect = document.getElementById('chat-model');
 	const sttModelSelect = document.getElementById('stt-model');
 	const ttsModelSelect = document.getElementById('tts-model');
+	const voiceLanguageSelect = document.getElementById('voice-language');
 	const speechToTextButton = document.getElementById('speech-to-text');
 	const autoTtsToggle = document.getElementById('auto-tts');
 
@@ -70,6 +71,12 @@ window.addEventListener('DOMContentLoaded', () => {
 		ttsModel: ttsModelSelect?.value || 'openai/gpt-4o-mini-tts',
 	});
 
+	const getVoiceLanguage = () => (
+		voiceLanguageSelect?.value
+		|| (typeof navigator !== 'undefined' ? navigator.language : null)
+		|| 'en-US'
+	);
+
 	const supportsSpeechRecognition = () => (
 		typeof window !== 'undefined'
 		&& !!(window.SpeechRecognition || window.webkitSpeechRecognition)
@@ -81,7 +88,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	function setSpeechToTextActive(active) {
 		speechToTextActive = active;
 		if (!speechToTextButton) return;
+		const label = active ? 'Stop speech-to-text' : 'Start speech-to-text';
 		speechToTextButton.textContent = active ? '⏹️ Stop speech-to-text' : '🎙️ Start speech-to-text';
+		speechToTextButton.setAttribute('aria-label', label);
+		speechToTextButton.setAttribute('title', label);
 	}
 
 	function speakResponse(text) {
@@ -89,11 +99,20 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (typeof window === 'undefined' || !window.speechSynthesis) return;
 		const spokenText = String(text || '').trim();
 		if (!spokenText) return;
-		window.speechSynthesis.cancel();
-		const utterance = new SpeechSynthesisUtterance(spokenText);
-		utterance.lang = 'pl-PL';
-		utterance.rate = 1;
-		window.speechSynthesis.speak(utterance);
+		// Local playback uses native browser speech synthesis.
+		// The selected TTS model is still forwarded to backend payloads for remote TTS-capable flows.
+		try {
+			window.speechSynthesis.cancel();
+			const utterance = new SpeechSynthesisUtterance(spokenText);
+			utterance.lang = getVoiceLanguage();
+			utterance.rate = 1;
+			utterance.onerror = () => {
+				appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
+			};
+			window.speechSynthesis.speak(utterance);
+		} catch {
+			appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
+		}
 	}
 
 	// ── Status ──────────────────────────────────────────────────────────────
@@ -146,7 +165,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				}
 
 				recognition = new SpeechRecognitionCtor();
-				recognition.lang = 'pl-PL';
+				recognition.lang = getVoiceLanguage();
 				recognition.continuous = true;
 				recognition.interimResults = true;
 
@@ -157,11 +176,11 @@ window.addEventListener('DOMContentLoaded', () => {
 					appendMessage(log, 'Speech-to-text', 'Speech capture failed. Try again.', 'error');
 				};
 				recognition.onresult = (event) => {
-					let transcript = '';
+					const transcriptParts = [];
 					for (let i = event.resultIndex; i < event.results.length; i += 1) {
-						transcript += event.results[i][0].transcript;
+						transcriptParts.push(event.results[i][0].transcript);
 					}
-					input.value = transcript.trim();
+					input.value = transcriptParts.join(' ').replace(/\s+/g, ' ').trim();
 				};
 
 				recognition.start();

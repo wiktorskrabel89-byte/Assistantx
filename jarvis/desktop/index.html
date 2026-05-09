@@ -301,7 +301,7 @@
     .model-grid {
       display: grid;
       gap: 8px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .field {
@@ -541,6 +541,15 @@
             <select id="tts-model">
               <option value="openai/gpt-4o-mini-tts">openai/gpt-4o-mini-tts</option>
               <option value="openai/tts-1">openai/tts-1</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Voice language</span>
+            <select id="voice-language">
+              <option value="pl-PL">Polish (pl-PL)</option>
+              <option value="en-US">English (en-US)</option>
+              <option value="de-DE">German (de-DE)</option>
+              <option value="es-ES">Spanish (es-ES)</option>
             </select>
           </label>
         </div>
