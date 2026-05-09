@@ -11,6 +11,13 @@ type NotificationsRouteResponse = {
   hint?: string;
 };
 
+function hasSupabaseConfig() {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+    && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  );
+}
+
 function getErrorProperty(error: unknown, key: "code" | "message") {
   if (!error || typeof error !== "object") return null;
   const value = (error as Record<string, unknown>)[key];
@@ -80,6 +87,15 @@ async function getAuthenticatedUser() {
 }
 
 export async function GET() {
+  if (!hasSupabaseConfig()) {
+    return Response.json({
+      notifications: [],
+      available: false,
+      code: "notifications_not_configured",
+      error: "Supabase is not configured. Notifications are unavailable.",
+    });
+  }
+
   try {
     const { supabase, user } = await getAuthenticatedUser();
     if (!user) {
@@ -107,6 +123,16 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!hasSupabaseConfig()) {
+    return Response.json({
+      ok: true,
+      notifications: [],
+      available: false,
+      code: "notifications_not_configured",
+      error: "Supabase is not configured. Notifications are unavailable.",
+    });
+  }
+
   try {
     const { supabase, user } = await getAuthenticatedUser();
     if (!user) {

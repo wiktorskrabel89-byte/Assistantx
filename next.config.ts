@@ -108,8 +108,8 @@ const nextConfig = {
             "img-src 'self' blob: data: https:",
             "font-src 'self' https://fonts.gstatic.com",
             "connect-src *",
-            // Monaco Editor creates web workers as blob: URLs
-            "worker-src blob:",
+            // Monaco Editor creates blob workers and the app registers a service worker
+            "worker-src 'self' blob:",
             "frame-src 'none'",
             "frame-ancestors 'none'",
             "object-src 'none'",
