@@ -9,6 +9,20 @@ const CODE_KEYWORDS_RE = /\b(function|class|interface|type|const|let|var|import|
 const CODE_ACTION_RE = /\b(write|generate|create|build|fix|optimize|review|explain)\b.{0,30}\b(code|script|query|function|component)\b/i;
 const CODE_SYMBOL_DENSITY_RE = /^[\s\w]*[{}()[\];=<>/\\]{2,}[\s\w]*$/;
 
+const COMPLEX_CODING_PATTERNS = [
+  /\b(debug|debugging|refactor|refactoring|architect|architecture|review|security|performance|optimize|optimise|migrate|migration|design pattern|dependency injection|async|concurrency|race condition|memory leak|bottleneck|test coverage|integration test|end.?to.?end|multi.?step|large codebase|legacy code|why (is|does|am|are) (my|this|the))\b/i,
+  /\b(fix (this |the )?bug|broken|not working|doesn'?t work|error in|exception in|failing test|how (do|can) (i|we|you) (fix|refactor|improve|redesign|migrate|optimise|optimize))\b/i,
+];
+
+const IMAGE_INTENT = /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/;
+const IMAGE_COMMAND = /^\s*\/image\b/;
+const IMAGE_OF = /\bimage of\b/;
+const IMAGE_PLEASE = /\bplease.*\b(image|picture|photo)\b/;
+
+const HEAVY_REASONING_KEYWORDS = /\b(step.?by.?step|reasoning|think through|analyze|analyse|plan|planning|architect|workflow|agent|pipeline|strategy|logic|deduce|infer|evaluate|complex|hard problem|multi.?step|break down)\b/i;
+const HEAVY_REASONING_HOW = /\b(how (should|would|do) (i|we|you) (design|build|structure|implement|approach|solve))\b/i;
+const HEAVY_REASONING_COMPARE = /\b(pros and cons|trade.?off|compare|contrast|decision|choose between)\b/i;
+
 export function isCodeRequest(message: string): boolean {
   const text = message.trim();
   if (!text) return false;
