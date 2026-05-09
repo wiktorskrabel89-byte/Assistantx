@@ -30,7 +30,12 @@ jest.mock("@/lib/rateLimit", () => ({
   rateLimitedResponse: jest.fn(),
 }));
 
-import { TOP_FREE_CHAT_MODELS, TOP_FREE_CODE_MODELS } from "@/lib/ai-config";
+import {
+  TOP_FREE_CHAT_MODELS,
+  TOP_FREE_CODE_MODELS,
+  ROUTING_MAIN_MODEL_FREE,
+  ROUTING_CODE_MODEL_FREE,
+} from "@/lib/ai-config";
 
 beforeEach(() => {
   process.env.GROQ_API_KEY = "test-groq-key";
@@ -580,7 +585,7 @@ describe("POST /api/chat — profile-based routing", () => {
     expect(res.status).toBe(200);
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).toBe("qwen/qwen3-32b:free");
+    expect(calledBody.model).toBe(ROUTING_MAIN_MODEL_FREE);
   });
 
   it("uses GPT OSS code model for gpt-oss-code profile", async () => {
@@ -601,6 +606,6 @@ describe("POST /api/chat — profile-based routing", () => {
     expect(res.status).toBe(200);
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).toBe("openai/gpt-oss-120b:free");
+    expect(calledBody.model).toBe(ROUTING_CODE_MODEL_FREE);
   });
 });
