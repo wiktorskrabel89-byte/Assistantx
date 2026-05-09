@@ -65,20 +65,19 @@ type AddOnItem = {
   label: string;
   description: string;
   icon: LucideIcon;
-  color: string;
   beta?: boolean;
   adminOnly?: boolean;
 };
 
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
-  { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",   icon: BrainCircuit, color: "", beta: true },
-  { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",   icon: Stethoscope,  color: "" },
-  { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen,     color: "" },
-  { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig,   color: "" },
-  { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2,       color: "" },
-  { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2,  color: "" },
-  { id: "ai-learning",      label: "AI Learning",     description: "Memory + RAG + tuning controls", icon: BrainCircuit, color: "", adminOnly: true },
+  { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",   icon: BrainCircuit, beta: true },
+  { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",   icon: Stethoscope },
+  { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen },
+  { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig },
+  { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2 },
+  { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2 },
+  { id: "ai-learning",      label: "AI Learning",     description: "Memory + RAG + tuning controls", icon: BrainCircuit, adminOnly: true },
 ];
 
 /** Core AI Code mode tabs — always visible in the sidebar when in AI Code mode */
