@@ -36,17 +36,17 @@ export default function JarvisTab() {
   const highlights = [
     {
       title: "New chat models",
-      description: "Jarvis Desktop wspiera nową generację modeli (np. GPT-5.x i Claude 4.x) w konfiguracji klienta.",
+      description: "Jarvis Desktop supports newer model generations (for example GPT-5.x and Claude 4.x) in client configuration.",
       icon: Sparkles,
     },
     {
       title: "Speech-to-text",
-      description: "Obsługa STT z domyślnym wyborem modelu openai/gpt-4o-mini-transcribe.",
+      description: "STT support with default model selection openai/gpt-4o-mini-transcribe.",
       icon: Mic,
     },
     {
       title: "Text-to-speech",
-      description: "Automatyczny odczyt odpowiedzi (TTS) z profilem openai/gpt-4o-mini-tts.",
+      description: "Automatic response playback (TTS) using the openai/gpt-4o-mini-tts profile.",
       icon: Volume2,
     },
   ];

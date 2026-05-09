@@ -81,6 +81,8 @@ export type ChatComposerProps = {
   planRequestLimit?: number;
 };
 
+const DEFAULT_THINKING_EFFORT = 2;
+
 export function ChatComposer({
   dark,
   message,
@@ -320,7 +322,7 @@ export function ChatComposer({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                onQueueMessage(2);
+                onQueueMessage(DEFAULT_THINKING_EFFORT);
               }
             }}
             onPaste={handlePaste}
