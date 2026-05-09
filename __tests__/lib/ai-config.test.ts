@@ -25,6 +25,15 @@ import {
   isModelProPlusOnly,
   TOP_PRO_FALLBACK_MODELS,
   TOP_PRO_PLUS_FALLBACK_MODELS,
+  ROUTING_MAIN_MODEL,
+  ROUTING_MAIN_MODEL_FREE,
+  ROUTING_CODE_MODEL,
+  ROUTING_CODE_MODEL_FREE,
+  ROUTING_REASONING_MODEL,
+  ROUTING_VISION_MODEL,
+  ROUTING_GEMINI_MODEL,
+  getModelTemperature,
+  getModelPromptText,
 } from "@/lib/ai-config";
 
 const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.:+-]+$/;
@@ -350,5 +359,32 @@ describe("filterModelsByPlan", () => {
     expect(TOP_PRO_PLUS_FALLBACK_MODELS).toHaveLength(2);
     // Pro+ fallback includes the exclusive flagship model
     expect(TOP_PRO_PLUS_FALLBACK_MODELS).toContain("anthropic/claude-opus-4.7");
+  });
+});
+
+describe("per-model behavior profiles", () => {
+  it("defines temperature and prompt text for all configured models", () => {
+    const configuredModelIds = new Set<string>([
+      ...CHAT_MODELS.map((m) => m.id),
+      ...CODE_MODELS.map((m) => m.id),
+      ...SEARCH_MODELS.map((m) => m.id),
+      ROUTING_MAIN_MODEL,
+      ROUTING_MAIN_MODEL_FREE,
+      ROUTING_CODE_MODEL,
+      ROUTING_CODE_MODEL_FREE,
+      ROUTING_REASONING_MODEL,
+      ROUTING_VISION_MODEL,
+      ROUTING_GEMINI_MODEL,
+    ]);
+
+    for (const modelId of configuredModelIds) {
+      expect(typeof getModelTemperature(modelId)).toBe("number");
+      expect(getModelPromptText(modelId).trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("uses explicit GPT OSS coding temperature and coding prompt profile", () => {
+    expect(getModelTemperature("openai/gpt-oss-120b", { isCodeRequest: true })).toBe(0.15);
+    expect(getModelPromptText("openai/gpt-oss-120b", true)).toMatch(/coding profile/i);
   });
 });

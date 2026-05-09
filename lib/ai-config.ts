@@ -49,6 +49,15 @@ export type ModelPreset = {
   costTier: CostTier;
 };
 
+export type ModelBehaviorProfile = {
+  defaultTemperature: number;
+  codeTemperature?: number;
+  longContextTemperature?: number;
+  visionTemperature?: number;
+  promptText: string;
+  codePromptText?: string;
+};
+
 export type LanguageOption = {
   code: string;
   label: string;
@@ -339,6 +348,245 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "x-ai/grok-4": "premium",
   "google/gemini-3-pro-preview": "premium",
 };
+
+/**
+ * Per-model behavior defaults used by the chat route.
+ * Every configured model gets explicit temperature and prompt guidance.
+ */
+export const MODEL_BEHAVIOR_PROFILES: Record<string, ModelBehaviorProfile> = {
+  "meta-llama/llama-3.3-70b-instruct:free": {
+    defaultTemperature: 0.7,
+    codeTemperature: 0.2,
+    promptText: "Provide practical, concise answers with clear structure.",
+    codePromptText: "Generate correct, minimal, production-ready code and explain briefly.",
+  },
+  "openai/gpt-oss-120b:free": {
+    defaultTemperature: 0.8,
+    codeTemperature: 0.15,
+    promptText: "Use a friendly, clear, practical chat style.",
+    codePromptText: "Prioritize correctness, code quality, and concise engineering explanations.",
+  },
+  "minimax/minimax-m2.5:free": {
+    defaultTemperature: 0.7,
+    codeTemperature: 0.2,
+    promptText: "Focus on clear and useful responses.",
+    codePromptText: "Return maintainable code with pragmatic implementation details.",
+  },
+  "z-ai/glm-4.5-air:free": {
+    defaultTemperature: 0.7,
+    codeTemperature: 0.2,
+    promptText: "Keep responses concise, factual, and actionable.",
+    codePromptText: "Deliver clean code and call out key assumptions.",
+  },
+  "nvidia/nemotron-3-super-120b-a12b:free": {
+    defaultTemperature: 0.65,
+    codeTemperature: 0.2,
+    promptText: "Answer directly and keep structure easy to scan.",
+    codePromptText: "Focus on robust code and practical debugging guidance.",
+  },
+  "qwen/qwen3-32b:free": {
+    defaultTemperature: 0.8,
+    codeTemperature: 0.2,
+    promptText: "Use natural conversation with concise practical outputs.",
+    codePromptText: "Provide production-minded code and concise rationale.",
+  },
+  "google/gemini-2.5-flash-lite": {
+    defaultTemperature: 0.6,
+    codeTemperature: 0.2,
+    longContextTemperature: 0.4,
+    promptText: "Summarize and explain efficiently with clear takeaways.",
+    codePromptText: "Produce compact, correct code and quick implementation notes.",
+  },
+  "google/gemini-3-flash-preview": {
+    defaultTemperature: 0.6,
+    codeTemperature: 0.2,
+    longContextTemperature: 0.4,
+    promptText: "Respond quickly with clear and practical guidance.",
+    codePromptText: "Optimize for correct, concise coding assistance.",
+  },
+  "google/gemini-2.5-flash": {
+    defaultTemperature: 0.7,
+    codeTemperature: 0.2,
+    longContextTemperature: 0.4,
+    promptText: "Handle broad chat tasks with balanced quality and speed.",
+    codePromptText: "Keep coding answers actionable and implementation-focused.",
+  },
+  "openai/gpt-5-mini": {
+    defaultTemperature: 0.6,
+    codeTemperature: 0.2,
+    promptText: "Provide concise, high-signal responses.",
+    codePromptText: "Return correct code and concise technical guidance.",
+  },
+  "openai/gpt-5-nano": {
+    defaultTemperature: 0.6,
+    codeTemperature: 0.2,
+    promptText: "Prefer brief, direct, utility-focused answers.",
+    codePromptText: "Keep code short, correct, and easy to apply.",
+  },
+  "x-ai/grok-3-mini": {
+    defaultTemperature: 0.65,
+    codeTemperature: 0.2,
+    promptText: "Use practical and straightforward language.",
+    codePromptText: "Prioritize functional code and explicit assumptions.",
+  },
+  "meta-llama/llama-3.3-70b-instruct": {
+    defaultTemperature: 0.7,
+    codeTemperature: 0.2,
+    promptText: "Provide concise, grounded, and clear responses.",
+    codePromptText: "Generate maintainable code with minimal unnecessary complexity.",
+  },
+  "deepseek/deepseek-r1": {
+    defaultTemperature: 0.3,
+    codeTemperature: 0.2,
+    promptText: "Use structured, logical reasoning and high factual accuracy.",
+    codePromptText: "Prioritize rigorous reasoning, correctness, and clear code decisions.",
+  },
+  "openai/gpt-oss-120b": {
+    defaultTemperature: 0.8,
+    codeTemperature: 0.15,
+    promptText: "Use the GPT OSS 120B chat profile: friendly, clear, and practical.",
+    codePromptText: "Use the GPT OSS 120B coding profile: correctness, code quality, and concise engineering explanations.",
+  },
+  "deepseek/deepseek-v3.2": {
+    defaultTemperature: 0.55,
+    codeTemperature: 0.2,
+    promptText: "Respond clearly with practical and well-structured outputs.",
+    codePromptText: "Provide reliable implementation details and test-aware code suggestions.",
+  },
+  "anthropic/claude-sonnet-4.5": {
+    defaultTemperature: 0.55,
+    codeTemperature: 0.2,
+    promptText: "Write with strong clarity, reasoning, and polished structure.",
+    codePromptText: "Focus on robust implementation quality and concise explanations.",
+  },
+  "openai/gpt-5": {
+    defaultTemperature: 0.5,
+    codeTemperature: 0.2,
+    promptText: "Provide high-quality, precise, and practical answers.",
+    codePromptText: "Optimize for correctness, architecture fit, and production quality.",
+  },
+  "qwen/qwen3-32b": {
+    defaultTemperature: 0.8,
+    codeTemperature: 0.2,
+    promptText: "Use natural conversational flow with concise practical guidance.",
+    codePromptText: "Deliver minimal-diff, production-oriented coding support.",
+  },
+  "qwen/qwen3-235b-a22b": {
+    defaultTemperature: 0.7,
+    codeTemperature: 0.2,
+    promptText: "Provide balanced depth with concise actionable outcomes.",
+    codePromptText: "Return complete, accurate code and clear implementation notes.",
+  },
+  "perplexity/sonar": {
+    defaultTemperature: 0.4,
+    promptText: "Prioritize current, source-aware, factual research responses.",
+  },
+  "moonshotai/kimi-k2-thinking": {
+    defaultTemperature: 0.35,
+    codeTemperature: 0.2,
+    longContextTemperature: 0.3,
+    promptText: "Handle long-context reasoning with structured, accurate synthesis.",
+    codePromptText: "Use deliberate reasoning for complex engineering tasks.",
+  },
+  "minimax/minimax-m2.5": {
+    defaultTemperature: 0.65,
+    codeTemperature: 0.2,
+    promptText: "Keep responses practical and easy to execute.",
+    codePromptText: "Prioritize usable code with concise implementation guidance.",
+  },
+  "meta-llama/llama-4-scout": {
+    defaultTemperature: 0.3,
+    visionTemperature: 0.3,
+    promptText: "Analyze multimodal inputs carefully and report concrete observations.",
+    codePromptText: "Use careful analysis before proposing code changes.",
+  },
+  "openai/gpt-5.3": {
+    defaultTemperature: 0.45,
+    codeTemperature: 0.2,
+    promptText: "Deliver premium-quality reasoning with concise, reliable outputs.",
+    codePromptText: "Provide production-ready, accurate code and brief rationale.",
+  },
+  "anthropic/claude-opus-4.5": {
+    defaultTemperature: 0.45,
+    codeTemperature: 0.2,
+    promptText: "Provide deep, careful analysis with clear communication.",
+    codePromptText: "Emphasize robust design, correctness, and maintainable code.",
+  },
+  "anthropic/claude-opus-4.6": {
+    defaultTemperature: 0.45,
+    codeTemperature: 0.2,
+    promptText: "Provide premium analysis with high clarity and precision.",
+    codePromptText: "Optimize for correctness, architecture preservation, and minimal-diff implementation.",
+  },
+  "anthropic/claude-opus-4.7": {
+    defaultTemperature: 0.45,
+    codeTemperature: 0.2,
+    promptText: "Deliver flagship-quality reasoning and polished responses.",
+    codePromptText: "Produce production-ready solutions with strong correctness guarantees.",
+  },
+  "openai/gpt-5.4": {
+    defaultTemperature: 0.4,
+    codeTemperature: 0.2,
+    promptText: "Provide high-precision frontier quality with concise structure.",
+    codePromptText: "Focus on complete, correct, and production-grade code outputs.",
+  },
+  "openai/gpt-5.5": {
+    defaultTemperature: 0.4,
+    codeTemperature: 0.2,
+    promptText: "Provide state-of-the-art quality with clear and direct communication.",
+    codePromptText: "Deliver rigorous, high-confidence coding guidance and implementation.",
+  },
+  "openai/gpt-5.2": {
+    defaultTemperature: 0.45,
+    codeTemperature: 0.2,
+    promptText: "Give clear, reliable premium responses with practical focus.",
+    codePromptText: "Provide accurate implementation details and concise engineering tradeoffs.",
+  },
+  "openai/gpt-5.2-pro": {
+    defaultTemperature: 0.4,
+    codeTemperature: 0.2,
+    promptText: "Prioritize precision and high-confidence technical outputs.",
+    codePromptText: "Produce robust code and explicit reasoning about edge cases.",
+  },
+  "x-ai/grok-4": {
+    defaultTemperature: 0.5,
+    codeTemperature: 0.2,
+    promptText: "Provide high-capability, practical, and direct responses.",
+    codePromptText: "Focus on effective implementation and correctness.",
+  },
+  "google/gemini-3-pro-preview": {
+    defaultTemperature: 0.45,
+    codeTemperature: 0.2,
+    longContextTemperature: 0.35,
+    promptText: "Deliver detailed but concise premium reasoning.",
+    codePromptText: "Provide production-aware coding guidance with strong clarity.",
+  },
+};
+
+/** Returns the model temperature with explicit per-model defaults and mode overrides. */
+export function getModelTemperature(
+  modelId: string,
+  {
+    isCodeRequest = false,
+    isLongContext = false,
+    isVisionRequest = false,
+  }: { isCodeRequest?: boolean; isLongContext?: boolean; isVisionRequest?: boolean } = {},
+): number {
+  const profile = MODEL_BEHAVIOR_PROFILES[modelId];
+  if (!profile) return isCodeRequest ? 0.2 : 0.7;
+  if (isVisionRequest && typeof profile.visionTemperature === "number") return profile.visionTemperature;
+  if (isLongContext && typeof profile.longContextTemperature === "number") return profile.longContextTemperature;
+  if (isCodeRequest && typeof profile.codeTemperature === "number") return profile.codeTemperature;
+  return profile.defaultTemperature;
+}
+
+/** Returns model-specific prompt guidance for chat or coding mode. */
+export function getModelPromptText(modelId: string, isCodeRequest = false): string {
+  const profile = MODEL_BEHAVIOR_PROFILES[modelId];
+  if (!profile) return "";
+  if (isCodeRequest && typeof profile.codePromptText === "string") return profile.codePromptText;
+  return profile.promptText;
+}
 
 /** Returns the cost tier for a model ID. Unknown models default to "standard". */
 export function getModelCostTier(modelId: string): CostTier {

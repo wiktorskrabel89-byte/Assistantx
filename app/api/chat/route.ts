@@ -21,6 +21,8 @@ import {
   AUTO_PREFERRED_CHAT_MODEL,
   REASONING_MODEL_IDS,
   getModelMaxTokens,
+  getModelPromptText,
+  getModelTemperature,
   ROUTING_MAIN_MODEL,
   ROUTING_CODE_MODEL,
   ROUTING_REASONING_MODEL,
@@ -407,6 +409,7 @@ const MODEL_LABELS: Record<string, string> = {
   "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5",
   "anthropic/claude-opus-4.5": "Claude Opus 4.5",
   "anthropic/claude-opus-4.6": "Claude Opus 4.6",
+  "anthropic/claude-opus-4.7": "Claude Opus 4.7",
   "anthropic/claude-haiku-4.5": "Claude Haiku 4.5",
   "openai/gpt-5.4": "GPT-5.4",
   "openai/gpt-5": "GPT-5",
@@ -415,6 +418,7 @@ const MODEL_LABELS: Record<string, string> = {
   "openai/gpt-5.2": "GPT-5.2",
   "openai/gpt-5.2-pro": "GPT-5.2 Pro",
   "openai/gpt-5.3": "GPT-5.3",
+  "openai/gpt-5.5": "GPT-5.5",
   "openai/gpt-oss-120b": "GPT OSS 120B",
   "openai/gpt-oss-120b:free": "GPT OSS 120B (Free)",
   "minimax/minimax-m2.5:free": "MiniMax M2.5 (Free)",
@@ -451,15 +455,6 @@ const CACHED_ANSWER_SIMILARITY_THRESHOLD = 0.9;
 // intentionally requires a high threshold to avoid returning the wrong prior answer.
 const KNOWLEDGE_MATCH_COUNT = 10;
 const KNOWLEDGE_MAX_TOTAL_TOKENS = 1500;
-
-// ─── Per-route temperature constants ─────────────────────────────────────────
-const TEMP_MAIN = 0.8;        // Qwen3-32B conversational
-const TEMP_CODE = 0.15;       // GPT OSS 120B coding
-const TEMP_REASONING = 0.3;   // GPT OSS 120B analytical reasoning
-const TEMP_VISION = 0.3;      // Llama 4 Scout vision
-const TEMP_GEMINI_FALLBACK = 0.7;  // Gemini 2.5 Flash fallback
-const TEMP_GEMINI_LONGCTX = 0.4;   // Gemini 2.5 Flash long-context
-
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
 
@@ -683,61 +678,61 @@ export const POST = async (req: Request) => {
   if (planEnforcedModelId) {
     // Manual / workspace-pinned model
     selectedModel = planEnforcedModelId;
-    if (inferredVisionRequest) {
-      resolvedTemperature = TEMP_VISION;
-      resolvedReasoningEffort = "medium";
-    } else if (selectedModel === ROUTING_GEMINI_MODEL) {
-      resolvedTemperature = inferredLongContext ? TEMP_GEMINI_LONGCTX : TEMP_GEMINI_FALLBACK;
-      resolvedReasoningEffort = "low";
-    } else {
-      resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
-      resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
-    }
+    resolvedTemperature = getModelTemperature(selectedModel, {
+      isCodeRequest: inferredCodeRequest,
+      isLongContext: inferredLongContext,
+      isVisionRequest: inferredVisionRequest,
+    });
+    resolvedReasoningEffort = inferredVisionRequest
+      ? "medium"
+      : determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
     smartRouteLabel = `Manual model: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   } else if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
     selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
-    resolvedTemperature = modelProfile === "gpt-oss-code" ? TEMP_CODE : TEMP_MAIN;
+    resolvedTemperature = getModelTemperature(selectedModel, {
+      isCodeRequest: modelProfile === "gpt-oss-code",
+      isLongContext: inferredLongContext,
+    });
     resolvedReasoningEffort = modelProfile === "gpt-oss-code" ? "high" : "low";
     smartRouteLabel = `Profile: ${modelProfile}`;
   } else if (isAutoRouted) {
     // ── Smart router (no explicit model chosen) ────────────────────────────────
     if (inferredVisionRequest) {
       selectedModel = ROUTING_VISION_MODEL;
-      resolvedTemperature = TEMP_VISION;
+      resolvedTemperature = getModelTemperature(selectedModel, { isVisionRequest: true });
       resolvedReasoningEffort = "medium";
       smartRouteLabel = `Vision analysis — ${MODEL_LABELS[ROUTING_VISION_MODEL] ?? ROUTING_VISION_MODEL}`;
     } else if (inferredCodeRequest) {
       selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
-      resolvedTemperature = TEMP_CODE;
+      resolvedTemperature = getModelTemperature(selectedModel, { isCodeRequest: true });
       // Complex debugging/refactor → high; simple function → low
       resolvedReasoningEffort = inferredComplexCoding ? "high" : "low";
       smartRouteLabel = `Coding — ${MODEL_LABELS[ROUTING_CODE_MODEL] ?? ROUTING_CODE_MODEL}${userPlan === "free" ? " (free)" : ""}`;
     } else if (inferredHeavyReasoning) {
       selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_REASONING_MODEL;
-      resolvedTemperature = TEMP_REASONING;
+      resolvedTemperature = getModelTemperature(selectedModel);
       resolvedReasoningEffort = "high";
       smartRouteLabel = `Heavy reasoning — ${MODEL_LABELS[ROUTING_REASONING_MODEL] ?? ROUTING_REASONING_MODEL}${userPlan === "free" ? " (free)" : ""}`;
     } else if (inferredLongContext) {
       selectedModel = ROUTING_GEMINI_MODEL;
-      resolvedTemperature = TEMP_GEMINI_LONGCTX;
+      resolvedTemperature = getModelTemperature(selectedModel, { isLongContext: true });
       resolvedReasoningEffort = "low"; // summarisation / extraction doesn't need deep reasoning
       smartRouteLabel = `Long-context — ${MODEL_LABELS[ROUTING_GEMINI_MODEL] ?? ROUTING_GEMINI_MODEL}`;
     } else {
       // Default: main conversational AI — keep it fast and cheap
       selectedModel = userPlan === "free" ? ROUTING_MAIN_MODEL_FREE : ROUTING_MAIN_MODEL;
-      resolvedTemperature = TEMP_MAIN;
+      resolvedTemperature = getModelTemperature(selectedModel);
       resolvedReasoningEffort = "low";
       smartRouteLabel = `Conversational AI — ${MODEL_LABELS[ROUTING_MAIN_MODEL] ?? ROUTING_MAIN_MODEL}${userPlan === "free" ? " (free)" : ""}`;
     }
   } else {
     selectedModel = costControlled.modelId;
-    if (selectedModel === ROUTING_GEMINI_MODEL) {
-      resolvedTemperature = inferredLongContext ? TEMP_GEMINI_LONGCTX : TEMP_GEMINI_FALLBACK;
-      resolvedReasoningEffort = "low";
-    } else {
-      resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
-      resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
-    }
+    resolvedTemperature = getModelTemperature(selectedModel, {
+      isCodeRequest: inferredCodeRequest,
+      isLongContext: inferredLongContext,
+      isVisionRequest: inferredVisionRequest,
+    });
+    resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
     smartRouteLabel = `Auto: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   }
 
@@ -775,6 +770,7 @@ export const POST = async (req: Request) => {
     : isGptOssModel && modelProfile === "gpt-oss-chat"
       ? "Use the GPT OSS 120B chat profile: prioritize friendly tone, clarity, and concise practical responses."
       : "";
+  const modelPromptInstruction = getModelPromptText(selectedModel, inferredCodeRequest);
   const internetContextInstruction = effectiveAddInternetContext
     ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
@@ -849,6 +845,8 @@ export const POST = async (req: Request) => {
     memoryInstruction,
     programmingLanguageInstruction,
     interactionProfileInstruction,
+    modelPromptInstruction,
+    modelProfileInstruction,
     internetContextInstruction,
   ].filter(Boolean).join(" ");
 
