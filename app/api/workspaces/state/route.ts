@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/server";
+import { hasSupabaseConfig, workspaceSyncNotConfiguredResponse } from "@/lib/supabase-config";
 
 export const maxDuration = 60;
 
@@ -117,6 +118,10 @@ async function getAuthenticatedUser() {
 }
 
 export async function GET() {
+  if (!hasSupabaseConfig()) {
+    return workspaceSyncNotConfiguredResponse();
+  }
+
   try {
     const { supabase, user } = await getAuthenticatedUser();
     if (!user) {
@@ -147,6 +152,10 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  if (!hasSupabaseConfig()) {
+    return workspaceSyncNotConfiguredResponse();
+  }
+
   try {
     const { supabase, user } = await getAuthenticatedUser();
     if (!user) {

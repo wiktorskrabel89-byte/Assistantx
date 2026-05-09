@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BarChart2, Bot, MessageSquareText, Zap } from "lucide-react";
+import { BarChart2, Bot, Cloud, MessageSquareText, MoonStar, Sparkles, Sun, Zap } from "lucide-react";
 import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
+import { Switch } from "@/components/ui/switch";
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
@@ -32,7 +33,15 @@ function UsageBar({ label, value, max, color }: { label: string; value: number; 
 }
 
 export function SettingsTab() {
-  const { state, activeWorkspace } = useWorkspace();
+  const {
+    state,
+    activeWorkspace,
+    setDark,
+    cloudSyncStatus,
+    cloudSyncMessage,
+    userEmail,
+    authReady,
+  } = useWorkspace();
 
   const [profile, setProfile] = useState<UserProfile>({
     avatarUrl: "",
@@ -139,17 +148,75 @@ export function SettingsTab() {
       : state.userPlan === "pro+"
         ? PRO_PLUS_PLAN.premiumRequestsPerMonth
         : null;
+  const dark = state.dark;
+  const appModeLabel = state.appMode === "ai-code" ? "AI Code" : "AI Chat";
+  const sectionBackground = dark
+    ? "bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.2),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(135deg,#020617,#0f172a_46%,#082f49)]"
+    : "bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)]";
+  const cardClass = dark
+    ? "border-sky-900/70 bg-slate-950/70 text-slate-100 shadow-[0_24px_80px_-28px_rgba(2,132,199,0.35)]"
+    : "border-sky-200/60 bg-white/90 text-slate-900 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)]";
+  const chipClass = dark
+    ? "border-sky-800/70 bg-slate-900/70 text-sky-200"
+    : "border-sky-300/70 bg-white/70 text-sky-800";
+  const mutedClass = dark ? "text-slate-300" : "text-slate-600";
+  const softSurfaceClass = dark
+    ? "border-slate-800 bg-slate-900/60"
+    : "border-slate-200 bg-slate-50/80";
 
   return (
-    <section className="h-full min-h-0 overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
+    <section className={`h-full min-h-0 overflow-auto p-4 sm:p-6 lg:p-8 ${sectionBackground}`}>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div className={`rounded-3xl border p-6 backdrop-blur sm:p-8 ${cardClass}`}>
+          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${chipClass}`}>
+            <Sparkles className="h-3.5 w-3.5" />
+            Ustawienia aplikacji
+          </div>
+          <h2 className="mt-5 text-2xl font-semibold tracking-tight">Personalizacja</h2>
+          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>Najważniejsze opcje wyglądu i statusu workspace w jednym miejscu.</p>
+
+          <div className={`mt-6 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">Tryb ciemny</p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>Włącz ciemny motyw całej aplikacji.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Sun className={`h-4 w-4 ${dark ? "text-slate-500" : "text-amber-500"}`} />
+                <Switch checked={dark} onCheckedChange={setDark} aria-label="Włącz tryb ciemny" />
+                <MoonStar className={`h-4 w-4 ${dark ? "text-sky-300" : "text-slate-400"}`} />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                <Cloud className="h-3.5 w-3.5" /> Sync
+              </div>
+              <p className="mt-2 text-sm font-semibold">{authReady ? cloudSyncStatus : "checking"}</p>
+              <p className={`mt-1 text-xs ${mutedClass}`}>{cloudSyncMessage}</p>
+            </div>
+            <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                <MessageSquareText className="h-3.5 w-3.5" /> Workspace
+              </div>
+              <p className="mt-2 text-sm font-semibold">{activeWorkspace.name}</p>
+              <p className={`mt-1 text-xs ${mutedClass}`}>
+                Plan: {state.userPlan.toUpperCase()} • Tryb: {appModeLabel}
+              </p>
+              {userEmail ? <p className={`mt-1 text-xs ${mutedClass}`}>{userEmail}</p> : null}
+            </div>
+          </div>
+        </div>
+
         {/* Profile card */}
-        <div className="rounded-3xl border border-sky-200/60 bg-white/90 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)] backdrop-blur sm:p-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/70 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">
+        <div className={`rounded-3xl border p-6 backdrop-blur sm:p-8 ${cardClass}`}>
+          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${chipClass}`}>
             Ustawienia profilu
           </div>
-          <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-900">Edit Profile</h2>
-          <p className="mt-2 text-sm leading-7 text-slate-600">Zarządzaj profilem i informacjami widocznymi w przestrzeni AssistantX.</p>
+          <h2 className="mt-5 text-2xl font-semibold tracking-tight">Edytuj profil</h2>
+          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>Zarządzaj profilem i informacjami widocznymi w przestrzeni AssistantX.</p>
 
           {saveStatus === "success" && (
             <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
@@ -168,44 +235,44 @@ export function SettingsTab() {
         </div>
 
         {/* Usage stats card */}
-        <div className="rounded-3xl border border-sky-200/60 bg-white/90 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)] backdrop-blur sm:p-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/70 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">
+        <div className={`rounded-3xl border p-6 backdrop-blur sm:p-8 ${cardClass}`}>
+          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${chipClass}`}>
             <BarChart2 className="h-3.5 w-3.5" />
             Użycie
           </div>
-          <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-900">Statystyki użycia</h2>
-          <p className="mt-2 text-sm leading-7 text-slate-600">Przegląd aktywności i limitu planu.</p>
+          <h2 className="mt-5 text-2xl font-semibold tracking-tight">Statystyki użycia</h2>
+          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>Przegląd aktywności i limitu planu.</p>
 
           {statsLoading ? (
-            <p className="mt-6 text-sm text-slate-400">Ładowanie statystyk…</p>
+            <p className={`mt-6 text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>Ładowanie statystyk…</p>
           ) : (
             <div className="mt-6 flex flex-col gap-5">
               {/* KPI row */}
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
+                  <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${dark ? "text-slate-400" : "text-slate-500"}`}>
                     <MessageSquareText className="h-3.5 w-3.5" /> Wiadomości
                   </div>
-                  <div className="mt-2 text-2xl font-bold text-slate-900">{totalMessages.toLocaleString()}</div>
+                  <div className="mt-2 text-2xl font-bold">{totalMessages.toLocaleString()}</div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
+                  <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${dark ? "text-slate-400" : "text-slate-500"}`}>
                     <MessageSquareText className="h-3.5 w-3.5" /> Rozmowy
                   </div>
-                  <div className="mt-2 text-2xl font-bold text-slate-900">{totalConversations.toLocaleString()}</div>
+                  <div className="mt-2 text-2xl font-bold">{totalConversations.toLocaleString()}</div>
                 </div>
 
                 {planLimit !== null && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                    <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                  <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
+                    <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${dark ? "text-slate-400" : "text-slate-500"}`}>
                       <Zap className="h-3.5 w-3.5" /> Zapytania premium
                     </div>
-                    <div className="mt-2 text-2xl font-bold text-slate-900">
+                    <div className="mt-2 text-2xl font-bold">
                       {premiumRequestsUsed}
-                      <span className="text-sm font-normal text-slate-400"> / {planLimit}</span>
+                      <span className={`text-sm font-normal ${dark ? "text-slate-500" : "text-slate-400"}`}> / {planLimit}</span>
                     </div>
-                    <div className="mt-3 rounded-full bg-slate-200" style={{ height: 7 }}>
+                    <div className={`mt-3 rounded-full ${dark ? "bg-slate-700" : "bg-slate-200"}`} style={{ height: 7 }}>
                       <div
                         className={`h-full rounded-full ${premiumRequestsUsed / planLimit >= 0.8 ? "bg-amber-500" : "bg-sky-500"}`}
                         style={{ width: `${Math.min((premiumRequestsUsed / planLimit) * 100, 100)}%`, transition: "width 0.6s ease" }}
@@ -217,10 +284,10 @@ export function SettingsTab() {
 
               {/* Top models */}
               {topModels.length > 0 && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
                   <div className="mb-3 flex items-center gap-2">
                     <Bot className="h-4 w-4 text-sky-500" />
-                    <span className="text-sm font-semibold text-slate-700">Najczęściej używane modele</span>
+                    <span className={`text-sm font-semibold ${dark ? "text-slate-200" : "text-slate-700"}`}>Najczęściej używane modele</span>
                   </div>
                   <div className="space-y-3">
                     {topModels.map((m, i) => (

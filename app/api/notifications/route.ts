@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/server";
+import { hasSupabaseConfig } from "@/lib/supabase-config";
 
 export const maxDuration = 30;
 
@@ -80,6 +81,18 @@ async function getAuthenticatedUser() {
 }
 
 export async function GET() {
+  if (!hasSupabaseConfig()) {
+    return Response.json(
+      {
+        notifications: [],
+        available: false,
+        code: "notifications_not_configured",
+        error: "Supabase is not configured. Notifications are unavailable.",
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     const { supabase, user } = await getAuthenticatedUser();
     if (!user) {
@@ -107,6 +120,19 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!hasSupabaseConfig()) {
+    return Response.json(
+      {
+        ok: true,
+        notifications: [],
+        available: false,
+        code: "notifications_not_configured",
+        error: "Supabase is not configured. Notifications are unavailable.",
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     const { supabase, user } = await getAuthenticatedUser();
     if (!user) {

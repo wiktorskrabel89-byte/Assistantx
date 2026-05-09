@@ -318,6 +318,10 @@ export function useWorkspaceState() {
     setState((prev) => ({ ...prev, userPlan }));
   }, []);
 
+  const setDark = useCallback((dark: boolean) => {
+    setState((prev) => ({ ...prev, dark }));
+  }, []);
+
   const incrementPremiumRequests = useCallback(() => {
     setState((prev) => ({ ...prev, premiumRequestsUsed: prev.premiumRequestsUsed + 1 }));
   }, []);
@@ -612,6 +616,7 @@ export function useWorkspaceState() {
     setPreferredModelId,
     setCostMode,
     setUserPlan,
+    setDark,
     incrementPremiumRequests,
     setAppMode,
     setPinnedAddOns,
