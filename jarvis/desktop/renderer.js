@@ -66,10 +66,20 @@ window.addEventListener('DOMContentLoaded', () => {
 	backendUrlNode.textContent = getBackendUrl();
 
 	const getModelSettings = () => ({
-		chatModel: chatModelSelect?.value || 'openai/gpt-5.4',
-		sttModel: sttModelSelect?.value || 'openai/gpt-4o-mini-transcribe',
-		ttsModel: ttsModelSelect?.value || 'openai/gpt-4o-mini-tts',
+		chatModel: chatModelSelect?.value || 'auto-smart',
+		sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
+		ttsModel: ttsModelSelect?.value || 'orpheus-english',
 	});
+
+	const isHardTaskPrompt = (text) => {
+		const normalized = String(text || '').toLowerCase();
+		return /\b(debug|bug|fix|refactor|architecture|design|optimi[sz]e|complex|hard|analy[sz]e|root cause|performance|scalability)\b/.test(normalized);
+	};
+
+	const resolveChatModel = (text, selectedModel) => {
+		if (selectedModel !== 'auto-smart') return selectedModel;
+		return isHardTaskPrompt(text) ? 'openai/gpt-oss-120b' : 'qwen/qwen3-32b';
+	};
 
 	const getVoiceLanguage = () => (
 		voiceLanguageSelect?.value
@@ -142,8 +152,13 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (!text) return;
 
 		const models = getModelSettings();
-		const sent = sendDesktopPrompt(text, models);
-		appendMessage(log, sent ? 'Prompt sent' : 'Queued (offline)', text, sent ? 'system' : 'error');
+		const resolvedChatModel = resolveChatModel(text, models.chatModel);
+		const routedModels = { ...models, chatModel: resolvedChatModel };
+		const sent = sendDesktopPrompt(text, routedModels);
+		const routeNote = models.chatModel === 'auto-smart'
+			? `\n(model auto-route: ${resolvedChatModel})`
+			: '';
+		appendMessage(log, sent ? 'Prompt sent' : 'Queued (offline)', `${text}${routeNote}`, sent ? 'system' : 'error');
 		input.value = '';
 	}
 

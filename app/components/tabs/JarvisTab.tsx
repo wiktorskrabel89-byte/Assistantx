@@ -36,17 +36,17 @@ export default function JarvisTab() {
   const highlights = [
     {
       title: "New chat models",
-      description: "Jarvis Desktop supports newer model generations (for example GPT-5.x and Claude 4.x) in client configuration.",
+      description: "Jarvis Desktop supports auto-smart routing (Qwen 3 32B for fast prompts, GPT OSS 120B for harder prompts) with Gemini 2.5 Flash fallback.",
       icon: Sparkles,
     },
     {
       title: "Speech-to-text",
-      description: "STT support with default model selection openai/gpt-4o-mini-transcribe.",
+      description: "STT support with default model selection whisper-large-v3-turbo.",
       icon: Mic,
     },
     {
       title: "Text-to-speech",
-      description: "Automatic response playback (TTS) using the openai/gpt-4o-mini-tts profile.",
+      description: "Automatic response playback (TTS) using the orpheus-english profile.",
       icon: Volume2,
     },
   ];

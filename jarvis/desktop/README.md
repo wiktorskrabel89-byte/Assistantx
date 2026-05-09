@@ -70,6 +70,10 @@ Wymagania:
 
 W tym repo workflow `.github/workflows/build-jarvis.yml` publikuje te pliki automatycznie do release `jarvis-latest`.
 
+Opcjonalne zmienne środowiskowe (desktop runtime):
+- `JARVIS_UPDATE_CHECK_INTERVAL_MS` — interwał automatycznych checków update (domyślnie `900000`, czyli 15 min)
+- `JARVIS_AUTO_INSTALL_ON_DOWNLOAD=1` — po pobraniu update automatycznie uruchamia instalację (restart aplikacji)
+
 ## Bootstrap PowerShell
 
 Do repo dodałem skrypt `scripts/JarvisSystemSetup.ps1`, oparty na Twoim flow pobierania + cichej instalacji NSIS.
