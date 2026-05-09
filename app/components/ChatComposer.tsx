@@ -5,8 +5,6 @@ import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "
 import { useLayoutEffect, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
-import { REASONING_MODEL_IDS } from "@/lib/ai-config";
-import type { ThinkingEffort } from "@/app/components/ModelSelector";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -79,9 +77,6 @@ export type ChatComposerProps = {
   onStopGeneration: () => void;
   onQueueMessage: (thinkingEffort: number) => void;
   onRemoveQueuedMessage: (queueId: string) => void;
-  selectedModel: string;
-  /** Current thinking effort level — controlled externally (from ModelSelector). */
-  thinkingEffort?: ThinkingEffort;
   premiumLimitReached?: boolean;
   planRequestLimit?: number;
 };
@@ -103,8 +98,6 @@ export function ChatComposer({
   onStopGeneration,
   onQueueMessage,
   onRemoveQueuedMessage,
-  selectedModel,
-  thinkingEffort = "Medium",
   premiumLimitReached = false,
   planRequestLimit,
 }: ChatComposerProps) {
@@ -121,8 +114,6 @@ export function ChatComposer({
   useLayoutEffect(() => {
     resizeComposer();
   }, [message, resizeComposer]);
-
-  const showThinkingEffort = REASONING_MODEL_IDS.includes(selectedModel);
 
   // ── Voice input ────────────────────────────────────────────────────────────
   const [micActive, setMicActive] = useState(false);
@@ -280,12 +271,6 @@ export function ChatComposer({
           }}
         />
 
-        {showThinkingEffort && (
-          <div className="mb-1 flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-            <span>Thinking: <span className="font-medium text-slate-600 dark:text-slate-300">{thinkingEffort}</span></span>
-          </div>
-        )}
-
         <div className={cn(
           "flex items-end gap-2 rounded-2xl border p-2 shadow-sm",
           dark ? "border-slate-800 bg-slate-950" : "border-sky-200/60 bg-white/95"
@@ -335,11 +320,7 @@ export function ChatComposer({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                let effortNum = 2;
-                if (thinkingEffort === "Low") effortNum = 1;
-                else if (thinkingEffort === "High") effortNum = 3;
-                else if (thinkingEffort === "Xhigh") effortNum = 4;
-                onQueueMessage(showThinkingEffort ? effortNum : 2);
+                onQueueMessage(2);
               }
             }}
             onPaste={handlePaste}
@@ -385,13 +366,7 @@ export function ChatComposer({
           ) : null}
 
           <Button
-            onClick={() => {
-              let effortNum = 2;
-              if (thinkingEffort === "Low") effortNum = 1;
-              else if (thinkingEffort === "High") effortNum = 3;
-              else if (thinkingEffort === "Xhigh") effortNum = 4;
-              onQueueMessage(showThinkingEffort ? effortNum : 2);
-            }}
+            onClick={() => onQueueMessage(2)}
             disabled={premiumLimitReached || (!message.trim() && !file)}
             size="icon"
             className="h-11 w-11 flex-shrink-0 rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 text-white hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
