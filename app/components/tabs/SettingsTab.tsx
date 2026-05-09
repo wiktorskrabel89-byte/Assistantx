@@ -149,6 +149,7 @@ export function SettingsTab() {
         ? PRO_PLUS_PLAN.premiumRequestsPerMonth
         : null;
   const dark = state.dark;
+  const appModeLabel = state.appMode === "ai-code" ? "AI Code" : "AI Chat";
   const sectionBackground = dark
     ? "bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.2),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(135deg,#020617,#0f172a_46%,#082f49)]"
     : "bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)]";
@@ -202,7 +203,7 @@ export function SettingsTab() {
               </div>
               <p className="mt-2 text-sm font-semibold">{activeWorkspace.name}</p>
               <p className={`mt-1 text-xs ${mutedClass}`}>
-                Plan: {state.userPlan.toUpperCase()} • Tryb: {state.appMode === "ai-code" ? "AI Code" : "AI Chat"}
+                Plan: {state.userPlan.toUpperCase()} • Tryb: {appModeLabel}
               </p>
               {userEmail ? <p className={`mt-1 text-xs ${mutedClass}`}>{userEmail}</p> : null}
             </div>
