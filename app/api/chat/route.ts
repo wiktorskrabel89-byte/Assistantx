@@ -691,7 +691,9 @@ export const POST = async (req: Request) => {
       : determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
     smartRouteLabel = `Manual model: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   } else if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
-    selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
+    selectedModel = modelProfile === "gpt-oss-chat"
+      ? (userPlan === "free" ? ROUTING_MAIN_MODEL_FREE : ROUTING_MAIN_MODEL)
+      : (userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL);
     resolvedTemperature = getModelTemperature(selectedModel, {
       isCodeRequest: modelProfile === "gpt-oss-code",
       isLongContext: inferredLongContext,
