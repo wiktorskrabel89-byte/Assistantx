@@ -1,5 +1,11 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Download, Mic, Smartphone, Sparkles, Volume2 } from "lucide-react";
+
 export default function JarvisTab() {
 
   async function downloadForWindows() {
@@ -27,70 +33,100 @@ export default function JarvisTab() {
     window.location.href = "/api/jarvis/download?platform=android";
   }
 
+  const highlights = [
+    {
+      title: "New chat models",
+      description: "Jarvis Desktop supports newer model generations (for example GPT-5.x and Claude 4.x) in client configuration.",
+      icon: Sparkles,
+    },
+    {
+      title: "Speech-to-text",
+      description: "STT support with default model selection openai/gpt-4o-mini-transcribe.",
+      icon: Mic,
+    },
+    {
+      title: "Text-to-speech",
+      description: "Automatic response playback (TTS) using the openai/gpt-4o-mini-tts profile.",
+      icon: Volume2,
+    },
+  ];
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6">
-        <div className="rounded-3xl border border-sky-200/60 bg-white/90 p-6 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)] backdrop-blur sm:p-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800 shadow-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-sky-500 to-amber-400" />
-            AssistantX Jarvis
-          </div>
-
-          <h1 className="mt-5 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            Download Jarvis
-            <span className="block bg-gradient-to-r from-sky-700 via-cyan-600 to-amber-500 bg-clip-text text-transparent">
-              for desktop and mobile
-            </span>
-          </h1>
-
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-            Keep your AssistantX assistant close at hand. Install Jarvis on Windows or Android and continue your workflows with the same account and ecosystem.
-          </p>
-
-          <div className="mt-7 grid gap-4 sm:grid-cols-2">
-            {/* Windows */}
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4">
+        <Card className="border-sky-200/70 bg-white/90 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)]">
+          <CardHeader className="gap-4">
+            <Badge className="w-fit bg-sky-100 text-sky-800 hover:bg-sky-100">AssistantX Jarvis</Badge>
+            <CardTitle className="text-3xl text-slate-900 sm:text-4xl">
+              Download Jarvis for desktop and mobile
+            </CardTitle>
+            <CardDescription className="max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
+              Keep your AssistantX assistant close at hand. Install Jarvis on Windows or Android and continue your workflows with updated models and voice features.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <button
-                onClick={downloadForWindows}
-                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-                title="Download Jarvis for Windows"
-              >
+              <Button onClick={downloadForWindows} className="h-11 gap-2" title="Download Jarvis for Windows">
+                <Download className="h-4 w-4" />
                 Download for Windows
-              </button>
-              <p className="text-center text-[11px] font-medium text-green-600">
-                ✅ Auto-detects x64 or ARM64
-              </p>
+              </Button>
+              <p className="text-center text-xs font-medium text-green-600">✅ Auto-detects x64 or ARM64</p>
             </div>
-
-            {/* Android */}
             <div className="flex flex-col gap-2">
-              <button
-                onClick={downloadForAndroid}
-                className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-                title="Download Jarvis for Android"
-              >
+              <Button onClick={downloadForAndroid} variant="secondary" className="h-11 gap-2" title="Download Jarvis for Android">
+                <Smartphone className="h-4 w-4" />
                 Download for Android
-              </button>
-              <p className="text-center text-[11px] font-medium text-emerald-600">
-                ✅ Direct APK download
-              </p>
+              </Button>
+              <p className="text-center text-xs font-medium text-emerald-600">✅ Direct APK download</p>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
+        <Card className="border-slate-200/80 bg-white/85">
+          <CardHeader>
+            <CardTitle className="text-base text-slate-900">Jarvis Desktop voice + model upgrades</CardTitle>
+            <CardDescription className="text-slate-600">
+              Desktop build now supports selecting chat/STT/TTS model profiles and includes speech-to-text + auto text-to-speech controls.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            {highlights.map(({ title, description, icon: Icon }) => (
+              <div key={title} className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                <div className="mb-2 flex items-center gap-2 text-slate-900">
+                  <Icon className="h-4 w-4" />
+                  <span className="text-sm font-semibold">{title}</span>
+                </div>
+                <Separator className="mb-2" />
+                <p className="text-xs leading-6 text-slate-600">{description}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-sky-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
-            <div className="text-sm font-semibold text-slate-900">Fast install</div>
-            <p className="mt-2 text-xs leading-6 text-slate-600">Get up and running in minutes with a direct installer and APK package.</p>
-          </div>
-          <div className="rounded-2xl border border-amber-200/70 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
-            <div className="text-sm font-semibold text-slate-900">Same ecosystem</div>
-            <p className="mt-2 text-xs leading-6 text-slate-600">Continue using your AssistantX flows, tools, and integrations across platforms.</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white/85 px-5 py-4 shadow-sm backdrop-blur">
-            <div className="text-sm font-semibold text-slate-900">Private workflow</div>
-            <p className="mt-2 text-xs leading-6 text-slate-600">Use your own account context and keep your work sessions organized per device.</p>
-          </div>
+          <Card className="border-sky-200/70 bg-white/85">
+            <CardHeader>
+              <CardTitle className="text-sm text-slate-900">Fast install</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-xs leading-6 text-slate-600">
+              Get up and running in minutes with a direct installer and APK package.
+            </CardContent>
+          </Card>
+          <Card className="border-amber-200/70 bg-white/85">
+            <CardHeader>
+              <CardTitle className="text-sm text-slate-900">Same ecosystem</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-xs leading-6 text-slate-600">
+              Continue using your AssistantX flows, tools, and integrations across platforms.
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200 bg-white/85">
+            <CardHeader>
+              <CardTitle className="text-sm text-slate-900">Private workflow</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-xs leading-6 text-slate-600">
+              Use your own account context and keep your work sessions organized per device.
+            </CardContent>
+          </Card>
         </div>
       </div>
     </section>

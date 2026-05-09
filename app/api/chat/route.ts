@@ -769,6 +769,12 @@ export const POST = async (req: Request) => {
   const interactionProfileInstruction = typeof interactionProfile === "string" && interactionProfile.trim()
     ? `Tailor the response using this local interaction profile: ${interactionProfile.trim()}`
     : "";
+  const isGptOssModel = selectedModel.startsWith("openai/gpt-oss-120b");
+  const modelProfileInstruction = isGptOssModel && modelProfile === "gpt-oss-code"
+    ? "Use the GPT OSS 120B coding profile: prioritize correctness, code quality, tests, and concise engineering explanations."
+    : isGptOssModel && modelProfile === "gpt-oss-chat"
+      ? "Use the GPT OSS 120B chat profile: prioritize friendly tone, clarity, and concise practical responses."
+      : "";
   const internetContextInstruction = effectiveAddInternetContext
     ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
@@ -916,6 +922,14 @@ export const POST = async (req: Request) => {
     // Unauthenticated users or no conversationId: use client-provided history.
     historyMessages = clientHistoryToMessages(history);
   }
+
+  const resolvedTemperature = modelProfile === "gpt-oss-code"
+    ? GPT_OSS_CODE_TEMPERATURE
+    : modelProfile === "gpt-oss-chat"
+      ? GPT_OSS_CHAT_TEMPERATURE
+      : inferredCodeRequest
+        ? GPT_OSS_CODE_TEMPERATURE
+        : GPT_OSS_CHAT_TEMPERATURE;
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,

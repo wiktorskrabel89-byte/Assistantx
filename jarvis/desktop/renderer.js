@@ -55,9 +55,65 @@ window.addEventListener('DOMContentLoaded', () => {
 	const urlInput = document.getElementById('url-input');
 	const urlGo = document.getElementById('url-go');
 	const urlSearch = document.getElementById('url-search');
+	const chatModelSelect = document.getElementById('chat-model');
+	const sttModelSelect = document.getElementById('stt-model');
+	const ttsModelSelect = document.getElementById('tts-model');
+	const voiceLanguageSelect = document.getElementById('voice-language');
+	const speechToTextButton = document.getElementById('speech-to-text');
+	const autoTtsToggle = document.getElementById('auto-tts');
 
 	tokenNode.textContent = token;
 	backendUrlNode.textContent = getBackendUrl();
+
+	const getModelSettings = () => ({
+		chatModel: chatModelSelect?.value || 'openai/gpt-5.4',
+		sttModel: sttModelSelect?.value || 'openai/gpt-4o-mini-transcribe',
+		ttsModel: ttsModelSelect?.value || 'openai/gpt-4o-mini-tts',
+	});
+
+	const getVoiceLanguage = () => (
+		voiceLanguageSelect?.value
+		|| (typeof navigator !== 'undefined' ? navigator.language : null)
+		|| 'en-US'
+	);
+
+	const supportsSpeechRecognition = () => (
+		typeof window !== 'undefined'
+		&& !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+	);
+
+	let recognition = null;
+	let speechToTextActive = false;
+
+	function setSpeechToTextActive(active) {
+		speechToTextActive = active;
+		if (!speechToTextButton) return;
+		const label = active ? 'Stop speech-to-text' : 'Start speech-to-text';
+		speechToTextButton.textContent = active ? '⏹️ Stop speech-to-text' : '🎙️ Start speech-to-text';
+		speechToTextButton.setAttribute('aria-label', label);
+		speechToTextButton.setAttribute('title', label);
+	}
+
+	function speakResponse(text) {
+		if (!autoTtsToggle?.checked) return;
+		if (typeof window === 'undefined' || !window.speechSynthesis) return;
+		const spokenText = String(text || '').trim();
+		if (!spokenText) return;
+		// Local playback uses native browser speech synthesis.
+		// The selected TTS model is still forwarded to backend payloads for remote TTS-capable flows.
+		try {
+			window.speechSynthesis.cancel();
+			const utterance = new SpeechSynthesisUtterance(spokenText);
+			utterance.lang = getVoiceLanguage();
+			utterance.rate = 1;
+			utterance.onerror = () => {
+				appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
+			};
+			window.speechSynthesis.speak(utterance);
+		} catch {
+			appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
+		}
+	}
 
 	// ── Status ──────────────────────────────────────────────────────────────
 	function updateStatus(status, detail) {
@@ -85,13 +141,52 @@ window.addEventListener('DOMContentLoaded', () => {
 		const text = input.value.trim();
 		if (!text) return;
 
-		const sent = sendDesktopPrompt(text);
+		const models = getModelSettings();
+		const sent = sendDesktopPrompt(text, models);
 		appendMessage(log, sent ? 'Prompt sent' : 'Queued (offline)', text, sent ? 'system' : 'error');
 		input.value = '';
 	}
 
 	send.addEventListener('click', submitPrompt);
 	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPrompt(); });
+
+	if (speechToTextButton) {
+		if (!supportsSpeechRecognition()) {
+			speechToTextButton.disabled = true;
+			speechToTextButton.title = 'Speech-to-text is not supported in this runtime';
+		} else {
+			speechToTextButton.addEventListener('click', () => {
+				const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+				if (!SpeechRecognitionCtor) return;
+
+				if (speechToTextActive) {
+					recognition?.stop();
+					return;
+				}
+
+				recognition = new SpeechRecognitionCtor();
+				recognition.lang = getVoiceLanguage();
+				recognition.continuous = true;
+				recognition.interimResults = true;
+
+				recognition.onstart = () => setSpeechToTextActive(true);
+				recognition.onend = () => setSpeechToTextActive(false);
+				recognition.onerror = () => {
+					setSpeechToTextActive(false);
+					appendMessage(log, 'Speech-to-text', 'Speech capture failed. Try again.', 'error');
+				};
+				recognition.onresult = (event) => {
+					const transcriptParts = [];
+					for (let i = event.resultIndex; i < event.results.length; i += 1) {
+						transcriptParts.push(event.results[i][0].transcript);
+					}
+					input.value = transcriptParts.join(' ').replace(/\s+/g, ' ').trim();
+				};
+
+				recognition.start();
+			});
+		}
+	}
 
 	// ── URL bar ──────────────────────────────────────────────────────────────
 	function doOpenUrl(rawUrl) {
@@ -211,6 +306,9 @@ window.addEventListener('DOMContentLoaded', () => {
 			const body = typeof parsed.text === 'string' ? parsed.text : JSON.stringify(parsed);
 			const title = parsed.type === 'response' ? '✅ Jarvis' : `Backend (${parsed.type || '?'})`;
 			appendMessage(log, title, body, 'system');
+			if (parsed.type === 'response') {
+				speakResponse(body);
+			}
 		} catch {
 			// rawMessage is not JSON — display as plain text
 			appendMessage(log, 'Backend event', rawMessage, 'system');

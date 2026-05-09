@@ -31,10 +31,8 @@ import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
-import type { ThinkingEffort } from "../ModelSelector";
 
 /** Poll interval for the model health endpoint (ms). */
-const THINKING_EFFORT_STORAGE_KEY = "assistantx.thinking-effort";
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
 const ConversationsSidebar = dynamic(
   () => import("../ConversationsSidebar").then((mod) => mod.ConversationsSidebar),
@@ -77,9 +75,6 @@ const UsageDashboard = dynamic(
   { ssr: false },
 );
 
-function isThinkingEffort(value: string | null): value is ThinkingEffort {
-  return value === "Low" || value === "Medium" || value === "High" || value === "Xhigh";
-}
 
 export function ChatTab() {
   const {
@@ -96,8 +91,6 @@ export function ChatTab() {
     updateLastMessage,
     setActiveChatId,
     setWorkspaceMode,
-    setPreferredModelId,
-    setCostMode,
     incrementPremiumRequests,
     createChatAction,
     renameChat,
@@ -110,7 +103,6 @@ export function ChatTab() {
     createCustomAgent,
     updateCustomAgent,
     deleteCustomAgent,
-    selectActiveAgent,
     importSharedChat,
     forkChatAtMessage,
     setMemoryNotes,
@@ -131,11 +123,6 @@ export function ChatTab() {
 
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
-  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>(() => {
-    if (typeof window === "undefined") return "Medium";
-    const saved = window.localStorage.getItem(THINKING_EFFORT_STORAGE_KEY);
-    return isThinkingEffort(saved) ? saved : "Medium";
-  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [codeHistoryOpen, setCodeHistoryOpen] = useState(false);
@@ -298,11 +285,6 @@ export function ChatTab() {
       mediaQuery.removeEventListener("change", listener);
     };
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(THINKING_EFFORT_STORAGE_KEY, thinkingEffort);
-  }, [thinkingEffort]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !sidebarOpen) return;
@@ -800,8 +782,6 @@ export function ChatTab() {
             onStopGeneration={stopCurrentGeneration}
             onQueueMessage={queueComposerMessage}
             onRemoveQueuedMessage={removeQueuedMessage}
-            selectedModel={activeWorkspace.settings.preferredModelId ?? "qwen/qwen3-32b"}
-            thinkingEffort={thinkingEffort}
             premiumLimitReached={(() => {
               const limit = state.userPlan === "pro"
                 ? PRO_PLAN.premiumRequestsPerMonth

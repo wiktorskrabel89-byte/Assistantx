@@ -7,10 +7,11 @@ import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
 import { createClient } from "@/lib/client";
 import type { AppMode } from "./lib/chat-types";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Shared skeleton shown while a tab's JS chunk is loading
 function TabSkeleton() {
-  return <div className="flex h-full w-full animate-pulse rounded-[inherit] bg-slate-200/60 dark:bg-slate-800/60" />;
+  return <Skeleton className="h-full w-full rounded-[inherit]" />;
 }
 
 // Non-initial tabs are code-split so they don't inflate the first-load bundle.

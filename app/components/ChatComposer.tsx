@@ -5,8 +5,9 @@ import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "
 import { useLayoutEffect, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
-import { REASONING_MODEL_IDS } from "@/lib/ai-config";
-import type { ThinkingEffort } from "@/app/components/ModelSelector";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 // Minimal type stubs for the Web Speech API (not yet in TypeScript's lib.dom.d.ts)
 declare global {
@@ -76,12 +77,11 @@ export type ChatComposerProps = {
   onStopGeneration: () => void;
   onQueueMessage: (thinkingEffort: number) => void;
   onRemoveQueuedMessage: (queueId: string) => void;
-  selectedModel: string;
-  /** Current thinking effort level — controlled externally (from ModelSelector). */
-  thinkingEffort?: ThinkingEffort;
   premiumLimitReached?: boolean;
   planRequestLimit?: number;
 };
+
+const DEFAULT_THINKING_EFFORT = 2;
 
 export function ChatComposer({
   dark,
@@ -100,8 +100,6 @@ export function ChatComposer({
   onStopGeneration,
   onQueueMessage,
   onRemoveQueuedMessage,
-  selectedModel,
-  thinkingEffort = "Medium",
   premiumLimitReached = false,
   planRequestLimit,
 }: ChatComposerProps) {
@@ -118,8 +116,6 @@ export function ChatComposer({
   useLayoutEffect(() => {
     resizeComposer();
   }, [message, resizeComposer]);
-
-  const showThinkingEffort = REASONING_MODEL_IDS.includes(selectedModel);
 
   // ── Voice input ────────────────────────────────────────────────────────────
   const [micActive, setMicActive] = useState(false);
@@ -184,25 +180,34 @@ export function ChatComposer({
     <div className="border-t border-slate-200 bg-white/85 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
       <div className="mx-auto max-w-5xl space-y-2">
         {premiumLimitReached ? (
-          <div className={`rounded-xl border px-4 py-2.5 text-xs font-medium ${dark ? "border-amber-800/50 bg-amber-950/30 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+          <div className={cn(
+            "rounded-xl border px-4 py-2.5 text-xs font-medium",
+            dark ? "border-amber-800/50 bg-amber-950/30 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"
+          )}>
             You have used all {planRequestLimit ?? "your"} premium requests for this month. Your quota will reset next month.
           </div>
         ) : null}
+
         {file ? (
           <div className="flex flex-wrap gap-2">
-            <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+            <div className={cn(
+              "flex items-center gap-2 rounded-xl border px-3 py-2 text-xs",
+              dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-amber-200 bg-amber-50 text-amber-800"
+            )}>
               {filePreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={filePreview} alt={file.name} className="h-8 w-8 rounded-lg object-cover" />
               ) : null}
               <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />
               <span className="max-w-[240px] truncate">{file.name}</span>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={onRemoveFile}
-                className="ml-1 text-[11px] opacity-70 hover:opacity-100"
+                className="ml-1 h-auto px-0 py-0 text-[11px] opacity-70 hover:opacity-100"
               >
                 Remove
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
@@ -216,29 +221,28 @@ export function ChatComposer({
               return (
                 <div
                   key={queuedMessage.id}
-                  className={`flex max-w-full items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
+                  className={cn(
+                    "flex max-w-full items-start gap-2 rounded-xl border px-3 py-2 text-xs",
                     isActive
-                      ? dark
-                        ? "border-cyan-800 bg-cyan-950/30 text-cyan-100"
-                        : "border-sky-200 bg-sky-50 text-sky-800"
-                      : dark
-                        ? "border-slate-700 bg-slate-900 text-slate-200"
-                        : "border-slate-200 bg-white text-slate-700"
-                  }`}
+                      ? dark ? "border-cyan-800 bg-cyan-950/30 text-cyan-100" : "border-sky-200 bg-sky-50 text-sky-800"
+                      : dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"
+                  )}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="font-medium">{isActive ? "Sending now" : `Queued ${queueNumber}`}</div>
                     <div className="truncate opacity-80">{queuedLabel}</div>
                   </div>
                   {!isActive ? (
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => onRemoveQueuedMessage(queuedMessage.id)}
-                      className="flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100"
+                      className="h-5 w-5 opacity-70 hover:opacity-100"
                       title="Remove queued message"
                       aria-label="Remove queued message"
                     >
                       <X className="h-3.5 w-3.5" />
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               );
@@ -247,7 +251,10 @@ export function ChatComposer({
         ) : null}
 
         {composerPreview && message.trim() ? (
-          <div className={`rounded-2xl border px-4 py-3 text-sm ${dark ? "border-slate-800 bg-slate-950 text-slate-200" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+          <div className={cn(
+            "rounded-2xl border px-4 py-3 text-sm",
+            dark ? "border-slate-800 bg-slate-950 text-slate-200" : "border-slate-200 bg-slate-50 text-slate-700"
+          )}>
             <ReactMarkdown>{message}</ReactMarkdown>
           </div>
         ) : null}
@@ -266,41 +273,43 @@ export function ChatComposer({
           }}
         />
 
-        {showThinkingEffort && (
-          <div className="mb-1 flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-            <span>Thinking: <span className="font-medium text-slate-600 dark:text-slate-300">{thinkingEffort}</span></span>
-          </div>
-        )}
-        <div className={`flex items-end gap-2 rounded-2xl border p-2 shadow-sm ${dark ? "border-slate-800 bg-slate-950" : "border-sky-200/60 bg-white/95"}`}>
-          <button
+        <div className={cn(
+          "flex items-end gap-2 rounded-2xl border p-2 shadow-sm",
+          dark ? "border-slate-800 bg-slate-950" : "border-sky-200/60 bg-white/95"
+        )}>
+          <Button
+            variant="outline"
+            size="icon"
             onClick={() => fileInputRef.current?.click()}
-            className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600"}`}
+            className={cn(
+              "h-11 w-11 flex-shrink-0 rounded-xl",
+              dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-slate-100" : ""
+            )}
             title="Attach file"
             aria-label="Attach file"
           >
             <Paperclip className="h-4 w-4" />
-          </button>
+          </Button>
 
           {hasSpeechRecognition && (
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={toggleMic}
-              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border transition-colors ${
+              className={cn(
+                "h-11 w-11 flex-shrink-0 rounded-xl transition-colors",
                 micActive
-                  ? dark
-                    ? "border-red-800 bg-red-950/40 text-red-300"
-                    : "border-red-200 bg-red-50 text-red-600"
-                  : dark
-                    ? "border-slate-700 bg-slate-900 text-slate-200"
-                    : "border-slate-200 bg-white text-slate-600"
-              }`}
+                  ? dark ? "border-red-800 bg-red-950/40 text-red-300 hover:bg-red-950/60" : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                  : dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : ""
+              )}
               title={micActive ? "Stop recording" : "Start voice input"}
               aria-label={micActive ? "Stop recording" : "Start voice input"}
             >
               {micActive ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            </button>
+            </Button>
           )}
 
-          <textarea
+          <Textarea
             ref={inputRef}
             id="chat-message"
             name="chatMessage"
@@ -313,55 +322,61 @@ export function ChatComposer({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                let effortNum = 2;
-                if (thinkingEffort === "Low") effortNum = 1;
-                else if (thinkingEffort === "High") effortNum = 3;
-                else if (thinkingEffort === "Xhigh") effortNum = 4;
-                onQueueMessage(showThinkingEffort ? effortNum : 2);
+                onQueueMessage(DEFAULT_THINKING_EFFORT);
               }
             }}
             onPaste={handlePaste}
             placeholder="Wiadomość... (Enter to send)"
             rows={1}
-            className={`flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${dark ? "text-slate-100 placeholder-slate-500" : "text-slate-900 placeholder-slate-400"}`}
+            className={cn(
+              "flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm shadow-none focus-visible:ring-0",
+              dark ? "text-slate-100 placeholder:text-slate-500" : "text-slate-900 placeholder:text-slate-400"
+            )}
             style={{ minHeight: 44, maxHeight: 180 }}
           />
 
-          <button
+          <Button
+            variant="outline"
+            size="icon"
             onClick={onTogglePreview}
-            className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${composerPreview ? (dark ? "border-blue-800 bg-blue-950/40 text-blue-200" : "border-blue-200 bg-blue-50 text-blue-700") : (dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-600")}`}
+            className={cn(
+              "h-11 w-11 flex-shrink-0 rounded-xl",
+              composerPreview
+                ? dark ? "border-blue-800 bg-blue-950/40 text-blue-200 hover:bg-blue-950/60" : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                : dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : ""
+            )}
             title="Preview message"
             aria-label="Preview message"
           >
             <Eye className="h-4 w-4" />
-          </button>
+          </Button>
 
           {loading ? (
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={onStopGeneration}
-              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${dark ? "border-red-900 bg-red-950/40 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}
+              className={cn(
+                "h-11 w-11 flex-shrink-0 rounded-xl",
+                dark ? "border-red-900 bg-red-950/40 text-red-200 hover:bg-red-950/60" : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+              )}
               title="Stop generation"
               aria-label="Stop generation"
             >
               <StopCircle className="h-4 w-4" />
-            </button>
+            </Button>
           ) : null}
 
-          <button
-            onClick={() => {
-              let effortNum = 2;
-              if (thinkingEffort === "Low") effortNum = 1;
-              else if (thinkingEffort === "High") effortNum = 3;
-              else if (thinkingEffort === "Xhigh") effortNum = 4;
-              onQueueMessage(showThinkingEffort ? effortNum : 2);
-            }}
+          <Button
+            onClick={() => onQueueMessage(2)}
             disabled={premiumLimitReached || (!message.trim() && !file)}
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 text-white transition-all hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
+            size="icon"
+            className="h-11 w-11 flex-shrink-0 rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 text-white hover:from-sky-800 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
             title={premiumLimitReached ? "Premium request limit reached" : loading ? "Add to queue" : "Send message"}
             aria-label={premiumLimitReached ? "Premium request limit reached" : loading ? "Add to queue" : "Send message"}
           >
             {loading ? <Plus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

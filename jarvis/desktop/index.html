@@ -281,6 +281,64 @@
       box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
     }
 
+    select {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--text);
+      padding: 9px 11px;
+      outline: none;
+      font-size: 12.5px;
+      font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    select:focus {
+      border-color: rgba(14, 165, 233, 0.6);
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+    }
+
+    .model-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .field {
+      display: grid;
+      gap: 4px;
+    }
+
+    .field span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .voice-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      user-select: none;
+    }
+
+    .toggle input {
+      width: auto;
+      padding: 0;
+      margin: 0;
+    }
+
     /* ── Log ─────────────────────────────────────────────────────────────── */
     #log {
       min-height: 360px;
@@ -361,6 +419,8 @@
     @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; }
       .app-subtitle { display: none; }
+      .model-grid { grid-template-columns: 1fr; }
+      .voice-actions { flex-direction: column; align-items: stretch; }
     }
   </style>
 </head>
@@ -455,6 +515,50 @@
           <p class="muted" style="font-size:12px;margin-top:3px;">
             Responses from your PC appear here in real time. Type a prompt or use the quick-action buttons.
           </p>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="section-label">AI Models</div>
+        <div class="model-grid">
+          <label class="field">
+            <span>Chat model</span>
+            <select id="chat-model">
+              <option value="openai/gpt-5.4">openai/gpt-5.4</option>
+              <option value="openai/gpt-5.3">openai/gpt-5.3</option>
+              <option value="anthropic/claude-opus-4.7">anthropic/claude-opus-4.7</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Speech-to-text model</span>
+            <select id="stt-model">
+              <option value="openai/gpt-4o-mini-transcribe">openai/gpt-4o-mini-transcribe</option>
+              <option value="openai/whisper-1">openai/whisper-1</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Text-to-speech model</span>
+            <select id="tts-model">
+              <option value="openai/gpt-4o-mini-tts">openai/gpt-4o-mini-tts</option>
+              <option value="openai/tts-1">openai/tts-1</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Voice language</span>
+            <select id="voice-language">
+              <option value="pl-PL">Polish (pl-PL)</option>
+              <option value="en-US">English (en-US)</option>
+              <option value="de-DE">German (de-DE)</option>
+              <option value="es-ES">Spanish (es-ES)</option>
+            </select>
+          </label>
+        </div>
+        <div class="voice-actions">
+          <button id="speech-to-text" type="button" class="secondary">🎙️ Start speech-to-text</button>
+          <label class="toggle" for="auto-tts">
+            <input id="auto-tts" type="checkbox" checked />
+            Auto text-to-speech playback
+          </label>
         </div>
       </div>
 
