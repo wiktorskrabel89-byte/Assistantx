@@ -43,6 +43,6 @@ export function isHeavyReasoningRequest(message: string): boolean {
  * Returns true when the combined message + context is very long (> 6000 chars),
  * making a long-context model like Gemini 2.5 Flash more suitable.
  */
-export function isVeryLongContext(message: string, contextLength = 0): boolean {
-  return message.length + contextLength > 6000;
+export function isVeryLongContext(message: string, additionalContextLength = 0): boolean {
+  return message.length + additionalContextLength > 6000;
 }

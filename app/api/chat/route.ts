@@ -609,8 +609,10 @@ export const POST = async (req: Request) => {
   }
 
   // Very long context: total input length > 6000 chars → route to Gemini 2.5 Flash
-  const totalContextLength = (typeof effectiveMessage === "string" ? effectiveMessage.length : 0) + retrievedKnowledgeContext.length;
-  const inferredLongContext = isVeryLongContext(typeof effectiveMessage === "string" ? effectiveMessage : "", retrievedKnowledgeContext.length + totalContextLength);
+  const inferredLongContext = isVeryLongContext(
+    typeof effectiveMessage === "string" ? effectiveMessage : "",
+    retrievedKnowledgeContext.length,
+  );
 
   // Apply plan-based model filtering: free users only see :free models, pro users cannot use pro+-only models
   const planFilteredAllowedModels = Array.isArray(allowedModelsFinal)
@@ -809,7 +811,7 @@ export const POST = async (req: Request) => {
   if (isSearchMode) {
     systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredVisionRequest) {
-    systemPrompt = `Analyze images accurately.\n\nFocus on:\n- screenshots\n- OCR\n- UI analysis\n- visual understanding\n\n${sharedSuffix}${ragContext}`.trim();
+    systemPrompt = `Analyze images accurately. ${langInstruction} ${styleInstruction}\n\nFocus on:\n- screenshots\n- OCR\n- UI analysis\n- visual understanding\n\n${sharedSuffix}${ragContext}`.trim();
   } else if (inferredCodeRequest) {
     systemPrompt = `You are a senior software engineer.\n\nRules:\n- prioritize correctness\n- preserve architecture\n- minimal diffs\n- production-ready code\n- avoid hallucinations\n- complete implementations\n- explain briefly\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredHeavyReasoning) {
