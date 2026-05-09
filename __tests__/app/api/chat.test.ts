@@ -32,6 +32,11 @@ jest.mock("@/lib/rateLimit", () => ({
 
 import { TOP_FREE_CHAT_MODELS, TOP_FREE_CODE_MODELS } from "@/lib/ai-config";
 
+beforeEach(() => {
+  process.env.GROQ_API_KEY = "test-groq-key";
+  process.env.GOOGLE_AI_STUDIO_API_KEY = "test-google-key";
+});
+
 describe("POST /api/chat — free-model fallback behavior", () => {
   let POST: (req: Request) => Promise<Response>;
 
@@ -124,7 +129,7 @@ describe("POST /api/chat — 5xx free-model retry cascade", () => {
     });
   }
 
-  it("retries with another free model when a free model returns 5xx, and succeeds", async () => {
+  it("retries with Gemini fallback when a Groq model returns 5xx, and succeeds", async () => {
     let callCount = 0;
     const mockFetch = jest.spyOn(globalThis, "fetch").mockImplementation(() => {
       callCount++;
@@ -161,14 +166,14 @@ describe("POST /api/chat — 5xx free-model retry cascade", () => {
     // Should have been called at least twice (initial + one retry)
     expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(2);
 
-    // The retry should use another free model (endsWith :free)
+    // First retry should use Gemini fallback when Groq is unavailable
     const retryBody = JSON.parse(
       mockFetch.mock.calls[1][1]?.body as string
     ) as { model: string };
-    expect(retryBody.model.endsWith(":free")).toBe(true);
+    expect(retryBody.model).toBe("google/gemini-2.5-flash");
   });
 
-  it("does not retry with paid models when a free model returns 5xx", async () => {
+  it("uses Gemini fallback in the retry chain when a Groq model returns 5xx", async () => {
     // All calls fail to exercise the exhausted-fallback code path
     const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("Service Unavailable", {
@@ -186,11 +191,12 @@ describe("POST /api/chat — 5xx free-model retry cascade", () => {
     // Consume the stream to let the async retry logic complete
     await res.text();
 
-    // Every model tried must be a free model — no paid models should appear
+    const triedModels: string[] = [];
     for (const [, init] of mockFetch.mock.calls) {
       const body = JSON.parse((init as RequestInit).body as string) as { model: string };
-      expect(body.model.endsWith(":free")).toBe(true);
+      triedModels.push(body.model);
     }
+    expect(triedModels).toContain("google/gemini-2.5-flash");
   });
 });
 
@@ -481,7 +487,7 @@ describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
     });
   }
 
-  it("uses Gemini fallback temperature 0.7 and balanced prompt for manual Gemini chat", async () => {
+  it("uses Gemini fallback temperature 0.6 and main assistant prompt for manual Gemini chat", async () => {
     const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\ndata: [DONE]\n`,
@@ -503,11 +509,11 @@ describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
       messages: Array<{ role: string; content: string }>;
     };
     const systemMessage = calledBody.messages.find((m) => m.role === "system");
-    expect(calledBody.temperature).toBe(0.7);
-    expect(systemMessage?.content).toContain("You are a balanced assistant.");
+    expect(calledBody.temperature).toBe(0.6);
+    expect(systemMessage?.content).toContain("You are a powerful AI assistant specialized in:");
   });
 
-  it("uses Gemini long-context temperature 0.4 and long-context prompt", async () => {
+  it("uses Gemini long-context temperature 0.6 and long-context prompt", async () => {
     const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\ndata: [DONE]\n`,
@@ -532,7 +538,7 @@ describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
     };
     const systemMessage = calledBody.messages.find((m) => m.role === "system");
     expect(calledBody.model).toBe("google/gemini-2.5-flash");
-    expect(calledBody.temperature).toBe(0.4);
+    expect(calledBody.temperature).toBe(0.6);
     expect(systemMessage?.content).toContain("Analyze long documents and large context efficiently.");
   });
 });

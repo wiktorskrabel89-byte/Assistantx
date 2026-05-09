@@ -47,7 +47,8 @@ function makeFetchOk(summary: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.GROQ_API_KEY = "test-key";
+  process.env.GOOGLE_AI_STUDIO_API_KEY = "test-google-key";
 });
 
 describe("POST /api/memory/summarize", () => {

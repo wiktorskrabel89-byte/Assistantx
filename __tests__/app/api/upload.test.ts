@@ -81,6 +81,8 @@ async function readSseEvents(res: Response): Promise<Array<Record<string, unknow
 describe("POST /api/upload", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.GROQ_API_KEY = "test-groq-key";
+    process.env.GOOGLE_AI_STUDIO_API_KEY = "test-google-key";
   });
 
   function makeFileFormData(
@@ -128,7 +130,7 @@ describe("POST /api/upload", () => {
     const res = await POST(req);
     const events = await readSseEvents(res);
 
-    expect(events[1]).toHaveProperty("model", "Gemini 2.5 Flash (Vision)");
+    expect(events[1]).toHaveProperty("model", "Llama 4 Scout (Vision)");
   });
 
   it("streams token events from the upstream API", async () => {
@@ -227,7 +229,7 @@ describe("POST /api/upload", () => {
     expect(textPart?.text).toBe("What do you see in this image?");
   });
 
-  it("sends vision temperature 0.3 and multimodal analysis prompt for image uploads", async () => {
+  it("sends vision temperature 0.4 and vision prompt for image uploads", async () => {
     mockFetch.mockResolvedValueOnce(
       makeSseResponse(["data: [DONE]"])
     );
@@ -244,8 +246,8 @@ describe("POST /api/upload", () => {
       mockFetch.mock.calls[0][1].body as string
     ) as { temperature?: number; messages: Array<{ role: string; content: string }> };
 
-    expect(requestBody.temperature).toBe(0.3);
-    expect(requestBody.messages[0].content).toContain("multimodal analysis");
+    expect(requestBody.temperature).toBe(0.4);
+    expect(requestBody.messages[0].content).toContain("Analyze the uploaded image carefully.");
   });
 
   it("returns 401 when the user is not authenticated", async () => {

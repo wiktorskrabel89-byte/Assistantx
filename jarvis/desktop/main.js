@@ -5,6 +5,11 @@ const { autoUpdater } = require('electron-updater');
 
 let win;
 let tray;
+let updateInterval = null;
+let lastUpdateCheckAt = 0;
+const UPDATE_CHECK_INTERVAL_MS = Number(process.env.JARVIS_UPDATE_CHECK_INTERVAL_MS || 15 * 60 * 1000);
+const AUTO_INSTALL_ON_DOWNLOAD = process.env.JARVIS_AUTO_INSTALL_ON_DOWNLOAD === '1';
+const UPDATE_CHECK_DEBOUNCE_MS = 10_000;
 let updateState = {
   status: 'idle',
   detail: 'Waiting to check for updates.',
@@ -73,6 +78,12 @@ async function checkForUpdates() {
     return { ok: false, reason: 'not-packaged' };
   }
 
+  const now = Date.now();
+  if (now - lastUpdateCheckAt < UPDATE_CHECK_DEBOUNCE_MS) {
+    return { ok: true, reason: 'debounced' };
+  }
+  lastUpdateCheckAt = now;
+
   try {
     await autoUpdater.checkForUpdates();
     return { ok: true };
@@ -119,6 +130,15 @@ function setupAutoUpdater() {
       downloaded: true,
       version: info.version,
     });
+    if (AUTO_INSTALL_ON_DOWNLOAD) {
+      emitUpdateStatus('installing', `Installing update ${info.version} now...`, {
+        downloaded: true,
+        version: info.version,
+      });
+      setTimeout(() => {
+        autoUpdater.quitAndInstall(false, true);
+      }, 1500);
+    }
   });
 
   autoUpdater.on('error', (error) => {
@@ -128,6 +148,11 @@ function setupAutoUpdater() {
   setTimeout(() => {
     void checkForUpdates();
   }, 4000);
+
+  if (updateInterval) clearInterval(updateInterval);
+  updateInterval = setInterval(() => {
+    void checkForUpdates();
+  }, UPDATE_CHECK_INTERVAL_MS);
 }
 
 function createTray() {
@@ -199,6 +224,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  if (updateInterval) {
+    clearInterval(updateInterval);
+    updateInterval = null;
+  }
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -210,4 +239,5 @@ app.on('activate', () => {
   } else {
     win.show();
   }
+  void checkForUpdates();
 });

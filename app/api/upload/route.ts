@@ -3,7 +3,7 @@ import { PDFParse } from "pdf-parse";
 import { createClient } from "@/lib/server";
 import { chunkTextByApproxTokens, createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
 import { runWithConcurrency } from "@/app/lib/concurrency";
-import { ALL_MODELS, FREE_CHAT_MODEL } from "@/lib/ai-config";
+import { ALL_MODELS, FREE_CHAT_MODEL, ROUTING_GEMINI_MODEL, ROUTING_VISION_MODEL, VISION_SYSTEM_PROMPT, getModelTemperature } from "@/lib/ai-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,12 +13,12 @@ const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 const MAX_INGESTION_CHUNKS = 60;
 // Maximum concurrent embedding API calls during ingestion to balance latency and rate limits.
 const EMBEDDING_CONCURRENCY = 5;
-const IMAGE_ANALYSIS_MODEL = "google/gemini-2.5-flash";
-const IMAGE_ANALYSIS_TEMPERATURE = 0.3;
+const IMAGE_ANALYSIS_MODEL = ROUTING_VISION_MODEL;
 const DOCUMENT_ANALYSIS_MODEL = FREE_CHAT_MODEL;
 
 function getUploadModelLabel(modelId: string, isImage: boolean): string {
-  if (isImage && modelId === IMAGE_ANALYSIS_MODEL) return "Gemini 2.5 Flash (Vision)";
+  if (isImage && modelId === ROUTING_VISION_MODEL) return "Llama 4 Scout (Vision)";
+  if (isImage && modelId === ROUTING_GEMINI_MODEL) return "Gemini 2.5 Flash (Vision Fallback)";
   const found = ALL_MODELS.find((m) => m.id === modelId);
   const base = found?.label ?? modelId;
   return isImage ? base : `${base} (Document)`;
@@ -230,41 +230,60 @@ export async function POST(req: Request) {
           // Move 'Writing response...' status outside the token loop
           let writingStatusSent = false;
 
-          const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-              "Content-Type": "application/json",
-              "HTTP-Referer": "https://assistantx.vercel.app",
-              "X-Title": "AssistantX",
-            },
-            body: JSON.stringify({
-              model: analysisModel,
-              stream: true,
-              temperature: isImage ? IMAGE_ANALYSIS_TEMPERATURE : undefined,
-              messages: [
-                {
-                  role: "system",
-                  content: isImage
-                    ? "Analyze images accurately. Focus on screenshots, OCR, UI analysis, and multimodal analysis. Detect the language of the user's message and always respond in that same language."
-                    : "You are a helpful document assistant. Read the uploaded file carefully, answer in the same language as the user's message, quote important details when useful, and mention if the file appears incomplete.",
-                },
-                {
-                  role: "user",
-                  content: isImage
-                    ? [
-                        { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-                        { type: "text", text: message },
-                      ]
-                    : `User question: ${message}\n\nFile name: ${file.name}\nFile type: ${mimeType || "unknown"}\n\nDocument content:\n${extractedText.slice(0, 30000)}`,
-                },
-              ],
-            }),
-          });
+          const sendModelRequest = async (model: string) => {
+            const useGoogleStudio = model.includes("gemini");
+            const endpoint = useGoogleStudio
+              ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+              : "https://api.groq.com/openai/v1/chat/completions";
+            const key = useGoogleStudio
+              ? (process.env.GOOGLE_AI_STUDIO_API_KEY || process.env.GOOGLE_API_KEY)
+              : process.env.GROQ_API_KEY;
+            if (!key) throw new Error(useGoogleStudio ? "Missing Google AI Studio API key." : "Missing Groq API key.");
+            return fetch(endpoint, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${key}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model,
+                stream: true,
+                temperature: isImage
+                  ? getModelTemperature(model, { isVisionRequest: true })
+                  : undefined,
+                messages: [
+                  {
+                    role: "system",
+                    content: isImage
+                      ? `${VISION_SYSTEM_PROMPT} Detect the language of the user's message and always respond in that same language.`
+                      : "You are a helpful document assistant. Read the uploaded file carefully, answer in the same language as the user's message, quote important details when useful, and mention if the file appears incomplete.",
+                  },
+                  {
+                    role: "user",
+                    content: isImage
+                      ? [
+                          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+                          { type: "text", text: message },
+                        ]
+                      : `User question: ${message}\n\nFile name: ${file.name}\nFile type: ${mimeType || "unknown"}\n\nDocument content:\n${extractedText.slice(0, 30000)}`,
+                  },
+                ],
+              }),
+            });
+          };
+
+          let activeAnalysisModel = analysisModel;
+          let response = await sendModelRequest(activeAnalysisModel);
+          if (!response.ok && isImage) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: "Primary vision model unavailable, switching to Gemini 2.5 Flash fallback..." })}\n\n`));
+            activeAnalysisModel = ROUTING_GEMINI_MODEL;
+            response = await sendModelRequest(activeAnalysisModel);
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ model: getUploadModelLabel(activeAnalysisModel, true) })}\n\n`));
+          }
 
           if (!response.ok) {
             const err = await response.text();
-            throw new Error(`OpenRouter error ${response.status}: ${err}`);
+            throw new Error(`Provider error ${response.status}: ${err}`);
           }
 
           const reader = response.body!.getReader();
