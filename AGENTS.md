@@ -29,6 +29,8 @@ Required in `.env` (not committed):
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+GROQ_API_KEY=...
+GOOGLE_AI_STUDIO_API_KEY=...
 OPENROUTER_API_KEY=...
 ```
 
@@ -72,7 +74,7 @@ Dockerfile          # Production Docker image (node:22-bookworm-slim)
 ## Architecture Notes
 
 - **Single-page app**: `app/page.tsx` is a large `"use client"` component that renders the entire chat workspace with tab navigation. All panels (chat, code review, GitHub, integrations, etc.) are toggled client-side.
-- **Chat backend**: `app/api/chat/route.ts` proxies requests to the OpenRouter API, streaming responses via SSE. It auto-detects language, request type (code/image/search), and selects the appropriate model.
+- **Chat backend**: `app/api/chat/route.ts` uses Groq as primary provider with Google AI Studio fallback, streaming responses via SSE. It auto-detects language, request type (code/image/search), and selects the appropriate model.
 - **Auth**: Supabase magic-link authentication with Google/GitHub OAuth providers. Middleware in `proxy.ts` + `lib/middleware.ts` refreshes sessions and redirects unauthenticated users to `/auth/login`.
 - **Styling**: Tailwind CSS v4 with `tw-animate-css`. Component library is shadcn/ui (radix-ui primitives). Dark/light theme is toggled client-side.
 - **State**: React Query (`@tanstack/react-query`) for server state. Local workspace state managed via custom hooks (`useWorkspaceState`, `useWorkspaceSync`).

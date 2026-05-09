@@ -66,9 +66,9 @@ window.addEventListener('DOMContentLoaded', () => {
 	backendUrlNode.textContent = getBackendUrl();
 
 	const getModelSettings = () => ({
-		chatModel: chatModelSelect?.value || 'openai/gpt-5.4',
-		sttModel: sttModelSelect?.value || 'openai/gpt-4o-mini-transcribe',
-		ttsModel: ttsModelSelect?.value || 'openai/gpt-4o-mini-tts',
+		chatModel: chatModelSelect?.value || 'qwen/qwen3-32b',
+		sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
+		ttsModel: ttsModelSelect?.value || 'orpheus-english',
 	});
 
 	const getVoiceLanguage = () => (

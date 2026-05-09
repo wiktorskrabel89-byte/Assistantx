@@ -383,8 +383,8 @@ describe("per-model behavior profiles", () => {
     }
   });
 
-  it("uses explicit GPT OSS coding temperature and coding prompt profile", () => {
-    expect(getModelTemperature("openai/gpt-oss-120b", { isCodeRequest: true })).toBe(0.15);
-    expect(getModelPromptText("openai/gpt-oss-120b", true)).toMatch(/senior software engineer/i);
+  it("uses explicit GPT OSS coding temperature and reasoning prompt profile", () => {
+    expect(getModelTemperature("openai/gpt-oss-120b", { isCodeRequest: true })).toBe(0.2);
+    expect(getModelPromptText("openai/gpt-oss-120b", true)).toMatch(/advanced reasoning ai/i);
   });
 });

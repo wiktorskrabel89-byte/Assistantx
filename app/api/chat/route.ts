@@ -30,6 +30,9 @@ import {
   ROUTING_GEMINI_MODEL,
   ROUTING_MAIN_MODEL_FREE,
   ROUTING_CODE_MODEL_FREE,
+  MAIN_AI_SYSTEM_PROMPT,
+  HEAVY_REASONING_SYSTEM_PROMPT,
+  VISION_SYSTEM_PROMPT,
 } from "@/lib/ai-config";
 import { isCodeRequest, isImageRequest, isHeavyReasoningRequest, isVeryLongContext, isComplexCodingRequest } from "@/lib/detect";
 import {
@@ -853,19 +856,19 @@ export const POST = async (req: Request) => {
   if (isSearchMode) {
     systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredVisionRequest && isGemini) {
-    systemPrompt = `Analyze images accurately.\n\nFocus on:\n- screenshots\n- OCR\n- UI analysis\n- multimodal analysis\n\n${langInstruction} ${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
+    systemPrompt = `${VISION_SYSTEM_PROMPT}\n\n${langInstruction} ${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredVisionRequest) {
-    systemPrompt = `Analyze images accurately. ${langInstruction} ${styleInstruction}\n\nFocus on:\n- screenshots\n- OCR\n- UI analysis\n- visual understanding\n\n${sharedSuffix}${ragContext}`.trim();
+    systemPrompt = `${VISION_SYSTEM_PROMPT}\n\n${langInstruction} ${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredCodeRequest) {
-    systemPrompt = `You are a senior software engineer.\n\nRules:\n- prioritize correctness\n- preserve architecture\n- minimal diffs\n- production-ready code\n- avoid hallucinations\n- complete implementations\n- explain briefly\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
+    systemPrompt = `${MAIN_AI_SYSTEM_PROMPT}\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredHeavyReasoning) {
-    systemPrompt = `You are an analytical reasoning model.\n\nFocus on:\n- logic\n- planning\n- accuracy\n- structured thinking\n- step-by-step reasoning\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
+    systemPrompt = `${HEAVY_REASONING_SYSTEM_PROMPT}\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredLongContext) {
     systemPrompt = `Analyze long documents and large context efficiently.\n\nFocus on:\n- summarization\n- context retention\n- accurate extraction\n\n${sharedSuffix}${ragContext}`.trim();
   } else if (isGemini) {
-    systemPrompt = `You are a balanced assistant.\n\nRules:\n- natural conversation\n- concise responses\n- accurate answers\n- practical structure\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
+    systemPrompt = `${MAIN_AI_SYSTEM_PROMPT}\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else {
-    systemPrompt = `You are a helpful AI assistant.\n\nRules:\n- natural conversation\n- concise responses\n- fast replies\n- good formatting\n- helpful explanations\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
+    systemPrompt = `${MAIN_AI_SYSTEM_PROMPT}\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   }
 
   // Append any custom workspace system prompt
@@ -981,18 +984,26 @@ export const POST = async (req: Request) => {
       headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
     });
   }
+  const isGeminiModel = (model: string) => model.includes("gemini");
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const googleApiKey = process.env.GOOGLE_AI_STUDIO_API_KEY || process.env.GOOGLE_API_KEY;
 
-
-
-  const sendOpenRouterRequest = async (body: Record<string, unknown>) => {
-    return fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const sendModelRequest = async (body: Record<string, unknown>) => {
+    const targetModel = String(body.model ?? "");
+    const useGoogleStudio = isGeminiModel(targetModel);
+    const endpoint = useGoogleStudio
+      ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+      : "https://api.groq.com/openai/v1/chat/completions";
+    const key = useGoogleStudio ? googleApiKey : groqApiKey;
+    if (!key) {
+      throw new Error(useGoogleStudio ? "Missing Google AI Studio API key." : "Missing Groq API key.");
+    }
+    return fetch(endpoint, {
       method: "POST",
       signal: requestSignal,
       headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://assistantx.vercel.app",
-        "X-Title": "AssistantX",
       },
       body: JSON.stringify(body),
     });
@@ -1034,7 +1045,7 @@ export const POST = async (req: Request) => {
         if (requestSignal.aborted) return;
 
         safeEnqueue(`data: ${JSON.stringify({ status: "Analyzing prompt..." })}\n\n`);
-        let response = await sendOpenRouterRequest(requestBody);
+        let response = await sendModelRequest(requestBody);
         let effectiveModel = selectedModel;
         let effectiveRouteReason = routeReason;
 
@@ -1057,6 +1068,41 @@ export const POST = async (req: Request) => {
           let status = response.status;
           let fallbackReason = routeReason;
           let found = false;
+          const currentModel = String(requestBody.model ?? selectedModel);
+
+          const shouldFallbackToGemini =
+            !isGeminiModel(currentModel)
+            && (status >= 500 || status === 429 || isProviderRateLimit(status, err));
+
+          if (shouldFallbackToGemini) {
+            safeEnqueue(`data: ${JSON.stringify({ status: "Groq unavailable, switching to Gemini 2.5 Flash fallback..." })}\n\n`);
+            const geminiFallbackBody: Record<string, unknown> = {
+              ...requestBody,
+              model: ROUTING_GEMINI_MODEL,
+              temperature: getModelTemperature(ROUTING_GEMINI_MODEL, {
+                isLongContext: inferredLongContext,
+                isVisionRequest: inferredVisionRequest,
+              }),
+            };
+            if (!websearchTrigger && !toolWebSearchEnabled) {
+              delete geminiFallbackBody.plugins;
+            }
+            response = await sendModelRequest(geminiFallbackBody);
+            triedModels.push(ROUTING_GEMINI_MODEL);
+            if (response.ok) {
+              effectiveModel = ROUTING_GEMINI_MODEL;
+              fallbackReason = `${routeReason}. Groq unavailable/rate-limited, switched to Gemini 2.5 Flash fallback.`;
+              effectiveRouteReason = fallbackReason;
+              found = true;
+            } else {
+              err = await response.text();
+              status = response.status;
+            }
+          }
+
+          if (found) {
+            // Gemini fallback succeeded; continue streaming with updated response.
+          } else {
 
           // Try all models in order if 404 (no endpoint found), 5xx (server error on a free model),
           // or 429 upstream provider rate limit (e.g. "temporarily rate-limited upstream").
@@ -1085,7 +1131,7 @@ export const POST = async (req: Request) => {
               if (!websearchTrigger && !toolWebSearchEnabled) {
                 delete fallbackRequestBody.plugins;
               }
-              response = await sendOpenRouterRequest(fallbackRequestBody);
+              response = await sendModelRequest(fallbackRequestBody);
               triedModels.push(modelId);
               if (response.ok) {
                 effectiveModel = modelId;
@@ -1098,7 +1144,7 @@ export const POST = async (req: Request) => {
               }
             }
             if (!found) {
-              throw new Error(`OpenRouter error ${status}: No available models. Tried: ${triedModels.join(", ")}. Last error: ${err}`);
+               throw new Error(`Provider error ${status}: No available models. Tried: ${triedModels.join(", ")}. Last error: ${err}`);
             }
             // Propagate the updated reason so the client sees the correct fallback info
             effectiveRouteReason = fallbackReason;
@@ -1107,7 +1153,7 @@ export const POST = async (req: Request) => {
             const shouldAutoRouterFallback = isAutoRouted && status === 404 && /No models match your request and model restrictions/i.test(err);
             const shouldCreditsFallback = !shouldAutoRouterFallback && isCreditsError(status, err);
             if (!shouldAutoRouterFallback && !shouldCreditsFallback) {
-              throw new Error(`OpenRouter error ${status}: ${err}`);
+               throw new Error(`Provider error ${status}: ${err}`);
             }
             const freeModel = getFreePlanFallback(inferredCodeRequest);
             const selectedFallbackModel = shouldCreditsFallback ? freeModel : fallbackModel;
@@ -1122,13 +1168,14 @@ export const POST = async (req: Request) => {
             if (!websearchTrigger && !toolWebSearchEnabled) {
               delete fallbackRequestBody.plugins;
             }
-            response = await sendOpenRouterRequest(fallbackRequestBody);
+            response = await sendModelRequest(fallbackRequestBody);
             effectiveModel = selectedFallbackModel;
             effectiveRouteReason = fallbackReason;
             if (!response.ok) {
               const fallbackErr = await response.text();
-              throw new Error(`OpenRouter error ${response.status}: ${fallbackErr}`);
+              throw new Error(`Provider error ${response.status}: ${fallbackErr}`);
             }
+          }
           }
         }
 

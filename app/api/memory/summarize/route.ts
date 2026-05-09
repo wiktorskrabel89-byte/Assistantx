@@ -2,7 +2,7 @@
  * POST /api/memory/summarize
  *
  * Compresses a block of chat messages into 2-3 bullet-point memory notes
- * using an OpenRouter LLM call.
+ * using Groq (primary) with Google AI Studio fallback.
  *
  * Body:
  *   { messages: Array<{ user: string; ai: string }> }
@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
 import { createClient } from "@/lib/server";
+import { MEMORY_SUMMARY_PROMPT, ROUTING_GEMINI_MODEL, ROUTING_MAIN_MODEL } from "@/lib/ai-config";
 
 export const runtime = "nodejs";
 
@@ -43,30 +44,40 @@ export async function POST(req: NextRequest) {
     .map((m, i) => `Turn ${i + 1}\nUser: ${m.user}\nAssistant: ${m.ai}`)
     .join("\n\n");
 
-  const systemPrompt =
-    "You are a memory-compression assistant. Given a conversation transcript, " +
-    "produce 2-3 concise bullet points (each starting with '• ') that capture the key " +
-    "context, decisions, and facts a future AI assistant would need. Be terse. " +
-    "Do not include greetings or filler. Return only the bullet points.";
+  const systemPrompt = MEMORY_SUMMARY_PROMPT;
 
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://assistantx.pl",
-        "X-Title": "AssistantX Memory",
-      },
-      body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
-        max_tokens: 300,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Summarize this conversation:\n\n${transcript}` },
-        ],
-      }),
-    });
+    const sendChat = async (model: string) => {
+      const useGoogleStudio = model.includes("gemini");
+      const endpoint = useGoogleStudio
+        ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        : "https://api.groq.com/openai/v1/chat/completions";
+      const key = useGoogleStudio
+        ? (process.env.GOOGLE_AI_STUDIO_API_KEY || process.env.GOOGLE_API_KEY)
+        : process.env.GROQ_API_KEY;
+      if (!key) throw new Error(useGoogleStudio ? "Missing Google AI Studio API key." : "Missing Groq API key.");
+      return fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 300,
+          temperature: model.includes("gemini") ? 0.6 : 0.7,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Summarize this conversation:\n\n${transcript}` },
+          ],
+        }),
+      });
+    };
+
+    let response = await sendChat(ROUTING_MAIN_MODEL);
+    if (!response.ok) {
+      response = await sendChat(ROUTING_GEMINI_MODEL);
+    }
 
     if (!response.ok) {
       return NextResponse.json({ summary: "" }, { status: response.status });
