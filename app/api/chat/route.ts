@@ -463,6 +463,17 @@ const TEMP_GEMINI_LONGCTX = 0.4;   // Gemini 2.5 Flash long-context
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
 
+/** Returns the OpenRouter reasoning_level string for the given request type. */
+function determineReasoningEffort(
+  inferredComplexCoding: boolean,
+  inferredHeavyReasoning: boolean,
+  inferredCodeRequest: boolean,
+): string {
+  if (inferredComplexCoding || inferredHeavyReasoning) return "high";
+  if (inferredCodeRequest) return "medium";
+  return "low";
+}
+
 export const POST = async (req: Request) => {
   // Rate limit: 30 chat requests per minute per user/IP
   const rlKey = getRateLimitKey(req, "chat");
@@ -673,7 +684,7 @@ export const POST = async (req: Request) => {
     // Manual / workspace-pinned model
     selectedModel = planEnforcedModelId;
     resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
-    resolvedReasoningEffort = inferredComplexCoding || inferredHeavyReasoning ? "high" : inferredCodeRequest ? "medium" : "low";
+    resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
     smartRouteLabel = `Manual model: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   } else if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
     selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
@@ -713,7 +724,7 @@ export const POST = async (req: Request) => {
   } else {
     selectedModel = costControlled.modelId;
     resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
-    resolvedReasoningEffort = inferredComplexCoding || inferredHeavyReasoning ? "high" : inferredCodeRequest ? "medium" : "low";
+    resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
     smartRouteLabel = `Auto: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   }
 

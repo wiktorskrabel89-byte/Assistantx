@@ -3,15 +3,37 @@
  * Imported by both the chat API route (server) and useChatTransport (client).
  */
 
+// ─── Module-level compiled regex constants ────────────────────────────────────
+const CODE_KEYWORDS = /\b(function|class|interface|type|const|let|var|import|export|npm|yarn|pnpm|sql|regex|api|endpoint|typescript|javascript|python|java|c\+\+|c#|golang|rust|debug|bug|refactor|algorithm)\b/i;
+const CODE_INTENT = /\b(write|generate|create|build|fix|optimize|review|explain)\b.{0,30}\b(code|script|query|function|component)\b/i;
+const CODE_SYMBOLS = /^[\s\w]*[{}()[\];=<>/\\]{2,}[\s\w]*$/;
+const CODE_TAGS = /<\/?[a-z][^>]*>/i;
+
+const COMPLEX_CODING_PATTERNS = [
+  /\b(debug|debugging|refactor|refactoring|architect|architecture|review|security|performance|optimize|optimise|migrate|migration|design pattern|dependency injection|async|concurrency|race condition|memory leak|bottleneck|test coverage|integration test|end.?to.?end|multi.?step|large codebase|legacy code|why (is|does|am|are) (my|this|the))\b/i,
+  /\b(fix (this |the )?bug|broken|not working|doesn'?t work|error in|exception in|failing test|how (do|can) (i|we|you) (fix|refactor|improve|redesign|migrate|optimise|optimize))\b/i,
+];
+
+const IMAGE_INTENT = /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/;
+const IMAGE_COMMAND = /^\s*\/image\b/;
+const IMAGE_OF = /\bimage of\b/;
+const IMAGE_PLEASE = /\bplease.*\b(image|picture|photo)\b/;
+
+const HEAVY_REASONING_KEYWORDS = /\b(step.?by.?step|reasoning|think through|analyze|analyse|plan|planning|architect|workflow|agent|pipeline|strategy|logic|deduce|infer|evaluate|complex|hard problem|multi.?step|break down)\b/i;
+const HEAVY_REASONING_HOW = /\b(how (should|would|do) (i|we|you) (design|build|structure|implement|approach|solve))\b/i;
+const HEAVY_REASONING_COMPARE = /\b(pros and cons|trade.?off|compare|contrast|decision|choose between)\b/i;
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function isCodeRequest(message: string): boolean {
   const text = message.trim();
   if (!text) return false;
 
   if (/```/.test(text)) return true;
-  if (/<\/?[a-z][^>]*>/i.test(text)) return true;
-  if (/\b(function|class|interface|type|const|let|var|import|export|npm|yarn|pnpm|sql|regex|api|endpoint|typescript|javascript|python|java|c\+\+|c#|golang|rust|debug|bug|refactor|algorithm)\b/i.test(text)) return true;
-  if (/\b(write|generate|create|build|fix|optimize|review|explain)\b.{0,30}\b(code|script|query|function|component)\b/i.test(text)) return true;
-  if (/^[\s\w]*[{}()[\];=<>/\\]{2,}[\s\w]*$/.test(text)) return true;
+  if (CODE_TAGS.test(text)) return true;
+  if (CODE_KEYWORDS.test(text)) return true;
+  if (CODE_INTENT.test(text)) return true;
+  if (CODE_SYMBOLS.test(text)) return true;
 
   return false;
 }
@@ -25,18 +47,17 @@ export function isComplexCodingRequest(message: string): boolean {
   const text = message.trim();
   if (!text) return false;
 
-  return /\b(debug|debugging|refactor|refactoring|architect|architecture|review|security|performance|optimize|optimise|migrate|migration|design pattern|dependency injection|async|concurrency|race condition|memory leak|bottleneck|test coverage|integration test|end.?to.?end|multi.?step|large codebase|legacy code|why (is|does|am|are) (my|this|the))\b/i.test(text)
-    || /\b(fix (this |the )?bug|broken|not working|doesn'?t work|error in|exception in|failing test|how (do|can) (i|we|you) (fix|refactor|improve|redesign|migrate|optimise|optimize))\b/i.test(text);
+  return COMPLEX_CODING_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 export function isImageRequest(message: string): boolean {
   const text = message.trim().toLowerCase();
   if (!text) return false;
 
-  return /\b(generate|create|draw|make|design)\b.{0,30}\b(image|picture|photo|art|illustration|logo|poster|wallpaper|icon)\b/.test(text)
-    || /^\s*\/image\b/.test(text)
-    || /\bimage of\b/.test(text)
-    || /\bplease.*\b(image|picture|photo)\b/.test(text);
+  return IMAGE_INTENT.test(text)
+    || IMAGE_COMMAND.test(text)
+    || IMAGE_OF.test(text)
+    || IMAGE_PLEASE.test(text);
 }
 
 /**
@@ -47,9 +68,9 @@ export function isHeavyReasoningRequest(message: string): boolean {
   const text = message.trim();
   if (!text) return false;
 
-  return /\b(step.?by.?step|reasoning|think through|analyze|analyse|plan|planning|architect|workflow|agent|pipeline|strategy|logic|deduce|infer|evaluate|complex|hard problem|multi.?step|break down)\b/i.test(text)
-    || /\b(how (should|would|do) (i|we|you) (design|build|structure|implement|approach|solve))\b/i.test(text)
-    || /\b(pros and cons|trade.?off|compare|contrast|decision|choose between)\b/i.test(text);
+  return HEAVY_REASONING_KEYWORDS.test(text)
+    || HEAVY_REASONING_HOW.test(text)
+    || HEAVY_REASONING_COMPARE.test(text);
 }
 
 /**
