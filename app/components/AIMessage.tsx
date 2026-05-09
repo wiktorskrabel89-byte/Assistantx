@@ -26,11 +26,13 @@ function parseCitations(text: string): { cleanText: string; citations: Citation[
 }
 
 // ── Dark mode detection ─────────────────────────────────────────────────────
+/** Subscribe to dark-mode changes by observing the `class` attribute on <html>. Used with React's useSyncExternalStore. */
 function subscribeDarkMode(callback: () => void) {
   const observer = new MutationObserver(callback);
   observer.observe(document.documentElement, { attributeFilter: ["class"] });
   return () => observer.disconnect();
 }
+/** Returns true when the document element currently has the "dark" class. */
 function getDarkSnapshot() {
   return document.documentElement.classList.contains("dark");
 }

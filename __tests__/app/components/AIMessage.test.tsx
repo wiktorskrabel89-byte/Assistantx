@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { AIMessage } from "@/app/components/AIMessage";
-import type { ChatEntry } from "@/app/lib/chat-types";
+import type { ChatEntry, MessageFeedback } from "@/app/lib/chat-types";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -49,13 +49,10 @@ function makeEntry(overrides: Partial<ChatEntry> = {}): ChatEntry {
 }
 
 const DEFAULT_PROPS = {
-  dark: false,
-  cardBg: "bg-white",
-  codeBg: "bg-gray-100",
   copied: null as string | null,
   isStreaming: false,
   reasoningOpen: false,
-  rating: undefined as number | undefined,
+  rating: undefined as MessageFeedback | undefined,
   reviewText: undefined as string | undefined,
   onCopyText: jest.fn(),
   onToggleReasoning: jest.fn(),

@@ -37,7 +37,7 @@ export function CodeReviewPanel({ blocks, onCreateFollowUp }: CodeReviewPanelPro
   ];
 
   return (
-    <div className="mt-3 rounded-xl border border-border bg-card px-4 py-3">
+    <div className="mt-3 rounded-lg border border-border bg-card px-4 py-3">
       <div>
         <div className="text-sm font-semibold text-foreground">Code analysis</div>
         <div className="mt-1 text-xs text-muted-foreground">{blocks.length} block{blocks.length === 1 ? "" : "s"} • {lineCount} lines • {summarizeLanguages(blocks)}</div>

@@ -56,7 +56,7 @@ export function ReviewPanel({ rating, reviewText, onRatingChange, onReviewTextCh
   }
 
   return (
-    <div className="mt-3 rounded-xl border border-border bg-card px-4 py-3">
+    <div className="mt-3 rounded-lg border border-border bg-card px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
           Oceń odpowiedź

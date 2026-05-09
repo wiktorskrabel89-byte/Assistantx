@@ -6,11 +6,10 @@ type Block = { language: string; code: string };
 
 function renderPanel(
   blocks: Block[] = [],
-  dark = false,
   onCreateFollowUp = jest.fn()
 ) {
   return render(
-    <CodeReviewPanel dark={dark} blocks={blocks} onCreateFollowUp={onCreateFollowUp} />
+    <CodeReviewPanel blocks={blocks} onCreateFollowUp={onCreateFollowUp} />
   );
 }
 
@@ -76,7 +75,7 @@ describe("CodeReviewPanel", () => {
 
     it("calls onCreateFollowUp with a prompt containing the code when Review is clicked", () => {
       const onCreateFollowUp = jest.fn();
-      renderPanel(SINGLE_BLOCK, false, onCreateFollowUp);
+      renderPanel(SINGLE_BLOCK, onCreateFollowUp);
       fireEvent.click(screen.getByRole("button", { name: "Review" }));
       expect(onCreateFollowUp).toHaveBeenCalledTimes(1);
       const [prompt] = onCreateFollowUp.mock.calls[0] as [string];
@@ -86,7 +85,7 @@ describe("CodeReviewPanel", () => {
 
     it("calls onCreateFollowUp with a prompt containing the code when Find bugs is clicked", () => {
       const onCreateFollowUp = jest.fn();
-      renderPanel(SINGLE_BLOCK, false, onCreateFollowUp);
+      renderPanel(SINGLE_BLOCK, onCreateFollowUp);
       fireEvent.click(screen.getByRole("button", { name: "Find bugs" }));
       const [prompt] = onCreateFollowUp.mock.calls[0] as [string];
       expect(prompt).toContain("const x = 1;");
@@ -95,7 +94,7 @@ describe("CodeReviewPanel", () => {
 
     it("calls onCreateFollowUp with a prompt containing the code when Generate tests is clicked", () => {
       const onCreateFollowUp = jest.fn();
-      renderPanel(SINGLE_BLOCK, false, onCreateFollowUp);
+      renderPanel(SINGLE_BLOCK, onCreateFollowUp);
       fireEvent.click(screen.getByRole("button", { name: "Generate tests" }));
       const [prompt] = onCreateFollowUp.mock.calls[0] as [string];
       expect(prompt).toContain("const x = 1;");
@@ -104,7 +103,7 @@ describe("CodeReviewPanel", () => {
 
     it("includes all block code in the follow-up prompt for multi-block responses", () => {
       const onCreateFollowUp = jest.fn();
-      renderPanel(MULTI_BLOCK, false, onCreateFollowUp);
+      renderPanel(MULTI_BLOCK, onCreateFollowUp);
       fireEvent.click(screen.getByRole("button", { name: "Review" }));
       const [prompt] = onCreateFollowUp.mock.calls[0] as [string];
       expect(prompt).toContain("const x = 1;");
@@ -113,20 +112,15 @@ describe("CodeReviewPanel", () => {
   });
 
   describe("dark mode", () => {
-    it("applies dark border class when dark=true", () => {
-      const { container } = renderPanel(SINGLE_BLOCK, true);
-      expect(container.firstChild).toHaveClass("border-slate-800");
+    it("uses CSS-variable-based border class", () => {
+      const { container } = renderPanel(SINGLE_BLOCK);
+      expect(container.firstChild).toHaveClass("border-border");
     });
 
-    it("applies light border class when dark=false", () => {
-      const { container } = renderPanel(SINGLE_BLOCK, false);
-      expect(container.firstChild).toHaveClass("border-slate-200");
-    });
-
-    it("applies dark button styles when dark=true", () => {
-      renderPanel(SINGLE_BLOCK, true);
+    it("uses CSS-variable-based button styles", () => {
+      renderPanel(SINGLE_BLOCK);
       const reviewBtn = screen.getByRole("button", { name: "Review" });
-      expect(reviewBtn.className).toContain("slate-700");
+      expect(reviewBtn.className).toContain("border-border");
     });
   });
 });
