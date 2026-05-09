@@ -3,6 +3,7 @@
 import { BarChart2, Braces, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 type ChatHeaderProps = {
   dark: boolean;
@@ -139,7 +140,7 @@ export function ChatHeader({
             <Button
               variant="outline"
               onClick={onOpenPrompts}
-              className={`hidden rounded-xl text-sm font-medium sm:flex ${dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700"}`}
+              className={cn("hidden rounded-xl text-sm font-medium sm:flex", dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700")}
             >
               Prompts
             </Button>
@@ -150,7 +151,7 @@ export function ChatHeader({
                   variant="outline"
                   size="icon"
                   onClick={onCreateChat}
-                  className={`h-10 w-10 rounded-xl ${dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700"}`}
+                  className={cn("h-10 w-10 rounded-xl", dark ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-700")}
                   aria-label="New chat"
                 >
                   <Plus className="h-4 w-4" />

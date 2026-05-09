@@ -168,7 +168,7 @@ export const ChatList = memo(function ChatList({
                     className={cn("w-full resize-none rounded-xl text-sm", dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900")}
                   />
                   <div className="mt-2 flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={onCancelEditingMessage} className={cn("rounded-lg text-xs", dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700")}>
+                    <Button variant="ghost" size="sm" onClick={onCancelEditingMessage} className={cn("rounded-lg text-xs", dark ? "border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border border-slate-200 bg-white text-slate-700")}>
                       Cancel
                     </Button>
                     <Button size="sm" onClick={onSaveEditedMessage} className="rounded-lg bg-blue-600 text-xs text-white hover:bg-blue-700">

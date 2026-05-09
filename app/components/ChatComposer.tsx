@@ -346,7 +346,7 @@ export function ChatComposer({
             placeholder="Wiadomość... (Enter to send)"
             rows={1}
             className={cn(
-              "flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm shadow-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
+              "flex-1 resize-none border-0 bg-transparent px-3 py-3 text-sm shadow-none focus-visible:ring-0",
               dark ? "text-slate-100 placeholder:text-slate-500" : "text-slate-900 placeholder:text-slate-400"
             )}
             style={{ minHeight: 44, maxHeight: 180 }}

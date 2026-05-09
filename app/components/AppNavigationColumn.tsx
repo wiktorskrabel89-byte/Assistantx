@@ -436,7 +436,7 @@ export function AppNavigationColumn({
               value={chatSearchLocal}
               onChange={(e) => setChatSearchLocal(e.target.value)}
               placeholder="Search chats…"
-              className={`w-full rounded-lg py-1 pl-6 pr-7 text-[11px] h-7 ${dark ? "border-slate-700 bg-slate-800 text-slate-200 placeholder:text-slate-500" : "border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400"}`}
+              className={cn("w-full rounded-lg py-1 pl-6 pr-7 text-[11px] h-7", dark ? "border-slate-700 bg-slate-800 text-slate-200 placeholder:text-slate-500" : "border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400")}
             />
             {chatSearchLocal && (
               <Button
