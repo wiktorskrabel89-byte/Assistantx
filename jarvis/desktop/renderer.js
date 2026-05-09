@@ -55,9 +55,46 @@ window.addEventListener('DOMContentLoaded', () => {
 	const urlInput = document.getElementById('url-input');
 	const urlGo = document.getElementById('url-go');
 	const urlSearch = document.getElementById('url-search');
+	const chatModelSelect = document.getElementById('chat-model');
+	const sttModelSelect = document.getElementById('stt-model');
+	const ttsModelSelect = document.getElementById('tts-model');
+	const speechToTextButton = document.getElementById('speech-to-text');
+	const autoTtsToggle = document.getElementById('auto-tts');
 
 	tokenNode.textContent = token;
 	backendUrlNode.textContent = getBackendUrl();
+
+	const getModelSettings = () => ({
+		chatModel: chatModelSelect?.value || 'openai/gpt-5.4',
+		sttModel: sttModelSelect?.value || 'openai/gpt-4o-mini-transcribe',
+		ttsModel: ttsModelSelect?.value || 'openai/gpt-4o-mini-tts',
+	});
+
+	const supportsSpeechRecognition = () => (
+		typeof window !== 'undefined'
+		&& !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+	);
+
+	let recognition = null;
+	let speechToTextActive = false;
+
+	function setSpeechToTextActive(active) {
+		speechToTextActive = active;
+		if (!speechToTextButton) return;
+		speechToTextButton.textContent = active ? '⏹️ Stop speech-to-text' : '🎙️ Start speech-to-text';
+	}
+
+	function speakResponse(text) {
+		if (!autoTtsToggle?.checked) return;
+		if (typeof window === 'undefined' || !window.speechSynthesis) return;
+		const spokenText = String(text || '').trim();
+		if (!spokenText) return;
+		window.speechSynthesis.cancel();
+		const utterance = new SpeechSynthesisUtterance(spokenText);
+		utterance.lang = 'pl-PL';
+		utterance.rate = 1;
+		window.speechSynthesis.speak(utterance);
+	}
 
 	// ── Status ──────────────────────────────────────────────────────────────
 	function updateStatus(status, detail) {
@@ -85,13 +122,52 @@ window.addEventListener('DOMContentLoaded', () => {
 		const text = input.value.trim();
 		if (!text) return;
 
-		const sent = sendDesktopPrompt(text);
+		const models = getModelSettings();
+		const sent = sendDesktopPrompt(text, models);
 		appendMessage(log, sent ? 'Prompt sent' : 'Queued (offline)', text, sent ? 'system' : 'error');
 		input.value = '';
 	}
 
 	send.addEventListener('click', submitPrompt);
 	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPrompt(); });
+
+	if (speechToTextButton) {
+		if (!supportsSpeechRecognition()) {
+			speechToTextButton.disabled = true;
+			speechToTextButton.title = 'Speech-to-text is not supported in this runtime';
+		} else {
+			speechToTextButton.addEventListener('click', () => {
+				const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+				if (!SpeechRecognitionCtor) return;
+
+				if (speechToTextActive) {
+					recognition?.stop();
+					return;
+				}
+
+				recognition = new SpeechRecognitionCtor();
+				recognition.lang = 'pl-PL';
+				recognition.continuous = true;
+				recognition.interimResults = true;
+
+				recognition.onstart = () => setSpeechToTextActive(true);
+				recognition.onend = () => setSpeechToTextActive(false);
+				recognition.onerror = () => {
+					setSpeechToTextActive(false);
+					appendMessage(log, 'Speech-to-text', 'Speech capture failed. Try again.', 'error');
+				};
+				recognition.onresult = (event) => {
+					let transcript = '';
+					for (let i = event.resultIndex; i < event.results.length; i += 1) {
+						transcript += event.results[i][0].transcript;
+					}
+					input.value = transcript.trim();
+				};
+
+				recognition.start();
+			});
+		}
+	}
 
 	// ── URL bar ──────────────────────────────────────────────────────────────
 	function doOpenUrl(rawUrl) {
@@ -211,6 +287,9 @@ window.addEventListener('DOMContentLoaded', () => {
 			const body = typeof parsed.text === 'string' ? parsed.text : JSON.stringify(parsed);
 			const title = parsed.type === 'response' ? '✅ Jarvis' : `Backend (${parsed.type || '?'})`;
 			appendMessage(log, title, body, 'system');
+			if (parsed.type === 'response') {
+				speakResponse(body);
+			}
 		} catch {
 			// rawMessage is not JSON — display as plain text
 			appendMessage(log, 'Backend event', rawMessage, 'system');

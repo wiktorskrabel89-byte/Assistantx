@@ -91,10 +91,17 @@ function sendMessageToBackend(payload) {
   return false;
 }
 
-function sendDesktopPrompt(text) {
-  const payload = { type: 'desktop_prompt', text, token: currentToken };
+function sendDesktopPrompt(text, modelSettings = {}) {
+  const payload = {
+    type: 'desktop_prompt',
+    text,
+    token: currentToken,
+    model: modelSettings.chatModel,
+    speechToTextModel: modelSettings.sttModel,
+    textToSpeechModel: modelSettings.ttsModel,
+  };
   const sent = sendMessageToBackend(payload);
-  emitter.emit('message', JSON.stringify({ type: 'outgoing', text, sent }));
+  emitter.emit('message', JSON.stringify({ type: 'outgoing', text, sent, ...modelSettings }));
   return sent;
 }
 
@@ -410,4 +417,3 @@ module.exports = {
   onStatus: (callback) => emitter.on('status', callback),
   getBackendUrl: () => BACKEND_URL,
 };
-
