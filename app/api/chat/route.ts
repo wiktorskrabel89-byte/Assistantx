@@ -29,7 +29,7 @@ import {
   ROUTING_MAIN_MODEL_FREE,
   ROUTING_CODE_MODEL_FREE,
 } from "@/lib/ai-config";
-import { isCodeRequest, isImageRequest, isHeavyReasoningRequest, isVeryLongContext } from "@/lib/detect";
+import { isCodeRequest, isImageRequest, isHeavyReasoningRequest, isVeryLongContext, isComplexCodingRequest } from "@/lib/detect";
 import {
   createOpenRouterEmbedding,
   formatKnowledgeContext,
@@ -546,6 +546,8 @@ export const POST = async (req: Request) => {
   // Vision input: user uploaded an image file for analysis (not image generation)
   const inferredVisionRequest = rawMode === "upload" && typeof message === "string" && /\.(png|jpe?g|gif|webp|bmp|svg)/i.test(message);
   const inferredHeavyReasoning = !inferredCodeRequest && isHeavyReasoningRequest(typeof message === "string" ? message : "");
+  // Distinguish complex from simple coding to tune reasoning effort accordingly
+  const inferredComplexCoding = inferredCodeRequest && isComplexCodingRequest(typeof message === "string" ? message : "");
 
   let queryEmbedding: number[] | null = null;
   let retrievedKnowledgeContext = "";
@@ -657,49 +659,61 @@ export const POST = async (req: Request) => {
 
   const fallbackModel = getFreePlanFallback(inferredCodeRequest);
 
-  // ── Smart routing: pick model + temperature based on request type ─────────────
+  // ── Smart routing: pick model + temperature + reasoning effort per request type ──
   // When the user (or a workspace) explicitly provides allowedModels or a modelId
   // we honour that; otherwise we apply the smart router.
   let selectedModel: string;
   let resolvedTemperature: number;
   let smartRouteLabel: string;
+  // reasoning_effort is automatically set based on task complexity.
+  // Values: "low" | "medium" | "high" (maps directly to OpenRouter's reasoning_level).
+  let resolvedReasoningEffort: string;
 
   if (planEnforcedModelId) {
     // Manual / workspace-pinned model
     selectedModel = planEnforcedModelId;
     resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
+    resolvedReasoningEffort = inferredComplexCoding || inferredHeavyReasoning ? "high" : inferredCodeRequest ? "medium" : "low";
     smartRouteLabel = `Manual model: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   } else if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
     selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
     resolvedTemperature = modelProfile === "gpt-oss-code" ? TEMP_CODE : TEMP_MAIN;
+    resolvedReasoningEffort = modelProfile === "gpt-oss-code" ? "high" : "low";
     smartRouteLabel = `Profile: ${modelProfile}`;
   } else if (isAutoRouted) {
     // ── Smart router (no explicit model chosen) ────────────────────────────────
     if (inferredVisionRequest) {
       selectedModel = ROUTING_VISION_MODEL;
       resolvedTemperature = TEMP_VISION;
+      resolvedReasoningEffort = "medium";
       smartRouteLabel = `Vision analysis — ${MODEL_LABELS[ROUTING_VISION_MODEL] ?? ROUTING_VISION_MODEL}`;
     } else if (inferredCodeRequest) {
       selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
       resolvedTemperature = TEMP_CODE;
+      // Complex debugging/refactor → high; simple function → low
+      resolvedReasoningEffort = inferredComplexCoding ? "high" : "low";
       smartRouteLabel = `Coding — ${MODEL_LABELS[ROUTING_CODE_MODEL] ?? ROUTING_CODE_MODEL}${userPlan === "free" ? " (free)" : ""}`;
     } else if (inferredHeavyReasoning) {
       selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_REASONING_MODEL;
       resolvedTemperature = TEMP_REASONING;
+      resolvedReasoningEffort = "high";
       smartRouteLabel = `Heavy reasoning — ${MODEL_LABELS[ROUTING_REASONING_MODEL] ?? ROUTING_REASONING_MODEL}${userPlan === "free" ? " (free)" : ""}`;
     } else if (inferredLongContext) {
       selectedModel = ROUTING_GEMINI_MODEL;
       resolvedTemperature = TEMP_GEMINI_LONGCTX;
+      resolvedReasoningEffort = "low"; // summarisation / extraction doesn't need deep reasoning
       smartRouteLabel = `Long-context — ${MODEL_LABELS[ROUTING_GEMINI_MODEL] ?? ROUTING_GEMINI_MODEL}`;
     } else {
-      // Default: main conversational AI
+      // Default: main conversational AI — keep it fast and cheap
       selectedModel = userPlan === "free" ? ROUTING_MAIN_MODEL_FREE : ROUTING_MAIN_MODEL;
       resolvedTemperature = TEMP_MAIN;
+      resolvedReasoningEffort = "low";
       smartRouteLabel = `Conversational AI — ${MODEL_LABELS[ROUTING_MAIN_MODEL] ?? ROUTING_MAIN_MODEL}${userPlan === "free" ? " (free)" : ""}`;
     }
   } else {
     selectedModel = costControlled.modelId;
     resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
+    resolvedReasoningEffort = inferredComplexCoding || inferredHeavyReasoning ? "high" : inferredCodeRequest ? "medium" : "low";
     smartRouteLabel = `Auto: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   }
 
@@ -892,13 +906,20 @@ export const POST = async (req: Request) => {
     requestBody.plugins = [{ id: "web" }];
   }
 
-  // Only send reasoning_level if the selected model explicitly supports it.
-  // Use exact ID match to avoid false positives from substring matching.
-  if (thinkingEffort && REASONING_MODEL_IDS.includes(selectedModel)) {
-    // Map numeric effort (1=low, 2=medium, 3=high, 4=xhigh) to the string OpenRouter expects.
-    const effortMap: Record<number, string> = { 1: "low", 2: "medium", 3: "high", 4: "xhigh" };
-    const effortNum = typeof thinkingEffort === "number" ? thinkingEffort : 2;
-    requestBody.reasoning_level = effortMap[effortNum] ?? "medium";
+  // Send reasoning_level when the selected model supports it.
+  // The auto-router already picks the right effort level per task type.
+  // If the client explicitly sent a thinkingEffort (e.g. from an advanced UI toggle),
+  // that takes precedence over the automatic value.
+  if (REASONING_MODEL_IDS.includes(selectedModel)) {
+    if (thinkingEffort) {
+      // Client override: map numeric effort (1=low, 2=medium, 3=high, 4=xhigh)
+      const effortMap: Record<number, string> = { 1: "low", 2: "medium", 3: "high", 4: "xhigh" };
+      const effortNum = typeof thinkingEffort === "number" ? thinkingEffort : 2;
+      requestBody.reasoning_level = effortMap[effortNum] ?? "medium";
+    } else {
+      // Automatic: use the effort level determined by the smart router
+      requestBody.reasoning_level = resolvedReasoningEffort;
+    }
   }
 
   if (cachedAnswerCandidate && cachedAnswerCandidate.similarity >= CACHED_ANSWER_SIMILARITY_THRESHOLD) {

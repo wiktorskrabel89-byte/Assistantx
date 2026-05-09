@@ -16,6 +16,19 @@ export function isCodeRequest(message: string): boolean {
   return false;
 }
 
+/**
+ * Returns true when a coding request is complex enough to warrant high reasoning effort.
+ * Complex = debugging, refactoring, architecture, code review, multi-step implementation.
+ * Simple = write a small helper, autocomplete, explain a snippet.
+ */
+export function isComplexCodingRequest(message: string): boolean {
+  const text = message.trim();
+  if (!text) return false;
+
+  return /\b(debug|debugging|refactor|refactoring|architect|architecture|review|security|performance|optimize|optimise|migrate|migration|design pattern|dependency injection|async|concurrency|race condition|memory leak|bottleneck|test coverage|integration test|end.?to.?end|multi.?step|large codebase|legacy code|why (is|does|am|are) (my|this|the))\b/i.test(text)
+    || /\b(fix (this |the )?bug|broken|not working|doesn'?t work|error in|exception in|failing test|how (do|can) (i|we|you) (fix|refactor|improve|redesign|migrate|optimise|optimize))\b/i.test(text);
+}
+
 export function isImageRequest(message: string): boolean {
   const text = message.trim().toLowerCase();
   if (!text) return false;

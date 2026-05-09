@@ -489,6 +489,8 @@ export const REASONING_MODEL_IDS: string[] = [
   "openai/gpt-5",
   "openai/gpt-oss-120b",
   "openai/gpt-oss-120b:free",
+  "qwen/qwen3-32b",
+  "qwen/qwen3-32b:free",
   "google/gemini-3-flash-preview",
   "google/gemini-3-pro-preview",
   "google/gemini-2.5-flash-lite",
