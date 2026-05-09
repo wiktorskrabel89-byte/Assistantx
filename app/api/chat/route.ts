@@ -683,8 +683,16 @@ export const POST = async (req: Request) => {
   if (planEnforcedModelId) {
     // Manual / workspace-pinned model
     selectedModel = planEnforcedModelId;
-    resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
-    resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
+    if (inferredVisionRequest) {
+      resolvedTemperature = TEMP_VISION;
+      resolvedReasoningEffort = "medium";
+    } else if (selectedModel === ROUTING_GEMINI_MODEL) {
+      resolvedTemperature = inferredLongContext ? TEMP_GEMINI_LONGCTX : TEMP_GEMINI_FALLBACK;
+      resolvedReasoningEffort = "low";
+    } else {
+      resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
+      resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
+    }
     smartRouteLabel = `Manual model: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   } else if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
     selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
@@ -723,8 +731,13 @@ export const POST = async (req: Request) => {
     }
   } else {
     selectedModel = costControlled.modelId;
-    resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
-    resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
+    if (selectedModel === ROUTING_GEMINI_MODEL) {
+      resolvedTemperature = inferredLongContext ? TEMP_GEMINI_LONGCTX : TEMP_GEMINI_FALLBACK;
+      resolvedReasoningEffort = "low";
+    } else {
+      resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
+      resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
+    }
     smartRouteLabel = `Auto: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   }
 
@@ -835,14 +848,18 @@ export const POST = async (req: Request) => {
 
   if (isSearchMode) {
     systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${sharedSuffix}${ragContext}`.trim();
+  } else if (inferredVisionRequest && isGemini) {
+    systemPrompt = `Analyze images accurately.\n\nFocus on:\n- screenshots\n- OCR\n- UI analysis\n- multimodal analysis\n\n${langInstruction} ${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredVisionRequest) {
     systemPrompt = `Analyze images accurately. ${langInstruction} ${styleInstruction}\n\nFocus on:\n- screenshots\n- OCR\n- UI analysis\n- visual understanding\n\n${sharedSuffix}${ragContext}`.trim();
   } else if (inferredCodeRequest) {
     systemPrompt = `You are a senior software engineer.\n\nRules:\n- prioritize correctness\n- preserve architecture\n- minimal diffs\n- production-ready code\n- avoid hallucinations\n- complete implementations\n- explain briefly\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else if (inferredHeavyReasoning) {
     systemPrompt = `You are an analytical reasoning model.\n\nFocus on:\n- logic\n- planning\n- accuracy\n- structured thinking\n- step-by-step reasoning\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
-  } else if (isGemini || inferredLongContext) {
+  } else if (inferredLongContext) {
     systemPrompt = `Analyze long documents and large context efficiently.\n\nFocus on:\n- summarization\n- context retention\n- accurate extraction\n\n${sharedSuffix}${ragContext}`.trim();
+  } else if (isGemini) {
+    systemPrompt = `You are a balanced assistant.\n\nRules:\n- natural conversation\n- concise responses\n- accurate answers\n- practical structure\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   } else {
     systemPrompt = `You are a helpful AI assistant.\n\nRules:\n- natural conversation\n- concise responses\n- fast replies\n- good formatting\n- helpful explanations\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   }

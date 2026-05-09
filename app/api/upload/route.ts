@@ -14,6 +14,7 @@ const MAX_INGESTION_CHUNKS = 60;
 // Maximum concurrent embedding API calls during ingestion to balance latency and rate limits.
 const EMBEDDING_CONCURRENCY = 5;
 const IMAGE_ANALYSIS_MODEL = "google/gemini-2.5-flash";
+const IMAGE_ANALYSIS_TEMPERATURE = 0.3;
 const DOCUMENT_ANALYSIS_MODEL = FREE_CHAT_MODEL;
 
 function getUploadModelLabel(modelId: string, isImage: boolean): string {
@@ -240,11 +241,12 @@ export async function POST(req: Request) {
             body: JSON.stringify({
               model: analysisModel,
               stream: true,
+              temperature: isImage ? IMAGE_ANALYSIS_TEMPERATURE : undefined,
               messages: [
                 {
                   role: "system",
                   content: isImage
-                    ? "You are a helpful assistant with vision capabilities. Detect the language of the user's message and always respond in that same language."
+                    ? "Analyze images accurately. Focus on screenshots, OCR, UI analysis, and multimodal analysis. Detect the language of the user's message and always respond in that same language."
                     : "You are a helpful document assistant. Read the uploaded file carefully, answer in the same language as the user's message, quote important details when useful, and mention if the file appears incomplete.",
                 },
                 {
