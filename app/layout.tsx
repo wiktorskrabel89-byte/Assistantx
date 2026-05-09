@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { headers } from "next/headers";
 import { AppBootTasks } from "./components/AppBootTasks";
 import { QueryProvider } from "./components/QueryProvider";
 import "./globals.css";
@@ -19,11 +20,18 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Calling headers() opts this layout into dynamic rendering so Next.js can
+  // read the x-nonce request header (set by lib/middleware.ts) and stamp its
+  // own inline bootstrap <script> tags with the correct nonce attribute.
+  // Without this, browsers that honour nonces in CSP ignore 'unsafe-inline'
+  // and block Next.js's hydration scripts.
+  await headers();
+
   return (
     <html
       lang="en"
