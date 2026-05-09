@@ -4,6 +4,8 @@ import { Bot, Code2, Crown, Lock, Zap, ChevronDown, ChevronUp, Brain } from "luc
 import { useId, useState } from "react";
 import { ALL_MODELS, CHAT_MODELS, CODE_MODELS, isModelPremiumOnly, isModelProPlusOnly, REASONING_MODEL_IDS } from "@/lib/ai-config";
 import type { AppMode } from "../lib/chat-types";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const THINKING_EFFORTS = ["Low", "Medium", "High", "Xhigh"] as const;
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
@@ -81,16 +83,18 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
 
   return (
     <div className="w-full">
-      <button
+      <Button
         type="button"
-        className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold mb-2"
+        variant="outline"
+        size="sm"
+        className="mb-2 gap-2 text-xs font-semibold"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={modelListId}
       >
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         {open ? "Ukryj wybór modelu" : "Pokaż wybór modelu"}
-      </button>
+      </Button>
       {open && (
         <div
           id={modelListId}
@@ -169,7 +173,7 @@ export function ModelSelector({ dark, preferredModelId, isPremium, onSelectModel
           {/* Thinking effort selector — shown only when a reasoning-capable model is active */}
           {preferredModelId && REASONING_MODEL_IDS.includes(preferredModelId) && onThinkingEffortChange && (
             <div className="flex w-full items-center gap-2 pt-1 mt-1 border-t border-slate-200 dark:border-slate-700">
-              <span className={`flex items-center gap-1 ${sectionLabel}`}>
+              <span className={cn("flex items-center gap-1", sectionLabel)}>
                 <Brain className="h-3 w-3" />
                 Thinking Effort:
               </span>

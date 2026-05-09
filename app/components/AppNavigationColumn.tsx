@@ -24,6 +24,12 @@ import Image from "next/image";
 import { useState } from "react";
 import type { AppMode } from "../lib/chat-types";
 import { useWorkspace } from "../providers/WorkspaceProvider";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export type AppNavigationTab =
   | "chat"
@@ -313,18 +319,18 @@ export function AppNavigationColumn({
             {/* Search */}
             <div className={`flex items-center gap-2 border-b px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
               <Search className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
-              <input
+              <Input
                 id="apps-search-desktop"
                 name="appsSearchDesktop"
                 value={appsSearch}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
                 placeholder="Szukaj aplikacji..."
-                className={`flex-1 bg-transparent text-xs outline-none placeholder-opacity-40 ${dark ? "placeholder-slate-500 text-slate-200" : "placeholder-slate-400 text-slate-700"}`}
+                className={`flex-1 border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0 ${dark ? "placeholder:text-slate-500 text-slate-200" : "placeholder:text-slate-400 text-slate-700"}`}
               />
               {appsSearch && (
-                <button type="button" onClick={() => setAppsSearch("")} className="opacity-40 hover:opacity-70">
+                <Button type="button" variant="ghost" size="icon" onClick={() => setAppsSearch("")} className="h-5 w-5 opacity-40 hover:opacity-70">
                   <X className="h-3 w-3" />
-                </button>
+                </Button>
               )}
             </div>
 
@@ -370,25 +376,24 @@ export function AppNavigationColumn({
                     </button>
 
                     {/* Pin toggle: Add to tabs / Added */}
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="icon"
                       onClick={() => togglePin(item.id)}
                       title={isPinned ? "Usuń z zakładek" : "Dodaj do zakładek"}
-                      className={`flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-lg border transition-colors ${
+                      className={cn(
+                        "h-6 w-6 flex-shrink-0 rounded-lg",
                         isPinned
-                          ? dark
-                            ? "border-sky-600 bg-sky-900/50 text-sky-400"
-                            : "border-sky-300 bg-sky-50 text-sky-600"
-                          : dark
-                            ? "border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200"
-                            : "border-slate-300 text-slate-400 hover:border-slate-500 hover:text-slate-600"
-                      }`}
+                          ? dark ? "border-sky-600 bg-sky-900/50 text-sky-400 hover:bg-sky-900" : "border-sky-300 bg-sky-50 text-sky-600 hover:bg-sky-100"
+                          : dark ? "border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200" : "border-slate-300 text-slate-400 hover:border-slate-500 hover:text-slate-600"
+                      )}
                     >
                       {isPinned
                         ? <Check className="h-3 w-3" />
                         : <Plus className="h-3 w-3" />
                       }
-                    </button>
+                    </Button>
                   </div>
                 );
               })}
@@ -409,39 +414,41 @@ export function AppNavigationColumn({
         {/* Header row */}
         <div className={`flex flex-shrink-0 items-center justify-between border-t px-3 pt-2 pb-1.5 ${dividerClassName}`}>
           <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Chats</span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => { createChatAction(); onSelectTab("chat"); }}
-            title="New chat"
             aria-label="New chat"
-            className={`flex h-5 w-5 items-center justify-center rounded-md transition-colors ${dark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"}`}
+            className="h-5 w-5 rounded-md"
           >
             <Plus className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
 
         {/* Search */}
         <div className="flex-shrink-0 px-3 pb-1.5">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
-            <input
+            <Input
               id="nav-chat-search"
               name="navChatSearch"
               value={chatSearchLocal}
               onChange={(e) => setChatSearchLocal(e.target.value)}
               placeholder="Search chats…"
-              className={`w-full rounded-lg border py-1 pl-6.5 pr-2 text-[11px] focus:outline-none ${dark ? "border-slate-700 bg-slate-800 text-slate-200 placeholder-slate-500" : "border-slate-200 bg-slate-50 text-slate-800 placeholder-slate-400"}`}
+              className={`w-full rounded-lg py-1 pl-6 pr-7 text-[11px] h-7 ${dark ? "border-slate-700 bg-slate-800 text-slate-200 placeholder:text-slate-500" : "border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400"}`}
             />
             {chatSearchLocal && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setChatSearchLocal("")}
-                title="Clear search"
                 aria-label="Clear search"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
+                className="absolute right-1 top-1/2 h-5 w-5 -translate-y-1/2 opacity-50 hover:opacity-80"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -485,9 +492,9 @@ export function AppNavigationColumn({
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className={`text-[10px] font-semibold uppercase tracking-wider ${dark ? "text-slate-500" : "text-slate-400"}`}>Konto & ustawienia</span>
-              <button type="button" onClick={() => setSettingsOpen(false)} className={`rounded-lg p-0.5 ${dark ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}>
+              <Button variant="ghost" size="icon" type="button" onClick={() => setSettingsOpen(false)} className="h-6 w-6 rounded-lg">
                 <X className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
             <div className="space-y-0.5">
               {[
@@ -507,9 +514,9 @@ export function AppNavigationColumn({
                   <Icon className="h-4 w-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{label}</span>
                   {tab === "notifications" && notificationUnread > 0 && (
-                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                    <Badge variant="destructive" className="h-4 min-w-4 rounded-full px-1 text-[9px] font-bold">
                       {notificationUnread > 99 ? "99+" : notificationUnread}
-                    </span>
+                    </Badge>
                   )}
                 </button>
               ))}
@@ -524,18 +531,18 @@ export function AppNavigationColumn({
               dark ? "hover:bg-slate-800" : "hover:bg-slate-100"
             }`}
           >
-            <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-              dark ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-600"
-            }`}>
-              {getInitials(userEmail)}
-            </div>
+            <Avatar className="h-8 w-8 flex-shrink-0 text-xs font-bold">
+              <AvatarFallback className={dark ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-600"}>
+                {getInitials(userEmail)}
+              </AvatarFallback>
+            </Avatar>
             <span className={`flex-1 truncate text-left text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>
               {userEmail ? userEmail.split("@")[0] : "Konto"}
             </span>
             {notificationUnread > 0 && (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+              <Badge variant="destructive" className="h-4 min-w-4 rounded-full px-1 text-[9px] font-bold">
                 {notificationUnread > 99 ? "99+" : notificationUnread}
-              </span>
+              </Badge>
             )}
           </button>
         )}
@@ -543,112 +550,154 @@ export function AppNavigationColumn({
     </aside>
 
       {/* ── Mobile compact icon strip (below xl) ── */}
+      <TooltipProvider>
       <nav
         aria-label="App navigation"
         className={`xl:hidden flex flex-shrink-0 flex-col items-center gap-1 py-3 w-14 min-h-0 rounded-[26px] border ${shellClassName}`}
       >
         {/* Chat */}
-        <button
-          type="button"
-          onClick={() => onSelectTab("chat")}
-          title="Chat"
-          aria-label="Chat"
-          className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
-            isChatActive
-              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
-              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
-          }`}
-        >
-          <MessageSquareText className="h-5 w-5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onSelectTab("chat")}
+              aria-label="Chat"
+              className={cn(
+                "h-10 w-10 rounded-2xl",
+                isChatActive
+                  ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
+                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+              )}
+            >
+              <MessageSquareText className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Chat</TooltipContent>
+        </Tooltip>
 
         {/* Pinned add-ons */}
         {pinnedItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelectTab(item.id)}
-              title={item.label}
-              aria-label={item.label}
-              className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
-                isActive
-                  ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
-                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
-              }`}
-            >
-              <Icon className="h-5 w-5" />
-            </button>
+            <Tooltip key={item.id}>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onSelectTab(item.id)}
+                  aria-label={item.label}
+                  className={cn(
+                    "h-10 w-10 rounded-2xl",
+                    isActive
+                      ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
+                      : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{item.label}</TooltipContent>
+            </Tooltip>
           );
         })}
 
         {/* Apps */}
-        <button
-          type="button"
-          onClick={() => setAppsOpen((v: boolean) => !v)}
-          title="Aplikacje"
-          aria-label="Aplikacje"
-          className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
-            appsOpen || (isAddOnActive && !pinnedAddOns.includes(activeTab))
-              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
-              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
-          }`}
-        >
-          <Grid2x2 className="h-5 w-5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setAppsOpen((v: boolean) => !v)}
+              aria-label="Aplikacje"
+              className={cn(
+                "h-10 w-10 rounded-2xl",
+                appsOpen || (isAddOnActive && !pinnedAddOns.includes(activeTab))
+                  ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
+                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+              )}
+            >
+              <Grid2x2 className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Aplikacje</TooltipContent>
+        </Tooltip>
 
         <div className="flex-1" />
 
         {/* Settings */}
-        <button
-          type="button"
-          onClick={() => onSelectTab("settings")}
-          title="Ustawienia"
-          aria-label="Ustawienia"
-          className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
-            activeTab === "settings"
-              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
-              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
-          }`}
-        >
-          <Settings2 className="h-5 w-5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onSelectTab("settings")}
+              aria-label="Ustawienia"
+              className={cn(
+                "h-10 w-10 rounded-2xl",
+                activeTab === "settings"
+                  ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
+                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+              )}
+            >
+              <Settings2 className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Ustawienia</TooltipContent>
+        </Tooltip>
 
         {/* Notifications */}
-        <button
-          type="button"
-          onClick={() => onSelectTab("notifications")}
-          title="Powiadomienia"
-          aria-label="Powiadomienia"
-          className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors ${
-            activeTab === "notifications"
-              ? dark ? "bg-slate-800 text-white" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm"
-              : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
-          }`}
-        >
-          <Bell className="h-5 w-5" />
-          {notificationUnread > 0 && (
-            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-              {notificationUnread > 99 ? "99+" : notificationUnread}
-            </span>
-          )}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onSelectTab("notifications")}
+              aria-label="Powiadomienia"
+              className={cn(
+                "relative h-10 w-10 rounded-2xl",
+                activeTab === "notifications"
+                  ? dark ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-gradient-to-br from-sky-700 to-cyan-600 text-white shadow-sm hover:from-sky-800 hover:to-cyan-700"
+                  : dark ? "text-slate-300 hover:bg-slate-800/80" : "text-slate-600 hover:bg-sky-50"
+              )}
+            >
+              <Bell className="h-5 w-5" />
+              {notificationUnread > 0 && (
+                <Badge variant="destructive" className="absolute right-0.5 top-0.5 h-4 min-w-4 rounded-full px-1 text-[9px] font-bold">
+                  {notificationUnread > 99 ? "99+" : notificationUnread}
+                </Badge>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Powiadomienia</TooltipContent>
+        </Tooltip>
 
         {/* User avatar */}
-        <button
-          type="button"
-          onClick={() => onSelectTab("settings")}
-          title={userEmail ?? "Konto"}
-          aria-label={userEmail ?? "Konto"}
-          className={`mt-1 flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
-            dark ? "bg-slate-700 text-slate-200 hover:bg-slate-600" : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-          }`}
-        >
-          {getInitials(userEmail)}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => onSelectTab("settings")}
+              aria-label={userEmail ?? "Konto"}
+              className="mt-1"
+            >
+              <Avatar className={cn("h-9 w-9 text-[11px] font-bold transition-colors", dark ? "hover:ring-2 hover:ring-slate-600" : "hover:ring-2 hover:ring-slate-300")}>
+                <AvatarFallback className={dark ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-600"}>
+                  {getInitials(userEmail)}
+                </AvatarFallback>
+              </Avatar>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{userEmail ?? "Konto"}</TooltipContent>
+        </Tooltip>
       </nav>
+      </TooltipProvider>
 
       {/* ── Mobile apps overlay (fixed, below xl) ── */}
       {appsOpen && (
@@ -665,20 +714,20 @@ export function AppNavigationColumn({
             {/* Search */}
             <div className={`flex items-center gap-2 border-b px-3 py-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
               <Search className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
-              <input
+              <Input
                 id="apps-search-mobile"
                 name="appsSearchMobile"
                 value={appsSearch}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
                 placeholder="Szukaj aplikacji..."
-                className={`flex-1 bg-transparent text-xs outline-none ${
-                  dark ? "placeholder-slate-500 text-slate-200" : "placeholder-slate-400 text-slate-700"
+                className={`flex-1 border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0 ${
+                  dark ? "placeholder:text-slate-500 text-slate-200" : "placeholder:text-slate-400 text-slate-700"
                 }`}
               />
               {appsSearch && (
-                <button type="button" onClick={() => setAppsSearch("")} className="opacity-40 hover:opacity-70">
+                <Button type="button" variant="ghost" size="icon" onClick={() => setAppsSearch("")} className="h-5 w-5 opacity-40 hover:opacity-70">
                   <X className="h-3 w-3" />
-                </button>
+                </Button>
               )}
             </div>
             {/* Add-on list */}
@@ -716,18 +765,21 @@ export function AppNavigationColumn({
                         <div className={`truncate text-[10px] ${dark ? "text-slate-500" : "text-slate-400"}`}>{item.description}</div>
                       </div>
                     </button>
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="icon"
                       onClick={() => togglePin(item.id)}
                       title={isPinned ? "Usuń z zakładek" : "Dodaj do zakładek"}
-                      className={`flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-lg border transition-colors ${
+                      className={cn(
+                        "h-6 w-6 flex-shrink-0 rounded-lg",
                         isPinned
-                          ? dark ? "border-sky-600 bg-sky-900/50 text-sky-400" : "border-sky-300 bg-sky-50 text-sky-600"
+                          ? dark ? "border-sky-600 bg-sky-900/50 text-sky-400 hover:bg-sky-900" : "border-sky-300 bg-sky-50 text-sky-600 hover:bg-sky-100"
                           : dark ? "border-slate-600 text-slate-400 hover:border-slate-400" : "border-slate-300 text-slate-400 hover:border-slate-500"
-                      }`}
+                      )}
                     >
                       {isPinned ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
-                    </button>
+                    </Button>
                   </div>
                 );
               })}
