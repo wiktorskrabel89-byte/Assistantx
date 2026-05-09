@@ -789,18 +789,26 @@ export const REASONING_MODEL_IDS: string[] = [
 
 /**
  * Per-model max_tokens overrides.
- * GPT OSS 120B has separate chat/code ceilings; all other models use DEFAULT_MAX_TOKENS.
+ * Models not listed here fall back to DEFAULT_MAX_TOKENS.
  */
 export const DEFAULT_MAX_TOKENS = 4096;
 
 export const MODEL_MAX_TOKENS_CHAT: Record<string, number> = {
-  "openai/gpt-oss-120b": 1024,
-  "openai/gpt-oss-120b:free": 1024,
+  "openai/gpt-oss-120b": 8192,
+  "openai/gpt-oss-120b:free": 8192,
+  "qwen/qwen3-32b": 4096,
+  "qwen/qwen3-32b:free": 4096,
+  "meta-llama/llama-4-scout": 4096,
+  "google/gemini-2.5-flash": 4096,
 };
 
 export const MODEL_MAX_TOKENS_CODE: Record<string, number> = {
-  "openai/gpt-oss-120b": 8000,
-  "openai/gpt-oss-120b:free": 8000,
+  "openai/gpt-oss-120b": 8192,
+  "openai/gpt-oss-120b:free": 8192,
+  "qwen/qwen3-32b": 4096,
+  "qwen/qwen3-32b:free": 4096,
+  "meta-llama/llama-4-scout": 4096,
+  "google/gemini-2.5-flash": 4096,
 };
 
 /** Returns the max_tokens value for a given model ID. */

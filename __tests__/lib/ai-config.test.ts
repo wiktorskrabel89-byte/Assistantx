@@ -34,6 +34,7 @@ import {
   ROUTING_GEMINI_MODEL,
   getModelTemperature,
   getModelPromptText,
+  getModelMaxTokens,
 } from "@/lib/ai-config";
 
 const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.:+-]+$/;
@@ -386,5 +387,21 @@ describe("per-model behavior profiles", () => {
   it("uses explicit GPT OSS coding temperature and reasoning prompt profile", () => {
     expect(getModelTemperature("openai/gpt-oss-120b", { isCodeRequest: true })).toBe(0.2);
     expect(getModelPromptText("openai/gpt-oss-120b", true)).toMatch(/advanced reasoning ai/i);
+  });
+});
+
+describe("max token overrides", () => {
+  it("uses 8192 max tokens for GPT OSS 120B variants in chat and code", () => {
+    expect(getModelMaxTokens("openai/gpt-oss-120b", false)).toBe(8192);
+    expect(getModelMaxTokens("openai/gpt-oss-120b:free", false)).toBe(8192);
+    expect(getModelMaxTokens("openai/gpt-oss-120b", true)).toBe(8192);
+    expect(getModelMaxTokens("openai/gpt-oss-120b:free", true)).toBe(8192);
+  });
+
+  it("uses 4096 max tokens for Qwen3 32B, Llama 4 Scout, and Gemini 2.5 Flash", () => {
+    expect(getModelMaxTokens("qwen/qwen3-32b")).toBe(4096);
+    expect(getModelMaxTokens("qwen/qwen3-32b:free")).toBe(4096);
+    expect(getModelMaxTokens("meta-llama/llama-4-scout")).toBe(4096);
+    expect(getModelMaxTokens("google/gemini-2.5-flash")).toBe(4096);
   });
 });
