@@ -4,7 +4,7 @@
  */
 
 const CODE_FENCE_RE = /```/;
-const HTML_TAG_RE = /<\/?[a-z][^>]*>/i;
+const HTML_TAG_RE = /<\/?[a-z][^>\n]{0,200}>/i;
 const CODE_KEYWORDS_RE = /\b(function|class|interface|type|const|let|var|import|export|npm|yarn|pnpm|sql|regex|api|endpoint|typescript|javascript|python|java|c\+\+|c#|golang|rust|debug|bug|refactor|algorithm)\b/i;
 const CODE_ACTION_RE = /\b(write|generate|create|build|fix|optimize|review|explain)\b.{0,30}\b(code|script|query|function|component)\b/i;
 const CODE_SYMBOL_DENSITY_RE = /^[\s\w]*[{}()[\];=<>/\\]{2,}[\s\w]*$/;
