@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
 import { createClient } from "@/lib/server";
-import { MEMORY_SUMMARY_PROMPT, ROUTING_GEMINI_MODEL, ROUTING_MAIN_MODEL } from "@/lib/ai-config";
+import { MEMORY_SUMMARY_PROMPT, ROUTING_GEMINI_MODEL, ROUTING_MAIN_MODEL, getModelTemperature } from "@/lib/ai-config";
 
 export const runtime = "nodejs";
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           model,
           max_tokens: 300,
-          temperature: model.includes("gemini") ? 0.6 : 0.7,
+          temperature: getModelTemperature(model),
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: `Summarize this conversation:\n\n${transcript}` },

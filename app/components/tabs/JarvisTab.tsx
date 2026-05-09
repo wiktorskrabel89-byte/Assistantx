@@ -36,7 +36,7 @@ export default function JarvisTab() {
   const highlights = [
     {
       title: "New chat models",
-      description: "Jarvis Desktop supports Groq-first chat routing (Qwen 3 32B / GPT OSS 120B / Llama 4 Scout) with Gemini 2.5 Flash fallback.",
+      description: "Jarvis Desktop supports auto-smart routing (Qwen 3 32B for fast prompts, GPT OSS 120B for harder prompts) with Gemini 2.5 Flash fallback.",
       icon: Sparkles,
     },
     {

@@ -3,7 +3,7 @@ import { PDFParse } from "pdf-parse";
 import { createClient } from "@/lib/server";
 import { chunkTextByApproxTokens, createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
 import { runWithConcurrency } from "@/app/lib/concurrency";
-import { ALL_MODELS, FREE_CHAT_MODEL, ROUTING_GEMINI_MODEL, ROUTING_VISION_MODEL, VISION_SYSTEM_PROMPT } from "@/lib/ai-config";
+import { ALL_MODELS, FREE_CHAT_MODEL, ROUTING_GEMINI_MODEL, ROUTING_VISION_MODEL, VISION_SYSTEM_PROMPT, getModelTemperature } from "@/lib/ai-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,7 +14,6 @@ const MAX_INGESTION_CHUNKS = 60;
 // Maximum concurrent embedding API calls during ingestion to balance latency and rate limits.
 const EMBEDDING_CONCURRENCY = 5;
 const IMAGE_ANALYSIS_MODEL = ROUTING_VISION_MODEL;
-const IMAGE_ANALYSIS_TEMPERATURE = 0.4;
 const DOCUMENT_ANALYSIS_MODEL = FREE_CHAT_MODEL;
 
 function getUploadModelLabel(modelId: string, isImage: boolean): string {
@@ -250,7 +249,7 @@ export async function POST(req: Request) {
                 model,
                 stream: true,
                 temperature: isImage
-                  ? (model.includes("gemini") ? 0.6 : IMAGE_ANALYSIS_TEMPERATURE)
+                  ? getModelTemperature(model, { isVisionRequest: true })
                   : undefined,
                 messages: [
                   {
