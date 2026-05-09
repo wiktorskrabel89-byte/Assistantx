@@ -531,7 +531,7 @@ describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
       message: longMessage,
       mode: "chat",
       userPlan: "pro",
-      allowedModels: ["qwen/qwen3-32b", "openai/gpt-oss-120b", "google/gemini-2.5-flash"],
+      allowedModels: ["qwen/qwen3-32b", "openai/gpt-oss-120b:free", "google/gemini-2.5-flash"],
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
