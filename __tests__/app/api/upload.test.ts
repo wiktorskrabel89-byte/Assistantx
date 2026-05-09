@@ -81,6 +81,8 @@ async function readSseEvents(res: Response): Promise<Array<Record<string, unknow
 describe("POST /api/upload", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.GROQ_API_KEY = "test-groq-key";
+    process.env.GOOGLE_AI_STUDIO_API_KEY = "test-google-key";
   });
 
   function makeFileFormData(
