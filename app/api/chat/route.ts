@@ -941,19 +941,34 @@ export const POST = async (req: Request) => {
     requestBody.plugins = [{ id: "web" }];
   }
 
-  // Send reasoning_level when the selected model supports it.
+  // Send provider-specific reasoning params when the selected model supports it.
+  // Google AI Studio uses thinking_config; Groq Qwen3 uses reasoning_effort "default"/"none";
+  // OpenAI-style models use reasoning_effort "low"/"medium"/"high".
   // The auto-router already picks the right effort level per task type.
   // If the client explicitly sent a thinkingEffort (e.g. from an advanced UI toggle),
   // that takes precedence over the automatic value.
   if (REASONING_MODEL_IDS.includes(selectedModel)) {
-    if (thinkingEffort) {
-      // Client override: map numeric effort (1=low, 2=medium, 3=high, 4=xhigh)
-      const effortMap: Record<number, string> = { 1: "low", 2: "medium", 3: "high", 4: "xhigh" };
-      const effortNum = typeof thinkingEffort === "number" ? thinkingEffort : 2;
-      requestBody.reasoning_level = effortMap[effortNum] ?? "medium";
+    const isQwen3Model = selectedModel.startsWith("qwen/qwen3");
+    if (isGemini) {
+      // Google AI Studio: thinking_config.include_thoughts
+      requestBody.thinking_config = { include_thoughts: true };
+    } else if (isQwen3Model) {
+      // Groq Qwen3: reasoning_effort "default" (think) or "none" (skip thinking)
+      const effortNum = thinkingEffort
+        ? (typeof thinkingEffort === "number" ? thinkingEffort : 2)
+        : (resolvedReasoningEffort === "low" ? 1 : 2);
+      requestBody.reasoning_effort = effortNum <= 1 ? "none" : "default";
     } else {
-      // Automatic: use the effort level determined by the smart router
-      requestBody.reasoning_level = resolvedReasoningEffort;
+      // OpenAI-style models via Groq: reasoning_effort "low" | "medium" | "high"
+      if (thinkingEffort) {
+        // Client override: map numeric effort (1=low, 2=medium, 3=high, 4=high)
+        const effortMap: Record<number, string> = { 1: "low", 2: "medium", 3: "high", 4: "high" };
+        const effortNum = typeof thinkingEffort === "number" ? thinkingEffort : 2;
+        requestBody.reasoning_effort = effortMap[effortNum] ?? "medium";
+      } else {
+        // Automatic: resolvedReasoningEffort is already "low" | "medium" | "high"
+        requestBody.reasoning_effort = resolvedReasoningEffort;
+      }
     }
   }
 
@@ -998,6 +1013,35 @@ export const POST = async (req: Request) => {
     if (!key) {
       throw new Error(useGoogleStudio ? "Missing Google AI Studio API key." : "Missing Groq API key.");
     }
+
+    // Translate reasoning params to the target provider's format.
+    // This is especially important for fallback requests where the body was built
+    // for a different provider (e.g. Groq body falling back to Google, or vice versa).
+    const providerBody: Record<string, unknown> = { ...body };
+    if (useGoogleStudio) {
+      // Google AI Studio: remove Groq-style params; use thinking_config when reasoning is active.
+      const hasReasoning = providerBody.reasoning_effort !== undefined || providerBody.reasoning_level !== undefined;
+      delete providerBody.reasoning_effort;
+      delete providerBody.reasoning_level;
+      if (hasReasoning || providerBody.thinking_config !== undefined) {
+        providerBody.thinking_config = { include_thoughts: true };
+      }
+    } else {
+      // Groq: remove Google-style params.
+      delete providerBody.thinking_config;
+      delete providerBody.reasoning_level;
+      // If falling back to a Qwen3 model with an OpenAI-style effort value, translate it.
+      const isQwen3Target = targetModel.startsWith("qwen/qwen3");
+      const effort = providerBody.reasoning_effort as string | undefined;
+      if (isQwen3Target && effort && ["low", "medium", "high"].includes(effort)) {
+        providerBody.reasoning_effort = effort === "low" ? "none" : "default";
+      }
+      // Remove reasoning_effort for models that don't support it.
+      if (effort !== undefined && !REASONING_MODEL_IDS.includes(targetModel)) {
+        delete providerBody.reasoning_effort;
+      }
+    }
+
     return fetch(endpoint, {
       method: "POST",
       signal: requestSignal,
@@ -1005,7 +1049,7 @@ export const POST = async (req: Request) => {
         "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(providerBody),
     });
   };
 

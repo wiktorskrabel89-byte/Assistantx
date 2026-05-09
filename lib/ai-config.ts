@@ -762,7 +762,8 @@ export const TOP_PRO_PLUS_FALLBACK_MODELS: string[] = [
 /**
  * Model IDs that support configurable reasoning depth / thinking effort.
  * Used by the composer UI to show the "Thinking Effort" selector and by the
- * chat route to decide whether to send the `reasoning_level` parameter.
+ * chat route to decide whether to send provider-specific reasoning params
+ * (reasoning_effort for Groq/OpenAI models, thinking_config for Google Gemini).
  */
 export const REASONING_MODEL_IDS: string[] = [
   "openai/gpt-5.4",
