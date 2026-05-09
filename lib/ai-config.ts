@@ -245,6 +245,22 @@ export const DEFAULT_CHAT_MODEL = CHAT_MODELS[0].id;
 export const DEFAULT_CODE_MODEL = "openai/gpt-5.4";
 export const DEFAULT_SEARCH_MODEL = SEARCH_MODELS[0].id;
 
+// ─── Smart-routing model IDs ──────────────────────────────────────────────────
+/** Main conversational AI (Groq – Qwen3 32B). Temperature: 0.8 */
+export const ROUTING_MAIN_MODEL = "qwen/qwen3-32b";
+/** Coding assistant – senior software engineer profile. Temperature: 0.15 */
+export const ROUTING_CODE_MODEL = "openai/gpt-oss-120b";
+/** Heavy reasoning / planning / agent design. Temperature: 0.3 */
+export const ROUTING_REASONING_MODEL = "openai/gpt-oss-120b";
+/** Vision analysis – screenshots, OCR, UI analysis. Temperature: 0.3 */
+export const ROUTING_VISION_MODEL = "meta-llama/llama-4-scout";
+/** Fallback / long-context – Gemini 2.5 Flash. Temperature: 0.7 (fallback) / 0.4 (long-ctx) */
+export const ROUTING_GEMINI_MODEL = "google/gemini-2.5-flash";
+
+// Free-tier variants for cost-constrained routing
+export const ROUTING_MAIN_MODEL_FREE = "qwen/qwen3-32b:free";
+export const ROUTING_CODE_MODEL_FREE = "openai/gpt-oss-120b:free";
+
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
   { id: "coding-gpt-oss-120b-profile", label: "GPT OSS 120B (Code Profile)", modelId: "openai/gpt-oss-120b", costTier: "standard" },
   { id: "coding-gpt-oss-120b-free", label: "GPT OSS 120B (Free)", modelId: "openai/gpt-oss-120b:free", costTier: "free" },
@@ -270,11 +286,11 @@ export const RECOMMENDED_CHAT_MODELS: ModelPreset[] = [
   { id: "chat-gemini-3", label: "Gemini 3 Flash", modelId: "google/gemini-3-flash-preview", costTier: "cheap" },
 ];
 
-export const AUTO_PREFERRED_CODING_MODEL = "anthropic/claude-opus-4.6";
-export const AUTO_PREFERRED_CHAT_MODEL = "openai/gpt-5.2";
+export const AUTO_PREFERRED_CODING_MODEL = "openai/gpt-oss-120b";
+export const AUTO_PREFERRED_CHAT_MODEL = "qwen/qwen3-32b";
 
 export const FREE_CODING_MODEL = "openai/gpt-oss-120b:free";
-export const FREE_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+export const FREE_CHAT_MODEL = "qwen/qwen3-32b:free";
 export const APP_FORCED_MODEL_ID = "openai/gpt-oss-120b:free";
 /** 1=low, 2=medium, 3=high, 4=xhigh */
 export const APP_FORCED_THINKING_EFFORT = 4;
@@ -290,9 +306,11 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "minimax/minimax-m2.5:free": "free",
   "z-ai/glm-4.5-air:free": "free",
   "nvidia/nemotron-3-super-120b-a12b:free": "free",
+  "qwen/qwen3-32b:free": "free",
   // Cheap models — fast, low cost per token
   "google/gemini-2.5-flash-lite": "cheap",
   "google/gemini-3-flash-preview": "cheap",
+  "google/gemini-2.5-flash": "cheap",
   "openai/gpt-5-mini": "cheap",
   "openai/gpt-5-nano": "cheap",
   "x-ai/grok-3-mini": "cheap",
@@ -303,10 +321,12 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "deepseek/deepseek-v3.2": "standard",
   "anthropic/claude-sonnet-4.5": "standard",
   "openai/gpt-5": "standard",
+  "qwen/qwen3-32b": "standard",
   "qwen/qwen3-235b-a22b": "standard",
   "perplexity/sonar": "standard",
   "moonshotai/kimi-k2-thinking": "standard",
   "minimax/minimax-m2.5": "standard",
+  "meta-llama/llama-4-scout": "standard",
   // Premium models — frontier, high cost per token
   "openai/gpt-5.3": "premium",
   "anthropic/claude-opus-4.5": "premium",
@@ -425,6 +445,7 @@ export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): stri
  */
 // Top free models for chat and coding
 export const TOP_FREE_CHAT_MODELS = [
+  "qwen/qwen3-32b:free",
   "meta-llama/llama-3.3-70b-instruct:free",
   "openai/gpt-oss-120b:free",
   "minimax/minimax-m2.5:free",

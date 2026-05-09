@@ -21,8 +21,15 @@ import {
   AUTO_PREFERRED_CHAT_MODEL,
   REASONING_MODEL_IDS,
   getModelMaxTokens,
+  ROUTING_MAIN_MODEL,
+  ROUTING_CODE_MODEL,
+  ROUTING_REASONING_MODEL,
+  ROUTING_VISION_MODEL,
+  ROUTING_GEMINI_MODEL,
+  ROUTING_MAIN_MODEL_FREE,
+  ROUTING_CODE_MODEL_FREE,
 } from "@/lib/ai-config";
-import { isCodeRequest, isImageRequest } from "@/lib/detect";
+import { isCodeRequest, isImageRequest, isHeavyReasoningRequest, isVeryLongContext } from "@/lib/detect";
 import {
   createOpenRouterEmbedding,
   formatKnowledgeContext,
@@ -418,15 +425,40 @@ const MODEL_LABELS: Record<string, string> = {
   "minimax/minimax-m2.5": "MiniMax M2.5",
   "moonshotai/kimi-k2-thinking": "Kimi K2 Thinking",
   "perplexity/sonar": "Perplexity Sonar",
+  "qwen/qwen3-32b": "Qwen3 32B",
+  "qwen/qwen3-32b:free": "Qwen3 32B (Free)",
+  "meta-llama/llama-4-scout": "Llama 4 Scout",
+  "google/gemini-2.5-flash": "Gemini 2.5 Flash",
 };
+
+// ─── Moderation: blocked input patterns ──────────────────────────────────────
+const BLOCKED_PATTERNS: RegExp[] = [
+  /ignore previous instructions/i,
+  /system prompt/i,
+  /bypass restrictions/i,
+  /jailbreak/i,
+  /disregard (all|your|previous) (rules|instructions|guidelines)/i,
+  /pretend (you are|to be) (an? )?(evil|unethical|unrestricted|uncensored)/i,
+  /dan mode/i,
+];
+
+function isModerationBlocked(message: string): boolean {
+  return BLOCKED_PATTERNS.some((pattern) => pattern.test(message));
+}
 
 const CACHED_ANSWER_SIMILARITY_THRESHOLD = 0.9;
 // Knowledge retrieval keeps a lower threshold for context breadth while cache reuse
 // intentionally requires a high threshold to avoid returning the wrong prior answer.
 const KNOWLEDGE_MATCH_COUNT = 10;
 const KNOWLEDGE_MAX_TOTAL_TOKENS = 1500;
-const GPT_OSS_CHAT_TEMPERATURE = 0.6;
-const GPT_OSS_CODE_TEMPERATURE = 0.1;
+
+// ─── Per-route temperature constants ─────────────────────────────────────────
+const TEMP_MAIN = 0.8;        // Qwen3-32B conversational
+const TEMP_CODE = 0.15;       // GPT OSS 120B coding
+const TEMP_REASONING = 0.3;   // GPT OSS 120B analytical reasoning
+const TEMP_VISION = 0.3;      // Llama 4 Scout vision
+const TEMP_GEMINI_FALLBACK = 0.7;  // Gemini 2.5 Flash fallback
+const TEMP_GEMINI_LONGCTX = 0.4;   // Gemini 2.5 Flash long-context
 
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
@@ -467,6 +499,14 @@ export const POST = async (req: Request) => {
     googleContext,
   } = await req.json();
 
+  // ── Moderation: block prompt-injection and jailbreak attempts ────────────────
+  if (typeof message === "string" && isModerationBlocked(message)) {
+    return new Response(
+      JSON.stringify({ error: "Message blocked by content policy." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   // Detect "websearch" trigger word at the very start of the message (any case).
   // Require a word boundary after "websearch" so "websearching ..." is not matched.
   // When present, strip it so the model receives a clean prompt.
@@ -503,6 +543,9 @@ export const POST = async (req: Request) => {
 
   const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
   const inferredImageRequest = rawMode === "image" || isImageRequest(message);
+  // Vision input: user uploaded an image file for analysis (not image generation)
+  const inferredVisionRequest = rawMode === "upload" && typeof message === "string" && /\.(png|jpe?g|gif|webp|bmp|svg)/i.test(message);
+  const inferredHeavyReasoning = !inferredCodeRequest && isHeavyReasoningRequest(typeof message === "string" ? message : "");
 
   let queryEmbedding: number[] | null = null;
   let retrievedKnowledgeContext = "";
@@ -565,6 +608,10 @@ export const POST = async (req: Request) => {
     }
   }
 
+  // Very long context: total input length > 6000 chars → route to Gemini 2.5 Flash
+  const totalContextLength = (typeof effectiveMessage === "string" ? effectiveMessage.length : 0) + retrievedKnowledgeContext.length;
+  const inferredLongContext = isVeryLongContext(typeof effectiveMessage === "string" ? effectiveMessage : "", retrievedKnowledgeContext.length + totalContextLength);
+
   // Apply plan-based model filtering: free users only see :free models, pro users cannot use pro+-only models
   const planFilteredAllowedModels = Array.isArray(allowedModelsFinal)
     ? filterModelsByPlan(allowedModelsFinal, userPlan)
@@ -603,26 +650,59 @@ export const POST = async (req: Request) => {
     ? getCheaperAlternative(rawSelectedModel, costMode, inferredCodeRequest)
     : { modelId: rawSelectedModel, downgraded: false };
 
-
-
   const toolWebSearchEnabled = Array.isArray(enabledTools) && enabledTools.includes("web_search");
   const effectiveRawMode = rawMode;
 
   const fallbackModel = getFreePlanFallback(inferredCodeRequest);
 
-  let selectedModel = isAutoRouted
-    ? (costFilteredModels.find((id: string) => id === (inferredCodeRequest ? AUTO_PREFERRED_CODING_MODEL : AUTO_PREFERRED_CHAT_MODEL))
-        ?? costFilteredModels[0]
-        ?? getFreePlanFallback(inferredCodeRequest))
-    : costControlled.modelId;
+  // ── Smart routing: pick model + temperature based on request type ─────────────
+  // When the user (or a workspace) explicitly provides allowedModels or a modelId
+  // we honour that; otherwise we apply the smart router.
+  let selectedModel: string;
+  let resolvedTemperature: number;
+  let smartRouteLabel: string;
 
-  if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
-    selectedModel = userPlan === "free" ? "openai/gpt-oss-120b:free" : "openai/gpt-oss-120b";
+  if (planEnforcedModelId) {
+    // Manual / workspace-pinned model
+    selectedModel = planEnforcedModelId;
+    resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
+    smartRouteLabel = `Manual model: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
+  } else if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
+    selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
+    resolvedTemperature = modelProfile === "gpt-oss-code" ? TEMP_CODE : TEMP_MAIN;
+    smartRouteLabel = `Profile: ${modelProfile}`;
+  } else if (isAutoRouted) {
+    // ── Smart router (no explicit model chosen) ────────────────────────────────
+    if (inferredVisionRequest) {
+      selectedModel = ROUTING_VISION_MODEL;
+      resolvedTemperature = TEMP_VISION;
+      smartRouteLabel = `Vision analysis — ${MODEL_LABELS[ROUTING_VISION_MODEL] ?? ROUTING_VISION_MODEL}`;
+    } else if (inferredCodeRequest) {
+      selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
+      resolvedTemperature = TEMP_CODE;
+      smartRouteLabel = `Coding — ${MODEL_LABELS[ROUTING_CODE_MODEL] ?? ROUTING_CODE_MODEL}${userPlan === "free" ? " (free)" : ""}`;
+    } else if (inferredHeavyReasoning) {
+      selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_REASONING_MODEL;
+      resolvedTemperature = TEMP_REASONING;
+      smartRouteLabel = `Heavy reasoning — ${MODEL_LABELS[ROUTING_REASONING_MODEL] ?? ROUTING_REASONING_MODEL}${userPlan === "free" ? " (free)" : ""}`;
+    } else if (inferredLongContext) {
+      selectedModel = ROUTING_GEMINI_MODEL;
+      resolvedTemperature = TEMP_GEMINI_LONGCTX;
+      smartRouteLabel = `Long-context — ${MODEL_LABELS[ROUTING_GEMINI_MODEL] ?? ROUTING_GEMINI_MODEL}`;
+    } else {
+      // Default: main conversational AI
+      selectedModel = userPlan === "free" ? ROUTING_MAIN_MODEL_FREE : ROUTING_MAIN_MODEL;
+      resolvedTemperature = TEMP_MAIN;
+      smartRouteLabel = `Conversational AI — ${MODEL_LABELS[ROUTING_MAIN_MODEL] ?? ROUTING_MAIN_MODEL}${userPlan === "free" ? " (free)" : ""}`;
+    }
+  } else {
+    selectedModel = costControlled.modelId;
+    resolvedTemperature = inferredCodeRequest ? TEMP_CODE : TEMP_MAIN;
+    smartRouteLabel = `Auto: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   }
 
-  // Determine if this is a search/DeepSeek/Gemini request for system prompt selection
+  // Determine if this is a search mode request for system prompt selection
   const isSearchMode = websearchTrigger || toolWebSearchEnabled || effectiveRawMode === "search";
-  const isDeepSeek = selectedModel.includes("deepseek");
   const isGemini = selectedModel.includes("gemini");
   const detected = detectLanguage(effectiveMessage);
   const languageName = languageLock !== "auto"
@@ -649,11 +729,6 @@ export const POST = async (req: Request) => {
   const interactionProfileInstruction = typeof interactionProfile === "string" && interactionProfile.trim()
     ? `Tailor the response using this local interaction profile: ${interactionProfile.trim()}`
     : "";
-  const modelProfileInstruction = modelProfile === "gpt-oss-code"
-    ? "Use the GPT OSS 120B coding profile: prioritize correctness, code quality, tests, and concise engineering explanations."
-    : modelProfile === "gpt-oss-chat"
-      ? "Use the GPT OSS 120B chat profile: prioritize friendly tone, clarity, and concise practical responses."
-      : "";
   const internetContextInstruction = effectiveAddInternetContext
     ? "Use recent web knowledge when the selected model supports it, and prefer concrete, current details over generic background."
     : "";
@@ -673,20 +748,12 @@ export const POST = async (req: Request) => {
       ? (liveWebSearch
         ? `Tavily live web search enabled — answering with ${MODEL_LABELS[selectedModel] ?? selectedModel}`
         : `Web Search enabled — browsing with ${MODEL_LABELS[selectedModel] ?? selectedModel}`)
-      : (isAutoRouted ? "Search mode with automatic model routing" : "Search mode using a research-oriented model"))
-    : isAutoRouted
-      ? rawMode === "code"
-        ? `Auto router choosing the best coding model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
-        : rawMode === "chat"
-          ? `Auto router choosing the best chat model${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
-          : `Auto router choosing the best model for this request${costMode !== "performance" ? ` (${costMode} mode)` : ""}${userPlan === "free" ? " (free plan)" : ""}`
-      : modelId
-        ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}${planDowngradeNote}`
-        : inferredImageRequest
-          ? "Auto-detected an image generation request"
-          : inferredCodeRequest
-            ? `Auto-detected a coding-focused request${costDowngradeNote}${planDowngradeNote}`
-            : `Auto-detected a conversational request${costDowngradeNote}${planDowngradeNote}`;
+      : "Search mode")
+    : modelId
+      ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}${planDowngradeNote}`
+      : inferredImageRequest
+        ? "Auto-detected an image generation request"
+        : `${smartRouteLabel}${costDowngradeNote}${planDowngradeNote}`;
 
   if (!modelId && rawMode === "auto" && inferredImageRequest) {
     const normalizedPrompt = message.replace(/^\s*\/image\s*/i, "").trim() || "A cinematic digital artwork";
@@ -726,17 +793,31 @@ export const POST = async (req: Request) => {
     }
   }
 
+  // ── System prompts per routing destination ─────────────────────────────────
   let systemPrompt: string;
+  const sharedSuffix = [
+    langInstruction,
+    googleContextInstruction,
+    assistantPurposeInstruction,
+    assistantInstruction,
+    memoryInstruction,
+    programmingLanguageInstruction,
+    interactionProfileInstruction,
+    internetContextInstruction,
+  ].filter(Boolean).join(" ");
+
   if (isSearchMode) {
-      systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
-  } else if (isDeepSeek) {
-      systemPrompt = `You are an expert software engineer and coding assistant. ${langInstruction} ${styleInstruction} Help with writing, reviewing, debugging and explaining code. Always use proper markdown code blocks with language tags. Be concise, precise and practical. Prefer showing working code over long explanations. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
-  } else if (isGemini) {
-      systemPrompt = `You are a friendly and knowledgeable conversational assistant. ${langInstruction} ${styleInstruction} Be warm, engaging and helpful. Explain things clearly, ask clarifying questions when needed, and keep responses natural and easy to read. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
+    systemPrompt = `You are a web research assistant. ${langInstruction} ${styleInstruction} Give current, practical answers. When the model has access to current web knowledge, prefer recent facts, mention concrete sources or links when possible, and clearly distinguish facts from guesses. ${sharedSuffix}${ragContext}`.trim();
+  } else if (inferredVisionRequest) {
+    systemPrompt = `Analyze images accurately.\n\nFocus on:\n- screenshots\n- OCR\n- UI analysis\n- visual understanding\n\n${sharedSuffix}${ragContext}`.trim();
   } else if (inferredCodeRequest) {
-      systemPrompt = `You are an expert programmer. ${langInstruction} ${styleInstruction} When generating code, always use proper formatting with markdown code blocks. Be concise and practical. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
+    systemPrompt = `You are a senior software engineer.\n\nRules:\n- prioritize correctness\n- preserve architecture\n- minimal diffs\n- production-ready code\n- avoid hallucinations\n- complete implementations\n- explain briefly\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
+  } else if (inferredHeavyReasoning) {
+    systemPrompt = `You are an analytical reasoning model.\n\nFocus on:\n- logic\n- planning\n- accuracy\n- structured thinking\n- step-by-step reasoning\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
+  } else if (isGemini || inferredLongContext) {
+    systemPrompt = `Analyze long documents and large context efficiently.\n\nFocus on:\n- summarization\n- context retention\n- accurate extraction\n\n${sharedSuffix}${ragContext}`.trim();
   } else {
-      systemPrompt = `You are a helpful assistant. ${langInstruction} ${styleInstruction} Be friendly and conversational. ${internetContextInstruction} ${googleContextInstruction} ${assistantPurposeInstruction} ${assistantInstruction} ${memoryInstruction} ${programmingLanguageInstruction} ${interactionProfileInstruction} ${modelProfileInstruction}${ragContext}`.trim();
+    systemPrompt = `You are a helpful AI assistant.\n\nRules:\n- natural conversation\n- concise responses\n- fast replies\n- good formatting\n- helpful explanations\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   }
 
   // Append any custom workspace system prompt
@@ -791,10 +872,6 @@ export const POST = async (req: Request) => {
     // Unauthenticated users or no conversationId: use client-provided history.
     historyMessages = clientHistoryToMessages(history);
   }
-
-  const resolvedTemperature = modelProfile === "gpt-oss-code"
-    ? GPT_OSS_CODE_TEMPERATURE
-    : GPT_OSS_CHAT_TEMPERATURE;
 
   const requestBody: Record<string, unknown> = {
     model: selectedModel,

@@ -25,3 +25,24 @@ export function isImageRequest(message: string): boolean {
     || /\bimage of\b/.test(text)
     || /\bplease.*\b(image|picture|photo)\b/.test(text);
 }
+
+/**
+ * Returns true for messages that require deep analytical or multi-step reasoning:
+ * planning, agent design, complex workflows, logic-heavy problems.
+ */
+export function isHeavyReasoningRequest(message: string): boolean {
+  const text = message.trim();
+  if (!text) return false;
+
+  return /\b(step.?by.?step|reasoning|think through|analyze|analyse|plan|planning|architect|workflow|agent|pipeline|strategy|logic|deduce|infer|evaluate|complex|hard problem|multi.?step|break down)\b/i.test(text)
+    || /\b(how (should|would|do) (i|we|you) (design|build|structure|implement|approach|solve))\b/i.test(text)
+    || /\b(pros and cons|trade.?off|compare|contrast|decision|choose between)\b/i.test(text);
+}
+
+/**
+ * Returns true when the combined message + context is very long (> 6000 chars),
+ * making a long-context model like Gemini 2.5 Flash more suitable.
+ */
+export function isVeryLongContext(message: string, contextLength = 0): boolean {
+  return message.length + contextLength > 6000;
+}
