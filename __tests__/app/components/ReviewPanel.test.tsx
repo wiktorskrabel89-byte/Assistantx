@@ -8,7 +8,6 @@ function renderPanel(overrides: Partial<Parameters<typeof ReviewPanel>[0]> = {})
   const onReviewTextChange = overrides.onReviewTextChange ?? jest.fn();
   const utils = render(
     <ReviewPanel
-      dark={overrides.dark ?? false}
       rating={overrides.rating}
       reviewText={overrides.reviewText}
       onRatingChange={onRatingChange}
@@ -150,14 +149,9 @@ describe("ReviewPanel", () => {
   });
 
   describe("dark mode", () => {
-    it("applies dark border class when dark=true", () => {
-      const { container } = renderPanel({ dark: true });
-      expect(container.firstChild).toHaveClass("border-slate-800");
-    });
-
-    it("applies light border class when dark=false", () => {
-      const { container } = renderPanel({ dark: false });
-      expect(container.firstChild).toHaveClass("border-slate-200");
+    it("uses CSS-variable-based border class", () => {
+      const { container } = renderPanel();
+      expect(container.firstChild).toHaveClass("border-border");
     });
   });
 
@@ -170,7 +164,6 @@ describe("ReviewPanel", () => {
       // Simulate parent updating reviewText
       rerender(
         <ReviewPanel
-          dark={false}
           rating={4 as MessageFeedback}
           reviewText="New comment"
           onRatingChange={jest.fn()}

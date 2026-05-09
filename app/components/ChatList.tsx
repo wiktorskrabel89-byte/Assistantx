@@ -13,9 +13,6 @@ const MESSAGE_LOAD_BATCH_SIZE = 80;
 export type ChatListProps = {
   chat: ChatEntry[];
   loading: boolean;
-  dark: boolean;
-  cardBg: string;
-  codeBg: string;
   copied: string | null;
   scrollRef: RefObject<HTMLDivElement | null>;
   chatEndRef: RefObject<HTMLDivElement | null>;
@@ -43,9 +40,6 @@ export type ChatListProps = {
 export const ChatList = memo(function ChatList({
   chat,
   loading,
-  dark,
-  cardBg,
-  codeBg,
   copied,
   scrollRef,
   chatEndRef,
@@ -85,11 +79,11 @@ export const ChatList = memo(function ChatList({
     <div ref={scrollRef} className="mx-auto flex-1 w-full max-w-4xl overflow-y-auto space-y-4 pr-1">
       {chat.length === 0 ? (
         <div className="mt-8 text-center sm:mt-12">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-700 via-cyan-600 to-amber-500 shadow-lg shadow-cyan-500/20">
-            <AssistantIcon className="h-6 w-6 text-white" />
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+            <AssistantIcon className="h-6 w-6 text-foreground/70" />
           </div>
-          <h2 className={cn("mt-5 text-[2rem] font-bold tracking-tight", dark ? "text-white" : "text-slate-900")}>Jak moge Ci pomoc?</h2>
-          <p className={cn("mx-auto mt-2 max-w-2xl text-sm", dark ? "text-slate-400" : "text-slate-600")}>
+          <h2 className="mt-5 text-[2rem] font-bold tracking-tight text-foreground">Jak moge Ci pomoc?</h2>
+          <p className="mx-auto mt-2 max-w-2xl text-sm text-muted-foreground">
             {assistantName === "Code Assistant"
               ? "Expert in AutoHotkey, Python, JavaScript, and all programming languages. Provides complete code solutions with best practices."
               : assistantDescription}
@@ -103,19 +97,16 @@ export const ChatList = memo(function ChatList({
                   variant="outline"
                   onClick={() => onQuickStart(card.prompt, card.mode)}
                   className={cn(
-                    "h-auto rounded-xl px-4 py-3 text-left transition-all justify-start",
-                    dark
-                      ? "border-slate-800 bg-slate-900/80 hover:border-blue-800 hover:bg-slate-900"
-                      : "border-slate-200 bg-white shadow-sm hover:border-sky-300 hover:shadow-md"
+                    "h-auto rounded-xl px-4 py-3 text-left transition-all justify-start border border-border bg-card hover:bg-accent"
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg", dark ? "bg-slate-800 text-cyan-300" : "bg-sky-50 text-sky-700")}>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground/70">
                       <Icon className="h-4 w-4" strokeWidth={2.2} />
                     </div>
                     <div>
-                      <div className={cn("text-sm font-semibold", dark ? "text-white" : "text-slate-900")}>{card.label}</div>
-                      <div className="mt-0.5 text-xs text-slate-500">{card.hint}</div>
+                      <div className="text-sm font-semibold text-foreground">{card.label}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{card.hint}</div>
                     </div>
                   </div>
                 </Button>
@@ -133,10 +124,7 @@ export const ChatList = memo(function ChatList({
             size="sm"
             onClick={() => setVisibleCount((current) => current + MESSAGE_LOAD_BATCH_SIZE)}
             className={cn(
-              "rounded-full text-xs backdrop-blur",
-              dark
-                ? "border-slate-700 bg-slate-900/80 text-slate-200 hover:bg-slate-800"
-                : "border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-50"
+              "rounded-full text-xs backdrop-blur border-border bg-background/80 text-foreground hover:bg-accent"
             )}
           >
             Show {revealCount} older message{revealCount === 1 ? "" : "s"}
@@ -153,39 +141,39 @@ export const ChatList = memo(function ChatList({
                 <img src={entry.filePreview} alt="file" className="mb-1 ml-auto block h-24 rounded-xl" />
               ) : null}
               {entry.fileName && !entry.filePreview ? (
-                <div className={cn("mb-1 ml-auto inline-flex rounded-full border px-2 py-1 text-xs", dark ? "border-gray-600 text-gray-300" : "border-gray-300 text-gray-600")}>
+                <div className="mb-1 ml-auto inline-flex rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
                   {entry.fileName}
                 </div>
               ) : null}
               {editingMessageId === entry.id ? (
-                <div className="rounded-2xl rounded-tr-sm bg-sky-600/10 p-3">
+                <div className="rounded-2xl rounded-tr-sm bg-muted/40 p-3">
                   <Textarea
                     id="edit-message-content"
                     name="editMessageContent"
                     value={editedMessageContent}
                     onChange={(event) => onEditedMessageChange(event.target.value)}
                     rows={4}
-                    className={cn("w-full resize-none rounded-xl text-sm", dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900")}
+                    className="w-full resize-none rounded-xl text-sm border-border bg-background text-foreground"
                   />
                   <div className="mt-2 flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={onCancelEditingMessage} className={cn("rounded-lg text-xs", dark ? "border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800" : "border border-slate-200 bg-white text-slate-700")}>
+                    <Button variant="ghost" size="sm" onClick={onCancelEditingMessage} className="rounded-lg text-xs border border-border bg-background text-foreground hover:bg-accent">
                       Cancel
                     </Button>
-                    <Button size="sm" onClick={onSaveEditedMessage} className="rounded-lg bg-blue-600 text-xs text-white hover:bg-blue-700">
+                    <Button size="sm" onClick={onSaveEditedMessage} className="rounded-lg text-xs bg-primary text-primary-foreground hover:bg-primary/90">
                       Save
                     </Button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-2 text-sm text-white">
+                  <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-muted px-4 py-2 text-sm text-foreground">
                     {entry.user}
                   </div>
                   <div className="mt-1 flex justify-end gap-3">
-                    <Button variant="ghost" size="sm" onClick={() => onEditUser(entry.user)} className={cn("h-auto px-0 py-0 text-xs", dark ? "text-cyan-300" : "text-sky-700")}>
+                    <Button variant="ghost" size="sm" onClick={() => onEditUser(entry.user)} className="h-auto px-0 py-0 text-xs text-muted-foreground hover:text-foreground">
                       Edit and resend
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => onStartEditingMessage(entry.id, entry.user)} className={cn("h-auto px-0 py-0 text-xs", dark ? "text-slate-300" : "text-slate-600")}>
+                    <Button variant="ghost" size="sm" onClick={() => onStartEditingMessage(entry.id, entry.user)} className="h-auto px-0 py-0 text-xs text-muted-foreground hover:text-foreground">
                       Edit inline
                     </Button>
                   </div>
@@ -196,9 +184,6 @@ export const ChatList = memo(function ChatList({
 
           <AIMessage
             entry={entry}
-            dark={dark}
-            cardBg={cardBg}
-            codeBg={codeBg}
             copied={copied}
             isStreaming={loading && index === chat.length - 1}
             reasoningOpen={openReasoning.has(entry.id)}

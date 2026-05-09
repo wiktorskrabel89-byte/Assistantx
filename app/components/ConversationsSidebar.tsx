@@ -7,9 +7,6 @@ import type { ChatThread } from "../lib/chat-types";
 
 type ConversationsSidebarProps = {
   open: boolean;
-  dark: boolean;
-  cardBg: string;
-  inputBg: string;
   workspaceName: string;
   chatSearch: string;
   chats: ChatThread[];
@@ -27,9 +24,6 @@ type ConversationsSidebarProps = {
 
 export function ConversationsSidebar({
   open,
-  dark,
-  cardBg,
-  inputBg,
   workspaceName,
   chatSearch,
   chats,
@@ -71,33 +65,33 @@ export function ConversationsSidebar({
         className={`fixed inset-0 z-30 bg-black/50 transition-opacity xl:hidden ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}
       />
 
-      <aside className={`fixed inset-y-3 left-3 z-40 w-[min(16rem,calc(100vw-1.5rem))] min-h-0 overflow-hidden rounded-[26px] border transition-transform duration-200 xl:static xl:w-[250px] xl:translate-x-0 ${cardBg} ${open ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
+      <aside className={`fixed inset-y-3 left-3 z-40 w-[min(16rem,calc(100vw-1.5rem))] min-h-0 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar transition-transform duration-200 xl:static xl:w-[250px] xl:translate-x-0 ${open ? "translate-x-0" : "-translate-x-[115%] xl:translate-x-0"}`}>
         <div className="flex h-full min-h-0 flex-col">
-          <div className="border-b border-slate-200 px-3 py-3 dark:border-slate-800">
+          <div className="border-b border-sidebar-border px-3 py-3">
             <button
               onClick={() => {
                 onCreateChat();
                 onClose();
               }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:from-sky-800 hover:to-cyan-700"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <Plus className="h-4 w-4" />
               New chat
             </button>
             <div className="relative mt-3">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="conversations-sidebar-search"
                 name="conversationsSidebarSearch"
                 value={chatSearch}
                 onChange={(event) => onSearchChange(event.target.value)}
                 placeholder="Search chats or tags..."
-                className={`w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm ${inputBg}`}
+                className="w-full rounded-lg border border-border bg-background/50 py-2.5 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
           </div>
 
-          <div className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          <div className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             {workspaceName}
           </div>
 
@@ -106,13 +100,13 @@ export function ConversationsSidebar({
             <button
               type="button"
               onClick={() => setSystemPromptOpen((prev) => !prev)}
-              className={`flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-[11px] font-medium transition-colors ${dark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700"}`}
+              className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               {systemPromptOpen
                 ? <ChevronDown className="h-3 w-3 flex-shrink-0" />
                 : <ChevronRight className="h-3 w-3 flex-shrink-0" />}
               System Prompt
-              {systemPrompt.trim() ? <span className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-500" /> : null}
+              {systemPrompt.trim() ? <span className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full bg-foreground/40" /> : null}
             </button>
             {systemPromptOpen ? (
               <textarea
@@ -122,7 +116,7 @@ export function ConversationsSidebar({
                 onChange={(e) => onSetSystemPrompt(e.target.value)}
                 placeholder="Add custom instructions for this workspace…"
                 rows={4}
-                className={`mt-1 w-full resize-none rounded-xl border px-2.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-sky-400 ${dark ? "border-slate-700 bg-slate-900 text-slate-200 placeholder-slate-600" : "border-slate-200 bg-slate-50 text-slate-800 placeholder-slate-400"}`}
+                className="mt-1 w-full resize-none rounded-lg border border-border bg-background/50 px-2.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
               />
             ) : null}
           </div>
@@ -152,14 +146,10 @@ export function ConversationsSidebar({
                             onClose();
                           }
                         }}
-                        className={`group w-full rounded-2xl px-3 py-3 text-left transition-colors cursor-pointer ${
+                        className={`group w-full rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer ${
                           chat.id === activeChatId
-                            ? dark
-                              ? "bg-slate-800 text-white"
-                              : "bg-sky-50 text-slate-900"
-                            : dark
-                              ? "text-slate-300 hover:bg-slate-800/80"
-                              : "text-slate-700 hover:bg-slate-50"
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                         }`}
                       >
                         <div className="flex items-start gap-2">
@@ -177,9 +167,7 @@ export function ConversationsSidebar({
                                     tabIndex={0}
                                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); handleRemoveTag(chat, tag); } }}
                                     aria-label={`Remove tag ${tag}`}
-                                    className={`inline-flex cursor-pointer items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
-                                      dark ? "bg-sky-900/60 text-sky-300 hover:bg-red-900/50 hover:text-red-300" : "bg-sky-100 text-sky-700 hover:bg-red-100 hover:text-red-600"
-                                    }`}
+                                    className="inline-flex cursor-pointer items-center gap-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                                   >
                                     #{tag}
                                     <X className="h-2.5 w-2.5" />
@@ -195,7 +183,7 @@ export function ConversationsSidebar({
                                 event.stopPropagation();
                                 onRenameChat(chat.id);
                               }}
-                              className="text-[11px] text-slate-400 hover:text-sky-600"
+                              className="text-[11px] text-muted-foreground hover:text-foreground"
                             >
                               Rename
                             </button>
@@ -206,7 +194,7 @@ export function ConversationsSidebar({
                                 setEditingTagsChatId(isTagging ? null : chat.id);
                                 setTagInput("");
                               }}
-                              className="text-[11px] text-slate-400 hover:text-sky-600"
+                              className="text-[11px] text-muted-foreground hover:text-foreground"
                               title="Add tag"
                             >
                               Tag
@@ -217,7 +205,7 @@ export function ConversationsSidebar({
                                 event.stopPropagation();
                                 onDeleteChat(chat.id);
                               }}
-                              className="text-[11px] text-slate-400 hover:text-red-500"
+                              className="text-[11px] text-muted-foreground hover:text-destructive"
                             >
                               Delete
                             </button>
@@ -227,10 +215,10 @@ export function ConversationsSidebar({
 
                       {isTagging ? (
                         <div
-                          className={`mx-1 mb-1 flex gap-1 rounded-xl border px-2 py-1.5 ${dark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}
+                          className="mx-1 mb-1 flex gap-1 rounded-lg border border-border bg-background px-2 py-1.5"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <Tag className="mt-1 h-3 w-3 flex-shrink-0 text-slate-400" />
+                          <Tag className="mt-1 h-3 w-3 flex-shrink-0 text-muted-foreground" />
                           <input
                             autoFocus
                             id="tag-input"
@@ -242,11 +230,11 @@ export function ConversationsSidebar({
                               if (e.key === "Escape") { setEditingTagsChatId(null); }
                             }}
                             placeholder="Add tag, Enter to confirm"
-                            className={`flex-1 bg-transparent text-xs focus:outline-none ${dark ? "text-slate-200 placeholder-slate-500" : "text-slate-800 placeholder-slate-400"}`}
+                            className="flex-1 bg-transparent text-xs focus:outline-none placeholder:text-muted-foreground"
                           />
                           <button
                             onClick={() => handleAddTag(chat)}
-                            className="text-[10px] font-semibold text-sky-600 hover:text-sky-700"
+                            className="text-[10px] font-semibold text-foreground/70 hover:text-foreground"
                           >
                             Add
                           </button>

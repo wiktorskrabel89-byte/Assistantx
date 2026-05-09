@@ -200,9 +200,6 @@ export function ChatTab() {
     [currentConversationId, filteredConversations]
   );
 
-  const cardBg = state.dark ? "bg-slate-900 border-slate-800" : "bg-white/92 border-sky-200/60 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.22)]";
-  const inputBg = state.dark ? "bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500" : "bg-white border-slate-200 text-slate-900 placeholder-slate-400";
-  const codeBg = state.dark ? "bg-slate-950" : "bg-slate-100";
   const googleLinked = linkedProviders.includes("google") || authProvider === "google";
   const latestEntry = activeChat.messages[activeChat.messages.length - 1];
 
@@ -638,9 +635,6 @@ export function ChatTab() {
         {sidebarOpen ? (
           <ConversationsSidebar
             open={sidebarOpen}
-            dark={state.dark}
-            cardBg={cardBg}
-            inputBg={inputBg}
             workspaceName={activeWorkspace.name}
             chatSearch={chatSearch}
             chats={filteredConversations}
@@ -658,11 +652,9 @@ export function ChatTab() {
         ) : null}
       </div>
 
-      <main className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[26px] border transition-all duration-200 ${cardBg}`}>
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card transition-all duration-200">
         <section className="flex h-full min-h-0 min-w-0 flex-col animate-tab-enter">
           <ChatHeader
-            dark={state.dark}
-            inputBg={inputBg}
             assistantIcon={assistantIcon}
             assistantName={assistantName}
             activeChatTitle={activeChat.title}
@@ -679,7 +671,7 @@ export function ChatTab() {
             onOpenUsage={() => setUsageDashboardOpen((prev) => !prev)}
           />
 
-          <div className={`min-h-0 flex-1 px-3 py-4 transition-colors duration-200 ${state.dark ? "bg-slate-950" : "bg-[#f7f8fd]"}`}>
+          <div className="min-h-0 flex-1 px-3 py-4 bg-background transition-colors duration-200">
             <div className="mx-auto flex h-full max-w-5xl flex-col">
               {!premiumBannerHidden ? (
                 <PremiumPlanBanner
@@ -693,7 +685,7 @@ export function ChatTab() {
                 <button
                   type="button"
                   onClick={() => setPremiumBannerHidden(false)}
-                  className={`mb-3 self-start rounded-lg border px-2.5 py-1 text-[11px] ${state.dark ? "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}
+                  className="mb-3 self-start rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] text-foreground/70 hover:bg-accent"
                 >
                   Show premium banner
                 </button>
@@ -723,9 +715,6 @@ export function ChatTab() {
                 <ChatList
                   chat={activeChat.messages}
                   loading={loading}
-                  dark={state.dark}
-                  cardBg={cardBg}
-                  codeBg={codeBg}
                   copied={copied}
                   scrollRef={chatScrollRef}
                   chatEndRef={chatEndRef}
@@ -762,7 +751,6 @@ export function ChatTab() {
           </div>
 
           <ChatComposer
-            dark={state.dark}
             message={message}
             file={file}
             filePreview={filePreview}
