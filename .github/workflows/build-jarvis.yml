@@ -54,26 +54,28 @@ jobs:
           $sha7 = "${{ github.sha }}".Substring(0, 7)
           $date = (Get-Date -AsUTC -Format "yyyy-MM-dd HH:mm") + " UTC"
 
-          $body = @"
-## What's new in v$version
-
-$commits
-
----
-Built from commit: [$sha7](https://github.com/wiktorskrabel89-byte/Assistantx/commit/${{ github.sha }})
-Built on: $date
-
-| File | Architecture |
-|------|-------------|
-| ``JarvisSetup-x64.exe`` | Intel / AMD 64-bit |
-| ``JarvisSetup-arm64.exe`` | ARM64 (Snapdragon, Surface Pro X) |
-| ``Jarvis-android.apk`` | Android |
-
-**How to use:**
-1. Download the installer for your architecture.
-2. Run it — Windows may warn about an unsigned binary; click *More info → Run anyway*.
-3. Jarvis will start and connect to your AssistantX backend automatically.
-"@
+          $bt = '``'
+          $commitUrl = "https://github.com/wiktorskrabel89-byte/Assistantx/commit/${{ github.sha }}"
+          $body = @(
+            "## What's new in v$version",
+            "",
+            "$commits",
+            "",
+            "---",
+            "Built from commit: [$sha7]($commitUrl)",
+            "Built on: $date",
+            "",
+            "| File | Architecture |",
+            "|------|-------------|",
+            "| ${bt}JarvisSetup-x64.exe${bt} | Intel / AMD 64-bit |",
+            "| ${bt}JarvisSetup-arm64.exe${bt} | ARM64 (Snapdragon, Surface Pro X) |",
+            "| ${bt}Jarvis-android.apk${bt} | Android |",
+            "",
+            "**How to use:**",
+            "1. Download the installer for your architecture.",
+            "2. Run it — Windows may warn about an unsigned binary; click *More info → Run anyway*.",
+            "3. Jarvis will start and connect to your AssistantX backend automatically."
+          ) -join "`n"
 
           $body | Set-Content -Path "changelog_body.txt" -Encoding UTF8
           Write-Host "Changelog written to changelog_body.txt"
