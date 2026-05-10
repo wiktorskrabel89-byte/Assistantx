@@ -88,20 +88,25 @@ jobs:
           $found = $false
           $gradleBuildFailed = $false
           $lastGradleLines = ""
+          $gradleLogPath = Join-Path $distDir "gradle-build.log"
 
           if (Test-Path "jarvis/android/android/gradlew.bat") {
-            $gradleLogPath = Join-Path $distDir "gradle-build.log"
             Push-Location "jarvis/android/android"
             try {
               ./gradlew.bat assembleRelease *> $gradleLogPath
               if ($LASTEXITCODE -ne 0) {
                 $gradleBuildFailed = $true
-                $lastGradleLines = (Get-Content $gradleLogPath -Tail 20 -ErrorAction SilentlyContinue | Out-String).Trim()
+                $lastGradleLines = (Get-Content $gradleLogPath -Tail 50 -ErrorAction SilentlyContinue | Out-String).Trim()
+                if ([string]::IsNullOrWhiteSpace($lastGradleLines)) {
+                  $lastGradleLines = "No log lines captured; see uploaded gradle-build.log artifact."
+                }
                 Write-Warning "Android Gradle build failed with exit code $LASTEXITCODE; checking fallback APK locations. Last output:`n$lastGradleLines"
               }
             } finally {
               Pop-Location
             }
+          } else {
+            "Gradle wrapper not found at jarvis/android/android/gradlew.bat; skipped Android build." | Set-Content $gradleLogPath
           }
 
           # Search order:
