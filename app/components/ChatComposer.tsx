@@ -3,6 +3,7 @@
 import { Eye, Mic, MicOff, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
 import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { type RefObject } from "react";
+import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
 import { Button } from "@/components/ui/button";

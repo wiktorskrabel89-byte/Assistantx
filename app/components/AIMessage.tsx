@@ -109,6 +109,8 @@ export function AIMessage({
     setIsSpeaking(false);
   };
 
+  let codeBlockIndex = 0;
+
   return (
     <div className="flex justify-start">
       <div className="max-w-[88%] space-y-1">
@@ -180,7 +182,7 @@ export function AIMessage({
                               {copied === blockId ? "Copied" : "Copy"}
                             </button>
                           </div>
-                          <LazyCodeBlock isDark={isDark} language={match?.[1] ?? "text"} code={codeText} />
+                          <LazyCodeBlock isDark={dark} language={match?.[1] ?? "text"} code={codeText} />
                         </div>
                       );
                     }
