@@ -9,6 +9,7 @@ const nextConfig = {
   },
   // Allow Next.js's webpack/turbopack build process to transpile ESM-only packages
   // in the react-markdown and react-syntax-highlighter dependency trees
+  // Periodically revalidate this list after dependency upgrades and remove entries no longer needed.
   transpilePackages: [
     'react-markdown',
     'unified',

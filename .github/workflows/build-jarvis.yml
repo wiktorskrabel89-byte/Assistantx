@@ -84,7 +84,7 @@ Built on: $date
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: jarvis/desktop/package-lock.json
 
@@ -98,7 +98,7 @@ Built on: $date
 
       - name: Install desktop dependencies
         working-directory: jarvis/desktop
-        run: npm install
+        run: npm ci
 
       - name: Build installers (x64 + ARM64)
         working-directory: jarvis/desktop
