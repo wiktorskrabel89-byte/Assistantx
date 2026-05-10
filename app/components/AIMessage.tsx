@@ -1,10 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { CodeReviewPanel } from "./CodeReviewPanel";
 import { ReviewPanel } from "./ReviewPanel";
+import ReactMarkdown from "react-markdown";
 import type { ChatEntry, MessageFeedback, ResponseAction } from "../lib/chat-types";
+
+// Lazily load the syntax highlighter so the large Prism bundle is excluded from
+// the initial page JavaScript, significantly reducing Total Blocking Time.
+const LazyCodeBlock = dynamic(
+  () => import("./LazyCodeBlock").then((m) => m.LazyCodeBlock),
+  { ssr: false }
+);
 
 // ── Inline citations ────────────────────────────────────────────────────────
 type Citation = { index: number; url: string };
@@ -155,13 +163,55 @@ export function AIMessage({
                 <span className="whitespace-pre-wrap break-words leading-relaxed">{entry.ai}</span>
               </div>
             ) : (
-              <MarkdownMessageRenderer
-                text={cleanText}
-                entryId={entry.id}
-                copied={copied}
-                dark={dark}
-                onCopyText={onCopyText}
-              />
+              <ReactMarkdown
+                components={{
+                  code({ className, children, ...props }) {
+                    const match = /language-(\w+)/.exec(className ?? "");
+                    const codeText = String(children).replace(/\n$/, "");
+                    const isBlock = Boolean(match) || codeText.includes("\n");
+
+                    if (isBlock) {
+                      const blockId = `${entry.id}-code-${codeBlockIndex++}`;
+                      return (
+                        <div className="relative my-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between px-3 py-1 text-xs text-muted-foreground bg-muted">
+                            <span>{match?.[1] ?? "code"}</span>
+                            <button onClick={() => onCopyText(codeText, blockId)} className="transition-colors hover:text-white">
+                              {copied === blockId ? "Copied" : "Copy"}
+                            </button>
+                          </div>
+                          <LazyCodeBlock isDark={isDark} language={match?.[1] ?? "text"} code={codeText} />
+                        </div>
+                      );
+                    }
+
+                    return <code className="bg-muted rounded px-1 text-xs" {...props}>{children}</code>;
+                  },
+                  p({ children }) {
+                    return <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{children}</p>;
+                  },
+                  ul({ children }) {
+                    return <ul className="mb-2 ml-4 list-disc space-y-1">{children}</ul>;
+                  },
+                  ol({ children }) {
+                    return <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>;
+                  },
+                  blockquote({ children }) {
+                    return <blockquote className="my-2 border-l-4 border-border pl-3 italic text-muted-foreground">{children}</blockquote>;
+                  },
+                  h1({ children }) {
+                    return <h1 className="mb-2 text-xl font-bold">{children}</h1>;
+                  },
+                  h2({ children }) {
+                    return <h2 className="mb-2 text-lg font-bold">{children}</h2>;
+                  },
+                  h3({ children }) {
+                    return <h3 className="mb-1 text-base font-bold">{children}</h3>;
+                  },
+                }}
+              >
+                {cleanText}
+              </ReactMarkdown>
             )}
 
             {/* Inline citations — shown for search responses that include footnotes */}
