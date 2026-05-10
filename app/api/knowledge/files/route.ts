@@ -5,6 +5,19 @@ import { runWithConcurrency } from "@/app/lib/concurrency";
 // Maximum concurrent embedding API calls during reindex.
 const REINDEX_EMBEDDING_CONCURRENCY = 5;
 
+// PostgREST / PostgreSQL error codes that indicate a missing table or column.
+const MISSING_TABLE_CODES = new Set(["42P01", "PGRST116", "PGRST200", "PGRST201", "PGRST202", "PGRST204", "PGRST205"]);
+
+function isMissingTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as Record<string, unknown>;
+  const code = typeof e.code === "string" ? e.code : null;
+  const message = (typeof e.message === "string" ? e.message : "").toLowerCase();
+  return (code !== null && MISSING_TABLE_CODES.has(code))
+    || (message.includes("relation") && message.includes("does not exist"))
+    || message.includes("knowledge_files does not exist");
+}
+
 type KnowledgeStorageClient = {
   from: (bucket: string) => {
     remove: (paths: string[]) => Promise<{ error?: { message?: string } | null }>;
@@ -18,13 +31,24 @@ function getKnowledgeStorageClient(client: unknown): KnowledgeStorageClient | nu
 }
 
 async function getAuth() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return { supabase, user };
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return { supabase, user };
+  } catch (err) {
+    console.error("[knowledge/files] Supabase initialization error:", err);
+    return { supabase: null, user: null };
+  }
 }
 
 export async function GET() {
   const { supabase, user } = await getAuth();
+  if (!supabase) {
+    return Response.json(
+      { files: [], available: false, code: "knowledge_not_configured", error: "Supabase is not configured." },
+      { status: 503 },
+    );
+  }
   if (!user) return Response.json({ files: [] }, { status: 401 });
 
   const { data, error } = await supabase
@@ -34,6 +58,12 @@ export async function GET() {
     .order("created_at", { ascending: false });
 
   if (error) {
+    if (isMissingTableError(error)) {
+      return Response.json(
+        { files: [], available: false, code: "knowledge_not_configured", error: "Knowledge base is not configured yet." },
+        { status: 503 },
+      );
+    }
     return Response.json({ files: [], error: error.message }, { status: 500 });
   }
   return Response.json({ files: data ?? [] });
@@ -41,7 +71,7 @@ export async function GET() {
 
 export async function DELETE(req: Request) {
   const { supabase, user } = await getAuth();
-  if (!user) return Response.json({ ok: false }, { status: 401 });
+  if (!supabase || !user) return Response.json({ ok: false }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const fileId = searchParams.get("id");
@@ -78,7 +108,7 @@ export async function DELETE(req: Request) {
 
 export async function POST(req: Request) {
   const { supabase, user } = await getAuth();
-  if (!user) return Response.json({ ok: false }, { status: 401 });
+  if (!supabase || !user) return Response.json({ ok: false }, { status: 401 });
 
   let body: { fileId?: string };
   try {

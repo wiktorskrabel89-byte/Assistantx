@@ -25,11 +25,19 @@ export function KnowledgeTab({ dark }: { dark: boolean }) {
     setError(null);
     try {
       const response = await fetch("/api/knowledge/files");
+      if (response.status === 503) {
+        setFiles([]);
+        return;
+      }
       if (!response.ok) {
         setError(`Failed to load files (${response.status})`);
         return;
       }
-      const payload = await response.json() as { files?: KnowledgeFile[] };
+      const payload = await response.json() as { files?: KnowledgeFile[]; code?: string };
+      if (payload.code === "knowledge_not_configured") {
+        setFiles([]);
+        return;
+      }
       setFiles(Array.isArray(payload.files) ? payload.files : []);
     } catch {
       setError("Network error — could not load knowledge files.");

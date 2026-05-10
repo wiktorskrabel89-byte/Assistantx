@@ -28,7 +28,7 @@ function buildCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
     // Restrict images to HTTPS + safe data URIs; avoid the broad wildcard '*'
     "img-src 'self' blob: data: https:",
-    // Allow Google Fonts, self-hosted fonts, and data: URIs (e.g. embedded base64 fonts)
+    // Allow Google Fonts, self-hosted fonts, and data-URI fonts (Monaco editor codicons)
     "font-src 'self' https://fonts.gstatic.com data:",
     // API and WebSocket connections are allowed to any origin (LLM providers etc.)
     "connect-src *",

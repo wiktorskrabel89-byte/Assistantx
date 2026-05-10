@@ -62,8 +62,12 @@ export function WebResearchTab({ dark }: { dark: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: searchQuery, forceFresh }),
       });
-      const payload = await response.json() as SearchPayload;
-      setResult(payload);
+      const payload = await response.json().catch(() => ({ error: "Server error — no response body." })) as SearchPayload;
+      if (!response.ok) {
+        setResult({ ...payload, answer: "", results: [], cached: false });
+      } else {
+        setResult(payload);
+      }
       await loadHistory();
     } finally {
       setLoading(false);
