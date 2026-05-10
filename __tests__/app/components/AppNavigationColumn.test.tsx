@@ -64,13 +64,13 @@ describe("AppNavigationColumn — click interactions", () => {
 
     it("calls onSelectTab('settings') when the Settings icon is clicked", () => {
       const { onSelectTab } = renderNav();
-      fireEvent.click(screen.getByTitle("Ustawienia"));
+      fireEvent.click(screen.getByTitle("Settings"));
       expect(onSelectTab).toHaveBeenCalledWith("settings");
     });
 
     it("calls onSelectTab('notifications') when the Notifications icon is clicked", () => {
       const { onSelectTab } = renderNav();
-      fireEvent.click(screen.getByTitle("Powiadomienia"));
+      fireEvent.click(screen.getByTitle("Notifications"));
       expect(onSelectTab).toHaveBeenCalledWith("notifications");
     });
   });
@@ -80,7 +80,7 @@ describe("AppNavigationColumn — click interactions", () => {
       renderNav();
       // apps drawer not visible yet
       expect(screen.queryByPlaceholderText("Szukaj aplikacji...")).not.toBeInTheDocument();
-      fireEvent.click(screen.getAllByTitle("Aplikacje")[0] ?? screen.getByRole("button", { name: /Aplikacje/i }));
+      fireEvent.click(screen.getAllByTitle("Applications")[0] ?? screen.getByRole("button", { name: /Applications/i }));
       expect(screen.getAllByPlaceholderText("Szukaj aplikacji...").length).toBeGreaterThan(0);
     });
   });

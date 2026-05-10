@@ -30,3 +30,6 @@ if (typeof TextEncoder === "undefined") {
   global.TextEncoder = util.TextEncoder as unknown as typeof TextEncoder;
   global.TextDecoder = util.TextDecoder as unknown as typeof TextDecoder;
 }
+
+process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://example.supabase.co";
+process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??= "test-key";

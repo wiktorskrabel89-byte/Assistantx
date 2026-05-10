@@ -180,7 +180,7 @@
     .update-actions {
       display: grid;
       gap: 6px;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     [hidden] {
@@ -467,6 +467,7 @@
         <div id="update-status">Waiting to check for updates…</div>
         <div class="update-actions">
           <button type="button" id="check-updates">Check now</button>
+          <button type="button" id="download-update" class="secondary" hidden>Download update</button>
           <button type="button" id="install-update" class="secondary" hidden>Install update</button>
         </div>
       </div>

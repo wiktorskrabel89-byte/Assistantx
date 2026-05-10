@@ -4,9 +4,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Download, Mic, Smartphone, Sparkles, Volume2 } from "lucide-react";
+import { Download, Laptop, Mic, Smartphone, Sparkles, TriangleAlert, Volume2 } from "lucide-react";
+import type { DeviceType, PairingStatus } from "@/lib/device-pairing";
 
-export default function JarvisTab() {
+export default function JarvisTab({
+  deviceType = "pc",
+  pairingStatus = "none",
+  pairingCode = null,
+  expiresAt = null,
+  onOpenPairingDialog,
+  onShowPhonePairingBanner,
+}: {
+  deviceType?: DeviceType;
+  pairingStatus?: PairingStatus;
+  pairingCode?: string | null;
+  expiresAt?: string | null;
+  onOpenPairingDialog?: () => void;
+  onShowPhonePairingBanner?: () => void;
+}) {
 
   async function downloadForWindows() {
     let arch = "x64";
@@ -81,6 +96,47 @@ export default function JarvisTab() {
             </div>
           </CardContent>
         </Card>
+
+        {pairingStatus !== "paired" && (
+          <Card className="border-amber-200/70 bg-amber-50/85">
+            <CardHeader>
+              <div className="flex items-center gap-2 text-amber-900">
+                <TriangleAlert className="h-4 w-4" />
+                <CardTitle className="text-base">
+                  Account not paired with {deviceType === "phone" ? "a PC" : "your phone"} yet
+                </CardTitle>
+              </div>
+              <CardDescription className="text-amber-900/80">
+                {deviceType === "phone"
+                  ? "To continue, install Jarvis Desktop on your PC, sign in with the same account, and enter the pairing code from your phone."
+                  : "Sign in on your phone with the same account, then enter the pairing code shown there to finish linking Jarvis."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1 text-xs text-amber-950/80">
+                {deviceType === "phone" && pairingCode && (
+                  <div className="font-mono text-sm font-semibold tracking-[0.28em] text-amber-950">
+                    {pairingCode}
+                  </div>
+                )}
+                {deviceType === "phone" && expiresAt && (
+                  <p>Pairing code active until {new Date(expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</p>
+                )}
+              </div>
+              {deviceType === "phone" ? (
+                <Button type="button" variant="secondary" className="gap-2" onClick={onShowPhonePairingBanner}>
+                  <Smartphone className="h-4 w-4" />
+                  Show pairing code
+                </Button>
+              ) : (
+                <Button type="button" variant="secondary" className="gap-2" onClick={onOpenPairingDialog}>
+                  <Laptop className="h-4 w-4" />
+                  Pair with phone
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-slate-200/80 bg-white/85">
           <CardHeader>

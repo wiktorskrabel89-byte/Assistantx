@@ -3,6 +3,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Home from "../app/page";
 
 // Mock external service dependencies so the page renders in isolation
+jest.mock("@/lib/server", () => ({
+  createClient: jest.fn(() => ({
+    auth: {
+      getUser: jest.fn().mockResolvedValue({ data: { user: null }, error: null }),
+    },
+  })),
+}));
+
 jest.mock("@/lib/client", () => ({
   createClient: jest.fn(() => ({
     auth: {
@@ -37,8 +45,9 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 
 describe("Home page", () => {
   it("renders without crashing", async () => {
+    const page = await Home();
     await act(async () => {
-      render(<Home />, { wrapper: Wrapper });
+      render(page, { wrapper: Wrapper });
     });
     // The page should render some content — the navigation column is always visible
     expect(document.body.firstChild).not.toBeNull();

@@ -22,6 +22,64 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Full history so we can generate a meaningful changelog
+          fetch-depth: 0
+
+      - name: Bump version and generate changelog
+        id: meta
+        shell: pwsh
+        run: |
+          # Version: 0.1.{run_number} — guarantees electron-updater sees a newer build each time
+          $version = "0.1.${{ github.run_number }}"
+          Write-Host "Version: $version"
+
+          # Patch desktop package.json
+          $desktopPkg = Get-Content "jarvis/desktop/package.json" -Raw | ConvertFrom-Json
+          $desktopPkg.version = $version
+          $desktopPkg | ConvertTo-Json -Depth 20 | Set-Content "jarvis/desktop/package.json" -Encoding UTF8
+
+          # Patch android package.json
+          $androidPkg = Get-Content "jarvis/android/package.json" -Raw | ConvertFrom-Json
+          $androidPkg.version = $version
+          $androidPkg | ConvertTo-Json -Depth 20 | Set-Content "jarvis/android/package.json" -Encoding UTF8
+
+          # Generate changelog from the last 20 commits that touched the jarvis/ tree.
+          # Redirect stderr to null so git error output never leaks into the release notes.
+          $commits = git log --pretty=format:"- %s" -20 -- jarvis/ 2>$null
+          if ([string]::IsNullOrWhiteSpace($commits)) {
+            $commits = "- Build updated"
+          }
+
+          $sha7 = "${{ github.sha }}".Substring(0, 7)
+          $date = (Get-Date -AsUTC -Format "yyyy-MM-dd HH:mm") + " UTC"
+
+          $body = @"
+## What's new in v$version
+
+$commits
+
+---
+Built from commit: [$sha7](https://github.com/wiktorskrabel89-byte/Assistantx/commit/${{ github.sha }})
+Built on: $date
+
+| File | Architecture |
+|------|-------------|
+| ``JarvisSetup-x64.exe`` | Intel / AMD 64-bit |
+| ``JarvisSetup-arm64.exe`` | ARM64 (Snapdragon, Surface Pro X) |
+| ``Jarvis-android.apk`` | Android |
+
+**How to use:**
+1. Download the installer for your architecture.
+2. Run it — Windows may warn about an unsigned binary; click *More info → Run anyway*.
+3. Jarvis will start and connect to your AssistantX backend automatically.
+"@
+
+          $body | Set-Content -Path "changelog_body.txt" -Encoding UTF8
+          Write-Host "Changelog written to changelog_body.txt"
+
+          # Expose version as a step output so other steps can reference it
+          "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -175,20 +233,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: jarvis-latest
-          name: Jarvis Desktop — latest build
-          body: |
-            Automatically built from `jarvis/desktop/` on commit ${{ github.sha }}.
-
-            | File | Architecture |
-            |------|-------------|
-            | `JarvisSetup-x64.exe` | Intel / AMD 64-bit |
-            | `JarvisSetup-arm64.exe` | ARM64 (Snapdragon, Surface Pro X) |
-            | `Jarvis-android.apk` | Android |
-
-            **How to use:**
-            1. Download the installer for your architecture.
-            2. Run it — Windows may warn about an unsigned binary; click *More info → Run anyway*.
-            3. Jarvis will start and connect to your AssistantX backend automatically.
+          name: "Jarvis Desktop — v${{ steps.meta.outputs.version }}"
+          body_path: changelog_body.txt
           prerelease: false
           make_latest: true
           files: |

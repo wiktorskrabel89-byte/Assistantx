@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { AppMode } from "../lib/chat-types";
 import { useWorkspace } from "../providers/WorkspaceProvider";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,8 @@ type AppNavigationColumnProps = {
   userEmail?: string | null;
   /** Whether the current user has admin role */
   isAdmin?: boolean;
+  desktopAccessory?: ReactNode;
+  mobileAccessory?: ReactNode;
 };
 
 type AddOnItem = {
@@ -107,6 +109,8 @@ export function AppNavigationColumn({
   onSetPinnedAddOns,
   userEmail,
   isAdmin = false,
+  desktopAccessory,
+  mobileAccessory,
 }: AppNavigationColumnProps) {
   const [appsOpen, setAppsOpen] = useState(false);
   const [appsSearch, setAppsSearch] = useState("");
@@ -177,21 +181,24 @@ export function AppNavigationColumn({
     <aside className={`hidden min-h-0 overflow-hidden rounded-lg border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
       {/* ── Logo ── */}
       <div className={`border-b px-4 py-4 ${dividerClassName}`}>
-        <div className="flex items-center gap-2.5 px-1 py-2">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-sidebar-accent">
-            <Image
-              src="/icon-192.png"
-              alt="AssistantX logo"
-              width={22}
-              height={22}
-              fetchPriority="high"
-              className="rounded-sm"
-            />
+        <div className="flex items-center justify-between gap-2.5 px-1 py-2">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-sidebar-accent">
+              <Image
+                src="/icon-192.png"
+                alt="AssistantX logo"
+                width={22}
+                height={22}
+                fetchPriority="high"
+                className="rounded-sm"
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold tracking-tight">AssistantX</div>
+              <div className="text-[10px] text-sidebar-foreground/50">AssistantX</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold tracking-tight">AssistantX</div>
-            <div className="text-[10px] text-sidebar-foreground/50">AssistantX</div>
-          </div>
+          {desktopAccessory}
         </div>
 
         {/* AI Chat / AI Code mode switcher */}
@@ -225,6 +232,7 @@ export function AppNavigationColumn({
         <button
           type="button"
           onClick={() => onSelectTab("chat")}
+          title="Chat"
           aria-current={isChatActive ? "page" : undefined}
           className={navButtonClass(isChatActive)}
         >
@@ -293,6 +301,7 @@ export function AppNavigationColumn({
         <button
           type="button"
           onClick={() => setAppsOpen((v: boolean) => !v)}
+          title="Applications"
           className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
             isAddOnActive && !pinnedAddOns.includes(activeTab)
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -302,7 +311,7 @@ export function AppNavigationColumn({
           }`}
         >
           <Grid2x2 className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1 truncate text-left">Aplikacje</span>
+          <span className="flex-1 truncate text-left">Applications</span>
           {eligibleAddOns.filter((a) => !pinnedAddOns.includes(a.id)).length > 0 && !appsOpen && (
             <span className={`ml-auto text-[10px] font-normal opacity-50`}>
               {eligibleAddOns.filter((a) => !pinnedAddOns.includes(a.id)).length}
@@ -493,8 +502,8 @@ export function AppNavigationColumn({
             </div>
             <div className="space-y-0.5">
               {[
-                { label: "Ustawienia", tab: "settings" as AppNavigationTab, icon: Settings2 },
-                { label: "Powiadomienia", tab: "notifications" as AppNavigationTab, icon: Bell },
+                { label: "Settings", tab: "settings" as AppNavigationTab, icon: Settings2 },
+                { label: "Notifications", tab: "notifications" as AppNavigationTab, icon: Bell },
               ].map(({ label, tab, icon: Icon }) => (
                 <button
                   key={tab}
@@ -556,6 +565,7 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => onSelectTab("chat")}
+              title="Chat"
               aria-label="Chat"
               className={cn(
                 "h-10 w-10 rounded-lg",
@@ -606,7 +616,8 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => setAppsOpen((v: boolean) => !v)}
-              aria-label="Aplikacje"
+              title="Applications"
+              aria-label="Applications"
               className={cn(
                 "h-10 w-10 rounded-lg",
                 appsOpen || (isAddOnActive && !pinnedAddOns.includes(activeTab))
@@ -617,8 +628,10 @@ export function AppNavigationColumn({
               <Grid2x2 className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Aplikacje</TooltipContent>
+          <TooltipContent side="right">Applications</TooltipContent>
         </Tooltip>
+
+        {mobileAccessory}
 
         <div className="flex-1" />
 
@@ -630,7 +643,8 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => onSelectTab("settings")}
-              aria-label="Ustawienia"
+              title="Settings"
+              aria-label="Settings"
               className={cn(
                 "h-10 w-10 rounded-lg",
                 activeTab === "settings"
@@ -641,7 +655,7 @@ export function AppNavigationColumn({
               <Settings2 className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Ustawienia</TooltipContent>
+          <TooltipContent side="right">Settings</TooltipContent>
         </Tooltip>
 
         {/* Notifications */}
@@ -652,7 +666,8 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => onSelectTab("notifications")}
-              aria-label="Powiadomienia"
+              title="Notifications"
+              aria-label="Notifications"
               className={cn(
                 "relative h-10 w-10 rounded-lg",
                 activeTab === "notifications"
@@ -668,7 +683,7 @@ export function AppNavigationColumn({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Powiadomienia</TooltipContent>
+          <TooltipContent side="right">Notifications</TooltipContent>
         </Tooltip>
 
         {/* User avatar */}
