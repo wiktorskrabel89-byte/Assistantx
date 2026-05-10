@@ -16,6 +16,13 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+  },
   verification: process.env.GOOGLE_SITE_VERIFICATION
     ? { google: process.env.GOOGLE_SITE_VERIFICATION }
     : undefined,
