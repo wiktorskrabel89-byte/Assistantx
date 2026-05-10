@@ -30,7 +30,12 @@ jest.mock("@/lib/rateLimit", () => ({
   rateLimitedResponse: jest.fn(),
 }));
 
-import { TOP_FREE_CHAT_MODELS, TOP_FREE_CODE_MODELS } from "@/lib/ai-config";
+import {
+  TOP_FREE_CHAT_MODELS,
+  TOP_FREE_CODE_MODELS,
+  ROUTING_MAIN_MODEL_FREE,
+  ROUTING_CODE_MODEL_FREE,
+} from "@/lib/ai-config";
 
 beforeEach(() => {
   process.env.GROQ_API_KEY = "test-groq-key";
@@ -526,7 +531,7 @@ describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
       message: longMessage,
       mode: "chat",
       userPlan: "pro",
-      allowedModels: ["qwen/qwen3-32b", "openai/gpt-oss-120b", "google/gemini-2.5-flash"],
+      allowedModels: ["qwen/qwen3-32b", "openai/gpt-oss-120b:free", "google/gemini-2.5-flash"],
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
@@ -540,5 +545,67 @@ describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
     expect(calledBody.model).toBe("google/gemini-2.5-flash");
     expect(calledBody.temperature).toBe(0.6);
     expect(systemMessage?.content).toContain("Analyze long documents and large context efficiently.");
+  });
+});
+
+describe("POST /api/chat — profile-based routing", () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("uses Qwen chat model for gpt-oss-chat profile on simple chat prompts", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "hi",
+      mode: "chat",
+      userPlan: "free",
+      modelProfile: "gpt-oss-chat",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).toBe(ROUTING_MAIN_MODEL_FREE);
+  });
+
+  it("uses GPT OSS code model for gpt-oss-code profile", async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "write a function",
+      mode: "code",
+      userPlan: "free",
+      modelProfile: "gpt-oss-code",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
+    expect(calledBody.model).toBe(ROUTING_CODE_MODEL_FREE);
   });
 });

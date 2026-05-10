@@ -422,7 +422,6 @@ const MODEL_LABELS: Record<string, string> = {
   "openai/gpt-5.2-pro": "GPT-5.2 Pro",
   "openai/gpt-5.3": "GPT-5.3",
   "openai/gpt-5.5": "GPT-5.5",
-  "openai/gpt-oss-120b": "GPT OSS 120B",
   "openai/gpt-oss-120b:free": "GPT OSS 120B (Free)",
   "minimax/minimax-m2.5:free": "MiniMax M2.5 (Free)",
   "z-ai/glm-4.5-air:free": "GLM 4.5 Air (Free)",
@@ -433,7 +432,6 @@ const MODEL_LABELS: Record<string, string> = {
   "moonshotai/kimi-k2-thinking": "Kimi K2 Thinking",
   "perplexity/sonar": "Perplexity Sonar",
   "qwen/qwen3-32b": "Qwen3 32B",
-  "qwen/qwen3-32b:free": "Qwen3 32B (Free)",
   "meta-llama/llama-4-scout": "Llama 4 Scout",
   "google/gemini-2.5-flash": "Gemini 2.5 Flash",
 };
@@ -634,6 +632,8 @@ export const POST = async (req: Request) => {
   // are automatically migrated to the current equivalent instead of hitting 404.
   const DEPRECATED_MODEL_ALIASES: Record<string, string> = {
     "openai/gpt-5.1": "openai/gpt-5.2",
+    "openai/gpt-oss-120b": "openai/gpt-oss-120b:free",
+    "qwen/qwen3-32b:free": "qwen/qwen3-32b",
   };
   const resolvedModelId = modelId
     ? (DEPRECATED_MODEL_ALIASES[modelId as string] ?? modelId)
@@ -691,7 +691,9 @@ export const POST = async (req: Request) => {
       : determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
     smartRouteLabel = `Manual model: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   } else if (modelProfile === "gpt-oss-chat" || modelProfile === "gpt-oss-code") {
-    selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
+    selectedModel = modelProfile === "gpt-oss-chat"
+      ? (userPlan === "free" ? ROUTING_MAIN_MODEL_FREE : ROUTING_MAIN_MODEL)
+      : (userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL);
     resolvedTemperature = getModelTemperature(selectedModel, {
       isCodeRequest: modelProfile === "gpt-oss-code",
       isLongContext: inferredLongContext,

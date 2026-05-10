@@ -78,7 +78,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	const resolveChatModel = (text, selectedModel) => {
 		if (selectedModel !== 'auto-smart') return selectedModel;
-		return isHardTaskPrompt(text) ? 'openai/gpt-oss-120b' : 'qwen/qwen3-32b';
+		return isHardTaskPrompt(text) ? 'openai/gpt-oss-120b:free' : 'qwen/qwen3-32b';
 	};
 
 	const getVoiceLanguage = () => (
