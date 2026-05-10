@@ -148,6 +148,14 @@ jobs:
           path: jarvis/android/dist/Jarvis-android.apk
           if-no-files-found: error
 
+      - name: Upload Android Gradle log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jarvis-android-gradle-log
+          path: jarvis/android/dist/gradle-build.log
+          if-no-files-found: ignore
+
       - name: Publish to GitHub Release (jarvis-latest)
         uses: softprops/action-gh-release@v2
         with:
