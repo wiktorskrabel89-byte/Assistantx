@@ -143,6 +143,8 @@ export function useWorkspaceSync({ loaded, state, setState, stateRef }: UseWorks
   useEffect(() => {
     if (!loaded || !authReady || !userEmail || !cloudSyncEnabled) return;
     let cancelled = false;
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
 
     async function hydrateCloudState() {
       try {
@@ -204,10 +206,20 @@ export function useWorkspaceSync({ loaded, state, setState, stateRef }: UseWorks
       }
     }
 
-    void hydrateCloudState();
+    if ("requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(() => {
+        void hydrateCloudState();
+      }, { timeout: 1800 });
+    } else {
+      timeoutId = window.setTimeout(() => {
+        void hydrateCloudState();
+      }, 350);
+    }
 
     return () => {
       cancelled = true;
+      if (idleId !== null && "cancelIdleCallback" in window) window.cancelIdleCallback(idleId);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
     };
   }, [authReady, cloudSyncEnabled, loaded, setState, stateRef, userEmail]);
 
