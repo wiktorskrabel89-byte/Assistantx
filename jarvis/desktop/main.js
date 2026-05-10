@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
 let win;
@@ -99,7 +99,9 @@ function setupAutoUpdater() {
     return;
   }
 
-  autoUpdater.autoDownload = true;
+  // Do NOT download automatically — show a dialog first so the user can
+  // read the changelog and decide when to update.
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
 
@@ -107,11 +109,66 @@ function setupAutoUpdater() {
     emitUpdateStatus('checking', 'Checking GitHub for a newer Jarvis build...', { downloaded: false });
   });
 
-  autoUpdater.on('update-available', (info) => {
-    emitUpdateStatus('downloading', `Update ${info.version} found. Downloading now...`, {
+  autoUpdater.on('update-available', async (info) => {
+    emitUpdateStatus('update-available', `Update ${info.version} available.`, {
       downloaded: false,
       version: info.version,
     });
+
+    // Strip basic HTML tags from release notes so they display cleanly in
+    // the native OS dialog (which renders plain text only).
+    let notes = '';
+    if (info.releaseNotes) {
+      notes = String(info.releaseNotes)
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/?(p|li|ul|ol|h[1-6]|blockquote)[^>]*>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+        .slice(0, 1500);
+    }
+
+    const detail = notes
+      ? `What's new:\n\n${notes}`
+      : 'No release notes available for this build.';
+
+    let response;
+    try {
+      ({ response } = await dialog.showMessageBox(win ?? null, {
+        type: 'info',
+        title: 'Jarvis Update Available',
+        message: `Jarvis ${info.version} is ready to download.`,
+        detail,
+        buttons: ['Update Now', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      }));
+    } catch {
+      // If the dialog fails (e.g. no display), default to skipping.
+      response = 1;
+    }
+
+    if (response === 0) {
+      emitUpdateStatus('downloading', `Downloading Jarvis ${info.version}…`, {
+        downloaded: false,
+        version: info.version,
+      });
+      try {
+        await autoUpdater.downloadUpdate();
+      } catch (error) {
+        emitUpdateStatus('error', `Download failed: ${error.message}`, { downloaded: false });
+      }
+    } else {
+      emitUpdateStatus('update-skipped', `Update to ${info.version} postponed.`, {
+        downloaded: false,
+        version: info.version,
+      });
+    }
   });
 
   autoUpdater.on('download-progress', (progress) => {
@@ -203,6 +260,21 @@ ipcMain.handle('get-app-meta', () => {
 
 ipcMain.handle('check-for-updates', () => {
   return checkForUpdates();
+});
+
+ipcMain.handle('download-update', async () => {
+  if (!app.isPackaged) {
+    return { ok: false, reason: 'not-packaged' };
+  }
+  if (updateState.downloaded) {
+    return { ok: true, reason: 'already-downloaded' };
+  }
+  try {
+    await autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: error.message };
+  }
 });
 
 ipcMain.handle('install-update', () => {

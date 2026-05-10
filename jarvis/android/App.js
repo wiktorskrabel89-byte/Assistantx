@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { useBackendConnection } from './backend';
+import { checkForUpdate, dismissUpdate, openDownloadUrl } from './updater';
 import { loadMac, loadServerUrl, saveMac, saveServerUrl, sendWakeOnLan } from './wol';
 
 export default function App() {
@@ -31,6 +32,53 @@ export default function App() {
       if (savedMac) setMac(savedMac);
       if (savedUrl) setServerUrl(savedUrl);
     });
+  }, []);
+
+  // Check for a new Jarvis APK release on every cold start.
+  // We use the saved serverUrl so private repos work via the server token.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const savedUrl = await loadServerUrl();
+        const update = await checkForUpdate(savedUrl);
+        if (cancelled || !update) return;
+
+        // Truncate long release notes so the Alert doesn't overflow the screen.
+        const notes = update.releaseNotes
+          ? update.releaseNotes.replace(/#+\s*/g, '').trim().slice(0, 600)
+          : 'No release notes available.';
+
+        Alert.alert(
+          '🚀 Jarvis Update Available',
+          `Version: ${update.version}\n\nWhat's new:\n${notes}`,
+          [
+            {
+              text: 'Download',
+              onPress: async () => {
+                await dismissUpdate(update.updatedAt);
+                await openDownloadUrl(update.downloadUrl);
+              },
+            },
+            {
+              text: 'Later',
+              style: 'cancel',
+              onPress: () => dismissUpdate(update.updatedAt),
+            },
+          ],
+          { cancelable: true }
+        );
+      } catch {
+        // Update check failures are silently ignored — they should never
+        // interrupt the user's workflow.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submitPrompt = () => {

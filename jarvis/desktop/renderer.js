@@ -141,8 +141,19 @@ window.addEventListener('DOMContentLoaded', () => {
 			installUpdateButton.hidden = !payload?.downloaded;
 		}
 
+		// Show "Download update" button if update is available but not yet
+		// downloaded (user chose "Later" in the native dialog).
+		const downloadUpdateButton = document.getElementById('download-update');
+		if (downloadUpdateButton) {
+			const showDownload = (
+				payload?.status === 'update-available' ||
+				payload?.status === 'update-skipped'
+			);
+			downloadUpdateButton.hidden = !showDownload;
+		}
+
 		if (checkUpdatesButton) {
-			checkUpdatesButton.disabled = payload?.status === 'checking';
+			checkUpdatesButton.disabled = payload?.status === 'checking' || payload?.status === 'downloading';
 		}
 	}
 
@@ -275,6 +286,19 @@ window.addEventListener('DOMContentLoaded', () => {
 			const result = await ipcRenderer.invoke('install-update');
 			if (!result?.ok) {
 				appendMessage(log, 'Updater', 'No downloaded update is ready yet.', 'error');
+			}
+		});
+	}
+
+	const downloadUpdateButton = document.getElementById('download-update');
+	if (downloadUpdateButton && ipcRenderer) {
+		downloadUpdateButton.addEventListener('click', async () => {
+			appendMessage(log, 'Updater', 'Starting download…', 'system');
+			downloadUpdateButton.disabled = true;
+			const result = await ipcRenderer.invoke('download-update');
+			if (!result?.ok) {
+				appendMessage(log, 'Updater', `Download failed: ${result?.reason || 'unknown error'}`, 'error');
+				downloadUpdateButton.disabled = false;
 			}
 		});
 	}
