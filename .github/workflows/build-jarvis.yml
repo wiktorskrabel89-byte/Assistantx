@@ -36,6 +36,7 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
+          cache-dependency-path: jarvis/android/android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Install desktop dependencies
         working-directory: jarvis/desktop
@@ -86,15 +87,16 @@ jobs:
           $apkOutput = Join-Path $distDir "Jarvis-android.apk"
           $found = $false
           $gradleBuildFailed = $false
-          $gradleOutput = ""
+          $lastGradleLines = ""
 
           if (Test-Path "jarvis/android/android/gradlew.bat") {
+            $gradleLogPath = Join-Path $distDir "gradle-build.log"
             Push-Location "jarvis/android/android"
             try {
-              ./gradlew.bat assembleRelease 2>&1 | Tee-Object -Variable gradleOutput
+              ./gradlew.bat assembleRelease *> $gradleLogPath
               if ($LASTEXITCODE -ne 0) {
                 $gradleBuildFailed = $true
-                $lastGradleLines = ($gradleOutput | Select-Object -Last 20 | Out-String).Trim()
+                $lastGradleLines = (Get-Content $gradleLogPath -Tail 20 -ErrorAction SilentlyContinue | Out-String).Trim()
                 Write-Warning "Android Gradle build failed with exit code $LASTEXITCODE; checking fallback APK locations. Last output:`n$lastGradleLines"
               }
             } finally {
@@ -108,9 +110,13 @@ jobs:
           # 3) prebuilt APK checked into jarvis/android with canonical filename
           # 4) prebuilt APK checked into jarvis/android with legacy filename
           $candidates = @(
+            # (1) Gradle output when project root is jarvis/android/android
             "jarvis/android/android/app/build/outputs/apk/release/app-release.apk",
+            # (2) Gradle output for flatter project layout
             "jarvis/android/app/build/outputs/apk/release/app-release.apk",
+            # (3) Canonical prebuilt APK filename
             "jarvis/android/Jarvis-android.apk",
+            # (4) Legacy prebuilt APK filename
             "jarvis/android/JarvisAndroid.apk"
           )
 
@@ -128,7 +134,7 @@ jobs:
           } else {
             "found=false" >> $env:GITHUB_OUTPUT
             if ($gradleBuildFailed) {
-              Write-Error "No Android APK found after Gradle build failure."
+              Write-Error "No Android APK found after Gradle build failure. Last Gradle output:`n$lastGradleLines"
               exit 1
             }
             Write-Host "Android APK not found; skipping Android release asset."
