@@ -95,6 +95,9 @@ const nextConfig = {
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
         // Enforce HTTPS for 2 years, include subdomains, request preload
         { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+        // Isolate the browsing context so opener references are not leaked across origins.
+        // Required for Lighthouse "Ensure proper origin isolation with COOP" audit.
+        { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
         // Content-Security-Policy — static baseline; the per-request middleware
         // (lib/middleware.ts / proxy.ts) injects a stricter nonce-based policy for
         // pages that run through the Edge middleware.  This header acts as a

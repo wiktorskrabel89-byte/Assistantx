@@ -67,6 +67,7 @@ export async function updateSession(request: NextRequest) {
 
   if (PUBLIC_METADATA_PATHS.has(request.nextUrl.pathname) || !hasSupabaseConfig()) {
     supabaseResponse.headers.set('Content-Security-Policy', csp)
+    supabaseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
     return supabaseResponse
   }
 
@@ -136,6 +137,7 @@ export async function updateSession(request: NextRequest) {
   // Attach the per-request CSP (set after cookies are finalised so the header
   // is always present on the actual response that gets returned).
   supabaseResponse.headers.set('Content-Security-Policy', csp)
+  supabaseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
 
   return supabaseResponse
 }

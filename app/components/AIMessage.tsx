@@ -1,12 +1,18 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
+import dynamic from "next/dynamic";
 import { CodeReviewPanel } from "./CodeReviewPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { ChatEntry, MessageFeedback, ResponseAction } from "../lib/chat-types";
+
+// Lazily load the syntax highlighter so the large Prism bundle is excluded from
+// the initial page JavaScript, significantly reducing Total Blocking Time.
+const LazyCodeBlock = dynamic(
+  () => import("./LazyCodeBlock").then((m) => m.LazyCodeBlock),
+  { ssr: false }
+);
 
 // ── Inline citations ────────────────────────────────────────────────────────
 type Citation = { index: number; url: string };
@@ -184,9 +190,7 @@ export function AIMessage({
                               {copied === blockId ? "Copied" : "Copy"}
                             </button>
                           </div>
-                          <SyntaxHighlighter style={isDark ? oneDark : oneLight} language={match?.[1] ?? "text"} PreTag="div">
-                            {codeText}
-                          </SyntaxHighlighter>
+                          <LazyCodeBlock isDark={isDark} language={match?.[1] ?? "text"} code={codeText} />
                         </div>
                       );
                     }
