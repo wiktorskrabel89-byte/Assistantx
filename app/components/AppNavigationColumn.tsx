@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { AppMode } from "../lib/chat-types";
 import { useWorkspace } from "../providers/WorkspaceProvider";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,8 @@ type AppNavigationColumnProps = {
   userEmail?: string | null;
   /** Whether the current user has admin role */
   isAdmin?: boolean;
+  desktopAccessory?: ReactNode;
+  mobileAccessory?: ReactNode;
 };
 
 type AddOnItem = {
@@ -107,6 +109,8 @@ export function AppNavigationColumn({
   onSetPinnedAddOns,
   userEmail,
   isAdmin = false,
+  desktopAccessory,
+  mobileAccessory,
 }: AppNavigationColumnProps) {
   const [appsOpen, setAppsOpen] = useState(false);
   const [appsSearch, setAppsSearch] = useState("");
@@ -177,21 +181,24 @@ export function AppNavigationColumn({
     <aside className={`hidden min-h-0 overflow-hidden rounded-lg border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
       {/* ── Logo ── */}
       <div className={`border-b px-4 py-4 ${dividerClassName}`}>
-        <div className="flex items-center gap-2.5 px-1 py-2">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-sidebar-accent">
-            <Image
-              src="/icon-192.png"
-              alt="AssistantX logo"
-              width={22}
-              height={22}
-              fetchPriority="high"
-              className="rounded-sm"
-            />
+        <div className="flex items-center justify-between gap-2.5 px-1 py-2">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-sidebar-accent">
+              <Image
+                src="/icon-192.png"
+                alt="AssistantX logo"
+                width={22}
+                height={22}
+                fetchPriority="high"
+                className="rounded-sm"
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold tracking-tight">AssistantX</div>
+              <div className="text-[10px] text-sidebar-foreground/50">AssistantX</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold tracking-tight">AssistantX</div>
-            <div className="text-[10px] text-sidebar-foreground/50">AssistantX</div>
-          </div>
+          {desktopAccessory}
         </div>
 
         {/* AI Chat / AI Code mode switcher */}
@@ -619,6 +626,8 @@ export function AppNavigationColumn({
           </TooltipTrigger>
           <TooltipContent side="right">Aplikacje</TooltipContent>
         </Tooltip>
+
+        {mobileAccessory}
 
         <div className="flex-1" />
 

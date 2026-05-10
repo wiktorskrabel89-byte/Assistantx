@@ -3,10 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
+import { PairingCodeBanner } from "./components/PairingCodeBanner";
+import { PCPairingDialog } from "./components/PCPairingDialog";
+import { PairingStatusIndicator } from "./components/PairingStatusIndicator";
 import { ChatTab } from "./components/tabs/ChatTab";
+import { useDevicePairing } from "./hooks/useDevicePairing";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
 import { createClient } from "@/lib/client";
+import { DEVICE_PAIRING_SKIP_KEY } from "@/lib/device-pairing";
 import type { AppMode } from "./lib/chat-types";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -91,11 +96,17 @@ function TabContent({
   notificationsHook,
   sandboxInitCode,
   onOpenInSandbox,
+  pairing,
+  onOpenPairingDialog,
+  onShowPhonePairingBanner,
 }: {
   activeTab: AppNavigationTab;
   notificationsHook: ReturnType<typeof useNotifications>;
   sandboxInitCode?: { html: string; css: string; js: string } | null;
   onOpenInSandbox?: (html: string, css: string, js: string) => void;
+  pairing: ReturnType<typeof useDevicePairing>;
+  onOpenPairingDialog: () => void;
+  onShowPhonePairingBanner: () => void;
 }) {
   const { state } = useWorkspace();
 
@@ -125,7 +136,16 @@ function TabContent({
     case "ai-learning":
       return <AILearningTab dark={state.dark} />;
     case "jarvis":
-      return <JarvisTab />;
+      return (
+        <JarvisTab
+          deviceType={pairing.deviceType}
+          pairingStatus={pairing.pairingStatus}
+          pairingCode={pairing.pairingCode}
+          expiresAt={pairing.expiresAt}
+          onOpenPairingDialog={onOpenPairingDialog}
+          onShowPhonePairingBanner={onShowPhonePairingBanner}
+        />
+      );
     default:
       return null;
   }
@@ -138,6 +158,9 @@ function HomeContent() {
   const [isAdmin, setIsAdmin] = useState(false);
   const adminCheckedRef = useRef(false);
   const [sandboxInitCode, setSandboxInitCode] = useState<{ html: string; css: string; js: string } | null>(null);
+  const pairing = useDevicePairing();
+  const [pcPairingDialogOpen, setPcPairingDialogOpen] = useState(false);
+  const [phoneBannerVisible, setPhoneBannerVisible] = useState(false);
 
   const appMode: AppMode = state.appMode ?? "ai-chat";
   const pinnedAddOns: string[] = state.pinnedAddOns ?? [];
@@ -172,6 +195,46 @@ function HomeContent() {
     setActiveAppTab("sandbox");
   }, [setAppMode]);
 
+  const openPairingExperience = useCallback(() => {
+    if (pairing.deviceType === "phone") {
+      setPhoneBannerVisible(true);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(DEVICE_PAIRING_SKIP_KEY);
+    }
+    pairing.clearPairingError();
+    setPcPairingDialogOpen(true);
+  }, [pairing]);
+
+  const handleSkipPairing = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(DEVICE_PAIRING_SKIP_KEY, "1");
+    }
+    setPcPairingDialogOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (pairing.deviceType === "phone" && (pairing.pairingStatus === "pending" || pairing.pairingStatus === "paired")) {
+      setPhoneBannerVisible(true);
+    }
+  }, [pairing.deviceType, pairing.pairingStatus]);
+
+  useEffect(() => {
+    if (pairing.deviceType !== "pc" || !pairing.ready) return;
+    if (pairing.pairingStatus === "paired") {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(DEVICE_PAIRING_SKIP_KEY);
+      }
+      setPcPairingDialogOpen(false);
+      return;
+    }
+    if (typeof window !== "undefined" && window.localStorage.getItem(DEVICE_PAIRING_SKIP_KEY) === "1") {
+      return;
+    }
+    setPcPairingDialogOpen(true);
+  }, [pairing.deviceType, pairing.pairingStatus, pairing.ready]);
+
   const isChatTab = visibleTab === "chat";
 
   if (!loaded) {
@@ -179,7 +242,19 @@ function HomeContent() {
   }
 
   return (
-    <div className="h-dvh overflow-hidden bg-background text-foreground transition-colors duration-300">
+    <div className="relative h-dvh overflow-hidden bg-background text-foreground transition-colors duration-300">
+      {pairing.deviceType === "phone" && phoneBannerVisible && (pairing.pairingStatus === "pending" || pairing.pairingStatus === "paired") && (
+        <PairingCodeBanner
+          status={pairing.pairingStatus}
+          pairingCode={pairing.pairingCode}
+          expiresAt={pairing.expiresAt}
+          isRefreshing={pairing.isRefreshing}
+          showDesktopInstallWarning={pairing.pairingStatus !== "paired"}
+          onRefresh={pairing.refreshPairingCode}
+          onClose={() => setPhoneBannerVisible(false)}
+        />
+      )}
+
       <div className="mx-auto flex h-full max-w-[1680px] gap-3 px-3 py-3">
         <AppNavigationColumn
           activeTab={visibleTab}
@@ -191,16 +266,58 @@ function HomeContent() {
           onSetPinnedAddOns={setPinnedAddOns}
           userEmail={userEmail}
           isAdmin={isAdmin}
+          desktopAccessory={(
+            <PairingStatusIndicator
+              status={pairing.pairingStatus}
+              deviceType={pairing.deviceType}
+              onClick={openPairingExperience}
+            />
+          )}
+          mobileAccessory={(
+            <PairingStatusIndicator
+              status={pairing.pairingStatus}
+              deviceType={pairing.deviceType}
+              onClick={openPairingExperience}
+            />
+          )}
         />
 
         {isChatTab ? (
-          <TabContent key={visibleTab} activeTab={visibleTab} notificationsHook={notificationsHook} sandboxInitCode={sandboxInitCode} onOpenInSandbox={handleOpenInSandbox} />
+          <TabContent
+            key={visibleTab}
+            activeTab={visibleTab}
+            notificationsHook={notificationsHook}
+            sandboxInitCode={sandboxInitCode}
+            onOpenInSandbox={handleOpenInSandbox}
+            pairing={pairing}
+            onOpenPairingDialog={() => setPcPairingDialogOpen(true)}
+            onShowPhonePairingBanner={() => setPhoneBannerVisible(true)}
+          />
         ) : (
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card transition-all duration-200">
-            <TabContent key={visibleTab} activeTab={visibleTab} notificationsHook={notificationsHook} sandboxInitCode={sandboxInitCode} onOpenInSandbox={handleOpenInSandbox} />
+            <TabContent
+              key={visibleTab}
+              activeTab={visibleTab}
+              notificationsHook={notificationsHook}
+              sandboxInitCode={sandboxInitCode}
+              onOpenInSandbox={handleOpenInSandbox}
+              pairing={pairing}
+              onOpenPairingDialog={() => setPcPairingDialogOpen(true)}
+              onShowPhonePairingBanner={() => setPhoneBannerVisible(true)}
+            />
           </main>
         )}
       </div>
+
+      <PCPairingDialog
+        open={pairing.deviceType === "pc" && pcPairingDialogOpen}
+        pairingStatus={pairing.pairingStatus}
+        errorMessage={pairing.errorMessage}
+        isConfirming={pairing.isConfirming}
+        onOpenChange={setPcPairingDialogOpen}
+        onConfirm={pairing.confirmPairing}
+        onSkip={handleSkipPairing}
+      />
     </div>
   );
 }
