@@ -44,8 +44,9 @@ jobs:
           $androidPkg.version = $version
           $androidPkg | ConvertTo-Json -Depth 20 | Set-Content "jarvis/android/package.json" -Encoding UTF8
 
-          # Generate changelog from the last 20 commits that touched the jarvis/ tree
-          $commits = git log --pretty=format:"- %s" -20 -- jarvis/ 2>&1
+          # Generate changelog from the last 20 commits that touched the jarvis/ tree.
+          # Redirect stderr to null so git error output never leaks into the release notes.
+          $commits = git log --pretty=format:"- %s" -20 -- jarvis/ 2>$null
           if ([string]::IsNullOrWhiteSpace($commits)) {
             $commits = "- Build updated"
           }

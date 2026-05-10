@@ -301,7 +301,7 @@ export function AppNavigationColumn({
         <button
           type="button"
           onClick={() => setAppsOpen((v: boolean) => !v)}
-          title="Aplikacje"
+          title="Applications"
           className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
             isAddOnActive && !pinnedAddOns.includes(activeTab)
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -311,7 +311,7 @@ export function AppNavigationColumn({
           }`}
         >
           <Grid2x2 className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1 truncate text-left">Aplikacje</span>
+          <span className="flex-1 truncate text-left">Applications</span>
           {eligibleAddOns.filter((a) => !pinnedAddOns.includes(a.id)).length > 0 && !appsOpen && (
             <span className={`ml-auto text-[10px] font-normal opacity-50`}>
               {eligibleAddOns.filter((a) => !pinnedAddOns.includes(a.id)).length}
@@ -502,8 +502,8 @@ export function AppNavigationColumn({
             </div>
             <div className="space-y-0.5">
               {[
-                { label: "Ustawienia", tab: "settings" as AppNavigationTab, icon: Settings2 },
-                { label: "Powiadomienia", tab: "notifications" as AppNavigationTab, icon: Bell },
+                { label: "Settings", tab: "settings" as AppNavigationTab, icon: Settings2 },
+                { label: "Notifications", tab: "notifications" as AppNavigationTab, icon: Bell },
               ].map(({ label, tab, icon: Icon }) => (
                 <button
                   key={tab}
@@ -616,8 +616,8 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => setAppsOpen((v: boolean) => !v)}
-              title="Aplikacje"
-              aria-label="Aplikacje"
+              title="Applications"
+              aria-label="Applications"
               className={cn(
                 "h-10 w-10 rounded-lg",
                 appsOpen || (isAddOnActive && !pinnedAddOns.includes(activeTab))
@@ -628,7 +628,7 @@ export function AppNavigationColumn({
               <Grid2x2 className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Aplikacje</TooltipContent>
+          <TooltipContent side="right">Applications</TooltipContent>
         </Tooltip>
 
         {mobileAccessory}
@@ -643,8 +643,8 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => onSelectTab("settings")}
-              title="Ustawienia"
-              aria-label="Ustawienia"
+              title="Settings"
+              aria-label="Settings"
               className={cn(
                 "h-10 w-10 rounded-lg",
                 activeTab === "settings"
@@ -655,7 +655,7 @@ export function AppNavigationColumn({
               <Settings2 className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Ustawienia</TooltipContent>
+          <TooltipContent side="right">Settings</TooltipContent>
         </Tooltip>
 
         {/* Notifications */}
@@ -666,8 +666,8 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => onSelectTab("notifications")}
-              title="Powiadomienia"
-              aria-label="Powiadomienia"
+              title="Notifications"
+              aria-label="Notifications"
               className={cn(
                 "relative h-10 w-10 rounded-lg",
                 activeTab === "notifications"
@@ -683,7 +683,7 @@ export function AppNavigationColumn({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Powiadomienia</TooltipContent>
+          <TooltipContent side="right">Notifications</TooltipContent>
         </Tooltip>
 
         {/* User avatar */}

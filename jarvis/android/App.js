@@ -78,6 +78,8 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  // The update check runs once on cold start. serverUrl comes from AsyncStorage
+  // (loaded by the WoL effect below), so it's intentionally excluded here.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
