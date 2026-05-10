@@ -1002,18 +1002,29 @@ export const POST = async (req: Request) => {
     });
   }
   const isGeminiModel = (model: string) => model.includes("gemini");
+  const isOpenRouterModel = (model: string) => model.startsWith("openai/gpt-oss-120b");
+  const normalizeOpenRouterModelId = (model: string) =>
+    model === "openai/gpt-oss-120b:free" ? "openai/gpt-oss-120b" : model;
   const groqApiKey = process.env.GROQ_API_KEY;
   const googleApiKey = process.env.GOOGLE_AI_STUDIO_API_KEY || process.env.GOOGLE_API_KEY;
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
   const sendModelRequest = async (body: Record<string, unknown>) => {
     const targetModel = String(body.model ?? "");
     const useGoogleStudio = isGeminiModel(targetModel);
+    const useOpenRouter = isOpenRouterModel(targetModel);
     const endpoint = useGoogleStudio
       ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-      : "https://api.groq.com/openai/v1/chat/completions";
-    const key = useGoogleStudio ? googleApiKey : groqApiKey;
+      : useOpenRouter
+        ? "https://openrouter.ai/api/v1/chat/completions"
+        : "https://api.groq.com/openai/v1/chat/completions";
+    const key = useGoogleStudio ? googleApiKey : (useOpenRouter ? openRouterApiKey : groqApiKey);
     if (!key) {
-      throw new Error(useGoogleStudio ? "Missing Google AI Studio API key." : "Missing Groq API key.");
+      throw new Error(
+        useGoogleStudio
+          ? "Missing Google AI Studio API key."
+          : (useOpenRouter ? "Missing OpenRouter API key." : "Missing Groq API key.")
+      );
     }
 
     // Translate reasoning params to the target provider's format.
@@ -1028,6 +1039,9 @@ export const POST = async (req: Request) => {
       if (hasReasoning || providerBody.thinking_config !== undefined) {
         providerBody.thinking_config = { include_thoughts: true };
       }
+    } else if (useOpenRouter) {
+      providerBody.model = normalizeOpenRouterModelId(targetModel);
+      delete providerBody.thinking_config;
     } else {
       // Groq: remove Google-style params.
       delete providerBody.thinking_config;
@@ -1050,6 +1064,12 @@ export const POST = async (req: Request) => {
       headers: {
         "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json",
+        ...(useOpenRouter
+          ? {
+              "HTTP-Referer": "https://assistantx.vercel.app",
+              "X-Title": "AssistantX",
+            }
+          : {}),
       },
       body: JSON.stringify(providerBody),
     });

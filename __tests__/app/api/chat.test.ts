@@ -37,9 +37,13 @@ import {
   ROUTING_CODE_MODEL_FREE,
 } from "@/lib/ai-config";
 
+const normalizeProviderModel = (modelId: string) =>
+  modelId === "openai/gpt-oss-120b:free" ? "openai/gpt-oss-120b" : modelId;
+
 beforeEach(() => {
   process.env.GROQ_API_KEY = "test-groq-key";
   process.env.GOOGLE_AI_STUDIO_API_KEY = "test-google-key";
+  process.env.OPENROUTER_API_KEY = "test-openrouter-key";
 });
 
 describe("POST /api/chat — free-model fallback behavior", () => {
@@ -76,7 +80,7 @@ describe("POST /api/chat — free-model fallback behavior", () => {
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
     // Free plan with no modelId → route picks from TOP_FREE_CHAT_MODELS (random)
-    expect(TOP_FREE_CHAT_MODELS).toContain(calledBody.model);
+    expect(TOP_FREE_CHAT_MODELS.map(normalizeProviderModel)).toContain(calledBody.model);
   });
 
   it("selects a free code model when rawMode=code", async () => {
@@ -93,7 +97,7 @@ describe("POST /api/chat — free-model fallback behavior", () => {
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
     // Free plan with code mode → route picks from TOP_FREE_CODE_MODELS (random)
-    expect(TOP_FREE_CODE_MODELS).toContain(calledBody.model);
+    expect(TOP_FREE_CODE_MODELS.map(normalizeProviderModel)).toContain(calledBody.model);
   });
 
   it("uses a code free model when rawMode=chat but message is code-focused", async () => {
@@ -111,7 +115,7 @@ describe("POST /api/chat — free-model fallback behavior", () => {
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
     // Code-focused message in chat mode → picks from TOP_FREE_CODE_MODELS
-    expect(TOP_FREE_CODE_MODELS).toContain(calledBody.model);
+    expect(TOP_FREE_CODE_MODELS.map(normalizeProviderModel)).toContain(calledBody.model);
   });
 });
 
@@ -466,10 +470,12 @@ describe('POST /api/chat — "websearch" prefix enables web plugin on current mo
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
       model: string;
     };
+    const calledUrl = String(mockFetch.mock.calls[0][0]);
 
     // Model must NOT be overridden to perplexity/sonar
     expect(calledBody.model).not.toBe("perplexity/sonar");
-    expect(calledBody.model).toBe("openai/gpt-oss-120b:free");
+    expect(calledBody.model).toBe("openai/gpt-oss-120b");
+    expect(calledUrl).toBe("https://openrouter.ai/api/v1/chat/completions");
   });
 });
 
@@ -585,7 +591,7 @@ describe("POST /api/chat — profile-based routing", () => {
     expect(res.status).toBe(200);
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).toBe(ROUTING_MAIN_MODEL_FREE);
+    expect(calledBody.model).toBe(normalizeProviderModel(ROUTING_MAIN_MODEL_FREE));
   });
 
   it("uses GPT OSS code model for gpt-oss-code profile", async () => {
@@ -606,6 +612,6 @@ describe("POST /api/chat — profile-based routing", () => {
     expect(res.status).toBe(200);
 
     const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as { model: string };
-    expect(calledBody.model).toBe(ROUTING_CODE_MODEL_FREE);
+    expect(calledBody.model).toBe(normalizeProviderModel(ROUTING_CODE_MODEL_FREE));
   });
 });
