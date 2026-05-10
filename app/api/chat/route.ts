@@ -1002,7 +1002,8 @@ export const POST = async (req: Request) => {
     });
   }
   const isGeminiModel = (model: string) => model.includes("gemini");
-  const isOpenRouterModel = (model: string) => model.startsWith("openai/gpt-oss-120b");
+  const isOpenRouterModel = (model: string) =>
+    model === "openai/gpt-oss-120b" || model === "openai/gpt-oss-120b:free";
   const normalizeOpenRouterModelId = (model: string) =>
     model === "openai/gpt-oss-120b:free" ? "openai/gpt-oss-120b" : model;
   const groqApiKey = process.env.GROQ_API_KEY;
