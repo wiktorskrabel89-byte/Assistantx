@@ -97,7 +97,7 @@ jobs:
           if (Test-Path $gradleWrapperPath) {
             Push-Location $gradleProjectDir
             try {
-              ./gradlew.bat assembleRelease *> $gradleLogPath
+              & $gradleWrapperPath assembleRelease *> $gradleLogPath
               if ($LASTEXITCODE -ne 0) {
                 $gradleBuildFailed = $true
                 $lastGradleLines = (Get-Content $gradleLogPath -Tail $maxGradleTailLines -ErrorAction SilentlyContinue | Out-String).Trim()
