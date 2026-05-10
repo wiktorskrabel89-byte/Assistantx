@@ -305,7 +305,7 @@ Rules:
 - avoid overly long paragraphs`;
 
 // Free-tier variants for cost-constrained routing
-export const ROUTING_MAIN_MODEL_FREE = "openai/gpt-oss-120b:free";
+export const ROUTING_MAIN_MODEL_FREE = "qwen/qwen3-32b";
 export const ROUTING_CODE_MODEL_FREE = "openai/gpt-oss-120b:free";
 
 export const RECOMMENDED_CODING_MODELS: ModelPreset[] = [
@@ -332,7 +332,7 @@ export const AUTO_PREFERRED_CODING_MODEL = "openai/gpt-oss-120b:free";
 export const AUTO_PREFERRED_CHAT_MODEL = "qwen/qwen3-32b";
 
 export const FREE_CODING_MODEL = "openai/gpt-oss-120b:free";
-export const FREE_CHAT_MODEL = "openai/gpt-oss-120b:free";
+export const FREE_CHAT_MODEL = "qwen/qwen3-32b";
 export const APP_FORCED_MODEL_ID = "openai/gpt-oss-120b:free";
 /** 1=low, 2=medium, 3=high, 4=xhigh */
 export const APP_FORCED_THINKING_EFFORT = 4;
@@ -345,6 +345,7 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
   "meta-llama/llama-3.3-70b-instruct:free": "free",
   "openai/gpt-oss-120b:free": "free",
+  "qwen/qwen3-32b": "free",
   "minimax/minimax-m2.5:free": "free",
   "z-ai/glm-4.5-air:free": "free",
   "nvidia/nemotron-3-super-120b-a12b:free": "free",
@@ -361,7 +362,6 @@ export const MODEL_COST_TIERS: Record<string, CostTier> = {
   "deepseek/deepseek-v3.2": "standard",
   "anthropic/claude-sonnet-4.5": "standard",
   "openai/gpt-5": "standard",
-  "qwen/qwen3-32b": "standard",
   "qwen/qwen3-235b-a22b": "standard",
   "perplexity/sonar": "standard",
   "moonshotai/kimi-k2-thinking": "standard",
@@ -648,7 +648,7 @@ export function getCheaperAlternative(modelId: string, costMode: CostMode, isCod
   // Pick the best model within budget for the request type
   const candidates = isCodeRequest
     ? ["openai/gpt-oss-120b:free"]
-    : ["google/gemini-2.5-flash", "openai/gpt-oss-120b:free"];
+    : ["qwen/qwen3-32b", "google/gemini-2.5-flash", "openai/gpt-oss-120b:free"];
 
   for (const candidate of candidates) {
     if (isModelAllowedByCostMode(candidate, costMode)) {
@@ -672,7 +672,7 @@ export const COST_TIER_LABELS: Record<CostTier, string> = {
 };
 
 /**
- * Models available to free-plan users (only the :free variants on OpenRouter).
+ * Models available to free-plan users.
  */
 export const FREE_PLAN_MODELS: string[] = Object.entries(MODEL_COST_TIERS)
   .filter(([, tier]) => tier === "free")
@@ -712,7 +712,7 @@ export function filterModelsByPlan(modelIds: string[], userPlan: UserPlan): stri
  */
 // Top free models for chat and coding
 export const TOP_FREE_CHAT_MODELS = [
-  "openai/gpt-oss-120b:free",
+  "qwen/qwen3-32b",
 ];
 export const TOP_FREE_CODE_MODELS = [
   "openai/gpt-oss-120b:free",

@@ -237,10 +237,11 @@ describe("cost control system", () => {
   });
 
   describe("MODEL_COST_TIERS consistency", () => {
-    it("free models contain :free suffix", () => {
+    it("free models are either :free IDs or explicit free-tier allowlisted IDs", () => {
+      const explicitFreeAllowlist = new Set(["qwen/qwen3-32b"]);
       for (const [id, tier] of Object.entries(MODEL_COST_TIERS)) {
         if (tier === "free") {
-          expect(id).toMatch(/:free$/);
+          expect(id.endsWith(":free") || explicitFreeAllowlist.has(id)).toBe(true);
         }
       }
     });
@@ -301,9 +302,9 @@ describe("filterModelsByPlan", () => {
     "anthropic/claude-opus-4.7",
   ];
 
-  it("free plan returns only :free models", () => {
+  it("free plan returns only free-tier models", () => {
     const result = filterModelsByPlan(models, "free");
-    expect(result.every((id) => id.endsWith(":free"))).toBe(true);
+    expect(result.every((id) => getModelCostTier(id) === "free")).toBe(true);
   });
 
   it("pro plan returns all models except pro+-only ones", () => {
