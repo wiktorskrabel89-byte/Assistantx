@@ -52,13 +52,13 @@ export default function PublicChatWidget() {
   }
 
   return (
-    <div className="fixed bottom-8 right-8 w-80 max-w-full bg-white border border-blue-200 rounded-xl shadow-lg z-50 flex flex-col">
-      <div className="p-4 border-b font-bold text-blue-700">Ask AssistantX</div>
+    <div className="fixed bottom-8 right-8 z-50 flex w-80 max-w-full flex-col rounded-xl border border-blue-200 bg-white shadow-lg">
+      <div className="border-b p-4 font-bold text-blue-800">Ask AssistantX</div>
       <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ maxHeight: 300 }}>
         {messages.map((m, i) => (
-          <div key={i} className={m.role === "assistant" ? "text-gray-700" : "text-right text-blue-600"}>{m.content}</div>
+          <div key={i} className={m.role === "assistant" ? "text-gray-800" : "text-right text-blue-700"}>{m.content}</div>
         ))}
-        {loading && <div className="text-gray-400">AssistantX is typing…</div>}
+        {loading && <div className="text-gray-600">AssistantX is typing…</div>}
       </div>
       <form
         className="flex border-t"
@@ -79,7 +79,7 @@ export default function PublicChatWidget() {
         />
         <button
           type="submit"
-          className="px-4 py-2 bg-blue-600 text-white rounded-br-xl hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-br-xl bg-blue-700 px-4 py-2 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-700 disabled:opacity-100"
           disabled={loading || !input.trim()}
         >
           Send

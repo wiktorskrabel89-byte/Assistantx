@@ -81,6 +81,13 @@ export type ChatComposerProps = {
 };
 
 const DEFAULT_THINKING_EFFORT = 2;
+const ComposerMarkdownPreview = dynamic(
+  () => import("./ComposerMarkdownPreview").then((module) => module.ComposerMarkdownPreview),
+  {
+    ssr: false,
+    loading: () => <span className="whitespace-pre-wrap break-words leading-relaxed text-foreground">Loading preview…</span>,
+  }
+);
 
 export function ChatComposer({
   message,
@@ -252,7 +259,7 @@ export function ChatComposer({
 
         {composerPreview && message.trim() ? (
           <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
-            <ReactMarkdown>{message}</ReactMarkdown>
+            <ComposerMarkdownPreview text={message} />
           </div>
         ) : null}
 

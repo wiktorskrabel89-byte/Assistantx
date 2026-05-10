@@ -35,6 +35,7 @@ export type ChatListProps = {
   assistantName: string;
   assistantDescription: string;
   assistantIcon: LucideIcon;
+  dark?: boolean;
 };
 
 export const ChatList = memo(function ChatList({
@@ -62,6 +63,7 @@ export const ChatList = memo(function ChatList({
   assistantName,
   assistantDescription,
   assistantIcon: AssistantIcon,
+  dark = false,
 }: ChatListProps) {
   const [visibleCount, setVisibleCount] = useState(MESSAGE_LOAD_BATCH_SIZE);
   const quickStarters: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
@@ -170,10 +172,10 @@ export const ChatList = memo(function ChatList({
                     {entry.user}
                   </div>
                   <div className="mt-1 flex justify-end gap-3">
-                    <Button variant="ghost" size="sm" onClick={() => onEditUser(entry.user)} className="h-auto px-0 py-0 text-xs text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" size="sm" onClick={() => onEditUser(entry.user)} className="h-auto px-0 py-0 text-xs text-foreground/80 hover:text-foreground">
                       Edit and resend
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => onStartEditingMessage(entry.id, entry.user)} className="h-auto px-0 py-0 text-xs text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" size="sm" onClick={() => onStartEditingMessage(entry.id, entry.user)} className="h-auto px-0 py-0 text-xs text-foreground/80 hover:text-foreground">
                       Edit inline
                     </Button>
                   </div>
@@ -196,6 +198,7 @@ export const ChatList = memo(function ChatList({
             onRatingChange={(value) => onSetFeedback(entry.id, value)}
             onReviewTextChange={(text) => onSetReviewText(entry.id, text)}
             onFork={onFork ? () => onFork(visibleStartIndex + index) : undefined}
+            dark={dark}
           />
         </div>
       ))}
