@@ -1,3 +1,9 @@
+<#
+.SYNOPSIS
+Jarvis System Setup - Kompleksowy instalator konfiguracji sprzętowej.
+Funkcje: Auto-BIOS (Dell/HP/Lenovo), Fast Boot Disable, Network Config, Autostart.
+#>
+
 param(
     [string]$DownloadUrl = "",
     [string]$BaseUrl = $(if ($env:JARVIS_BASE_URL) { $env:JARVIS_BASE_URL } else { "http://127.0.0.1:3000/jarvis" }),
@@ -85,6 +91,27 @@ Write-Host "----------------------------------------------" -ForegroundColor Cya
 Write-Host "Detected architecture : $($env:PROCESSOR_ARCHITECTURE)" -ForegroundColor DarkCyan
 Write-Host "Installer URL         : $DownloadUrl" -ForegroundColor DarkCyan
 
+# Hardware identification
+$brand = ""
+$model = ""
+$hasEthernet = $false
+try {
+    $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+    $brand = [string]$computerSystem.Manufacturer
+    $model = [string]$computerSystem.Model
+} catch {
+    Write-Host "Jarvis: Nie udało się odczytać producenta/modelu sprzętu." -ForegroundColor Yellow
+}
+try {
+    $ethernetAdapters = Get-NetAdapter -ErrorAction Stop | Where-Object {
+        $_.PhysicalMediaType -eq "802.3" -or $_.NdisPhysicalMedium -eq "802.3"
+    }
+    $hasEthernet = @($ethernetAdapters).Count -gt 0
+} catch {
+    $hasEthernet = $false
+}
+Write-Host "Jarvis: Wykryłem sprzęt: $brand $model" -ForegroundColor White
+
 if (-not (Test-Path $InstallDir)) {
     New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
     Write-Host "Created install directory: $InstallDir" -ForegroundColor Green
@@ -112,14 +139,9 @@ try {
     exit 1
 }
 
+Write-Stage "[2/4] Preparing installer run"
 if ($ApplyPowerTweaks) {
-    Write-Stage "[2/4] Applying optional power tweaks"
-    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Value 0
-    powercfg /h off
-    Write-Host "Fast startup and hibernation disabled." -ForegroundColor Green
-} else {
-    Write-Stage "[2/4] Skipping optional power tweaks"
-    Write-Host "Run with -ApplyPowerTweaks if you want to disable fast startup and hibernation." -ForegroundColor DarkYellow
+    Write-Host "Flag -ApplyPowerTweaks detected. Power optimization will run in the hardware setup phase." -ForegroundColor DarkYellow
 }
 
 Write-Stage "[3/4] Running silent NSIS installation"
@@ -147,16 +169,93 @@ if ([string]::IsNullOrWhiteSpace($finalAppPath)) {
 
 Write-Host "Verified application path: $finalAppPath" -ForegroundColor Green
 
-if (-not $SkipAutostart) {
+Write-Host ""
+Write-Host "--------------------------------------------------" -ForegroundColor Cyan
+Write-Host " JARVIS SETUP - INSTALATOR SYSTEMOWY " -ForegroundColor Cyan
+Write-Host "--------------------------------------------------" -ForegroundColor Cyan
+
+# [1/4] Network configuration (Wake on LAN)
+Write-Host "`n[1/4] Konfiguracja sieci..." -ForegroundColor Yellow
+if ($hasEthernet) {
+    try {
+        $adapters = Get-NetAdapter -ErrorAction Stop | Get-NetAdapterPowerManagement -ErrorAction Stop | Where-Object { $_.WakeOnMagicPacket -ne $null }
+        foreach ($adapter in $adapters) {
+            Enable-NetAdapterPowerManagement -InterfaceDescription $adapter.InterfaceDescription -WakeOnMagicPacket -ErrorAction SilentlyContinue
+        }
+        Write-Host "Jarvis: Funkcja budzenia przez telefon (WOL) została aktywowana." -ForegroundColor Green
+    } catch {
+        Write-Host "Jarvis: Nie udało się automatycznie skonfigurować karty, sprawdź sterowniki." -ForegroundColor Red
+    }
+} else {
+    Write-Host "Jarvis: Brak aktywnej karty Ethernet. Funkcja budzenia przez telefon będzie niedostępna." -ForegroundColor Gray
+}
+
+# [2/4] Disable Fast Boot and hibernation
+Write-Host "`n[2/4] Optymalizacja zasilania Windows..." -ForegroundColor Yellow
+try {
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Value 0 -ErrorAction Stop
+} catch {
+    Write-Host "Jarvis: Nie udało się wyłączyć Fast Boot." -ForegroundColor Yellow
+}
+try {
+    powercfg /h off | Out-Null
+} catch {
+    Write-Host "Jarvis: Nie udało się wyłączyć hibernacji." -ForegroundColor Yellow
+}
+Write-Host "Jarvis: Szybkie uruchamianie wyłączone. BIOS ma teraz pełną kontrolę." -ForegroundColor Green
+
+# [3/4] BIOS automation
+Write-Host "`n[3/4] Próba automatycznej konfiguracji BIOS..." -ForegroundColor Yellow
+switch -wildcard ($brand) {
+    "*Dell*" {
+        Write-Host "Jarvis: Wykryto Dell. Instaluję sterownik DellBIOSProvider..." -ForegroundColor Blue
+        Install-Module -Name DellBIOSProvider -Force -AllowClobber -Scope CurrentUser -ErrorAction SilentlyContinue
+        Import-Module DellBIOSProvider -ErrorAction SilentlyContinue
+        Set-Item -Path "DellSmbios:\PowerManagement\WakeOnLan" -Value "LanOnly" -ErrorAction SilentlyContinue
+        Set-Item -Path "DellSmbios:\PowerManagement\AcRecovery" -Value "On" -ErrorAction SilentlyContinue
+        Set-Item -Path "DellSmbios:\PowerManagement\DeepSleepCtrl" -Value "Disabled" -ErrorAction SilentlyContinue
+        Write-Host "Jarvis: BIOS Dell został skonfigurowany automatycznie." -ForegroundColor Green
+    }
+    "*HP*" {
+        Write-Host "Jarvis: Wykryto HP. Instaluję bibliotekę HP CMSL..." -ForegroundColor Blue
+        Install-Module -Name HPCMSL -Force -Scope CurrentUser -ErrorAction SilentlyContinue
+        Set-HPBIOSSettingValue -Name "Wake On LAN" -Value "Enable" -ErrorAction SilentlyContinue
+        Set-HPBIOSSettingValue -Name "After Power Loss" -Value "Power On" -ErrorAction SilentlyContinue
+        Write-Host "Jarvis: BIOS HP został skonfigurowany automatycznie." -ForegroundColor Green
+    }
+    "*Lenovo*" {
+        Write-Host "Jarvis: Wykryto Lenovo. Używam interfejsu WMI..." -ForegroundColor Blue
+        $wmi = Get-WmiObject -Class Lenovo_SetBiosSetting -Namespace root\wmi -ErrorAction SilentlyContinue
+        if ($wmi) {
+            $wmi.SetBiosSetting("Wake on LAN,Primary") | Out-Null
+            $wmi.SetBiosSetting("After Power Loss,Power On") | Out-Null
+            $wmi.SetBiosSetting("Enhanced Power Saving Mode,Disable") | Out-Null
+            (Get-WmiObject -Class Lenovo_SaveBiosSettings -Namespace root\wmi -ErrorAction SilentlyContinue).SaveBiosSettings() | Out-Null
+            Write-Host "Jarvis: BIOS Lenovo został skonfigurowany automatycznie." -ForegroundColor Green
+        } else {
+            Write-Host "Jarvis: Interfejs WMI Lenovo niedostępny, pomijam auto-konfigurację BIOS." -ForegroundColor Yellow
+        }
+    }
+    Default {
+        Write-Host "Jarvis: Marka $brand nie wspiera auto-konfiguracji." -ForegroundColor Gray
+        Write-Host "ZALECENIE: Wejdź do BIOS i włącz: 'Wake on LAN' oraz 'Restore on AC Power Loss'." -ForegroundColor Yellow
+    }
+}
+
+# [4/4] Autostart
+Write-Host "`n[4/4] Konfiguracja autostartu..." -ForegroundColor Yellow
+if (-not $SkipAutostart -and (Test-Path $finalAppPath)) {
     $shortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\Jarvis.lnk"
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = $finalAppPath
     $shortcut.WorkingDirectory = Split-Path -Path $finalAppPath -Parent
     $shortcut.Save()
-    Write-Host "Autostart shortcut created: $shortcutPath" -ForegroundColor Green
+    Write-Host "Jarvis: Dodano do autostartu. Będę gotowy przy każdym włączeniu!" -ForegroundColor Green
+} elseif ($SkipAutostart) {
+    Write-Host "Jarvis: Pominąłem autostart na życzenie (-SkipAutostart)." -ForegroundColor Gray
 } else {
-    Write-Host "Autostart shortcut skipped." -ForegroundColor DarkYellow
+    Write-Host "Jarvis: Nie znalazłem pliku $finalAppPath. Pomińmy autostart na razie." -ForegroundColor Gray
 }
 
 if (Test-Path $setupPath) {
@@ -166,4 +265,5 @@ if (Test-Path $setupPath) {
 Write-Host "`n----------------------------------------------" -ForegroundColor Cyan
 Write-Host "        JARVIS SETUP COMPLETED SUCCESSFULLY     " -ForegroundColor Cyan
 Write-Host "----------------------------------------------" -ForegroundColor Cyan
+Write-Host "Jarvis: Zrestartuj komputer, aby wszystkie zmiany weszły w życie." -ForegroundColor White
 Pause
