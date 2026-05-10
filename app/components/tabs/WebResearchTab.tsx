@@ -85,8 +85,10 @@ export function WebResearchTab({ dark }: { dark: boolean }) {
       <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="min-h-0 space-y-4 overflow-y-auto">
           <div className={`rounded-2xl border p-4 ${card}`}>
-            <label className="block text-sm font-medium">Research query</label>
+            <label htmlFor="web-research-query" className="block text-sm font-medium">Research query</label>
             <textarea
+              id="web-research-query"
+              name="webResearchQuery"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               rows={4}
@@ -94,7 +96,7 @@ export function WebResearchTab({ dark }: { dark: boolean }) {
               placeholder="What should the assistant research?"
             />
             <label className={`mt-3 flex items-center gap-2 text-xs ${muted}`}>
-              <input type="checkbox" checked={forceFresh} onChange={(event) => setForceFresh(event.target.checked)} />
+              <input id="web-research-force-fresh" name="webResearchForceFresh" type="checkbox" checked={forceFresh} onChange={(event) => setForceFresh(event.target.checked)} />
               Ignore cached result and fetch fresh sources
             </label>
             <div className="mt-3 flex gap-2">

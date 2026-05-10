@@ -106,7 +106,7 @@ const nextConfig = {
             "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "img-src 'self' blob: data: https:",
-            "font-src 'self' https://fonts.gstatic.com",
+            "font-src 'self' https://fonts.gstatic.com data:",
             "connect-src *",
             // Monaco Editor creates blob workers and the app registers a service worker
             "worker-src 'self' blob:",

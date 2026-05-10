@@ -82,6 +82,9 @@ export function MemoryTab({ dark }: { dark: boolean }) {
               </button>
             </div>
             <textarea
+              id="memory-workspace-notes"
+              name="memoryWorkspaceNotes"
+              aria-label="Workspace memory notes"
               value={draftNotes}
               onChange={(event) => setDraftNotes(event.target.value)}
               rows={8}
