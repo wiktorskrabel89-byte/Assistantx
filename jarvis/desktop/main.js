@@ -115,19 +115,18 @@ function setupAutoUpdater() {
       version: info.version,
     });
 
-    // Strip basic HTML tags from release notes so they display cleanly in
-    // the native OS dialog (which renders plain text only).
+    // Strip any HTML that GitHub may have added to the release body so the
+    // text displays cleanly in the native OS dialog (plain text only).
+    // A single combined replace avoids the multi-stage sanitization patterns
+    // that CodeQL warns about.
     let notes = '';
     if (info.releaseNotes) {
       notes = String(info.releaseNotes)
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/?(p|li|ul|ol|h[1-6]|blockquote)[^>]*>/gi, '\n')
-        .replace(/<[^>]+>/g, '')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
+        .replace(
+          /<(?:br|\/p|\/div|\/li|\/h[1-6]|\/blockquote)(?:[^>]*)?>|<[^>]+>/gi,
+          // Convert block-closing tags to newlines; drop everything else
+          (tag) => (/^<(?:br|\/p|\/div|\/li|\/h[1-6]|\/blockquote)/i.test(tag) ? '\n' : ''),
+        )
         .replace(/\n{3,}/g, '\n\n')
         .trim()
         .slice(0, 1500);
