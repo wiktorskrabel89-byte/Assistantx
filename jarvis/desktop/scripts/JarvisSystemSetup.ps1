@@ -40,6 +40,22 @@ function Write-Stage {
     Write-Host "`n$Message" -ForegroundColor Yellow
 }
 
+function Test-CommandResult {
+    param([object]$Result)
+
+    if ($null -eq $Result) {
+        return $false
+    }
+    if ($Result.PSObject.Properties.Match("Return").Count -gt 0) {
+        return ($Result.Return -eq 0 -or $Result.Return -eq "Success")
+    }
+    if ($Result.PSObject.Properties.Match("Status").Count -gt 0) {
+        return ($Result.Status -eq 0 -or $Result.Status -eq "Success")
+    }
+
+    return $true
+}
+
 function Get-JarvisExecutablePath {
     param(
         [string]$SearchRoot,
@@ -179,10 +195,20 @@ Write-Host "`n[1/4] Konfiguracja sieci..." -ForegroundColor Yellow
 if ($hasEthernet) {
     try {
         $adapters = Get-NetAdapter -ErrorAction Stop | Get-NetAdapterPowerManagement -ErrorAction Stop | Where-Object { $null -ne $_.WakeOnMagicPacket }
+        $wolEnabledCount = 0
         foreach ($adapter in $adapters) {
-            Enable-NetAdapterPowerManagement -InterfaceDescription $adapter.InterfaceDescription -WakeOnMagicPacket -ErrorAction SilentlyContinue
+            try {
+                Enable-NetAdapterPowerManagement -InterfaceDescription $adapter.InterfaceDescription -WakeOnMagicPacket -ErrorAction Stop
+                $wolEnabledCount++
+            } catch {
+                continue
+            }
         }
-        Write-Host "Jarvis: Funkcja budzenia przez telefon (WOL) została aktywowana." -ForegroundColor Green
+        if ($wolEnabledCount -gt 0) {
+            Write-Host "Jarvis: Funkcja budzenia przez telefon (WOL) została aktywowana." -ForegroundColor Green
+        } else {
+            Write-Host "Jarvis: Nie udało się aktywować WOL na wykrytych kartach." -ForegroundColor Yellow
+        }
     } catch {
         Write-Host "Jarvis: Nie udało się automatycznie skonfigurować karty, sprawdź sterowniki." -ForegroundColor Red
     }
@@ -203,7 +229,7 @@ try {
         throw "powercfg exited with code $LASTEXITCODE"
     }
 } catch {
-    Write-Host "Jarvis: Nie udało się wyłączyć hibernacji." -ForegroundColor Yellow
+    Write-Host "Jarvis: Nie udało się wyłączyć hibernacji. Szczegóły: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 Write-Host "Jarvis: Szybkie uruchamianie wyłączone. BIOS ma teraz pełną kontrolę." -ForegroundColor Green
 
@@ -214,12 +240,20 @@ switch -wildcard ($brand) {
         Write-Host "Jarvis: Wykryto Dell. Instaluję sterownik DellBIOSProvider..." -ForegroundColor Blue
         Install-Module -Name DellBIOSProvider -Force -AllowClobber -Scope CurrentUser -ErrorAction SilentlyContinue
         Import-Module DellBIOSProvider -ErrorAction SilentlyContinue
-        $dellResults = @(
-            Set-Item -Path "DellSmbios:\PowerManagement\WakeOnLan" -Value "LanOnly" -PassThru -ErrorAction SilentlyContinue
-            Set-Item -Path "DellSmbios:\PowerManagement\AcRecovery" -Value "On" -PassThru -ErrorAction SilentlyContinue
-            Set-Item -Path "DellSmbios:\PowerManagement\DeepSleepCtrl" -Value "Disabled" -PassThru -ErrorAction SilentlyContinue
-        )
-        if (($dellResults | Where-Object { $null -ne $_ }).Count -gt 0) {
+        $dellSuccessCount = 0
+        foreach ($operation in @(
+                @{ Path = "DellSmbios:\PowerManagement\WakeOnLan"; Value = "LanOnly" },
+                @{ Path = "DellSmbios:\PowerManagement\AcRecovery"; Value = "On" },
+                @{ Path = "DellSmbios:\PowerManagement\DeepSleepCtrl"; Value = "Disabled" }
+            )) {
+            try {
+                Set-Item -Path $operation.Path -Value $operation.Value -PassThru -ErrorAction Stop | Out-Null
+                $dellSuccessCount++
+            } catch {
+                continue
+            }
+        }
+        if ($dellSuccessCount -gt 0) {
             Write-Host "Jarvis: BIOS Dell został skonfigurowany automatycznie." -ForegroundColor Green
         } else {
             Write-Host "Jarvis: Nie udało się potwierdzić zmian BIOS Dell automatycznie." -ForegroundColor Yellow
@@ -229,11 +263,19 @@ switch -wildcard ($brand) {
         Write-Host "Jarvis: Wykryto HP. Instaluję bibliotekę HP CMSL..." -ForegroundColor Blue
         Install-Module -Name HPCMSL -Force -Scope CurrentUser -ErrorAction SilentlyContinue
         if (Get-Command Set-HPBIOSSettingValue -ErrorAction SilentlyContinue) {
-            $hpResults = @(
-                Set-HPBIOSSettingValue -Name "Wake On LAN" -Value "Enable" -ErrorAction SilentlyContinue
-                Set-HPBIOSSettingValue -Name "After Power Loss" -Value "Power On" -ErrorAction SilentlyContinue
-            )
-            if (($hpResults | Where-Object { $null -ne $_ }).Count -gt 0) {
+            $hpSuccessCount = 0
+            foreach ($setting in @(
+                    @{ Name = "Wake On LAN"; Value = "Enable" },
+                    @{ Name = "After Power Loss"; Value = "Power On" }
+                )) {
+                try {
+                    Set-HPBIOSSettingValue -Name $setting.Name -Value $setting.Value -ErrorAction Stop | Out-Null
+                    $hpSuccessCount++
+                } catch {
+                    continue
+                }
+            }
+            if ($hpSuccessCount -gt 0) {
                 Write-Host "Jarvis: BIOS HP został skonfigurowany automatycznie." -ForegroundColor Green
             } else {
                 Write-Host "Jarvis: Nie udało się potwierdzić zmian BIOS HP automatycznie." -ForegroundColor Yellow
@@ -254,11 +296,7 @@ switch -wildcard ($brand) {
             if ($saveSettings) {
                 $saveResult = $saveSettings.SaveBiosSettings()
                 $lenovoResults = @($setWakeOnLan, $setAfterPowerLoss, $setPowerSaving, $saveResult) | ForEach-Object {
-                    if ($null -eq $_ -or $null -eq $_.Return) {
-                        $false
-                    } else {
-                        $_.Return -eq "Success"
-                    }
+                    Test-CommandResult -Result $_
                 }
                 if ($lenovoResults.Count -gt 0 -and ($lenovoResults -notcontains $false)) {
                     Write-Host "Jarvis: BIOS Lenovo został skonfigurowany automatycznie." -ForegroundColor Green
