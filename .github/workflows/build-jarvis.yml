@@ -82,18 +82,20 @@ jobs:
         id: android_apk
         shell: pwsh
         run: |
-          $distDir = "jarvis/android/dist"
+          $repoRoot = (Get-Location).Path
+          $distDir = Join-Path $repoRoot "jarvis/android/dist"
           New-Item -ItemType Directory -Force -Path $distDir | Out-Null
           $apkOutput = Join-Path $distDir "Jarvis-android.apk"
           $found = $false
           $gradleBuildFailed = $false
           $lastGradleLines = ""
           $gradleLogPath = Join-Path $distDir "gradle-build.log"
-          $gradleWrapperPath = "jarvis/android/android/gradlew.bat"
+          $gradleProjectDir = Join-Path $repoRoot "jarvis/android/android"
+          $gradleWrapperPath = Join-Path $gradleProjectDir "gradlew.bat"
           $maxGradleTailLines = 50
 
           if (Test-Path $gradleWrapperPath) {
-            Push-Location "jarvis/android/android"
+            Push-Location $gradleProjectDir
             try {
               ./gradlew.bat assembleRelease *> $gradleLogPath
               if ($LASTEXITCODE -ne 0) {
