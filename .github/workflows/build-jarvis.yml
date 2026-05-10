@@ -85,16 +85,22 @@ jobs:
           New-Item -ItemType Directory -Force -Path $distDir | Out-Null
           $apkOutput = Join-Path $distDir "Jarvis-android.apk"
           $found = $false
+          $gradleBuildFailed = $false
 
           if (Test-Path "jarvis/android/android/gradlew.bat") {
             Push-Location "jarvis/android/android"
             try {
               ./gradlew.bat assembleRelease
+              if ($LASTEXITCODE -ne 0) {
+                $gradleBuildFailed = $true
+                Write-Warning "Android Gradle build failed with exit code $LASTEXITCODE; checking fallback APK locations."
+              }
             } finally {
               Pop-Location
             }
           }
 
+          # Check canonical Gradle outputs first, then fallback to prebuilt APK names.
           $candidates = @(
             "jarvis/android/android/app/build/outputs/apk/release/app-release.apk",
             "jarvis/android/app/build/outputs/apk/release/app-release.apk",
@@ -115,6 +121,9 @@ jobs:
             Write-Host "Android APK prepared at $apkOutput"
           } else {
             "found=false" >> $env:GITHUB_OUTPUT
+            if ($gradleBuildFailed) {
+              Write-Warning "No Android APK found after Gradle build failure."
+            }
             Write-Host "Android APK not found; skipping Android release asset."
           }
 
