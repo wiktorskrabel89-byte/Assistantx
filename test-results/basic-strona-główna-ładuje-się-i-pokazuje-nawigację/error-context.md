@@ -81,7 +81,7 @@ Call log:
   2 | 
   3 | test('strona główna ładuje się i pokazuje nawigację', async ({ page }) => {
   4 |   await page.goto('/');
-  5 |   await expect(page.locator('text=Moje AI')).toBeVisible();
+  5 |   await expect(page.locator('text=AssistantX')).toBeVisible();
   6 |   await expect(page.locator('text=Chat')).toBeVisible();
 > 7 |   await expect(page.locator('text=AI Learning')).toBeVisible();
     |                                                  ^ Error: expect(locator).toBeVisible() failed

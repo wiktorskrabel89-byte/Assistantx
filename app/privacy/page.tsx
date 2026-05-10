@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LegalDocument } from "@/app/components/LegalDocument";
 import ChatbotSection from "@/app/components/ChatbotSection";
 
@@ -114,7 +115,7 @@ export default function PrivacyPage() {
             If you have questions about this Privacy Policy or your personal data, contact the operator using the contact details or support channel made available on this website.
           </p>
           <p style={{ marginTop: 24 }}>
-            <strong>Visit our homepage:</strong> <a href="/support" target="_blank" rel="noopener noreferrer">Support</a>
+            <strong>Visit our homepage:</strong> <Link href="/">AssistantX</Link>
           </p>
         </section>
       </LegalDocument>
