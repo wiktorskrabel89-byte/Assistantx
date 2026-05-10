@@ -178,7 +178,7 @@ Write-Host "--------------------------------------------------" -ForegroundColor
 Write-Host "`n[1/4] Konfiguracja sieci..." -ForegroundColor Yellow
 if ($hasEthernet) {
     try {
-        $adapters = Get-NetAdapter -ErrorAction Stop | Get-NetAdapterPowerManagement -ErrorAction Stop | Where-Object { $_.WakeOnMagicPacket -ne $null }
+        $adapters = Get-NetAdapter -ErrorAction Stop | Get-NetAdapterPowerManagement -ErrorAction Stop | Where-Object { $null -ne $_.WakeOnMagicPacket }
         foreach ($adapter in $adapters) {
             Enable-NetAdapterPowerManagement -InterfaceDescription $adapter.InterfaceDescription -WakeOnMagicPacket -ErrorAction SilentlyContinue
         }
@@ -227,11 +227,24 @@ switch -wildcard ($brand) {
         Write-Host "Jarvis: Wykryto Lenovo. Używam interfejsu WMI..." -ForegroundColor Blue
         $wmi = Get-WmiObject -Class Lenovo_SetBiosSetting -Namespace root\wmi -ErrorAction SilentlyContinue
         if ($wmi) {
-            $wmi.SetBiosSetting("Wake on LAN,Primary") | Out-Null
-            $wmi.SetBiosSetting("After Power Loss,Power On") | Out-Null
-            $wmi.SetBiosSetting("Enhanced Power Saving Mode,Disable") | Out-Null
-            (Get-WmiObject -Class Lenovo_SaveBiosSettings -Namespace root\wmi -ErrorAction SilentlyContinue).SaveBiosSettings() | Out-Null
-            Write-Host "Jarvis: BIOS Lenovo został skonfigurowany automatycznie." -ForegroundColor Green
+            $setWakeOnLan = $wmi.SetBiosSetting("Wake on LAN,Primary")
+            $setAfterPowerLoss = $wmi.SetBiosSetting("After Power Loss,Power On")
+            $setPowerSaving = $wmi.SetBiosSetting("Enhanced Power Saving Mode,Disable")
+            $saveSettings = Get-WmiObject -Class Lenovo_SaveBiosSettings -Namespace root\wmi -ErrorAction SilentlyContinue
+
+            if ($saveSettings) {
+                $saveResult = $saveSettings.SaveBiosSettings()
+                $lenovoSucceeded = @($setWakeOnLan, $setAfterPowerLoss, $setPowerSaving, $saveResult) | ForEach-Object {
+                    $_ -and $_.Return -eq "Success"
+                }
+                if (($lenovoSucceeded -notcontains $false)) {
+                    Write-Host "Jarvis: BIOS Lenovo został skonfigurowany automatycznie." -ForegroundColor Green
+                } else {
+                    Write-Host "Jarvis: Część ustawień BIOS Lenovo nie została zapisana automatycznie." -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "Jarvis: Nie udało się zapisać ustawień BIOS Lenovo (brak klasy SaveBiosSettings)." -ForegroundColor Yellow
+            }
         } else {
             Write-Host "Jarvis: Interfejs WMI Lenovo niedostępny, pomijam auto-konfigurację BIOS." -ForegroundColor Yellow
         }
