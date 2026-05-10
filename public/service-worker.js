@@ -6,10 +6,6 @@ self.addEventListener('activate', () => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', () => {
-  // Możesz dodać cache lub inne strategie
-});
-
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {};
   const title = data.title || 'Nowa notyfikacja';

@@ -40,6 +40,12 @@ export default async function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#2563eb" />
+        {/* Preconnect to critical external services to reduce DNS + TLS overhead */}
+        <link rel="preconnect" href="https://api.groq.com" />
+        <link rel="preconnect" href="https://generativelanguage.googleapis.com" />
+        <link rel="preconnect" href="https://openrouter.ai" />
+        <link rel="dns-prefetch" href="https://api.groq.com" />
+        <link rel="dns-prefetch" href="https://openrouter.ai" />
       </head>
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>

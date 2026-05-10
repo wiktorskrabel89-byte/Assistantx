@@ -708,11 +708,17 @@ export const POST = async (req: Request) => {
       resolvedReasoningEffort = "medium";
       smartRouteLabel = `Vision analysis — ${MODEL_LABELS[ROUTING_VISION_MODEL] ?? ROUTING_VISION_MODEL}`;
     } else if (inferredCodeRequest) {
-      selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
+      // Simple coding → Qwen3-32b (fast, free); complex debugging/refactor → GPT OSS 120B
+      const codeModel = inferredComplexCoding
+        ? (userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL)
+        : ROUTING_MAIN_MODEL;
+      selectedModel = codeModel;
       resolvedTemperature = getModelTemperature(selectedModel, { isCodeRequest: true });
       // Complex debugging/refactor → high; simple function → low
       resolvedReasoningEffort = inferredComplexCoding ? "high" : "low";
-      smartRouteLabel = `Coding — ${MODEL_LABELS[ROUTING_CODE_MODEL] ?? ROUTING_CODE_MODEL}${userPlan === "free" ? " (free)" : ""}`;
+      smartRouteLabel = inferredComplexCoding
+        ? `Coding (complex) — ${MODEL_LABELS[codeModel] ?? codeModel}${userPlan === "free" ? " (free)" : ""}`
+        : `Coding (simple) — ${MODEL_LABELS[codeModel] ?? codeModel}`;
     } else if (inferredHeavyReasoning) {
       selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_REASONING_MODEL;
       resolvedTemperature = getModelTemperature(selectedModel);
@@ -944,16 +950,18 @@ export const POST = async (req: Request) => {
   }
 
   // Send provider-specific reasoning params when the selected model supports it.
-  // Google AI Studio uses thinking_config; Groq Qwen3 uses reasoning_effort "default"/"none";
+  // Groq Qwen3 uses reasoning_effort "default"/"none";
   // OpenAI-style models use reasoning_effort "low"/"medium"/"high".
+  // NOTE: Google AI Studio's OpenAI-compatible endpoint does NOT support thinking_config
+  // or reasoning_effort — those params are stripped in sendModelRequest for Gemini models.
   // The auto-router already picks the right effort level per task type.
   // If the client explicitly sent a thinkingEffort (e.g. from an advanced UI toggle),
   // that takes precedence over the automatic value.
   if (REASONING_MODEL_IDS.includes(selectedModel)) {
     const isQwen3Model = selectedModel.startsWith("qwen/qwen3");
     if (isGemini) {
-      // Google AI Studio: thinking_config.include_thoughts
-      requestBody.thinking_config = { include_thoughts: true };
+      // Google AI Studio's OpenAI-compatible endpoint doesn't support any reasoning params.
+      // No special fields needed; the model reasons natively.
     } else if (isQwen3Model) {
       // Groq Qwen3: reasoning_effort "default" (think) or "none" (skip thinking)
       const effortNum = thinkingEffort
@@ -1041,13 +1049,11 @@ export const POST = async (req: Request) => {
     // for a different provider (e.g. Groq body falling back to Google, or vice versa).
     const providerBody: Record<string, unknown> = { ...body };
     if (useGoogleStudio) {
-      // Google AI Studio: remove Groq-style params; use thinking_config when reasoning is active.
-      const hasReasoning = providerBody.reasoning_effort !== undefined || providerBody.reasoning_level !== undefined;
+      // Google AI Studio's OpenAI-compatible endpoint does not support reasoning_effort,
+      // reasoning_level, or thinking_config. Strip all of them so the request succeeds.
       delete providerBody.reasoning_effort;
       delete providerBody.reasoning_level;
-      if (hasReasoning || providerBody.thinking_config !== undefined) {
-        providerBody.thinking_config = { include_thoughts: true };
-      }
+      delete providerBody.thinking_config;
     } else if (useOpenRouter) {
       providerBody.model = normalizeOpenRouterModelId(targetModel);
       delete providerBody.thinking_config;

@@ -2,7 +2,7 @@
 
 import { Eye, Mic, MicOff, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
 import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import { useLayoutEffect, type RefObject } from "react";
+import { type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
 import { Button } from "@/components/ui/button";
@@ -111,7 +111,9 @@ export function ChatComposer({
     textarea.style.overflowY = textarea.scrollHeight > 180 ? "auto" : "hidden";
   }, [inputRef]);
 
-  useLayoutEffect(() => {
+  // Run after paint (useEffect, not useLayoutEffect) so the synchronous reflow
+  // does not block the browser from painting — keeps keyboard INP low.
+  useEffect(() => {
     resizeComposer();
   }, [message, resizeComposer]);
 

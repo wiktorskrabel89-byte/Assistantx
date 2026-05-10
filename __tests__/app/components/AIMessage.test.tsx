@@ -133,9 +133,9 @@ describe("AIMessage", () => {
       expect(screen.getByText("My reasoning here")).toBeInTheDocument();
     });
 
-    it("shows reasoning text while streaming regardless of reasoningOpen", () => {
+    it("hides reasoning text while streaming when reasoningOpen is false", () => {
       renderMessage(makeEntry({ reasoning: "Thinking…", ai: "" }), { isStreaming: true, reasoningOpen: false });
-      expect(screen.getByText("Thinking…")).toBeInTheDocument();
+      expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
     });
   });
 
