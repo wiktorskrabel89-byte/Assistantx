@@ -169,6 +169,7 @@ export function ChatTab() {
     updateChat,
     createCustomAgent,
     updateCustomAgent,
+    options: { enableInsights: shareDialogOpen || appsOpen },
   });
   const selectedAgent = activeAgentId;
   const userPreferences = workspaceQueries.userPreferencesQuery.data ?? activeWorkspace.settings;
@@ -737,6 +738,7 @@ export function ChatTab() {
                   assistantName={assistantName}
                   assistantDescription={assistantDescription}
                   assistantIcon={assistantIcon}
+                  dark={state.dark}
                 />
               </div>
 

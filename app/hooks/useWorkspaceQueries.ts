@@ -107,6 +107,7 @@ export function useWorkspaceQueries({
   updateChat,
   createCustomAgent,
   updateCustomAgent,
+  options,
 }: {
   activeWorkspace: Workspace;
   activeChat: ChatThread;
@@ -114,9 +115,13 @@ export function useWorkspaceQueries({
   updateChat: (workspaceId: string, chatId: string, updater: (chat: ChatThread) => ChatThread) => void;
   createCustomAgent: (agent: { name: string; description: string; instructions: string; preferredMode: string }) => void;
   updateCustomAgent: (agentId: string, agent: { name: string; description: string; instructions: string; preferredMode: string }) => void;
+  options?: {
+    enableInsights?: boolean;
+  };
 }) {
   const queryClient = useQueryClient();
   const baseKey = ["workspace", activeWorkspace.id, activeWorkspace.updatedAt] as const;
+  const insightsEnabled = options?.enableInsights ?? true;
 
   const conversationsQuery = useQuery({
     queryKey: [...baseKey, "conversations"],
@@ -136,16 +141,19 @@ export function useWorkspaceQueries({
   const feedbacksQuery = useQuery({
     queryKey: [...baseKey, "feedbacks"],
     queryFn: () => deriveFeedbacks(activeWorkspace),
+    enabled: insightsEnabled,
   });
 
   const patternsQuery = useQuery({
     queryKey: [...baseKey, "patterns"],
     queryFn: () => deriveInteractionPatterns(activeWorkspace),
+    enabled: insightsEnabled,
   });
 
   const conversationKnowledgeQuery = useQuery({
     queryKey: [...baseKey, "conversationKnowledge", activeChat.id, activeChat.updatedAt],
     queryFn: () => deriveConversationKnowledge(activeChat),
+    enabled: insightsEnabled,
   });
 
   const updatePreferencesMutation = useMutation({

@@ -2,7 +2,7 @@
 
 import { Eye, Mic, MicOff, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
 import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import { useLayoutEffect, type RefObject } from "react";
+import { type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
 import { Button } from "@/components/ui/button";
@@ -81,6 +81,13 @@ export type ChatComposerProps = {
 };
 
 const DEFAULT_THINKING_EFFORT = 2;
+const ComposerMarkdownPreview = dynamic(
+  () => import("./ComposerMarkdownPreview").then((module) => module.ComposerMarkdownPreview),
+  {
+    ssr: false,
+    loading: () => <span className="whitespace-pre-wrap break-words leading-relaxed text-foreground">Loading preview…</span>,
+  }
+);
 
 export function ChatComposer({
   message,
@@ -111,7 +118,9 @@ export function ChatComposer({
     textarea.style.overflowY = textarea.scrollHeight > 180 ? "auto" : "hidden";
   }, [inputRef]);
 
-  useLayoutEffect(() => {
+  // Run after paint (useEffect, not useLayoutEffect) so the synchronous reflow
+  // does not block the browser from painting — keeps keyboard INP low.
+  useEffect(() => {
     resizeComposer();
   }, [message, resizeComposer]);
 
@@ -250,7 +259,7 @@ export function ChatComposer({
 
         {composerPreview && message.trim() ? (
           <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
-            <ReactMarkdown>{message}</ReactMarkdown>
+            <ComposerMarkdownPreview text={message} />
           </div>
         ) : null}
 
