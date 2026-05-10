@@ -101,7 +101,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) {
                 $gradleBuildFailed = $true
                 if (Test-Path $gradleLogPath) {
-                  $lastGradleLines = (Get-Content $gradleLogPath -Tail $maxGradleTailLines -ErrorAction SilentlyContinue | Out-String).Trim()
+                  $lastGradleLines = (Get-Content $gradleLogPath -Tail $maxGradleTailLines | Out-String).Trim()
                 } else {
                   $lastGradleLines = "Gradle log file was not created at $gradleLogPath; verify wrapper execution and output redirection."
                 }
