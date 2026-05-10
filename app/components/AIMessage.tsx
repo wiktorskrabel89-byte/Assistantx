@@ -1,11 +1,9 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { CodeReviewPanel } from "./CodeReviewPanel";
 import { ReviewPanel } from "./ReviewPanel";
-import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { ChatEntry, MessageFeedback, ResponseAction } from "../lib/chat-types";
 
 // ── Inline citations ────────────────────────────────────────────────────────
@@ -25,25 +23,16 @@ function parseCitations(text: string): { cleanText: string; citations: Citation[
   return { cleanText, citations };
 }
 
-// ── Dark mode detection ─────────────────────────────────────────────────────
-/** Subscribe to dark-mode changes by observing the `class` attribute on <html>. Used with React's useSyncExternalStore. */
-function subscribeDarkMode(callback: () => void) {
-  const observer = new MutationObserver(callback);
-  observer.observe(document.documentElement, { attributeFilter: ["class"] });
-  return () => observer.disconnect();
-}
-/** Returns true when the document element currently has the "dark" class. */
-function getDarkSnapshot() {
-  return document.documentElement.classList.contains("dark");
-}
-
-// ── TTS helpers (useSyncExternalStore) ─────────────────────────────────────
-function getTtsSupportSnapshot() {
-  return typeof window !== "undefined" && "speechSynthesis" in window;
-}
-function subscribeTtsSupport() {
-  return () => { /* TTS support does not change at runtime */ };
-}
+const MarkdownMessageRenderer = process.env.NODE_ENV === "test"
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("./MarkdownMessageRenderer").MarkdownMessageRenderer
+  : dynamic(
+      () => import("./MarkdownMessageRenderer").then((module) => module.MarkdownMessageRenderer),
+      {
+        ssr: false,
+        loading: () => <span className="whitespace-pre-wrap break-words leading-relaxed text-foreground">Loading formatted response…</span>,
+      }
+    );
 
 type AIMessageProps = {
   entry: ChatEntry;
@@ -59,6 +48,7 @@ type AIMessageProps = {
   onRatingChange: (value: MessageFeedback | null) => void;
   onReviewTextChange: (text: string) => void;
   onFork?: () => void;
+  dark?: boolean;
 };
 
 export function AIMessage({
@@ -75,13 +65,11 @@ export function AIMessage({
   onRatingChange,
   onReviewTextChange,
   onFork,
+  dark = false,
 }: AIMessageProps) {
-  let codeBlockIndex = 0;
   const responseCopyId = `${entry.id}-response`;
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const isDark = useSyncExternalStore(subscribeDarkMode, getDarkSnapshot, () => false);
-
-  const ttsSupported = useSyncExternalStore(subscribeTtsSupport, getTtsSupportSnapshot, () => false);
+  const ttsSupported = typeof window !== "undefined" && "speechSynthesis" in window;
 
   const codeBlocks = useMemo(() => {
     const matches = Array.from(entry.ai.matchAll(/```([\w-]+)?\n([\s\S]*?)```/g));
@@ -155,11 +143,11 @@ export function AIMessage({
           <div className="rounded-2xl rounded-tl-sm py-3 text-sm">
             {!entry.ai && isStreaming ? (
               <div className="space-y-2">
-                <span className="flex items-center gap-2 py-1 text-xs text-gray-400">
+                <span className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
                   <span className="inline-block h-2 w-20 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-400/40 via-blue-400/80 to-cyan-400/40 bg-[length:200%_100%]" />
                   <span>{entry.status ?? "Thinking..."}</span>
                 </span>
-                {entry.routeReason ? <div className="text-[11px] text-gray-400">{entry.routeReason}</div> : null}
+                {entry.routeReason ? <div className="text-[11px] text-muted-foreground">{entry.routeReason}</div> : null}
               </div>
             ) : isStreaming ? (
               <div>
@@ -167,57 +155,13 @@ export function AIMessage({
                 <span className="whitespace-pre-wrap break-words leading-relaxed">{entry.ai}</span>
               </div>
             ) : (
-              <ReactMarkdown
-                components={{
-                  code({ className, children, ...props }) {
-                    const match = /language-(\w+)/.exec(className ?? "");
-                    const codeText = String(children).replace(/\n$/, "");
-                    const isBlock = Boolean(match) || codeText.includes("\n");
-
-                    if (isBlock) {
-                      const blockId = `${entry.id}-code-${codeBlockIndex++}`;
-                      return (
-                        <div className="relative my-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-                          <div className="flex items-center justify-between px-3 py-1 text-xs text-muted-foreground bg-muted">
-                            <span>{match?.[1] ?? "code"}</span>
-                            <button onClick={() => onCopyText(codeText, blockId)} className="transition-colors hover:text-white">
-                              {copied === blockId ? "Copied" : "Copy"}
-                            </button>
-                          </div>
-                          <SyntaxHighlighter style={isDark ? oneDark : oneLight} language={match?.[1] ?? "text"} PreTag="div">
-                            {codeText}
-                          </SyntaxHighlighter>
-                        </div>
-                      );
-                    }
-
-                    return <code className="bg-muted rounded px-1 text-xs" {...props}>{children}</code>;
-                  },
-                  p({ children }) {
-                    return <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{children}</p>;
-                  },
-                  ul({ children }) {
-                    return <ul className="mb-2 ml-4 list-disc space-y-1">{children}</ul>;
-                  },
-                  ol({ children }) {
-                    return <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>;
-                  },
-                  blockquote({ children }) {
-                    return <blockquote className="my-2 border-l-4 border-border pl-3 italic text-muted-foreground">{children}</blockquote>;
-                  },
-                  h1({ children }) {
-                    return <h1 className="mb-2 text-xl font-bold">{children}</h1>;
-                  },
-                  h2({ children }) {
-                    return <h2 className="mb-2 text-lg font-bold">{children}</h2>;
-                  },
-                  h3({ children }) {
-                    return <h3 className="mb-1 text-base font-bold">{children}</h3>;
-                  },
-                }}
-              >
-                {cleanText}
-              </ReactMarkdown>
+              <MarkdownMessageRenderer
+                text={cleanText}
+                entryId={entry.id}
+                copied={copied}
+                dark={dark}
+                onCopyText={onCopyText}
+              />
             )}
 
             {/* Inline citations — shown for search responses that include footnotes */}
@@ -232,7 +176,7 @@ export function AIMessage({
                         href={c.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="truncate text-sky-500 hover:underline"
+                        className="truncate text-sky-600 hover:underline dark:text-sky-300"
                       >
                         {c.url}
                       </a>
@@ -244,39 +188,39 @@ export function AIMessage({
           </div>
         )}
 
-        <div className="ml-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+        <div className="ml-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {entry.routeReason ? <span>{entry.routeReason}</span> : null}
-          {entry.stopped ? <span className="text-amber-400">Stopped</span> : null}
+          {entry.stopped ? <span className="text-amber-500 dark:text-amber-300">Stopped</span> : null}
           {entry.ai && !entry.imageUrl ? (
             <>
-              <button onClick={() => onCopyText(entry.ai, responseCopyId)} className="hover:text-blue-400">
+              <button onClick={() => onCopyText(entry.ai, responseCopyId)} className="hover:text-blue-600 dark:hover:text-blue-300">
                 {copied === responseCopyId ? "Copied" : "Copy"}
               </button>
               {ttsSupported ? (
                 isSpeaking ? (
-                  <button onClick={handleStopSpeaking} className="hover:text-amber-400" title="Stop speaking" aria-label="Stop speaking">
+                  <button onClick={handleStopSpeaking} className="hover:text-amber-500 dark:hover:text-amber-300" title="Stop speaking" aria-label="Stop speaking">
                     Stop
                   </button>
                 ) : (
-                  <button onClick={handleSpeak} className="hover:text-blue-400" title="Read aloud" aria-label="Read response aloud">
+                  <button onClick={handleSpeak} className="hover:text-blue-600 dark:hover:text-blue-300" title="Read aloud" aria-label="Read response aloud">
                     Speak
                   </button>
                 )
               ) : null}
-              <button onClick={() => onResponseAction("summarize", entry.ai)} className="hover:text-blue-400">
+              <button onClick={() => onResponseAction("summarize", entry.ai)} className="hover:text-blue-600 dark:hover:text-blue-300">
                 Summarize
               </button>
-              <button onClick={() => onResponseAction("checklist", entry.ai)} className="hover:text-blue-400">
+              <button onClick={() => onResponseAction("checklist", entry.ai)} className="hover:text-blue-600 dark:hover:text-blue-300">
                 Checklist
               </button>
-              <button onClick={() => onResponseAction("translate", entry.ai)} className="hover:text-blue-400">
+              <button onClick={() => onResponseAction("translate", entry.ai)} className="hover:text-blue-600 dark:hover:text-blue-300">
                 Translate
               </button>
-              <button onClick={() => onResponseAction("commit", entry.ai)} className="hover:text-blue-400">
+              <button onClick={() => onResponseAction("commit", entry.ai)} className="hover:text-blue-600 dark:hover:text-blue-300">
                 Commit msg
               </button>
               {onFork ? (
-                <button onClick={onFork} title="Fork conversation at this message" className="hover:text-emerald-400">
+                <button onClick={onFork} title="Fork conversation at this message" className="hover:text-emerald-600 dark:hover:text-emerald-300">
                   Fork
                 </button>
               ) : null}

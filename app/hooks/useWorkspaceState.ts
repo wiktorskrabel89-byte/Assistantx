@@ -91,7 +91,10 @@ export function useWorkspaceState() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const browserWindow = window;
     let cancelled = false;
+    let idleId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     async function loadState() {
       const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -108,36 +111,71 @@ export function useWorkspaceState() {
         }
       }
 
-      try {
-        const response = await fetch("/api/history");
-        const data = await response.json();
-        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
-          const nextState = createDefaultState();
-          nextState.workspaces[0].chats[0].title = "Imported chat";
-          nextState.workspaces[0].chats[0].messages = data.messages.map((item: { user_message: string; ai_message: string; model: string; image_url?: string }) => createMessage({
-            user: item.user_message,
-            ai: item.ai_message,
-            model: item.model,
-            imageUrl: item.image_url ?? undefined,
-          }));
-          setState(nextState);
+      if (!cancelled) setLoaded(true);
+
+      const importLegacyHistory = async () => {
+        if (cancelled) return;
+        if (stateRef.current.workspaces.some((workspace) => workspace.chats.some((chat) => chat.messages.length > 0))) {
+          return;
         }
-      } catch {
-        // Ignore missing history and keep the local default workspace.
-      } finally {
-        if (!cancelled) setLoaded(true);
+
+        try {
+          const response = await fetch("/api/history");
+          const data = await response.json();
+          if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
+            const nextState = createDefaultState();
+            nextState.workspaces[0].chats[0].title = "Imported chat";
+            nextState.workspaces[0].chats[0].messages = data.messages.map((item: { user_message: string; ai_message: string; model: string; image_url?: string }) => createMessage({
+              user: item.user_message,
+              ai: item.ai_message,
+              model: item.model,
+              imageUrl: item.image_url ?? undefined,
+            }));
+            setState(nextState);
+          }
+        } catch {
+          // Ignore missing history and keep the local default workspace.
+        }
+      };
+
+      if ("requestIdleCallback" in browserWindow) {
+        idleId = browserWindow.requestIdleCallback(() => {
+          void importLegacyHistory();
+        }, { timeout: 2000 });
+      } else {
+        timeoutId = globalThis.setTimeout(() => {
+          void importLegacyHistory();
+        }, 800);
       }
     }
 
     void loadState();
     return () => {
       cancelled = true;
+      if (idleId !== null && "cancelIdleCallback" in browserWindow) browserWindow.cancelIdleCallback(idleId);
+      if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
     };
   }, []);
 
   useEffect(() => {
     if (!loaded || typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeForStorage(state)));
+    const browserWindow = window;
+    let idleId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const persistState = () => {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeForStorage(state)));
+    };
+
+    if ("requestIdleCallback" in browserWindow) {
+      idleId = browserWindow.requestIdleCallback(persistState, { timeout: 1200 });
+    } else {
+      timeoutId = globalThis.setTimeout(persistState, 250);
+    }
+
+    return () => {
+      if (idleId !== null && "cancelIdleCallback" in browserWindow) browserWindow.cancelIdleCallback(idleId);
+      if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
+    };
   }, [loaded, state]);
 
   useEffect(() => {
