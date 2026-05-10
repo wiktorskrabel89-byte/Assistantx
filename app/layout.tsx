@@ -40,13 +40,9 @@ export default async function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#2563eb" />
-        {/* Preconnect to critical external services to reduce DNS + TLS overhead */}
-        <link rel="preconnect" href="https://api.groq.com" />
-        <link rel="preconnect" href="https://generativelanguage.googleapis.com" />
-        <link rel="preconnect" href="https://openrouter.ai" />
-        <link rel="dns-prefetch" href="https://api.groq.com" />
-        <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
-        <link rel="dns-prefetch" href="https://openrouter.ai" />
+        {/* Preconnect to CDN used by scripts/styles referenced in CSP */}
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+        <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
       </head>
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>
