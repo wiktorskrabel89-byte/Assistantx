@@ -11,7 +11,14 @@ export const metadata: Metadata = {
     default: "AssistantX",
     template: "%s | AssistantX",
   },
+  metadataBase: new URL("https://www.assistantx.pl"),
   description: "AssistantX is an AI workspace for chat, uploads, integrations, and cloud-synced projects.",
+  alternates: {
+    canonical: "/",
+  },
+  verification: process.env.GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 export const viewport: Viewport = {

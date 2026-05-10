@@ -107,7 +107,7 @@ export default function TermsPage() {
         <p>
           If you have questions about these Terms of Service, contact the operator at
           <a href="mailto:support.assistantx.pl@gmail.com" className="text-blue-600 underline ml-1">support.assistantx.pl@gmail.com</a>
-          or visit our <a href="/page-public" className="text-blue-600 underline ml-1">public home page</a> for more information.
+          or visit our <a href="/" className="text-blue-600 underline ml-1">homepage</a> for more information.
         </p>
       </section>
     </LegalDocument>
