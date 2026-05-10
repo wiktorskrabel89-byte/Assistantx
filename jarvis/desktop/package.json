@@ -21,7 +21,7 @@
     "dist:win:public": "npm run dist:win:all && npm run publish:download"
   },
   "devDependencies": {
-    "electron": "^41.5.0",
+    "electron": "^41.5.1",
     "electron-builder": "^26.0.12"
   },
   "build": {
