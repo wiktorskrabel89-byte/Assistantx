@@ -89,14 +89,16 @@ jobs:
           $gradleBuildFailed = $false
           $lastGradleLines = ""
           $gradleLogPath = Join-Path $distDir "gradle-build.log"
+          $gradleWrapperPath = "jarvis/android/android/gradlew.bat"
+          $maxGradleTailLines = 50
 
-          if (Test-Path "jarvis/android/android/gradlew.bat") {
+          if (Test-Path $gradleWrapperPath) {
             Push-Location "jarvis/android/android"
             try {
               ./gradlew.bat assembleRelease *> $gradleLogPath
               if ($LASTEXITCODE -ne 0) {
                 $gradleBuildFailed = $true
-                $lastGradleLines = (Get-Content $gradleLogPath -Tail 50 -ErrorAction SilentlyContinue | Out-String).Trim()
+                $lastGradleLines = (Get-Content $gradleLogPath -Tail $maxGradleTailLines -ErrorAction SilentlyContinue | Out-String).Trim()
                 if ([string]::IsNullOrWhiteSpace($lastGradleLines)) {
                   $lastGradleLines = "No log lines captured; see uploaded gradle-build.log artifact."
                 }
@@ -106,7 +108,7 @@ jobs:
               Pop-Location
             }
           } else {
-            "Gradle wrapper not found at jarvis/android/android/gradlew.bat; skipped Android build." | Set-Content $gradleLogPath
+            "Gradle wrapper not found at $gradleWrapperPath; skipped Android build." | Set-Content $gradleLogPath
           }
 
           # Search order:
@@ -114,6 +116,8 @@ jobs:
           # 2) alternative Gradle output path for flatter Android projects
           # 3) prebuilt APK checked into jarvis/android with canonical filename
           # 4) prebuilt APK checked into jarvis/android with legacy filename
+          # Items 3-4 are fallback inputs for repos/runners without Android build
+          # toolchains or for manual emergency release drops.
           $candidates = @(
             # (1) Gradle output when project root is jarvis/android/android
             "jarvis/android/android/app/build/outputs/apk/release/app-release.apk",
