@@ -112,7 +112,7 @@ export function AIMessage({
                 ? <span className="ml-auto animate-pulse">...</span>
                 : <span className="ml-auto">{reasoningOpen ? "-" : "+"}</span>}
             </button>
-            {(reasoningOpen || isStreaming) ? (
+            {reasoningOpen ? (
               <div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap leading-relaxed opacity-80">
                 {entry.reasoning}
               </div>
