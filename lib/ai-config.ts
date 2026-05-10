@@ -644,6 +644,8 @@ export function getCheaperAlternative(modelId: string, costMode: CostMode, isCod
   // Pick the best model within budget for the request type
   const candidates = isCodeRequest
     ? ["openai/gpt-oss-120b:free"]
+    // Non-code preference order: Qwen for everyday chat, Gemini for broad/fallback coverage,
+    // GPT OSS as the strongest free reasoning fallback when needed.
     : ["qwen/qwen3-32b", "google/gemini-2.5-flash", "openai/gpt-oss-120b:free"];
 
   for (const candidate of candidates) {

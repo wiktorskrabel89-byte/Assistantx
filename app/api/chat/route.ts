@@ -1009,6 +1009,14 @@ export const POST = async (req: Request) => {
   const groqApiKey = process.env.GROQ_API_KEY;
   const googleApiKey = process.env.GOOGLE_AI_STUDIO_API_KEY || process.env.GOOGLE_API_KEY;
   const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+  const openRouterReferer = process.env.OPENROUTER_HTTP_REFERER
+    ?? (() => {
+      try {
+        return new URL(req.url).origin;
+      } catch {
+        return "https://assistantx.vercel.app";
+      }
+    })();
 
   const sendModelRequest = async (body: Record<string, unknown>) => {
     const targetModel = String(body.model ?? "");
@@ -1067,7 +1075,7 @@ export const POST = async (req: Request) => {
         "Content-Type": "application/json",
         ...(useOpenRouter
           ? {
-              "HTTP-Referer": "https://assistantx.vercel.app",
+              "HTTP-Referer": openRouterReferer,
               "X-Title": "AssistantX",
             }
           : {}),
