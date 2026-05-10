@@ -709,16 +709,15 @@ export const POST = async (req: Request) => {
       smartRouteLabel = `Vision analysis — ${MODEL_LABELS[ROUTING_VISION_MODEL] ?? ROUTING_VISION_MODEL}`;
     } else if (inferredCodeRequest) {
       // Simple coding → Qwen3-32b (fast, free); complex debugging/refactor → GPT OSS 120B
-      const codeModel = inferredComplexCoding
+      selectedModel = inferredComplexCoding
         ? (userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL)
         : ROUTING_MAIN_MODEL;
-      selectedModel = codeModel;
       resolvedTemperature = getModelTemperature(selectedModel, { isCodeRequest: true });
       // Complex debugging/refactor → high; simple function → low
       resolvedReasoningEffort = inferredComplexCoding ? "high" : "low";
       smartRouteLabel = inferredComplexCoding
-        ? `Coding (complex) — ${MODEL_LABELS[codeModel] ?? codeModel}${userPlan === "free" ? " (free)" : ""}`
-        : `Coding (simple) — ${MODEL_LABELS[codeModel] ?? codeModel}`;
+        ? `Coding (complex) — ${MODEL_LABELS[selectedModel] ?? selectedModel}${userPlan === "free" ? " (free)" : ""}`
+        : `Coding (simple) — ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
     } else if (inferredHeavyReasoning) {
       selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_REASONING_MODEL;
       resolvedTemperature = getModelTemperature(selectedModel);

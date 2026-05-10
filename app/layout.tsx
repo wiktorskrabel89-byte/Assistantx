@@ -45,6 +45,7 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://generativelanguage.googleapis.com" />
         <link rel="preconnect" href="https://openrouter.ai" />
         <link rel="dns-prefetch" href="https://api.groq.com" />
+        <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
         <link rel="dns-prefetch" href="https://openrouter.ai" />
       </head>
       <body className="min-h-full flex flex-col">
