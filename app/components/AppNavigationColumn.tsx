@@ -232,6 +232,7 @@ export function AppNavigationColumn({
         <button
           type="button"
           onClick={() => onSelectTab("chat")}
+          title="Chat"
           aria-current={isChatActive ? "page" : undefined}
           className={navButtonClass(isChatActive)}
         >
@@ -300,6 +301,7 @@ export function AppNavigationColumn({
         <button
           type="button"
           onClick={() => setAppsOpen((v: boolean) => !v)}
+          title="Aplikacje"
           className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
             isAddOnActive && !pinnedAddOns.includes(activeTab)
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -563,6 +565,7 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => onSelectTab("chat")}
+              title="Chat"
               aria-label="Chat"
               className={cn(
                 "h-10 w-10 rounded-lg",
@@ -613,6 +616,7 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => setAppsOpen((v: boolean) => !v)}
+              title="Aplikacje"
               aria-label="Aplikacje"
               className={cn(
                 "h-10 w-10 rounded-lg",
@@ -639,6 +643,7 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => onSelectTab("settings")}
+              title="Ustawienia"
               aria-label="Ustawienia"
               className={cn(
                 "h-10 w-10 rounded-lg",
@@ -661,6 +666,7 @@ export function AppNavigationColumn({
               variant="ghost"
               size="icon"
               onClick={() => onSelectTab("notifications")}
+              title="Powiadomienia"
               aria-label="Powiadomienia"
               className={cn(
                 "relative h-10 w-10 rounded-lg",

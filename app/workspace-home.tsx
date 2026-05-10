@@ -216,23 +216,35 @@ function HomeContent() {
 
   useEffect(() => {
     if (pairing.deviceType === "phone" && (pairing.pairingStatus === "pending" || pairing.pairingStatus === "paired")) {
-      setPhoneBannerVisible(true);
+      const timeoutId = window.setTimeout(() => {
+        setPhoneBannerVisible(true);
+      }, 0);
+      return () => {
+        window.clearTimeout(timeoutId);
+      };
     }
   }, [pairing.deviceType, pairing.pairingStatus]);
 
   useEffect(() => {
     if (pairing.deviceType !== "pc" || !pairing.ready) return;
     if (pairing.pairingStatus === "paired") {
-      if (typeof window !== "undefined") {
+      const timeoutId = window.setTimeout(() => {
         window.localStorage.removeItem(DEVICE_PAIRING_SKIP_KEY);
-      }
-      setPcPairingDialogOpen(false);
-      return;
+        setPcPairingDialogOpen(false);
+      }, 0);
+      return () => {
+        window.clearTimeout(timeoutId);
+      };
     }
     if (typeof window !== "undefined" && window.localStorage.getItem(DEVICE_PAIRING_SKIP_KEY) === "1") {
       return;
     }
-    setPcPairingDialogOpen(true);
+    const timeoutId = window.setTimeout(() => {
+      setPcPairingDialogOpen(true);
+    }, 0);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [pairing.deviceType, pairing.pairingStatus, pairing.ready]);
 
   const isChatTab = visibleTab === "chat";

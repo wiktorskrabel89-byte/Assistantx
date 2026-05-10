@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Smartphone, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,15 +33,25 @@ export function PairingCodeBanner({
   onRefresh: () => void;
   onClose?: () => void;
 }) {
-  const [countdown, setCountdown] = useState(() => formatRemainingTime(expiresAt));
+  const [countdown, setCountdown] = useState("--:--");
 
   useEffect(() => {
-    setCountdown(formatRemainingTime(expiresAt));
-    if (!expiresAt) return;
-    const intervalId = window.setInterval(() => {
+    const updateCountdown = () => {
       setCountdown(formatRemainingTime(expiresAt));
+    };
+
+    const timeoutId = window.setTimeout(updateCountdown, 0);
+    if (!expiresAt) {
+      return () => {
+        window.clearTimeout(timeoutId);
+      };
+    }
+
+    const intervalId = window.setInterval(() => {
+      updateCountdown();
     }, 1000);
     return () => {
+      window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
   }, [expiresAt]);
@@ -56,9 +66,7 @@ export function PairingCodeBanner({
     };
   }, [onClose, status]);
 
-  const statusLabel = useMemo(() => (
-    status === "paired" ? "Paired" : "Waiting for your PC"
-  ), [status]);
+  const statusLabel = status === "paired" ? "Paired" : "Waiting for your PC";
 
   return (
     <div className="fixed left-1/2 top-3 z-50 w-[min(calc(100%-1.5rem),30rem)] -translate-x-1/2">
