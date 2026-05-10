@@ -28,8 +28,8 @@ function buildCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
     // Restrict images to HTTPS + safe data URIs; avoid the broad wildcard '*'
     "img-src 'self' blob: data: https:",
-    // Allow Google Fonts as well as self-hosted fonts
-    "font-src 'self' https://fonts.gstatic.com",
+    // Allow Google Fonts, self-hosted fonts, and data: URIs (e.g. embedded base64 fonts)
+    "font-src 'self' https://fonts.gstatic.com data:",
     // API and WebSocket connections are allowed to any origin (LLM providers etc.)
     "connect-src *",
     // Monaco Editor creates blob workers and the app registers a service worker

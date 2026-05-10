@@ -84,8 +84,10 @@ export function ImageStudioTab({ dark }: { dark: boolean }) {
 
       <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[0.95fr_1.05fr]">
         <aside className={`min-h-0 overflow-y-auto rounded-2xl border p-4 ${card}`}>
-          <label className="block text-sm font-medium">Prompt</label>
+          <label htmlFor="image-studio-prompt" className="block text-sm font-medium">Prompt</label>
           <textarea
+            id="image-studio-prompt"
+            name="imageStudioPrompt"
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             rows={6}
@@ -96,6 +98,8 @@ export function ImageStudioTab({ dark }: { dark: boolean }) {
             <label className="text-sm">
               <span className="block font-medium">Quality</span>
               <select
+                id="image-studio-quality"
+                name="imageStudioQuality"
                 value={quality}
                 onChange={(event) => setQuality(event.target.value === "high" ? "high" : "fast")}
                 className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"}`}
@@ -105,7 +109,7 @@ export function ImageStudioTab({ dark }: { dark: boolean }) {
               </select>
             </label>
             <label className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${dark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"}`}>
-              <input type="checkbox" checked={enhancePrompt} onChange={(event) => setEnhancePrompt(event.target.checked)} />
+              <input id="image-studio-enhance" name="imageStudioEnhance" type="checkbox" checked={enhancePrompt} onChange={(event) => setEnhancePrompt(event.target.checked)} />
               Enhance prompt
             </label>
           </div>
