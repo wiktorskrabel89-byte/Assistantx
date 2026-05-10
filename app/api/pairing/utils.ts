@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { createClient } from "@/lib/server";
 import { hasSupabaseConfig } from "@/lib/supabase-config";
 import {
@@ -106,7 +107,7 @@ export function isValidInitiatorDevice(value: unknown): value is DeviceType {
 
 export function createPairingCode(): string {
   return Array.from({ length: DEVICE_PAIRING_CODE_LENGTH }, () => {
-    const index = crypto.getRandomValues(new Uint32Array(1))[0] % PAIRING_ALPHABET.length;
+    const index = randomInt(0, PAIRING_ALPHABET.length);
     return PAIRING_ALPHABET[index];
   }).join("");
 }
