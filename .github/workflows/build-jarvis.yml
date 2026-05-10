@@ -86,21 +86,27 @@ jobs:
           $apkOutput = Join-Path $distDir "Jarvis-android.apk"
           $found = $false
           $gradleBuildFailed = $false
+          $gradleOutput = ""
 
           if (Test-Path "jarvis/android/android/gradlew.bat") {
             Push-Location "jarvis/android/android"
             try {
-              ./gradlew.bat assembleRelease
+              ./gradlew.bat assembleRelease 2>&1 | Tee-Object -Variable gradleOutput
               if ($LASTEXITCODE -ne 0) {
                 $gradleBuildFailed = $true
-                Write-Warning "Android Gradle build failed with exit code $LASTEXITCODE; checking fallback APK locations."
+                $lastGradleLines = ($gradleOutput | Select-Object -Last 20 | Out-String).Trim()
+                Write-Warning "Android Gradle build failed with exit code $LASTEXITCODE; checking fallback APK locations. Last output:`n$lastGradleLines"
               }
             } finally {
               Pop-Location
             }
           }
 
-          # Check canonical Gradle outputs first, then fallback to prebuilt APK names.
+          # Search order:
+          # 1) canonical Gradle output path from jarvis/android/android
+          # 2) alternative Gradle output path for flatter Android projects
+          # 3) prebuilt APK checked into jarvis/android with canonical filename
+          # 4) prebuilt APK checked into jarvis/android with legacy filename
           $candidates = @(
             "jarvis/android/android/app/build/outputs/apk/release/app-release.apk",
             "jarvis/android/app/build/outputs/apk/release/app-release.apk",
@@ -122,7 +128,8 @@ jobs:
           } else {
             "found=false" >> $env:GITHUB_OUTPUT
             if ($gradleBuildFailed) {
-              Write-Warning "No Android APK found after Gradle build failure."
+              Write-Error "No Android APK found after Gradle build failure."
+              exit 1
             }
             Write-Host "Android APK not found; skipping Android release asset."
           }
