@@ -33,7 +33,11 @@ export function MarkdownMessageRenderer({
               <div className="relative my-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between bg-muted px-3 py-1 text-xs text-muted-foreground">
                   <span>{match?.[1] ?? "code"}</span>
-                  <button onClick={() => onCopyText(codeText, blockId)} className="transition-colors hover:text-foreground">
+                  <button
+                    onClick={() => onCopyText(codeText, blockId)}
+                    className="transition-colors hover:text-foreground"
+                    aria-label="Copy code block"
+                  >
                     {copied === blockId ? "Copied" : "Copy"}
                   </button>
                 </div>

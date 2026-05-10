@@ -91,9 +91,10 @@ export function useWorkspaceState() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const browserWindow = window;
     let cancelled = false;
     let idleId: number | null = null;
-    let timeoutId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     async function loadState() {
       const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -137,12 +138,12 @@ export function useWorkspaceState() {
         }
       };
 
-      if ("requestIdleCallback" in window) {
-        idleId = window.requestIdleCallback(() => {
+      if ("requestIdleCallback" in browserWindow) {
+        idleId = browserWindow.requestIdleCallback(() => {
           void importLegacyHistory();
         }, { timeout: 2000 });
       } else {
-        timeoutId = window.setTimeout(() => {
+        timeoutId = globalThis.setTimeout(() => {
           void importLegacyHistory();
         }, 800);
       }
@@ -151,28 +152,29 @@ export function useWorkspaceState() {
     void loadState();
     return () => {
       cancelled = true;
-      if (idleId !== null && "cancelIdleCallback" in window) window.cancelIdleCallback(idleId);
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (idleId !== null && "cancelIdleCallback" in browserWindow) browserWindow.cancelIdleCallback(idleId);
+      if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
     };
   }, []);
 
   useEffect(() => {
     if (!loaded || typeof window === "undefined") return;
+    const browserWindow = window;
     let idleId: number | null = null;
-    let timeoutId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const persistState = () => {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeForStorage(state)));
     };
 
-    if ("requestIdleCallback" in window) {
-      idleId = window.requestIdleCallback(persistState, { timeout: 1200 });
+    if ("requestIdleCallback" in browserWindow) {
+      idleId = browserWindow.requestIdleCallback(persistState, { timeout: 1200 });
     } else {
-      timeoutId = window.setTimeout(persistState, 250);
+      timeoutId = globalThis.setTimeout(persistState, 250);
     }
 
     return () => {
-      if (idleId !== null && "cancelIdleCallback" in window) window.cancelIdleCallback(idleId);
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (idleId !== null && "cancelIdleCallback" in browserWindow) browserWindow.cancelIdleCallback(idleId);
+      if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
     };
   }, [loaded, state]);
 

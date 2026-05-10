@@ -79,7 +79,7 @@ export default function PublicChatWidget() {
         />
         <button
           type="submit"
-          className="rounded-br-xl bg-blue-700 px-4 py-2 text-white hover:bg-blue-800 disabled:opacity-50"
+          className="rounded-br-xl bg-blue-700 px-4 py-2 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-700 disabled:opacity-100"
           disabled={loading || !input.trim()}
         >
           Send
