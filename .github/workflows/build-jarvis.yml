@@ -97,10 +97,14 @@ jobs:
           if (Test-Path $gradleWrapperPath) {
             Push-Location $gradleProjectDir
             try {
-              & $gradleWrapperPath assembleRelease *> $gradleLogPath
+              & .\gradlew.bat assembleRelease *> $gradleLogPath
               if ($LASTEXITCODE -ne 0) {
                 $gradleBuildFailed = $true
-                $lastGradleLines = (Get-Content $gradleLogPath -Tail $maxGradleTailLines -ErrorAction SilentlyContinue | Out-String).Trim()
+                if (Test-Path $gradleLogPath) {
+                  $lastGradleLines = (Get-Content $gradleLogPath -Tail $maxGradleTailLines -ErrorAction SilentlyContinue | Out-String).Trim()
+                } else {
+                  $lastGradleLines = "Gradle log file was not created at $gradleLogPath; verify wrapper execution and output redirection."
+                }
                 if ([string]::IsNullOrWhiteSpace($lastGradleLines)) {
                   $lastGradleLines = "No log lines captured; see uploaded gradle-build.log artifact."
                 }
