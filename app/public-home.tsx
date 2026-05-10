@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 import { DeferredPublicChatWidget } from "./components/DeferredPublicChatWidget";
 
@@ -26,7 +25,7 @@ export default function PublicHome() {
 
           <h1 className="mb-4 text-4xl font-bold text-blue-700">AssistantX</h1>
           <p className="mb-4 text-lg text-slate-700">
-          <strong>AssistantX</strong> is an advanced AI workspace for chat, code, file uploads, image generation, and cloud-synced projects. It integrates with GitHub, Google Drive, and Supabase for seamless productivity.
+            <strong>AssistantX</strong> is an advanced AI workspace for chat, code, file uploads, image generation, and cloud-synced projects. It integrates with GitHub, Google Drive, and Supabase for seamless productivity.
           </p>
           <ul className="mb-6 list-disc pl-6 text-slate-700">
             <li>Multi-model AI chat (GPT, Claude, Gemini, and more)</li>
