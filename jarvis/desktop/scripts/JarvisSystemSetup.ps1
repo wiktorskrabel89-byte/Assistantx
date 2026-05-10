@@ -199,6 +199,9 @@ try {
 }
 try {
     powercfg /h off | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "powercfg exited with code $LASTEXITCODE"
+    }
 } catch {
     Write-Host "Jarvis: Nie udało się wyłączyć hibernacji." -ForegroundColor Yellow
 }
@@ -235,9 +238,13 @@ switch -wildcard ($brand) {
             if ($saveSettings) {
                 $saveResult = $saveSettings.SaveBiosSettings()
                 $lenovoSucceeded = @($setWakeOnLan, $setAfterPowerLoss, $setPowerSaving, $saveResult) | ForEach-Object {
-                    $_ -and $_.Return -eq "Success"
+                    if ($null -eq $_ -or $null -eq $_.Return) {
+                        $false
+                    } else {
+                        $_.Return -eq "Success"
+                    }
                 }
-                if (($lenovoSucceeded -notcontains $false)) {
+                if ($lenovoSucceeded.Count -gt 0 -and ($lenovoSucceeded -notcontains $false)) {
                     Write-Host "Jarvis: BIOS Lenovo został skonfigurowany automatycznie." -ForegroundColor Green
                 } else {
                     Write-Host "Jarvis: Część ustawień BIOS Lenovo nie została zapisana automatycznie." -ForegroundColor Yellow
