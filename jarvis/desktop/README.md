@@ -94,10 +94,17 @@ Skrypt zakłada, że aplikacja po instalacji będzie nazywać się `Jarvis.exe`,
 
 Opcjonalne przełączniki:
 
-- `-ApplyPowerTweaks` wyłącza Fast Startup i hibernację.
+- `-ApplyPowerTweaks` zachowany dla kompatybilności (optymalizacja zasilania i tak jest wykonywana w fazie konfiguracji sprzętowej).
 - `-SkipAutostart` pomija utworzenie skrótu autostartu.
 - `-DownloadUrl` pozwala wskazać dokładny URL instalatora (pomija auto-detekcję architektury).
 - `-BaseUrl` pozwala zmienić bazowy URL, z którego wybierany jest instalator wg architektury.
+
+Po instalacji skrypt uruchamia też automatyczną konfigurację sprzętową:
+- wykrywa markę/model,
+- próbuje włączyć Wake on LAN dla kart Ethernet,
+- wyłącza Fast Startup i hibernację,
+- próbuje auto-konfiguracji BIOS dla Dell/HP/Lenovo,
+- ustawia autostart Jarvisa.
 
 Jest to zewnętrzny bootstrapper Windows. Nie jest uruchamiany przez sam instalator NSIS, tylko pobiera i odpala wygenerowany plik `.exe` w trybie silent.
 
