@@ -354,7 +354,7 @@ describe('POST /api/chat — "websearch" prefix enables web plugin on current mo
     const req = makeRequest({
       message: "websearch what is the capital of France",
       mode: "chat",
-      modelId: "meta-llama/llama-3.3-70b-instruct:free",
+      modelId: "qwen/qwen3-32b",
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
@@ -369,7 +369,7 @@ describe('POST /api/chat — "websearch" prefix enables web plugin on current mo
     expect(calledBody.plugins).toEqual([{ id: "web" }]);
 
     // The model should remain the user's selected model, not be replaced by perplexity/sonar
-    expect(calledBody.model).toBe("meta-llama/llama-3.3-70b-instruct:free");
+    expect(calledBody.model).toBe("qwen/qwen3-32b");
 
     // The "websearch" prefix should be stripped from the user message
     const userMsg = calledBody.messages.find((m) => m.role === "user");

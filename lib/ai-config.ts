@@ -343,16 +343,12 @@ export const APP_FORCED_THINKING_EFFORT = 4;
  */
 export const MODEL_COST_TIERS: Record<string, CostTier> = {
   // Free-tier models
-  "meta-llama/llama-3.3-70b-instruct:free": "free",
   "openai/gpt-oss-120b:free": "free",
   "qwen/qwen3-32b": "free",
-  "minimax/minimax-m2.5:free": "free",
-  "z-ai/glm-4.5-air:free": "free",
-  "nvidia/nemotron-3-super-120b-a12b:free": "free",
+  "google/gemini-2.5-flash": "free",
   // Cheap models — fast, low cost per token
   "google/gemini-2.5-flash-lite": "cheap",
   "google/gemini-3-flash-preview": "cheap",
-  "google/gemini-2.5-flash": "cheap",
   "openai/gpt-5-mini": "cheap",
   "openai/gpt-5-nano": "cheap",
   "x-ai/grok-3-mini": "cheap",

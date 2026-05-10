@@ -129,8 +129,9 @@ describe("recommended model presets", () => {
 describe("cost control system", () => {
   describe("getModelCostTier", () => {
     it("returns free for free models", () => {
-      expect(getModelCostTier("nvidia/nemotron-3-super-120b-a12b:free")).toBe("free");
-      expect(getModelCostTier("meta-llama/llama-3.3-70b-instruct:free")).toBe("free");
+      expect(getModelCostTier("openai/gpt-oss-120b:free")).toBe("free");
+      expect(getModelCostTier("qwen/qwen3-32b")).toBe("free");
+      expect(getModelCostTier("google/gemini-2.5-flash")).toBe("free");
     });
 
     it("returns cheap for budget models", () => {
@@ -155,14 +156,14 @@ describe("cost control system", () => {
 
   describe("isModelAllowedByCostMode", () => {
     it("thrifty allows free and cheap only", () => {
-      expect(isModelAllowedByCostMode("meta-llama/llama-3.3-70b-instruct:free", "thrifty")).toBe(true);
+      expect(isModelAllowedByCostMode("qwen/qwen3-32b", "thrifty")).toBe(true);
       expect(isModelAllowedByCostMode("openai/gpt-5-mini", "thrifty")).toBe(true);
       expect(isModelAllowedByCostMode("deepseek/deepseek-r1", "thrifty")).toBe(false);
       expect(isModelAllowedByCostMode("openai/gpt-5.4", "thrifty")).toBe(false);
     });
 
     it("balanced allows up to standard", () => {
-      expect(isModelAllowedByCostMode("meta-llama/llama-3.3-70b-instruct:free", "balanced")).toBe(true);
+      expect(isModelAllowedByCostMode("qwen/qwen3-32b", "balanced")).toBe(true);
       expect(isModelAllowedByCostMode("openai/gpt-5-mini", "balanced")).toBe(true);
       expect(isModelAllowedByCostMode("deepseek/deepseek-r1", "balanced")).toBe(true);
       expect(isModelAllowedByCostMode("openai/gpt-5.4", "balanced")).toBe(false);
@@ -177,7 +178,7 @@ describe("cost control system", () => {
 
   describe("filterModelsByCostMode", () => {
     const models = [
-      "meta-llama/llama-3.3-70b-instruct:free",
+      "qwen/qwen3-32b",
       "openai/gpt-5-mini",
       "deepseek/deepseek-r1",
       "openai/gpt-5.4",
@@ -185,7 +186,7 @@ describe("cost control system", () => {
 
     it("thrifty keeps only free and cheap models", () => {
       const filtered = filterModelsByCostMode(models, "thrifty");
-      expect(filtered).toContain("meta-llama/llama-3.3-70b-instruct:free");
+      expect(filtered).toContain("qwen/qwen3-32b");
       expect(filtered).toContain("openai/gpt-5-mini");
       expect(filtered).not.toContain("deepseek/deepseek-r1");
       expect(filtered).not.toContain("openai/gpt-5.4");
@@ -193,7 +194,7 @@ describe("cost control system", () => {
 
     it("balanced keeps free, cheap, and standard models", () => {
       const filtered = filterModelsByCostMode(models, "balanced");
-      expect(filtered).toContain("meta-llama/llama-3.3-70b-instruct:free");
+      expect(filtered).toContain("qwen/qwen3-32b");
       expect(filtered).toContain("openai/gpt-5-mini");
       expect(filtered).toContain("deepseek/deepseek-r1");
       expect(filtered).not.toContain("openai/gpt-5.4");
@@ -238,7 +239,7 @@ describe("cost control system", () => {
 
   describe("MODEL_COST_TIERS consistency", () => {
     it("free models are either :free IDs or explicit free-tier allowlisted IDs", () => {
-      const explicitFreeAllowlist = new Set(["qwen/qwen3-32b"]);
+      const explicitFreeAllowlist = new Set(["qwen/qwen3-32b", "google/gemini-2.5-flash"]);
       for (const [id, tier] of Object.entries(MODEL_COST_TIERS)) {
         if (tier === "free") {
           expect(id.endsWith(":free") || explicitFreeAllowlist.has(id)).toBe(true);
@@ -296,7 +297,7 @@ describe("plan configuration", () => {
 
 describe("filterModelsByPlan", () => {
   const models = [
-    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemini-2.5-flash",
     "openai/gpt-5.4",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.7",
@@ -311,7 +312,7 @@ describe("filterModelsByPlan", () => {
     const result = filterModelsByPlan(models, "pro");
     expect(result).not.toContain("anthropic/claude-opus-4.7");
     expect(result).toContain("openai/gpt-5.4");
-    expect(result).toContain("meta-llama/llama-3.3-70b-instruct:free");
+    expect(result).toContain("google/gemini-2.5-flash");
   });
 
   it("pro+ plan returns all models including pro+-only ones", () => {
@@ -337,10 +338,10 @@ describe("filterModelsByPlan", () => {
   });
 
   it("pro plan with only pro+-only models and a free model still returns non-pro+-only models", () => {
-    const mixed = ["anthropic/claude-opus-4.7", "meta-llama/llama-3.3-70b-instruct:free"];
+    const mixed = ["anthropic/claude-opus-4.7", "google/gemini-2.5-flash"];
     const result = filterModelsByPlan(mixed, "pro");
     // After filtering out pro+-only, free model remains — no fallback needed
-    expect(result).toContain("meta-llama/llama-3.3-70b-instruct:free");
+    expect(result).toContain("google/gemini-2.5-flash");
     expect(result).not.toContain("anthropic/claude-opus-4.7");
   });
 
