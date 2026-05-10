@@ -214,17 +214,33 @@ switch -wildcard ($brand) {
         Write-Host "Jarvis: Wykryto Dell. Instaluję sterownik DellBIOSProvider..." -ForegroundColor Blue
         Install-Module -Name DellBIOSProvider -Force -AllowClobber -Scope CurrentUser -ErrorAction SilentlyContinue
         Import-Module DellBIOSProvider -ErrorAction SilentlyContinue
-        Set-Item -Path "DellSmbios:\PowerManagement\WakeOnLan" -Value "LanOnly" -ErrorAction SilentlyContinue
-        Set-Item -Path "DellSmbios:\PowerManagement\AcRecovery" -Value "On" -ErrorAction SilentlyContinue
-        Set-Item -Path "DellSmbios:\PowerManagement\DeepSleepCtrl" -Value "Disabled" -ErrorAction SilentlyContinue
-        Write-Host "Jarvis: BIOS Dell został skonfigurowany automatycznie." -ForegroundColor Green
+        $dellResults = @(
+            Set-Item -Path "DellSmbios:\PowerManagement\WakeOnLan" -Value "LanOnly" -PassThru -ErrorAction SilentlyContinue
+            Set-Item -Path "DellSmbios:\PowerManagement\AcRecovery" -Value "On" -PassThru -ErrorAction SilentlyContinue
+            Set-Item -Path "DellSmbios:\PowerManagement\DeepSleepCtrl" -Value "Disabled" -PassThru -ErrorAction SilentlyContinue
+        )
+        if (($dellResults | Where-Object { $null -ne $_ }).Count -gt 0) {
+            Write-Host "Jarvis: BIOS Dell został skonfigurowany automatycznie." -ForegroundColor Green
+        } else {
+            Write-Host "Jarvis: Nie udało się potwierdzić zmian BIOS Dell automatycznie." -ForegroundColor Yellow
+        }
     }
     "*HP*" {
         Write-Host "Jarvis: Wykryto HP. Instaluję bibliotekę HP CMSL..." -ForegroundColor Blue
         Install-Module -Name HPCMSL -Force -Scope CurrentUser -ErrorAction SilentlyContinue
-        Set-HPBIOSSettingValue -Name "Wake On LAN" -Value "Enable" -ErrorAction SilentlyContinue
-        Set-HPBIOSSettingValue -Name "After Power Loss" -Value "Power On" -ErrorAction SilentlyContinue
-        Write-Host "Jarvis: BIOS HP został skonfigurowany automatycznie." -ForegroundColor Green
+        if (Get-Command Set-HPBIOSSettingValue -ErrorAction SilentlyContinue) {
+            $hpResults = @(
+                Set-HPBIOSSettingValue -Name "Wake On LAN" -Value "Enable" -ErrorAction SilentlyContinue
+                Set-HPBIOSSettingValue -Name "After Power Loss" -Value "Power On" -ErrorAction SilentlyContinue
+            )
+            if (($hpResults | Where-Object { $null -ne $_ }).Count -gt 0) {
+                Write-Host "Jarvis: BIOS HP został skonfigurowany automatycznie." -ForegroundColor Green
+            } else {
+                Write-Host "Jarvis: Nie udało się potwierdzić zmian BIOS HP automatycznie." -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "Jarvis: Cmdlet Set-HPBIOSSettingValue jest niedostępny po instalacji HPCMSL." -ForegroundColor Yellow
+        }
     }
     "*Lenovo*" {
         Write-Host "Jarvis: Wykryto Lenovo. Używam interfejsu WMI..." -ForegroundColor Blue
@@ -237,14 +253,14 @@ switch -wildcard ($brand) {
 
             if ($saveSettings) {
                 $saveResult = $saveSettings.SaveBiosSettings()
-                $lenovoSucceeded = @($setWakeOnLan, $setAfterPowerLoss, $setPowerSaving, $saveResult) | ForEach-Object {
+                $lenovoResults = @($setWakeOnLan, $setAfterPowerLoss, $setPowerSaving, $saveResult) | ForEach-Object {
                     if ($null -eq $_ -or $null -eq $_.Return) {
                         $false
                     } else {
                         $_.Return -eq "Success"
                     }
                 }
-                if ($lenovoSucceeded.Count -gt 0 -and ($lenovoSucceeded -notcontains $false)) {
+                if ($lenovoResults.Count -gt 0 -and ($lenovoResults -notcontains $false)) {
                     Write-Host "Jarvis: BIOS Lenovo został skonfigurowany automatycznie." -ForegroundColor Green
                 } else {
                     Write-Host "Jarvis: Część ustawień BIOS Lenovo nie została zapisana automatycznie." -ForegroundColor Yellow
