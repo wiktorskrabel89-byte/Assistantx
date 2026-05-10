@@ -106,8 +106,8 @@ Built on: $date
         env:
           # electron-builder can sign the app if a certificate is available.
           # Leave blank to produce unsigned builds.
-          CSC_LINK: ${{ secrets.WIN_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: List dist directory
         working-directory: jarvis/desktop
