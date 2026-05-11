@@ -380,7 +380,7 @@ export function GitHubIntegration({ dark, linkedProviders, authProvider, onImpor
                     onChange={() => toggleFilePath(file.path)}
                     className="h-3.5 w-3.5 shrink-0 accent-cyan-500"
                   />
-                  <div className="min-w-0 flex-1" onClick={() => toggleFilePath(file.path)} role="button" tabIndex={-1} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleFilePath(file.path); }}>
+                  <div className="min-w-0 flex-1" onClick={() => toggleFilePath(file.path)} role="button" tabIndex={-1} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleFilePath(file.path); } }}>
                     <div className="truncate text-sm font-medium cursor-pointer">{file.path}</div>
                     <div className="mt-0.5 text-[11px] text-gray-500">{file.language} • {Math.max(1, Math.round(file.size / 1024))} KB</div>
                   </div>

@@ -64,7 +64,10 @@ export function ScriptsTab({ dark }: ScriptsTabProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: script.body, language: script.language }),
       });
-      const data = await res.json().catch(() => ({})) as { output?: string; error?: string };
+      const data = await res.json().catch(async () => {
+        const text = await res.text().catch(() => "");
+        return { error: text || undefined } as { output?: string; error?: string };
+      }) as { output?: string; error?: string };
       setRunResult((prev) => ({
         ...prev,
         [script.id]: data.output ?? data.error ?? (res.ok ? "Done." : "Run failed."),

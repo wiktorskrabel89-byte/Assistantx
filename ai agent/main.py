@@ -23,7 +23,7 @@ from note import note_tool
 
 from supabase import create_client
 
-# Auto-discover .env file(s) up the directory tree
+# Load .env from the current working directory (or nearest parent that contains one)
 load_dotenv()
 
 app = FastAPI()

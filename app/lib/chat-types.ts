@@ -105,6 +105,8 @@ export type StoredState = {
   premiumRequestsUsed: number;
   appMode: AppMode;
   pinnedAddOns: string[];
+  /** BCP-47-like UI language code, e.g. "en" | "pl" | "de" | "es" | "fr". Defaults to "en". */
+  uiLanguage: string;
 };
 
 export type Artifact = {

@@ -209,6 +209,7 @@ export function createDefaultState(): StoredState {
     premiumRequestsUsed: 0,
     appMode: "ai-chat",
     pinnedAddOns: [],
+    uiLanguage: "en",
   };
 }
 
@@ -411,5 +412,6 @@ export function upgradeState(value: StoredState | null): StoredState | null {
       : 0,
     appMode: (raw.appMode === "ai-chat" || raw.appMode === "ai-code") ? raw.appMode : "ai-chat",
     pinnedAddOns: Array.isArray(raw.pinnedAddOns) ? raw.pinnedAddOns as string[] : [],
+    uiLanguage: typeof raw.uiLanguage === "string" && raw.uiLanguage ? raw.uiLanguage : "en",
   };
 }
