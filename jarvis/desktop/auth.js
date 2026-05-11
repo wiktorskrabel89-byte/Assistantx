@@ -22,7 +22,18 @@ function generateToken() {
   return crypto.randomBytes(24).toString('hex');
 }
 
+function clearToken() {
+  try {
+    if (fs.existsSync(TOKEN_PATH)) {
+      fs.unlinkSync(TOKEN_PATH);
+    }
+  } catch {
+    // ignore logout cleanup errors
+  }
+}
+
 module.exports = {
   getToken,
+  clearToken,
   tokenPath: TOKEN_PATH,
 };

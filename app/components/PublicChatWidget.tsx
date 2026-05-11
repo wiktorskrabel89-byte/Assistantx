@@ -1,64 +1,172 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { APP_FORCED_MODEL_ID, APP_FORCED_THINKING_EFFORT } from "@/lib/ai-config";
+import { X } from "lucide-react";
 
-export default function PublicChatWidget() {
+interface Props {
+  onClose?: () => void;
+}
+
+export default function PublicChatWidget({ onClose }: Props) {
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hi! I’m the AssistantX bot. Ask me anything about this website or its features." },
+    { role: "assistant", content: "Hi! I'm the AssistantX bot. Ask me anything about this website or its features." },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   async function sendMessage() {
-    if (!input.trim()) return;
-    setMessages((msgs) => [...msgs, { role: "user", content: input }]);
-    setLoading(true);
+    const text = input.trim();
+    if (!text || loading) return;
+    setMessages((msgs) => [...msgs, { role: "user", content: text }]);
     setInput("");
+    setLoading(true);
+
+    const history = messages.reduce<Array<{ user: string; ai: string }>>((acc, msg, i, arr) => {
+      if (msg.role === "user") {
+        const next = arr[i + 1];
+        acc.push({ user: msg.content, ai: next?.role === "assistant" ? next.content : "" });
+      }
+      return acc;
+    }, []);
+
+    let reply = "";
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: input,
+          message: text,
           mode: "chat",
-          history: messages.filter((m) => m.role === "user").map((m) => ({ user: m.content, ai: "" })),
-          assistantInstructions: "You are a helpful website assistant. Only answer questions about AssistantX, its features, usage, and policies. If the question is unrelated, politely decline.",
+          history,
+          assistantInstructions:
+            "You are a helpful website assistant. Only answer questions about AssistantX, its features, usage, and policies. If the question is unrelated, politely decline.",
           style: "concise",
           modelId: APP_FORCED_MODEL_ID,
           thinkingEffort: APP_FORCED_THINKING_EFFORT,
           allowedModels: [APP_FORCED_MODEL_ID],
         }),
       });
-      let reply = "";
-      if (res.body) {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let done = false;
-        while (!done) {
-          const { value, done: doneReading } = await reader.read();
-          done = doneReading;
-          reply += decoder.decode(value);
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`Request failed (${res.status}): ${errText || res.statusText}`);
+      }
+
+      if (!res.body) throw new Error("No response body");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      // Add placeholder assistant message for real-time streaming
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      let done = false;
+      let buf = "";
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        buf += decoder.decode(value, { stream: !done });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(data);
+            if (typeof parsed.token === "string") {
+              reply += parsed.token;
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: reply };
+                return updated;
+              });
+            }
+          } catch {
+            // ignore non-JSON SSE lines (status/model metadata events)
+          }
         }
-        // Try to extract the last AI message from the SSE stream
-        const match = reply.match(/\{"token":"([^"]+)"/g);
-        const last = match ? match.map((m) => JSON.parse(m + '"}').token).join("") : "Sorry, I couldn't get a response.";
-        setMessages((msgs) => [...msgs, { role: "assistant", content: last }]);
+      }
+
+      // Process any remaining buffered data after the stream closes
+      if (buf.startsWith("data: ")) {
+        const data = buf.slice(6).trim();
+        if (data && data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data);
+            if (typeof parsed.token === "string") {
+              reply += parsed.token;
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: reply };
+                return updated;
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (!reply) {
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: "Sorry, I couldn't get a response. Please try again.",
+          };
+          return updated;
+        });
       }
     } catch {
-      setMessages((msgs) => [...msgs, { role: "assistant", content: "Sorry, there was an error. Please try again." }]);
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant" && last.content === "") {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: "Sorry, there was an error. Please try again.",
+          };
+          return updated;
+        }
+        return [...prev, { role: "assistant", content: "Sorry, there was an error. Please try again." }];
+      });
     }
     setLoading(false);
   }
 
   return (
     <div className="fixed bottom-8 right-8 z-50 flex w-80 max-w-full flex-col rounded-xl border border-blue-200 bg-white shadow-lg">
-      <div className="border-b p-4 font-bold text-blue-800">Ask AssistantX</div>
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <span className="font-bold text-blue-800">Ask AssistantX</span>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close chat widget"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+      </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ maxHeight: 300 }}>
         {messages.map((m, i) => (
-          <div key={i} className={m.role === "assistant" ? "text-gray-800" : "text-right text-blue-700"}>{m.content}</div>
+          <div
+            key={i}
+            className={m.role === "assistant" ? "text-gray-800" : "text-right text-blue-700"}
+          >
+            {m.content || (loading && i === messages.length - 1 ? "…" : "")}
+          </div>
         ))}
-        {loading && <div className="text-gray-600">AssistantX is typing…</div>}
+        <div ref={bottomRef} />
       </div>
       <form
         className="flex border-t"

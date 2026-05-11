@@ -3,6 +3,7 @@ import {
   CHAT_MODELS,
   CODE_MODELS,
   LANGUAGE_OPTIONS,
+  PERSONALITY_MODES,
   RECOMMENDED_CHAT_MODELS,
   RECOMMENDED_CODING_MODELS,
   SEARCH_MODELS,
@@ -22,6 +23,7 @@ import type {
   Workspace,
   WorkspaceSettings,
 } from "./chat-types";
+import { DEFAULT_WEB_WAKE_PHRASE, VOICE_PROFILES } from "./voice";
 
 type AutoRoutedMode = Exclude<Mode, "image" | "upload">;
 
@@ -161,6 +163,14 @@ export function createSettings(): WorkspaceSettings {
     costMode: "balanced",
     systemPrompt: "",
     enabledTools: [],
+    wakeWordEnabled: true,
+    wakeWordPhrase: DEFAULT_WEB_WAKE_PHRASE,
+    sttEnabled: true,
+    ttsEnabled: true,
+    voiceLanguage: "en-US",
+    ttsVoiceId: "default",
+    autoSpeakResponses: false,
+    personalityMode: "default",
   };
 }
 
@@ -344,9 +354,20 @@ export function upgradeState(value: StoredState | null): StoredState | null {
       ? workspace.activeChatId
       : chats[0].id;
 
+    const rawSettings = workspace.settings ?? {};
     const settings = {
       ...createSettings(),
-      ...workspace.settings,
+      ...rawSettings,
+      ttsVoiceId:
+        typeof rawSettings.ttsVoiceId === "string"
+        && VOICE_PROFILES.some((voice) => voice.id === rawSettings.ttsVoiceId)
+          ? rawSettings.ttsVoiceId
+          : "default",
+      personalityMode:
+        typeof rawSettings.personalityMode === "string"
+        && PERSONALITY_MODES.some((mode) => mode.id === rawSettings.personalityMode)
+          ? rawSettings.personalityMode
+          : "default",
     };
 
     return {

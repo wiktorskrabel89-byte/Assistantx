@@ -1,4 +1,4 @@
-const { getToken } = require('./auth');
+const { clearToken, getToken } = require('./auth');
 const { handlePhoneCommand } = require('./phone-commands');
 const {
 	connectToBackend,
@@ -16,6 +16,8 @@ try {
 } catch {
 	ipcRenderer = null;
 }
+
+const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
 
 function appendMessage(log, title, body, tone = 'system') {
 	const item = document.createElement('div');
@@ -52,6 +54,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const checkUpdatesButton = document.getElementById('check-updates');
 	const installUpdateButton = document.getElementById('install-update');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
+	const openBrowserTabButton = document.getElementById('open-browser-tab');
 	const urlInput = document.getElementById('url-input');
 	const urlGo = document.getElementById('url-go');
 	const urlSearch = document.getElementById('url-search');
@@ -61,9 +64,57 @@ window.addEventListener('DOMContentLoaded', () => {
 	const voiceLanguageSelect = document.getElementById('voice-language');
 	const speechToTextButton = document.getElementById('speech-to-text');
 	const autoTtsToggle = document.getElementById('auto-tts');
+	const voiceVisualizer = document.getElementById('voice-visualizer');
+	const wakeWordEnabledToggle = document.getElementById('wake-word-enabled');
+	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
+	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
+	const saveVoiceSettingsButton = document.getElementById('save-voice-settings');
+	const logoutButton = document.getElementById('logout');
+
+	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
 
 	tokenNode.textContent = token;
 	backendUrlNode.textContent = getBackendUrl();
+
+	const defaultVoiceSettings = {
+		wakeWordEnabled: true,
+		wakeWordPhrase: DEFAULT_JARVIS_WAKE_PHRASE,
+		allowBackgroundWake: true,
+		voiceLanguage: voiceLanguageSelect?.value || 'en-US',
+		autoTts: true,
+	};
+
+	function readVoiceSettings() {
+		try {
+			const raw = localStorage.getItem(JARVIS_SETTINGS_KEY);
+			if (!raw) return { ...defaultVoiceSettings };
+			return { ...defaultVoiceSettings, ...JSON.parse(raw) };
+		} catch {
+			return { ...defaultVoiceSettings };
+		}
+	}
+
+	function writeVoiceSettings(settings) {
+		try {
+			localStorage.setItem(JARVIS_SETTINGS_KEY, JSON.stringify(settings));
+		} catch {
+			// ignore storage failures
+		}
+	}
+
+	let voiceSettings = readVoiceSettings();
+	if (wakeWordEnabledToggle) wakeWordEnabledToggle.checked = !!voiceSettings.wakeWordEnabled;
+	if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
+	if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
+	if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
+	if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
+
+	function setVoiceVisualizer(state) {
+		if (!voiceVisualizer) return;
+		voiceVisualizer.classList.remove('listening', 'speaking');
+		if (state === 'listening') voiceVisualizer.classList.add('listening');
+		if (state === 'speaking') voiceVisualizer.classList.add('speaking');
+	}
 
 	const getModelSettings = () => ({
 		chatModel: chatModelSelect?.value || 'auto-smart',
@@ -116,11 +167,15 @@ window.addEventListener('DOMContentLoaded', () => {
 			const utterance = new SpeechSynthesisUtterance(spokenText);
 			utterance.lang = getVoiceLanguage();
 			utterance.rate = 1;
+			setVoiceVisualizer('speaking');
+			utterance.onend = () => setVoiceVisualizer('idle');
 			utterance.onerror = () => {
+				setVoiceVisualizer('idle');
 				appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
 			};
 			window.speechSynthesis.speak(utterance);
 		} catch {
+			setVoiceVisualizer('idle');
 			appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
 		}
 	}
@@ -176,43 +231,132 @@ window.addEventListener('DOMContentLoaded', () => {
 	send.addEventListener('click', submitPrompt);
 	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPrompt(); });
 
+	function startSpeechToText({ autoSubmit = false } = {}) {
+		const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+		if (!SpeechRecognitionCtor) return;
+		if (speechToTextActive) return;
+		recognition = new SpeechRecognitionCtor();
+		recognition.lang = getVoiceLanguage();
+		recognition.continuous = true;
+		recognition.interimResults = true;
+		recognition.onstart = () => {
+			setSpeechToTextActive(true);
+			setVoiceVisualizer('listening');
+		};
+		recognition.onend = () => {
+			setSpeechToTextActive(false);
+			setVoiceVisualizer('idle');
+		};
+		recognition.onerror = () => {
+			setSpeechToTextActive(false);
+			setVoiceVisualizer('idle');
+			appendMessage(log, 'Speech-to-text', 'Speech capture failed. Try again.', 'error');
+		};
+		recognition.onresult = (event) => {
+			const transcriptParts = [];
+			let hasFinal = false;
+			for (let i = event.resultIndex; i < event.results.length; i += 1) {
+				transcriptParts.push(event.results[i][0].transcript);
+				if (event.results[i].isFinal) hasFinal = true;
+			}
+			const transcript = transcriptParts.join(' ').replace(/\s+/g, ' ').trim();
+			input.value = transcript;
+			if (autoSubmit && hasFinal && transcript) {
+				submitPrompt();
+				recognition?.stop();
+			}
+		};
+		recognition.start();
+	}
+
 	if (speechToTextButton) {
 		if (!supportsSpeechRecognition()) {
 			speechToTextButton.disabled = true;
 			speechToTextButton.title = 'Speech-to-text is not supported in this runtime';
 		} else {
 			speechToTextButton.addEventListener('click', () => {
-				const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-				if (!SpeechRecognitionCtor) return;
-
 				if (speechToTextActive) {
 					recognition?.stop();
 					return;
 				}
-
-				recognition = new SpeechRecognitionCtor();
-				recognition.lang = getVoiceLanguage();
-				recognition.continuous = true;
-				recognition.interimResults = true;
-
-				recognition.onstart = () => setSpeechToTextActive(true);
-				recognition.onend = () => setSpeechToTextActive(false);
-				recognition.onerror = () => {
-					setSpeechToTextActive(false);
-					appendMessage(log, 'Speech-to-text', 'Speech capture failed. Try again.', 'error');
-				};
-				recognition.onresult = (event) => {
-					const transcriptParts = [];
-					for (let i = event.resultIndex; i < event.results.length; i += 1) {
-						transcriptParts.push(event.results[i][0].transcript);
-					}
-					input.value = transcriptParts.join(' ').replace(/\s+/g, ' ').trim();
-				};
-
-				recognition.start();
+				startSpeechToText({ autoSubmit: false });
 			});
 		}
 	}
+
+	if (saveVoiceSettingsButton) {
+		saveVoiceSettingsButton.addEventListener('click', () => {
+			voiceSettings = {
+				...voiceSettings,
+				wakeWordEnabled: Boolean(wakeWordEnabledToggle?.checked),
+				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
+				allowBackgroundWake: Boolean(allowBackgroundWakeToggle?.checked),
+				voiceLanguage: voiceLanguageSelect?.value || 'en-US',
+				autoTts: Boolean(autoTtsToggle?.checked),
+			};
+			writeVoiceSettings(voiceSettings);
+			appendMessage(log, 'Settings', 'Voice settings saved.');
+		});
+	}
+
+	if (voiceLanguageSelect) {
+		voiceLanguageSelect.addEventListener('change', () => {
+			voiceSettings.voiceLanguage = voiceLanguageSelect.value;
+			writeVoiceSettings(voiceSettings);
+		});
+	}
+
+	if (autoTtsToggle) {
+		autoTtsToggle.addEventListener('change', () => {
+			voiceSettings.autoTts = Boolean(autoTtsToggle.checked);
+			writeVoiceSettings(voiceSettings);
+		});
+	}
+
+	if (logoutButton) {
+		logoutButton.addEventListener('click', () => {
+			clearToken();
+			appendMessage(log, 'Account', 'Logged out. New device token will be generated.');
+			setTimeout(() => window.location.reload(), 300);
+		});
+	}
+
+	let wakeRecognition = null;
+	function setupWakeWordListener() {
+		if (!supportsSpeechRecognition()) return;
+		const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+		if (!SpeechRecognitionCtor) return;
+		wakeRecognition = new SpeechRecognitionCtor();
+		wakeRecognition.lang = getVoiceLanguage();
+		wakeRecognition.continuous = true;
+		wakeRecognition.interimResults = true;
+		wakeRecognition.onresult = (event) => {
+			if (!voiceSettings.wakeWordEnabled) return;
+			if (!voiceSettings.allowBackgroundWake && !document.hasFocus()) return;
+			const phrase = String(voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE).toLowerCase();
+			let transcript = '';
+			for (let i = event.resultIndex; i < event.results.length; i += 1) {
+				transcript += event.results[i][0].transcript;
+			}
+			if (transcript.toLowerCase().includes(phrase)) {
+				appendMessage(log, 'Wake word', `Detected "${voiceSettings.wakeWordPhrase}"`);
+				startSpeechToText({ autoSubmit: true });
+			}
+		};
+		wakeRecognition.onend = () => {
+			try {
+				wakeRecognition.start();
+			} catch {
+				// no-op
+			}
+		};
+		try {
+			wakeRecognition.start();
+		} catch (error) {
+			appendMessage(log, 'Wake word', `Wake listener failed to start: ${error?.message || 'unknown error'}`, 'error');
+		}
+	}
+	setupWakeWordListener();
 
 	// ── URL bar ──────────────────────────────────────────────────────────────
 	function doOpenUrl(rawUrl) {
@@ -329,6 +473,13 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 		});
 	});
+
+	if (openBrowserTabButton) {
+		openBrowserTabButton.addEventListener('click', () => {
+			sendMessageToBackend({ type: 'command', command: 'openChromeTab', url: 'https://www.google.com', token });
+			appendMessage(log, 'Quick action', 'Open browser tab');
+		});
+	}
 
 	// ── Backend events ────────────────────────────────────────────────────────
 	onStatus(({ status, detail, url }) => {

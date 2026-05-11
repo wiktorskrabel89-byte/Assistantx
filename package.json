@@ -16,7 +16,7 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.88.0",
+    "@anthropic-ai/sdk": "^0.95.1",
     "@monaco-editor/react": "^4.7.0",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
@@ -32,7 +32,7 @@
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
     "radix-ui": "^1.4.3",
-    "react": "19.2.4",
+    "react": "19.2.6",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",
@@ -48,12 +48,12 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20",
+    "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
     "concurrently": "^9.2.1",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.2.6",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
@@ -61,11 +61,13 @@
     "shadcn": "^4.1.2",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
-    "typescript": "^5"
+    "typescript": "^6"
   },
   "overrides": {
     "glob": "^13.0.0",
-    "babel-plugin-istanbul": "^8.0.0"
+    "babel-plugin-istanbul": "^8.0.0",
+    "dompurify": "3.4.0",
+    "postcss": "8.5.10"
   },
   "optionalDependencies": {
     "@tailwindcss/oxide-linux-x64-gnu": "^4.2.2",

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('strona główna ładuje się i pokazuje nawigację', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('text=AssistantX')).toBeVisible();
-  await expect(page.locator('text=Chat')).toBeVisible();
-  await expect(page.locator('text=AI Learning')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AssistantX' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign In' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Support' })).toBeVisible();
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/client";
 import { KnowledgeTab } from "./KnowledgeTab";
 import { MemoryTab } from "./MemoryTab";
@@ -36,10 +36,23 @@ export function AILearningTab({ dark }: { dark: boolean }) {
   const [activeTool, setActiveTool] = useState<AdminTool>(DEFAULT_TOOL);
   const [visitedTools, setVisitedTools] = useState<AdminTool[]>([DEFAULT_TOOL]);
 
-  const handleSelectTool = (tool: AdminTool) => {
+  const handleSelectTool = useCallback((tool: AdminTool) => {
     setActiveTool(tool);
     setVisitedTools((current) => (current.includes(tool) ? current : [...current, tool]));
-  };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenTool = (event: Event) => {
+      const customEvent = event as CustomEvent<{ tool?: AdminTool }>;
+      const tool = customEvent.detail?.tool;
+      if (!tool) return;
+      handleSelectTool(tool);
+    };
+    window.addEventListener("assistantx:ai-learning-tool", handleOpenTool as EventListener);
+    return () => {
+      window.removeEventListener("assistantx:ai-learning-tool", handleOpenTool as EventListener);
+    };
+  }, [handleSelectTool]);
 
   if (!isAdmin) {
     return (

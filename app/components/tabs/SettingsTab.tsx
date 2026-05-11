@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BarChart2, Bot, Cloud, MessageSquareText, MoonStar, Sparkles, Sun, Zap } from "lucide-react";
+import { BarChart2, Bot, Cloud, LogOut, MessageSquareText, Mic, MoonStar, Sparkles, Sun, Theater, Volume2, Zap } from "lucide-react";
 import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
-import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
+import { PERSONALITY_MODES, PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
+import { DEFAULT_WEB_WAKE_PHRASE, VOICE_PROFILES } from "@/app/lib/voice";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { MemorySummaryCard } from "../MemorySummaryCard";
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
@@ -41,6 +45,19 @@ export function SettingsTab() {
     cloudSyncMessage,
     userEmail,
     authReady,
+    authProvider,
+    linkedProviders,
+    oauthLoading,
+    signInWithProvider,
+    signOut,
+    setWakeWordEnabled,
+    setWakeWordPhrase,
+    setSttEnabled,
+    setTtsEnabled,
+    setVoiceLanguage,
+    setTtsVoiceId,
+    setAutoSpeakResponses,
+    setPersonalityMode,
   } = useWorkspace();
 
   const [profile, setProfile] = useState<UserProfile>({
@@ -149,6 +166,7 @@ export function SettingsTab() {
         ? PRO_PLUS_PLAN.premiumRequestsPerMonth
         : null;
   const dark = state.dark;
+  const voiceSettings = activeWorkspace.settings;
   const appModeLabel = state.appMode === "ai-code" ? "AI Code" : "AI Chat";
   const sectionBackground = dark
     ? "bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.2),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(135deg,#020617,#0f172a_46%,#082f49)]"
@@ -206,6 +224,157 @@ export function SettingsTab() {
                 Plan: {state.userPlan.toUpperCase()} • Tryb: {appModeLabel}
               </p>
               {userEmail ? <p className={`mt-1 text-xs ${mutedClass}`}>{userEmail}</p> : null}
+            </div>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Account</p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>
+                  Logged in as {userEmail ?? "unknown"} {authProvider ? `via ${authProvider}` : ""}
+                </p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>
+                  Linked: {linkedProviders.length ? linkedProviders.join(", ") : "none"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={oauthLoading === "google"}
+                  onClick={() => void signInWithProvider("google")}
+                >
+                  {oauthLoading === "google" ? "Connecting..." : "Connect Google"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={oauthLoading === "github"}
+                  onClick={() => void signInWithProvider("github")}
+                >
+                  {oauthLoading === "github" ? "Connecting..." : "Connect GitHub"}
+                </Button>
+                <Button type="button" size="sm" variant="destructive" onClick={() => void signOut()}>
+                  <LogOut className="mr-1 h-3.5 w-3.5" />
+                  Log out
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <MemorySummaryCard dark={dark} />
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+              <Mic className="h-3.5 w-3.5" /> Voice controls
+            </div>
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Wake word</p>
+                  <p className={`text-xs ${mutedClass}`}>Use your configured phrase (&quot;{voiceSettings.wakeWordPhrase || DEFAULT_WEB_WAKE_PHRASE}&quot;) in web chat voice mode.</p>
+                </div>
+                <Switch checked={voiceSettings.wakeWordEnabled} onCheckedChange={setWakeWordEnabled} aria-label="Toggle wake word" />
+              </div>
+              <Input
+                value={voiceSettings.wakeWordPhrase}
+                onChange={(event) => setWakeWordPhrase(event.target.value)}
+                placeholder={DEFAULT_WEB_WAKE_PHRASE}
+              />
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Speech-to-text</p>
+                  <p className={`text-xs ${mutedClass}`}>Microphone transcription for prompts.</p>
+                </div>
+                <Switch checked={voiceSettings.sttEnabled} onCheckedChange={setSttEnabled} aria-label="Toggle speech to text" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Text-to-speech</p>
+                  <p className={`text-xs ${mutedClass}`}>Allow response playback.</p>
+                </div>
+                <Switch checked={voiceSettings.ttsEnabled} onCheckedChange={setTtsEnabled} aria-label="Toggle text to speech" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Volume2 className="h-4 w-4" />
+                  <p className="text-sm font-medium">Auto-speak responses</p>
+                </div>
+                <Switch checked={voiceSettings.autoSpeakResponses} onCheckedChange={setAutoSpeakResponses} aria-label="Toggle auto speak responses" />
+              </div>
+              <div className="grid gap-1">
+                <label htmlFor="voice-language" className={`text-xs ${mutedClass}`}>Voice language</label>
+                <select
+                  id="voice-language"
+                  name="voiceLanguage"
+                  value={voiceSettings.voiceLanguage}
+                  onChange={(event) => setVoiceLanguage(event.target.value)}
+                  className={`h-10 rounded-md border px-3 text-sm ${dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+                >
+                  <option value="en-US">English (en-US)</option>
+                  <option value="pl-PL">Polish (pl-PL)</option>
+                  <option value="de-DE">German (de-DE)</option>
+                  <option value="es-ES">Spanish (es-ES)</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <div className={`text-xs ${mutedClass}`}>Voice personality</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {VOICE_PROFILES.map((voice) => {
+                    const selected = voiceSettings.ttsVoiceId === voice.id;
+                    return (
+                      <button
+                        key={voice.id}
+                        type="button"
+                        onClick={() => setTtsVoiceId(voice.id)}
+                        className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                          selected
+                            ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                            : `${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`
+                        }`}
+                        aria-pressed={selected}
+                      >
+                        <div className="text-sm font-semibold">{voice.label}</div>
+                        <div className={`mt-0.5 text-xs ${mutedClass}`}>{voice.description}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+              <Theater className="h-3.5 w-3.5" /> Personality mode
+            </div>
+            <p className={`mt-2 text-xs ${mutedClass}`}>Apply ChatGPT-style behavior presets for tone and creativity.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {PERSONALITY_MODES.map((mode) => {
+                const selected = (voiceSettings.personalityMode ?? "default") === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setPersonalityMode(mode.id)}
+                    className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                      selected
+                        ? "border-violet-500 bg-violet-500/10 text-violet-700 dark:text-violet-200"
+                        : `${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`
+                    }`}
+                    aria-pressed={selected}
+                  >
+                    <div className="text-sm font-semibold">{mode.emoji} {mode.label}</div>
+                    <div className={`mt-0.5 text-xs ${mutedClass}`}>{mode.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className={`mt-2 text-[11px] ${mutedClass}`}>
+              Temperatures are estimated behavior targets and may still be adjusted by model-specific routing.
             </div>
           </div>
         </div>
