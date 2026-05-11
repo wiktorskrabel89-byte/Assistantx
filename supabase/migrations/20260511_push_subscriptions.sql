@@ -23,7 +23,7 @@ begin
     where schemaname = 'public' and tablename = 'push_subscriptions' and policyname = 'push_subscriptions_select_own'
   ) then
     create policy push_subscriptions_select_own on public.push_subscriptions
-      for select using (auth.uid() = user_id);
+      for select using (auth.uid() is not null and auth.uid() = user_id);
   end if;
 
   if not exists (
@@ -31,7 +31,7 @@ begin
     where schemaname = 'public' and tablename = 'push_subscriptions' and policyname = 'push_subscriptions_insert_own'
   ) then
     create policy push_subscriptions_insert_own on public.push_subscriptions
-      for insert with check (auth.uid() = user_id);
+      for insert with check (auth.uid() is not null and auth.uid() = user_id);
   end if;
 
   if not exists (
@@ -39,8 +39,8 @@ begin
     where schemaname = 'public' and tablename = 'push_subscriptions' and policyname = 'push_subscriptions_update_own'
   ) then
     create policy push_subscriptions_update_own on public.push_subscriptions
-      for update using (auth.uid() = user_id)
-      with check (auth.uid() = user_id);
+      for update using (auth.uid() is not null and auth.uid() = user_id)
+      with check (auth.uid() is not null and auth.uid() = user_id);
   end if;
 
   if not exists (
@@ -48,7 +48,7 @@ begin
     where schemaname = 'public' and tablename = 'push_subscriptions' and policyname = 'push_subscriptions_delete_own'
   ) then
     create policy push_subscriptions_delete_own on public.push_subscriptions
-      for delete using (auth.uid() = user_id);
+      for delete using (auth.uid() is not null and auth.uid() = user_id);
   end if;
 end
 $$;

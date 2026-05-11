@@ -20,11 +20,11 @@ export function isPushSupported(): boolean {
     && "PushManager" in window;
 }
 
-export function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+export function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const normalized = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(normalized);
-  const output = new Uint8Array(raw.length) as Uint8Array<ArrayBuffer>;
+  const output = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
   return output;
 }
@@ -69,9 +69,15 @@ export async function ensurePushSubscription(vapidPublicKey?: string | null): Pr
       return { state: "registered-no-vapid", registration, subscription: null };
     }
 
+    const applicationServerKeyBytes = urlBase64ToUint8Array(trimmedVapidKey);
+    const applicationServerKey = applicationServerKeyBytes.buffer.slice(
+      applicationServerKeyBytes.byteOffset,
+      applicationServerKeyBytes.byteOffset + applicationServerKeyBytes.byteLength,
+    ) as ArrayBuffer;
+
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(trimmedVapidKey),
+      applicationServerKey,
     });
 
     return { state: "subscribed", registration, subscription };

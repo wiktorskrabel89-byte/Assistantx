@@ -7,6 +7,8 @@ function estimateTokensFromText(text: string): number {
   if (!text.trim()) return 0;
   // Approximation only: ~1 token per 4 chars is a rough heuristic and can vary
   // significantly by language/content type versus real tokenizer counts.
+  // In this app the value is used for lightweight usage telemetry (not exact billing),
+  // so small/medium estimation error is acceptable for current tracking needs.
   return Math.ceil(text.length / 4);
 }
 

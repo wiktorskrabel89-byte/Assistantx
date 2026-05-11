@@ -145,7 +145,12 @@ export async function DELETE(request: Request) {
       return Response.json({ ok: true, available: false });
     }
 
-    const payload = await request.json().catch(() => ({})) as { endpoint?: unknown };
+    let payload: { endpoint?: unknown };
+    try {
+      payload = await request.json() as { endpoint?: unknown };
+    } catch {
+      return Response.json({ code: "invalid_push_subscription", error: "Invalid JSON payload." }, { status: 400 });
+    }
     if (typeof payload.endpoint !== "string" || !payload.endpoint) {
       return Response.json({ code: "invalid_push_subscription", error: "Missing subscription endpoint." }, { status: 400 });
     }

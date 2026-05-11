@@ -189,7 +189,10 @@ export function NotificationsTab({
     }
 
     if (setup.subscription) {
-      const synced = await syncPushSubscription(setup.subscription).catch(() => false);
+      const synced = await syncPushSubscription(setup.subscription).catch((error) => {
+        console.warn("Failed to sync push subscription:", error);
+        return false;
+      });
       setPushStatus(
         synced
           ? "Powiadomienia push są aktywne i subskrypcja została zapisana."

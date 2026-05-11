@@ -8,7 +8,12 @@ const APP_SHELL_ASSETS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL_ASSETS)).catch(() => undefined),
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_SHELL_ASSETS))
+      .catch((error) => {
+        console.error("Service worker cache initialization failed:", error);
+      }),
   );
   self.skipWaiting();
 });
@@ -60,7 +65,7 @@ self.addEventListener("push", (event) => {
 
   const title = data.title || "AssistantX";
   const options = {
-    body: data.body || "Masz nową aktualizację w AssistantX.",
+    body: data.body || "You have a new update in AssistantX.",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
     data: {
