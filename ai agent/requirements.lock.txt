@@ -47,7 +47,7 @@ langgraph-prebuilt==1.0.13
 langgraph-sdk==0.3.14
 langsmith==0.8.3
 markdown-it-py==4.2.0
-marshmallow==3.26.2
+marshmallow==4.3.0
 mdurl==0.1.2
 mmh3==5.2.1
 multidict==6.7.1
