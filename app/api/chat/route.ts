@@ -32,6 +32,8 @@ import {
   ROUTING_CODE_MODEL_FREE,
   MAIN_AI_SYSTEM_PROMPT,
   HEAVY_REASONING_SYSTEM_PROMPT,
+  PERSONALITY_MODES,
+  type PersonalityMode,
   VISION_SYSTEM_PROMPT,
 } from "@/lib/ai-config";
 import { isCodeRequest, isImageRequest, isHeavyReasoningRequest, isVeryLongContext, isComplexCodingRequest } from "@/lib/detect";
@@ -502,6 +504,7 @@ export const POST = async (req: Request) => {
     thinkingEffort, // New: reasoning depth (Low, Medium, High, Xhigh)
     modelProfile = "default",
     systemPrompt: customSystemPrompt,
+    personalityMode: rawPersonalityMode = "default",
     enabledTools,
     googleContext,
   } = await req.json();
@@ -759,6 +762,18 @@ export const POST = async (req: Request) => {
     : style === "step-by-step"
       ? "Explain using concise numbered steps."
       : "Keep responses concise and practical.";
+  const defaultPersonality = PERSONALITY_MODES.find((mode) => mode.id === "default")
+    ?? {
+      id: "default",
+      label: "Default",
+      labelPl: "Domyślny",
+      emoji: "⚖️",
+      description: "Balanced behavior",
+      temperature: 0.7,
+      systemPromptSuffix: "Be balanced and adaptive. Maintain a natural conversational tone.",
+    };
+  const selectedPersonality = PERSONALITY_MODES.find((mode) => mode.id === rawPersonalityMode as PersonalityMode)
+    ?? defaultPersonality;
   const assistantInstruction = typeof assistantInstructions === "string" && assistantInstructions.trim()
     ? `Additional agent instructions for ${typeof assistantName === "string" && assistantName.trim() ? assistantName.trim() : "this assistant"}: ${assistantInstructions.trim()}`
     : "";
@@ -878,9 +893,17 @@ export const POST = async (req: Request) => {
     systemPrompt = `${MAIN_AI_SYSTEM_PROMPT}\n\n${styleInstruction} ${sharedSuffix}${ragContext}`.trim();
   }
 
+  systemPrompt = `${systemPrompt} ${selectedPersonality.systemPromptSuffix}`.trim();
+
   // Append any custom workspace system prompt
   if (typeof customSystemPrompt === "string" && customSystemPrompt.trim()) {
     systemPrompt = `${systemPrompt} ${customSystemPrompt.trim()}`.trim();
+  }
+
+  // Keep strict model-specific decoding defaults for code/vision requests.
+  // Personality temperature overrides apply to conversational responses only.
+  if (selectedPersonality.id !== "default" && !inferredCodeRequest && !inferredVisionRequest) {
+    resolvedTemperature = selectedPersonality.temperature;
   }
 
   // Helper to convert client-side history pairs to role/content message format.

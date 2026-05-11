@@ -429,6 +429,7 @@ export function useChatTransport({
         thinkingEffort: queuedMessage.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
         modelProfile: activeSettings.modelProfile ?? "default",
         systemPrompt: activeSettings.systemPrompt ?? "",
+        personalityMode: activeSettings.personalityMode ?? "default",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,
       };

@@ -14,10 +14,16 @@ export default async function Home() {
     return <PublicHome />;
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
+  let isAuthenticated = false;
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.getUser();
+    isAuthenticated = !error && Boolean(data.user);
+  } catch {
+    isAuthenticated = false;
+  }
 
-  if (error || !data.user) {
+  if (!isAuthenticated) {
     return <PublicHome />;
   }
 

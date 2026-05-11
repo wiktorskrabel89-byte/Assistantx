@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import type { CostMode, UserPlan } from "@/lib/ai-config";
+import type { CostMode, PersonalityMode, UserPlan } from "@/lib/ai-config";
 
 export type Mode = "auto" | "code" | "chat" | "search" | "image" | "upload";
 export type StyleMode = "concise" | "detailed" | "step-by-step";
@@ -75,6 +75,14 @@ export type WorkspaceSettings = {
   costMode: CostMode;
   systemPrompt: string;
   enabledTools: string[];
+  wakeWordEnabled: boolean;
+  wakeWordPhrase: string;
+  sttEnabled: boolean;
+  ttsEnabled: boolean;
+  voiceLanguage: string;
+  ttsVoiceId: string;
+  autoSpeakResponses: boolean;
+  personalityMode: PersonalityMode;
 };
 
 export type Workspace = {

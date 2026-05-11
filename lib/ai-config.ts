@@ -1,6 +1,7 @@
 export type CostTier = "free" | "cheap" | "standard" | "premium";
 export type CostMode = "thrifty" | "balanced" | "performance";
 export type UserPlan = "free" | "pro" | "pro+";
+export type PersonalityMode = "default" | "professional" | "friendly" | "honest" | "weird" | "concise" | "cynical";
 
 export type PremiumPlanInfo = {
   priceUsd: number;
@@ -62,6 +63,82 @@ export type LanguageOption = {
   code: string;
   label: string;
 };
+
+export type PersonalityModeOption = {
+  id: PersonalityMode;
+  label: string;
+  labelPl: string;
+  emoji: string;
+  description: string;
+  temperature: number;
+  systemPromptSuffix: string;
+};
+
+export const PERSONALITY_MODES: PersonalityModeOption[] = [
+  {
+    id: "default",
+    label: "Default",
+    labelPl: "Domyślny",
+    emoji: "⚖️",
+    description: "Balanced, adaptive, general-purpose style.",
+    temperature: 0.7,
+    systemPromptSuffix: "Be balanced and adaptive. Maintain a neutral, natural conversational tone and avoid stylistic extremes.",
+  },
+  {
+    id: "professional",
+    label: "Professional",
+    labelPl: "Profesjonalny",
+    emoji: "💼",
+    description: "Precise, structured, analytical tone.",
+    temperature: 0.35,
+    systemPromptSuffix: "Prioritize precision and clarity. Use professional language, structured formatting, and focus on accuracy.",
+  },
+  {
+    id: "friendly",
+    label: "Friendly",
+    labelPl: "Przyjazny",
+    emoji: "😊",
+    description: "Warm, conversational, supportive.",
+    temperature: 0.82,
+    systemPromptSuffix: "Use warm and supportive language. Keep responses approachable, encouraging, and conversational.",
+  },
+  {
+    id: "honest",
+    label: "Honest / Direct",
+    labelPl: "Szczery",
+    emoji: "🧭",
+    description: "Direct, practical, low fluff.",
+    temperature: 0.52,
+    systemPromptSuffix: "Be direct and practical. Prioritize usefulness and concise recommendations with minimal emotional padding.",
+  },
+  {
+    id: "weird",
+    label: "Weird",
+    labelPl: "Dziwaczny",
+    emoji: "🌀",
+    description: "Playful, imaginative, unconventional.",
+    temperature: 1.1,
+    systemPromptSuffix: "Be playful and creative. Allow unconventional phrasing, humor, and imaginative stylistic freedom.",
+  },
+  {
+    id: "concise",
+    label: "Concise / Firm",
+    labelPl: "Zasadniczy",
+    emoji: "✂️",
+    description: "Short, dense, efficient answers.",
+    temperature: 0.3,
+    systemPromptSuffix: "Minimize unnecessary words. Prioritize efficiency, information density, and direct answers.",
+  },
+  {
+    id: "cynical",
+    label: "Cynical",
+    labelPl: "Cyniczny",
+    emoji: "😏",
+    description: "Sarcastic, skeptical, entertaining.",
+    temperature: 0.95,
+    systemPromptSuffix: "Use sarcastic humor and critical framing when appropriate while staying useful and safe.",
+  },
+];
 
 export const CHAT_MODELS: ModelOption[] = [
   // Free-plan models — only those in the routing plan

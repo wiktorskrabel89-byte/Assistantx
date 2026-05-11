@@ -114,7 +114,6 @@ export function AppNavigationColumn({
 }: AppNavigationColumnProps) {
   const [appsOpen, setAppsOpen] = useState(false);
   const [appsSearch, setAppsSearch] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatSearchLocal, setChatSearchLocal] = useState("");
 
   const {
@@ -489,65 +488,57 @@ export function AppNavigationColumn({
 
       </div>{/* end Core nav + Chats */}
 
-      {/* ── Bottom: settings panel or avatar pill ── */}
+      {/* ── Bottom: account + quick settings ── */}
       <div className={`border-t px-3 py-3 ${dividerClassName}`}>
-        {settingsOpen ? (
-          /* Settings mini-panel */
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Konto & ustawienia</span>
-              <Button variant="ghost" size="icon" type="button" onClick={() => setSettingsOpen(false)} className="h-6 w-6 rounded-lg">
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <div className="space-y-0.5">
-              {[
-                { label: "Settings", tab: "settings" as AppNavigationTab, icon: Settings2 },
-                { label: "Notifications", tab: "notifications" as AppNavigationTab, icon: Bell },
-              ].map(({ label, tab, icon: Icon }) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => { onSelectTab(tab); setSettingsOpen(false); }}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    activeTab === tab
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground/70 hover:bg-accent/60 hover:text-accent-foreground"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="flex-1 text-left">{label}</span>
-                  {tab === "notifications" && notificationUnread > 0 && (
-                    <Badge variant="destructive" className="h-4 min-w-4 rounded-full px-1 text-[9px] font-bold">
-                      {notificationUnread > 99 ? "99+" : notificationUnread}
-                    </Badge>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          /* Avatar pill */
+        <button
+          type="button"
+          onClick={() => onSelectTab("settings")}
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-sidebar-accent/60"
+        >
+          <Avatar className="h-8 w-8 flex-shrink-0 text-xs font-bold">
+            <AvatarFallback className="bg-muted text-muted-foreground">
+              {getInitials(userEmail)}
+            </AvatarFallback>
+          </Avatar>
+          <span className="flex-1 truncate text-left text-sm text-sidebar-foreground/60">
+            {userEmail ? userEmail.split("@")[0] : "Konto"}
+          </span>
+          <Settings2 className="h-4 w-4 text-sidebar-foreground/60" />
+        </button>
+
+        <div className="mt-2 grid grid-cols-2 gap-1">
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-sidebar-accent/60"
+            onClick={() => onSelectTab("settings")}
+            className={cn(
+              "flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors",
+              activeTab === "settings"
+                ? "bg-accent text-accent-foreground"
+                : "text-foreground/70 hover:bg-accent/60 hover:text-accent-foreground"
+            )}
           >
-            <Avatar className="h-8 w-8 flex-shrink-0 text-xs font-bold">
-              <AvatarFallback className="bg-muted text-muted-foreground">
-                {getInitials(userEmail)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="flex-1 truncate text-left text-sm text-sidebar-foreground/60">
-              {userEmail ? userEmail.split("@")[0] : "Konto"}
-            </span>
-            {notificationUnread > 0 && (
-              <Badge variant="destructive" className="h-4 min-w-4 rounded-full px-1 text-[9px] font-bold">
+            <Settings2 className="h-3.5 w-3.5" />
+            Settings
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectTab("notifications")}
+            className={cn(
+              "relative flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors",
+              activeTab === "notifications"
+                ? "bg-accent text-accent-foreground"
+                : "text-foreground/70 hover:bg-accent/60 hover:text-accent-foreground"
+            )}
+          >
+            <Bell className="h-3.5 w-3.5" />
+            Alerts
+            {notificationUnread > 0 ? (
+              <Badge variant="destructive" className="absolute right-1 top-1 h-4 min-w-4 rounded-full px-1 text-[9px] font-bold">
                 {notificationUnread > 99 ? "99+" : notificationUnread}
               </Badge>
-            )}
+            ) : null}
           </button>
-        )}
+        </div>
       </div>
     </aside>
 
