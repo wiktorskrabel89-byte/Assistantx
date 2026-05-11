@@ -1,11 +1,4 @@
 
-import { createClient } from "@/lib/server";
-function getSupabase() {
-  // This assumes createClient returns a promise, so you may need to adjust usage to await getSupabase()
-  // If createClient is synchronous, remove await in usages.
-  // For now, return createClient() directly for compatibility.
-  return createClient();
-}
 import {
   CHAT_MODELS,
   CODE_MODELS,
@@ -38,12 +31,6 @@ import {
 } from "@/lib/ai-config";
 import { isCodeRequest, isImageRequest, isHeavyReasoningRequest, isVeryLongContext, isComplexCodingRequest } from "@/lib/detect";
 import {
-  createOpenRouterEmbedding,
-  formatKnowledgeContext,
-  extractUserProfileFacts,
-  toPgVectorLiteral,
-} from "@/app/lib/knowledge";
-import {
   formatWebSearchContext,
   getCachedWebSearch,
   logUsageEvent,
@@ -53,206 +40,26 @@ import {
   type WebSearchResponsePayload,
 } from "@/app/lib/ai-platform";
 
-async function getAuthUserId(req: Request): Promise<string | null> {
-  try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) return null;
-    const token = authHeader.replace("Bearer ", "");
-    const supabase = await getSupabase();
-    const { data } = await supabase.auth.getUser(token);
-    return data.user?.id ?? null;
-  } catch {
-    return null;
-  }
-}
+import { LANGUAGE_NAMES, detectLanguage } from "@/app/api/chat/language";
+import { reportChatTokenUsage } from "@/app/api/chat/token-usage";
+import {
+  CACHED_ANSWER_SIMILARITY_THRESHOLD,
+  ensureConversation,
+  findCachedAnswer,
+  findKnowledgeContext,
+  getAuthUserId,
+  getMemoryHistory,
+  getMemorySummaries,
+  getQueryEmbedding,
+  getServerSideUserPlan,
+  getSupabase,
+  incrementCachedAnswerUsage,
+  saveCachedAnswer,
+  saveMessage,
+  saveUserProfileFacts,
+} from "@/app/api/chat/supabase";
 
-/**
- * Reads the user's plan from their workspace_states record in Supabase.
- * Falls back to the client-supplied plan if the server lookup fails.
- */
-async function getServerSideUserPlan(userId: string | null, clientPlan: UserPlan): Promise<UserPlan> {
-  if (!userId) return clientPlan;
-  try {
-    const supabase = await getSupabase();
-    const { data } = await supabase
-      .from("workspace_states")
-      .select("state_json")
-      .eq("user_id", userId)
-      .single();
-    if (!data?.state_json) return clientPlan;
-    const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
-    const rawPlan = (data.state_json as Record<string, unknown>).userPlan;
-    if (typeof rawPlan === "string" && VALID_USER_PLANS.includes(rawPlan as UserPlan)) {
-      return rawPlan as UserPlan;
-    }
-    return clientPlan;
-  } catch {
-    return clientPlan;
-  }
-}
-
-async function getMemoryHistory(conversationId: string) {
-  const supabase = await getSupabase();
-  const { data } = await supabase.rpc("get_memory_limited_messages", {
-    p_conversation_id: conversationId,
-    p_max_tokens: 4000,
-    p_max_messages: 20,
-  });
-  return data ?? [];
-}
-
-async function getMemorySummaries(conversationId: string) {
-  const supabase = await getSupabase();
-  const { data } = await supabase
-    .from("memory_summaries")
-    .select("*")
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
-  return data ?? [];
-}
-
-async function saveMessage(conversationId: string, role: "user" | "assistant", content: string) {
-  const supabase = await getSupabase();
-  await supabase.from("messages").insert({
-    conversation_id: conversationId,
-    role,
-    content,
-    token_count: Math.ceil(content.length / 4),
-  });
-}
-
-async function ensureConversation(conversationId: string, userId: string | null) {
-  if (!userId) return; // do not create conversation records without an authenticated owner
-  const supabase = await getSupabase();
-
-  // Guard against a user injecting another user's conversationId.
-  // Check whether the conversation already exists and belongs to someone else.
-  const { data: existing } = await supabase
-    .from("conversations")
-    .select("user_id")
-    .eq("id", conversationId)
-    .maybeSingle();
-
-  if (existing && existing.user_id && existing.user_id !== userId) {
-    const err = new Error("Unauthorized: conversation belongs to another user") as Error & { status: number };
-    err.status = 403;
-    throw err;
-  }
-
-  await supabase.from("conversations").upsert(
-    { id: conversationId, user_id: userId },
-    { onConflict: "id" }
-  );
-}
-
-async function findKnowledgeContext(userId: string, queryEmbedding: number[]) {
-  try {
-    const supabase = await getSupabase();
-    const vector = toPgVectorLiteral(queryEmbedding);
-    const [chunkResult, profileResult] = await Promise.all([
-      supabase.rpc("match_documents", {
-        p_user_id: userId,
-        p_query_embedding: vector,
-        match_count: KNOWLEDGE_MATCH_COUNT,
-        max_total_tokens: KNOWLEDGE_MAX_TOTAL_TOKENS,
-      }),
-      supabase.rpc("match_user_profile_memories", {
-        p_user_id: userId,
-        p_query_embedding: vector,
-        p_match_count: 4,
-      }),
-    ]);
-
-    const chunks = Array.isArray(chunkResult.data) ? chunkResult.data as Array<{ file_name: string; content: string; similarity: number }> : [];
-    const profileMemories = Array.isArray(profileResult.data) ? profileResult.data as Array<{ memory_key: string; memory_value: string }> : [];
-    return formatKnowledgeContext(chunks, profileMemories);
-  } catch {
-    return "";
-  }
-}
-
-async function findCachedAnswer(userId: string, queryEmbedding: number[]) {
-  try {
-    const supabase = await getSupabase();
-    const vector = toPgVectorLiteral(queryEmbedding);
-    const { data } = await supabase.rpc("match_cached_answers", {
-      p_user_id: userId,
-      p_query_embedding: vector,
-      p_match_count: 1,
-      p_min_similarity: CACHED_ANSWER_SIMILARITY_THRESHOLD,
-    });
-    const first = Array.isArray(data) ? data[0] as { answer?: string; similarity?: number; answer_id?: string } : null;
-    if (!first?.answer || typeof first.similarity !== "number") return null;
-    return { answer: first.answer, similarity: first.similarity, answerId: first.answer_id };
-  } catch {
-    return null;
-  }
-}
-
-async function saveCachedAnswer(userId: string, question: string, answer: string, queryEmbedding: number[]) {
-  try {
-    const supabase = await getSupabase();
-    await supabase.from("knowledge_qa_cache").insert({
-      user_id: userId,
-      question,
-      answer,
-      question_embedding: toPgVectorLiteral(queryEmbedding),
-      similarity_hint: null,
-      usage_count: 0,
-    });
-  } catch {
-    // best effort
-  }
-}
-
-async function incrementCachedAnswerUsage(answerId: string, userId: string) {
-  try {
-    const supabase = await getSupabase();
-    // Atomic increment: a single UPDATE avoids the read-then-write race.
-    await supabase.rpc("increment_qa_cache_usage", { answer_id: answerId, answer_user_id: userId });
-  } catch {
-    // best effort
-  }
-}
-
-async function saveUserProfileFacts(userId: string, message: string, queryEmbedding: number[]) {
-  const facts = extractUserProfileFacts(message);
-  if (facts.length === 0) return;
-  try {
-    const supabase = await getSupabase();
-    for (const fact of facts) {
-      const existing = await supabase
-        .from("user_profile_memories")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("memory_key", fact.key)
-        .maybeSingle();
-
-      if ((existing.data as { id?: string } | null)?.id) {
-        await supabase
-          .from("user_profile_memories")
-          .update({
-            memory_value: fact.value,
-            source_message: message.slice(0, 1000),
-            embedding: toPgVectorLiteral(queryEmbedding),
-          })
-          .eq("id", (existing.data as { id: string }).id)
-          .eq("user_id", userId);
-      } else {
-        await supabase.from("user_profile_memories").insert({
-          user_id: userId,
-          memory_key: fact.key,
-          memory_value: fact.value,
-          source_message: message.slice(0, 1000),
-          embedding: toPgVectorLiteral(queryEmbedding),
-        });
-      }
-    }
-  } catch {
-    // best effort
-  }
-}
-
+export { detectLanguage } from "@/app/api/chat/language";
 
 /**
  * Returns true when a 429 response is a provider-side upstream rate limit
@@ -290,113 +97,6 @@ function isAbortLikeError(error: unknown) {
   if (error instanceof DOMException) return error.name === "AbortError";
   if (error instanceof Error) return error.name === "AbortError" || /aborted/i.test(error.message);
   return false;
-}
-
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: "English",
-  pl: "Polish",
-  de: "German",
-  fr: "French",
-  es: "Spanish",
-  pt: "Portuguese",
-  it: "Italian",
-  nl: "Dutch",
-  tr: "Turkish",
-  ru: "Russian",
-  zh: "Chinese",
-  ja: "Japanese",
-  ko: "Korean",
-  ar: "Arabic",
-};
-
-
-const LANG_PATTERNS: Array<{ lang: string; name: string; patterns: RegExp[] }> = [
-  {
-    lang: "pl", name: "Polish",
-    patterns: [
-      /\b(elo|siema|hej|cześć|dzień dobry|dobra|spoko|git|okej|okej|co tam|co słychać|dziękuję|proszę|przepraszam|tak|nie|ile|gdzie|kiedy|jak|co|dlaczego|który|która|które)\b/i,
-      /[ąćęłńóśźż]/,
-      /\b(jest|są|były|będzie|mam|masz|ma|mamy|macie|mają|idę|idziesz|idzie|chcę|chcesz|mogę|możesz|można|trzeba|wiem|widzę|rozumiem|powiedz|napisz|zrób|pomóż|sprawdź)\b/i,
-    ],
-  },
-  {
-    lang: "de", name: "German",
-    patterns: [
-      /\b(hallo|guten|tag|morgen|abend|bitte|danke|ja|nein|wie|was|wo|wann|warum|wer|ich|du|er|sie|wir|ihr|sie|ein|eine|der|die|das|und|oder|aber|mit|für|von)\b/i,
-      /[äöüß]/,
-    ],
-  },
-  {
-    lang: "fr", name: "French",
-    patterns: [
-      /\b(bonjour|salut|merci|oui|non|comment|quoi|où|quand|pourquoi|qui|je|tu|il|elle|nous|vous|ils|elles|un|une|le|la|les|et|ou|mais|avec|pour|de|du|des)\b/i,
-      /[àâæçéèêëîïôœùûüÿ]/,
-    ],
-  },
-  {
-    lang: "es", name: "Spanish",
-    patterns: [
-      /\b(hola|buenos|días|gracias|sí|no|cómo|qué|dónde|cuándo|por qué|quién|yo|tú|él|ella|nosotros|vosotros|ellos|un|una|el|la|los|las|y|o|pero|con|para|de)\b/i,
-      /[áéíóúüñ¿¡]/,
-    ],
-  },
-  {
-    lang: "pt", name: "Portuguese",
-    patterns: [
-      /\b(olá|oi|obrigado|obrigada|sim|não|como|o que|onde|quando|por que|quem|eu|tu|ele|ela|nós|vocês|eles|um|uma|o|a|os|as|e|ou|mas|com|para|de|do|da)\b/i,
-      /[ãõâêôàáéíóúç]/,
-    ],
-  },
-  { lang: "ru", name: "Russian", patterns: [/[\u0400-\u04FF]/] },
-  { lang: "zh", name: "Chinese", patterns: [/[\u4E00-\u9FFF\u3400-\u4DBF]/] },
-  { lang: "ja", name: "Japanese", patterns: [/[\u3040-\u309F\u30A0-\u30FF]/] },
-  { lang: "ko", name: "Korean", patterns: [/[\uAC00-\uD7AF\u1100-\u11FF]/] },
-  { lang: "ar", name: "Arabic", patterns: [/[\u0600-\u06FF]/] },
-  {
-    lang: "tr", name: "Turkish",
-    patterns: [
-      /\b(merhaba|selam|teşekkür|evet|hayır|nasıl|ne|nerede|ne zaman|neden|kim|ben|sen|o|biz|siz|onlar|bir|ve|veya|ama|ile|için|bu|şu|o)\b/i,
-      /[çğışöü]/,
-    ],
-  },
-  {
-    lang: "it", name: "Italian",
-    patterns: [
-      /\b(ciao|buongiorno|grazie|sì|no|come|cosa|dove|quando|perché|chi|io|tu|lui|lei|noi|voi|loro|un|una|il|la|i|le|e|o|ma|con|per|di|del|della)\b/i,
-      /[àèéìíîòóùú]/,
-    ],
-  },
-  {
-    lang: "nl", name: "Dutch",
-    patterns: [/\b(hallo|hoi|dank|ja|nee|hoe|wat|waar|wanneer|waarom|wie|ik|jij|hij|zij|wij|jullie|zij|een|de|het|en|of|maar|met|voor|van)\b/i],
-  },
-  {
-    lang: "en", name: "English",
-    patterns: [/\b(hello|hi|hey|thanks|thank you|yes|no|how|what|where|when|why|who|i|you|he|she|we|they|the|a|an|and|or|but|with|for|is|are|was|were|have|has|do|does|can|will|please|help)\b/i],
-  },
-];
-
-export function detectLanguage(text: string): { lang: string; name: string } | null {
-  const trimmed = text.trim();
-  if (trimmed.length < 2) return null;
-
-  const scores: Record<string, { name: string; score: number }> = {};
-  for (const { lang, name, patterns } of LANG_PATTERNS) {
-    let score = 0;
-    for (const pattern of patterns) {
-      const matches = trimmed.match(new RegExp(pattern.source, pattern.flags + (pattern.flags.includes("g") ? "" : "g")));
-      if (matches) score += matches.length;
-    }
-    if (score > 0) scores[lang] = { name, score };
-  }
-
-  const ranked = Object.entries(scores).sort((a, b) => b[1].score - a[1].score);
-  if (ranked.length === 0) return null;
-
-  const [topLang, topData] = ranked[0];
-  const secondScore = ranked[1]?.[1].score ?? 0;
-  if (topData.score <= secondScore && topLang !== "en") return { lang: "en", name: "English" };
-  return { lang: topLang, name: topData.name };
 }
 
 const MODEL_LABELS: Record<string, string> = {
@@ -453,13 +153,7 @@ function isModerationBlocked(message: string): boolean {
   return BLOCKED_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-const CACHED_ANSWER_SIMILARITY_THRESHOLD = 0.9;
-// Knowledge retrieval keeps a lower threshold for context breadth while cache reuse
-// intentionally requires a high threshold to avoid returning the wrong prior answer.
-const KNOWLEDGE_MATCH_COUNT = 10;
-const KNOWLEDGE_MAX_TOTAL_TOKENS = 1500;
-
-/** Matches a canonical lowercase UUID (v1–v5). */
+/** Matches a canonical UUID (v1–v5). */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
@@ -582,7 +276,7 @@ export const POST = async (req: Request) => {
     effectiveMessage.trim().length > 0;
   if (shouldPerformRagLookup) {
     try {
-      queryEmbedding = await createOpenRouterEmbedding(effectiveMessage);
+      queryEmbedding = await getQueryEmbedding(effectiveMessage);
       const [knowledgeContext, cacheCandidate] = await Promise.all([
         findKnowledgeContext(authUserId, queryEmbedding),
         findCachedAnswer(authUserId, queryEmbedding),
@@ -1016,6 +710,7 @@ export const POST = async (req: Request) => {
   }
 
   if (cachedAnswerCandidate && cachedAnswerCandidate.similarity >= CACHED_ANSWER_SIMILARITY_THRESHOLD) {
+    const cacheHitRouteReason = `Answer cache hit (${(cachedAnswerCandidate.similarity * 100).toFixed(1)}% similarity)`;
     const stream = new ReadableStream({
       async start(controller) {
         const enqueue = (payload: Record<string, unknown>) => {
@@ -1024,7 +719,7 @@ export const POST = async (req: Request) => {
         enqueue({ status: "Reusing a previously solved answer..." });
         enqueue({
           model: MODEL_LABELS[selectedModel] ?? selectedModel,
-          routeReason: `Answer cache hit (${(cachedAnswerCandidate.similarity * 100).toFixed(1)}% similarity)`,
+          routeReason: cacheHitRouteReason,
         });
         enqueue({ token: cachedAnswerCandidate.answer });
         enqueue({ status: "Done" });
@@ -1034,6 +729,16 @@ export const POST = async (req: Request) => {
         }
         if (authUserId && cachedAnswerCandidate.answerId) {
           await incrementCachedAnswerUsage(cachedAnswerCandidate.answerId, authUserId);
+        }
+        if (authUserId) {
+          await reportChatTokenUsage({
+            userId: authUserId,
+            model: selectedModel,
+            messages: (requestBody.messages as Array<{ role?: string; content?: string }> | undefined) ?? [],
+            reply: cachedAnswerCandidate.answer.trim(),
+            routeReason: cacheHitRouteReason,
+            cached: true,
+          });
         }
         controller.close();
       },
@@ -1127,6 +832,8 @@ export const POST = async (req: Request) => {
     async start(controller) {
       let closed = false;
       let fullReply = "";
+      let effectiveModel = selectedModel;
+      let effectiveRouteReason = routeReason;
       const safeEnqueue = (payload: string) => {
         if (closed || requestSignal.aborted) return;
         // Collect assistant tokens for saving
@@ -1146,6 +853,16 @@ export const POST = async (req: Request) => {
           if (authUserId && queryEmbedding && effectiveMessage.trim() && fullReply.trim()) {
             await saveCachedAnswer(authUserId, effectiveMessage.trim(), fullReply.trim(), queryEmbedding);
           }
+          if (authUserId && fullReply.trim()) {
+            await reportChatTokenUsage({
+              userId: authUserId,
+              model: effectiveModel,
+              messages: (requestBody.messages as Array<{ role?: string; content?: string }> | undefined) ?? [],
+              reply: fullReply.trim(),
+              routeReason: effectiveRouteReason,
+              cached: false,
+            });
+          }
           controller.close();
         };
       const handleAbort = () => {
@@ -1160,8 +877,6 @@ export const POST = async (req: Request) => {
 
         safeEnqueue(`data: ${JSON.stringify({ status: "Analyzing prompt..." })}\n\n`);
         let response = await sendModelRequest(requestBody);
-        let effectiveModel = selectedModel;
-        let effectiveRouteReason = routeReason;
 
         // Helper: get ordered list of models to try (paid first if allowed, then free)
         function getModelFallbackList() {
