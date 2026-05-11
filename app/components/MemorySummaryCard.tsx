@@ -31,17 +31,14 @@ export function MemorySummaryCard({ dark }: { dark: boolean }) {
   const [facts, setFacts] = useState<MemoryFact[]>([]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void fetch("/api/memory")
-        .then((response) => (response.ok ? response.json() : null))
-        .then((payload: MemorySummaryResponse | null) => {
-          setFacts(Array.isArray(payload?.memories) ? payload!.memories : []);
-        })
-        .catch(() => {
-          setFacts([]);
-        });
-    }, 0);
-    return () => window.clearTimeout(timeout);
+    void fetch("/api/memory")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: MemorySummaryResponse | null) => {
+        setFacts(Array.isArray(payload?.memories) ? payload.memories : []);
+      })
+      .catch(() => {
+        setFacts([]);
+      });
   }, []);
 
   const groupedMemories = useMemo(() => groupMemoriesByScope(facts), [facts]);
@@ -77,7 +74,11 @@ export function MemorySummaryCard({ dark }: { dark: boolean }) {
       ) : hasModelScopedGroups ? (
         <div className="mt-3 space-y-2">
           {Array.from(groupedMemories.entries()).map(([scope, scopedFacts]) => (
-            <details key={scope} className={`rounded-xl border px-3 py-2 ${chipClass}`} open={scope === "General"}>
+            <details
+              key={scope}
+              className={`rounded-xl border px-3 py-2 ${chipClass}`}
+              open={scope === "General"}
+            >
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-violet-500">
                 {scope}
               </summary>

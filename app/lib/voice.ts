@@ -71,7 +71,10 @@ export function resolveSpeechVoice(
   const exactLanguage = voices.find((voice) => voice.lang.toLowerCase() === language.toLowerCase());
   if (exactLanguage) return exactLanguage;
 
-  const sameLanguageFamily = voices.find((voice) => voice.lang.toLowerCase().startsWith(language.split("-")[0].toLowerCase()));
+  const baseLanguage = language.trim().split("-")[0]?.toLowerCase();
+  const sameLanguageFamily = baseLanguage
+    ? voices.find((voice) => voice.lang.toLowerCase().startsWith(baseLanguage))
+    : undefined;
   if (sameLanguageFamily) return sameLanguageFamily;
 
   return voices[0] ?? null;

@@ -162,20 +162,24 @@ export function ChatHeader({
               <TooltipContent>New chat</TooltipContent>
             </Tooltip>
 
-            <select
-              id="chat-header-personality-mode"
-              name="chatHeaderPersonalityMode"
-              value={personalityMode}
-              onChange={(event) => onPersonalityModeChange(event.target.value as PersonalityMode)}
-              className="hidden h-10 rounded-lg border border-border bg-background px-2 text-xs text-foreground md:block"
-              aria-label="Quick personality mode"
-            >
-              {PERSONALITY_MODES.map((mode) => (
-                <option key={mode.id} value={mode.id}>
-                  {mode.emoji} {mode.label}
-                </option>
-              ))}
-            </select>
+            <div className="hidden items-center gap-2 md:flex">
+              <label htmlFor="chat-header-personality-mode" className="text-xs text-muted-foreground">
+                Personality mode
+              </label>
+              <select
+                id="chat-header-personality-mode"
+                name="chatHeaderPersonalityMode"
+                value={personalityMode}
+                onChange={(event) => onPersonalityModeChange(event.target.value as PersonalityMode)}
+                className="h-10 rounded-lg border border-border bg-background px-2 text-xs text-foreground"
+              >
+                {PERSONALITY_MODES.map((mode) => (
+                  <option key={mode.id} value={mode.id}>
+                    {mode.emoji} {mode.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </TooltipProvider>

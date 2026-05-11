@@ -762,9 +762,18 @@ export const POST = async (req: Request) => {
     : style === "step-by-step"
       ? "Explain using concise numbered steps."
       : "Keep responses concise and practical.";
+  const defaultPersonality = PERSONALITY_MODES.find((mode) => mode.id === "default")
+    ?? {
+      id: "default",
+      label: "Default",
+      labelPl: "Domyślny",
+      emoji: "⚖️",
+      description: "Balanced behavior",
+      temperature: 0.7,
+      systemPromptSuffix: "Be balanced and adaptive. Maintain a natural conversational tone.",
+    };
   const selectedPersonality = PERSONALITY_MODES.find((mode) => mode.id === rawPersonalityMode as PersonalityMode)
-    ?? PERSONALITY_MODES.find((mode) => mode.id === "default")
-    ?? PERSONALITY_MODES[0];
+    ?? defaultPersonality;
   const assistantInstruction = typeof assistantInstructions === "string" && assistantInstructions.trim()
     ? `Additional agent instructions for ${typeof assistantName === "string" && assistantName.trim() ? assistantName.trim() : "this assistant"}: ${assistantInstructions.trim()}`
     : "";
@@ -891,6 +900,8 @@ export const POST = async (req: Request) => {
     systemPrompt = `${systemPrompt} ${customSystemPrompt.trim()}`.trim();
   }
 
+  // Keep strict model-specific decoding defaults for code/vision requests.
+  // Personality temperature overrides apply to conversational responses only.
   if (selectedPersonality.id !== "default" && !inferredCodeRequest && !inferredVisionRequest) {
     resolvedTemperature = selectedPersonality.temperature;
   }
