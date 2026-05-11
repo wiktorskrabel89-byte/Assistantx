@@ -1,4 +1,5 @@
 import { PLATFORM_DECISIONS } from "@/src/core/config/platform";
+import { inngestClient } from "@/src/core/events/inngest-client";
 import type { RuntimeEvent } from "@/src/core/events/types";
 
 export type EventBus = {
@@ -15,13 +16,19 @@ class InMemoryEventBus implements EventBus {
 }
 
 class InngestEventBus implements EventBus {
-  // Intentionally no direct Inngest SDK dependency yet.
-  // This boundary keeps route handlers runtime-agnostic and migration-safe.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async publish(_event: RuntimeEvent): Promise<void> {
-    // Temporary adapter stub. This method is the single place where
-    // Inngest dispatch will be implemented in the next migration step.
-    return;
+  // Routes runtime events to Inngest. Gracefully degrades when
+  // INNGEST_EVENT_KEY is absent so development and CI remain unaffected.
+  async publish(event: RuntimeEvent): Promise<void> {
+    await inngestClient.send({
+      name: event.type,
+      data: {
+        timestamp: event.timestamp,
+        actorUserId: event.actorUserId ?? null,
+        organizationId: event.organizationId ?? null,
+        executionId: event.executionId ?? null,
+        payload: event.payload,
+      },
+    });
   }
 }
 
