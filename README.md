@@ -99,6 +99,19 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 The repository includes Jest unit tests in `__tests__/` and Playwright end-to-end tests in `e2e/`.
 
+## Runtime Foundation (Phase 1)
+
+AssistantX now includes a runtime-foundation scaffold under `/src` for the architecture migration:
+
+- platform decisions (`src/core/config/platform.ts`)
+- runtime events + event-bus boundary (`src/core/events/*`)
+- tool policy + governed tool router (`src/core/policies/*`, `src/tools/router/*`)
+- agent-runtime contracts (`src/agents/runtime/*`)
+- runtime facade + FastAPI compatibility bridge marker (`src/backend/runtime/*`)
+- thin runtime API adapter (`app/api/runtime/execute/route.ts`)
+
+See `docs/architecture/runtime-foundation.md` for details.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
