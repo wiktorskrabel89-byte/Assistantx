@@ -20,11 +20,11 @@ export function isPushSupported(): boolean {
     && "PushManager" in window;
 }
 
-export function urlBase64ToUint8Array(base64String: string): Uint8Array {
+export function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const normalized = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(normalized);
-  const output = new Uint8Array(raw.length);
+  const output = new Uint8Array(raw.length) as Uint8Array<ArrayBuffer>;
   for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
   return output;
 }
