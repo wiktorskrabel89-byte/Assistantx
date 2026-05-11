@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 import os
 import json
 import base64
-from pathlib import Path
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_anthropic import ChatAnthropic
@@ -24,10 +23,8 @@ from note import note_tool
 
 from supabase import create_client
 
-# Load .env from github subdirectory
-script_dir = Path(__file__).parent
-env_path = script_dir / "github" / ".env"
-load_dotenv(env_path)
+# Auto-discover .env file(s) up the directory tree
+load_dotenv()
 
 app = FastAPI()
 

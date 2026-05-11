@@ -69,16 +69,16 @@ export function NotificationsTab({
         events.push({
           id: "plan-limit-reached",
           kind: "warning",
-          title: "Limit zapytań osiągnięty",
-          body: `Wykorzystałeś wszystkie ${limit} zapytań w planie Pro. Limit odnowi się na początku następnego miesiąca lub przejdź na plan Pro+.`,
+          title: "Request limit reached",
+          body: `You have used all ${limit} Pro plan requests. Your limit will reset at the start of next month, or upgrade to Pro+.`,
           date: new Date().toLocaleString(),
         });
       } else if (pct >= 0.8) {
         events.push({
           id: "plan-limit-warning",
           kind: "warning",
-          title: "Zbliżasz się do limitu zapytań",
-          body: `Wykorzystałeś ${used} z ${limit} zapytań w planie Pro (${Math.round(pct * 100)}%).`,
+          title: "Approaching request limit",
+          body: `You have used ${used} of ${limit} Pro plan requests (${Math.round(pct * 100)}%).`,
           date: new Date().toLocaleString(),
         });
       }
@@ -89,16 +89,16 @@ export function NotificationsTab({
         events.push({
           id: "plan-limit-reached",
           kind: "warning",
-          title: "Limit zapytań osiągnięty",
-          body: `Wykorzystałeś wszystkie ${limit} zapytań w planie Pro+. Limit odnowi się na początku następnego miesiąca.`,
+          title: "Request limit reached",
+          body: `You have used all ${limit} Pro+ plan requests. Your limit will reset at the start of next month.`,
           date: new Date().toLocaleString(),
         });
       } else if (pct >= 0.8) {
         events.push({
           id: "plan-limit-warning",
           kind: "warning",
-          title: "Zbliżasz się do limitu zapytań",
-          body: `Wykorzystałeś ${used} z ${limit} zapytań w planie Pro+ (${Math.round(pct * 100)}%).`,
+          title: "Approaching request limit",
+          body: `You have used ${used} of ${limit} Pro+ plan requests (${Math.round(pct * 100)}%).`,
           date: new Date().toLocaleString(),
         });
       }
@@ -106,8 +106,8 @@ export function NotificationsTab({
       events.push({
         id: "free-plan-info",
         kind: "info",
-        title: "Korzystasz z planu Free",
-        body: "Przejdź na plan Pro lub Pro+, aby uzyskać dostęp do zaawansowanych modeli AI i wyższych limitów zapytań.",
+        title: "You are on the Free plan",
+        body: "Upgrade to Pro or Pro+ to access advanced AI models and higher request limits.",
         date: new Date().toLocaleString(),
       });
     }
@@ -132,7 +132,7 @@ export function NotificationsTab({
 
   const sendTestNotification = async () => {
     if (!("serviceWorker" in navigator) || typeof Notification === "undefined") {
-      setPushStatus("Powiadomienia push nie są obsługiwane w tej przeglądarce.");
+      setPushStatus("Push notifications are not supported in this browser.");
       return;
     }
 
@@ -140,27 +140,27 @@ export function NotificationsTab({
       const permission = await Notification.requestPermission();
       window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
       if (permission !== "granted") {
-        setPushStatus("Brak zgody na wyświetlanie powiadomień.");
+        setPushStatus("Notification permission not granted.");
         return;
       }
     }
 
     if (Notification.permission !== "granted") {
-      setPushStatus("Brak zgody na wyświetlanie powiadomień.");
+      setPushStatus("Notification permission not granted.");
       return;
     }
 
     const registration = await registerPushServiceWorker();
     if (!registration) {
-      setPushStatus("Nie udało się zarejestrować service workera.");
+      setPushStatus("Failed to register the service worker.");
       return;
     }
 
-    await registration.showNotification("Testowa notyfikacja", {
-      body: "To jest przykładowe powiadomienie push.",
+    await registration.showNotification("Test notification", {
+      body: "This is a sample push notification.",
       icon: "/icon-192.png",
     });
-    setPushStatus("Wysłano testowe powiadomienie push.");
+    setPushStatus("Test push notification sent.");
   };
 
   const handleEnablePush = async () => {
@@ -168,23 +168,23 @@ export function NotificationsTab({
     window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
 
     if (setup.state === "unsupported") {
-      setPushStatus("Ta przeglądarka nie obsługuje powiadomień push.");
+      setPushStatus("This browser does not support push notifications.");
       return;
     }
     if (setup.state === "permission-default") {
-      setPushStatus("Nie udzielono jeszcze zgody na powiadomienia.");
+      setPushStatus("Notification permission not yet granted.");
       return;
     }
     if (setup.state === "permission-denied") {
-      setPushStatus("Powiadomienia są zablokowane w ustawieniach przeglądarki.");
+      setPushStatus("Notifications are blocked in browser settings.");
       return;
     }
     if (setup.state === "registered-no-vapid") {
-      setPushStatus("Zgoda została nadana. Dodaj NEXT_PUBLIC_VAPID_PUBLIC_KEY, aby dokończyć subskrypcję push.");
+      setPushStatus("Permission granted. Add NEXT_PUBLIC_VAPID_PUBLIC_KEY to complete push subscription.");
       return;
     }
     if (setup.state === "error") {
-      setPushStatus(setup.error ?? "Wystąpił błąd podczas konfiguracji push.");
+      setPushStatus(setup.error ?? "An error occurred during push setup.");
       return;
     }
 
@@ -195,13 +195,13 @@ export function NotificationsTab({
       });
       setPushStatus(
         synced
-          ? "Powiadomienia push są aktywne i subskrypcja została zapisana."
-          : "Powiadomienia aktywne lokalnie, ale nie udało się zapisać subskrypcji na serwerze."
+          ? "Push notifications are active and subscription saved."
+          : "Notifications active locally, but failed to save subscription to server."
       );
       return;
     }
 
-    setPushStatus("Powiadomienia push zostały włączone.");
+    setPushStatus("Push notifications have been enabled.");
   };
 
   return (
@@ -226,14 +226,14 @@ export function NotificationsTab({
             }`}
           >
             <Bell className="h-3.5 w-3.5" />
-            Center powiadomień
+            Notification Center
           </div>
 
           <h2 className={`mt-5 text-2xl font-semibold tracking-tight ${dark ? "text-slate-100" : "text-slate-900"}`}>
-            Powiadomienia i aktywność
+            Notifications &amp; activity
           </h2>
           <p className={`mt-2 max-w-2xl text-sm leading-7 ${dark ? "text-slate-300" : "text-slate-600"}`}>
-            Przeglądaj zdarzenia systemowe i testuj powiadomienia push w jednym miejscu.
+            Review system events and test push notifications in one place.
           </p>
           {pushStatus ? (
             <p className={`mt-3 text-sm ${dark ? "text-slate-300" : "text-slate-600"}`}>{pushStatus}</p>
@@ -249,14 +249,14 @@ export function NotificationsTab({
                 }`}
                 onClick={() => void handleEnablePush()}
               >
-                Włącz powiadomienia push
+                Enable push notifications
               </button>
             ) : null}
             <button
               className="inline-flex items-center rounded-xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-sky-800 hover:to-cyan-700"
               onClick={() => void sendTestNotification()}
             >
-              Wyślij testowe powiadomienie push
+              Send test push notification
             </button>
             {hasUnread && notificationsHook && (
               <button
@@ -267,7 +267,7 @@ export function NotificationsTab({
                 }`}
                 onClick={() => void notificationsHook.markAllRead()}
               >
-                Oznacz wszystkie jako przeczytane
+                Mark all as read
               </button>
             )}
           </div>
@@ -279,10 +279,10 @@ export function NotificationsTab({
           }`}
         >
           <h3 className={`mb-3 text-base font-semibold ${dark ? "text-slate-100" : "text-slate-900"}`}>
-            Ostatnie zdarzenia
+            Recent events
           </h3>
           {allNotifications.length === 0 ? (
-            <div className={`text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>Brak powiadomień.</div>
+            <div className={`text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>No notifications.</div>
           ) : (
             <ul className="space-y-3">
               {allNotifications.map((n) => (

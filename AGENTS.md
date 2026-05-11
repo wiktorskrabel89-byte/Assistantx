@@ -19,6 +19,8 @@ An AI workspace built with **Next.js 16** and a **Python FastAPI** backend. Feat
 | Build | `npm run build` |
 | Start production | `npm start` |
 | Lint | `npm run lint` |
+| Unit tests | `npm test` |
+| E2E tests | `npx playwright test` |
 
 The Next.js dev server uses a custom `server.js` (binds `0.0.0.0:3000`). The FastAPI backend lives in the `ai agent/` directory and runs on `127.0.0.1:8000`.
 
@@ -73,12 +75,12 @@ Dockerfile          # Production Docker image (node:22-bookworm-slim)
 
 ## Architecture Notes
 
-- **Single-page app**: `app/page.tsx` is a large `"use client"` component that renders the entire chat workspace with tab navigation. All panels (chat, code review, GitHub, integrations, etc.) are toggled client-side.
+- **Single-page app**: `app/page.tsx` is a server component that checks auth and renders either `PublicHome` (unauthenticated) or `WorkspaceHome` (authenticated). The actual workspace UI lives in `app/workspace-home.tsx` (a large `"use client"` component).
 - **Chat backend**: `app/api/chat/route.ts` uses Groq as primary provider with Google AI Studio fallback, streaming responses via SSE. It auto-detects language, request type (code/image/search), and selects the appropriate model.
 - **Auth**: Supabase magic-link authentication with Google/GitHub OAuth providers. Middleware in `proxy.ts` + `lib/middleware.ts` refreshes sessions and redirects unauthenticated users to `/auth/login`.
 - **Styling**: Tailwind CSS v4 with `tw-animate-css`. Component library is shadcn/ui (radix-ui primitives). Dark/light theme is toggled client-side.
 - **State**: React Query (`@tanstack/react-query`) for server state. Local workspace state managed via custom hooks (`useWorkspaceState`, `useWorkspaceSync`).
-- **No test framework** is currently configured in this repository.
+- **Testing**: Jest unit tests live in `__tests__/`. Playwright e2e tests live in `e2e/`. Run `npm test` for unit tests and `npx playwright test` for e2e.
 
 ## Conventions
 

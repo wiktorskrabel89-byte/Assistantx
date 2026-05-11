@@ -49,7 +49,7 @@ export function TabPlaceholder({ dark, icon: Icon, title, description }: TabPlac
             : "border border-amber-300/60 bg-amber-100/70 text-amber-700"
         }`}
       >
-        Wkrótce dostępne
+        Coming soon
       </span>
     </section>
   );
