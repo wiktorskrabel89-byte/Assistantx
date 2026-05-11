@@ -75,6 +75,12 @@ export type WorkspaceSettings = {
   costMode: CostMode;
   systemPrompt: string;
   enabledTools: string[];
+  wakeWordEnabled: boolean;
+  wakeWordPhrase: string;
+  sttEnabled: boolean;
+  ttsEnabled: boolean;
+  voiceLanguage: string;
+  autoSpeakResponses: boolean;
 };
 
 export type Workspace = {

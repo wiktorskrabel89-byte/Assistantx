@@ -161,6 +161,12 @@ export function createSettings(): WorkspaceSettings {
     costMode: "balanced",
     systemPrompt: "",
     enabledTools: [],
+    wakeWordEnabled: true,
+    wakeWordPhrase: "Hey AssistantX",
+    sttEnabled: true,
+    ttsEnabled: true,
+    voiceLanguage: "en-US",
+    autoSpeakResponses: false,
   };
 }
 

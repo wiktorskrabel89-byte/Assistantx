@@ -429,6 +429,48 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setWakeWordEnabled = useCallback((wakeWordEnabled: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, wakeWordEnabled },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setWakeWordPhrase = useCallback((wakeWordPhrase: string) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, wakeWordPhrase },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setSttEnabled = useCallback((sttEnabled: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, sttEnabled },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setTtsEnabled = useCallback((ttsEnabled: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, ttsEnabled },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setVoiceLanguage = useCallback((voiceLanguage: string) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, voiceLanguage },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setAutoSpeakResponses = useCallback((autoSpeakResponses: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, autoSpeakResponses },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const clearMemoryNotes = useCallback(() => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -662,6 +704,12 @@ export function useWorkspaceState() {
     setMemoryNotes,
     setSystemPrompt,
     setEnabledTools,
+    setWakeWordEnabled,
+    setWakeWordPhrase,
+    setSttEnabled,
+    setTtsEnabled,
+    setVoiceLanguage,
+    setAutoSpeakResponses,
     clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,

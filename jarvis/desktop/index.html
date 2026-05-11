@@ -324,6 +324,50 @@
       margin-top: 10px;
     }
 
+    .voice-visualizer {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 4px;
+      height: 26px;
+      margin-top: 8px;
+    }
+
+    .voice-visualizer span {
+      width: 5px;
+      height: 7px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #c084fc, #8b5cf6);
+      opacity: 0.4;
+      transition: height 0.2s ease, opacity 0.2s ease;
+    }
+
+    .voice-visualizer.listening span,
+    .voice-visualizer.speaking span {
+      animation: wave 1s ease-in-out infinite;
+      opacity: 1;
+    }
+
+    .voice-visualizer span:nth-child(2) { animation-delay: 0.1s; }
+    .voice-visualizer span:nth-child(3) { animation-delay: 0.2s; }
+    .voice-visualizer span:nth-child(4) { animation-delay: 0.3s; }
+    .voice-visualizer span:nth-child(5) { animation-delay: 0.4s; }
+
+    @keyframes wave {
+      0%, 100% { height: 7px; }
+      50% { height: 22px; }
+    }
+
+    .settings-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .settings-grid .field-full {
+      grid-column: span 2;
+    }
+
     .toggle {
       display: inline-flex;
       align-items: center;
@@ -450,6 +494,7 @@
       <div class="stack">
         <div class="section-label">Device Token</div>
         <div id="device-token" class="value">Loading…</div>
+        <button type="button" id="logout" class="danger sm">Simple logout</button>
       </div>
 
       <div class="stack">
@@ -493,6 +538,7 @@
           <button type="button" data-command="open:discord">💬 Discord</button>
           <button type="button" data-command="open:spotify">🎵 Spotify</button>
           <button type="button" data-command="open:chrome">🌐 Chrome</button>
+          <button type="button" id="open-browser-tab">🪟 New Tab</button>
           <button type="button" data-command="open:roblox">🎮 Roblox</button>
           <button type="button" data-command="open:steam">🎯 Steam</button>
           <button type="button" data-command="command:screenshot">📸 Screenshot</button>
@@ -560,6 +606,28 @@
             <input id="auto-tts" type="checkbox" checked />
             Auto text-to-speech playback
           </label>
+        </div>
+        <div id="voice-visualizer" class="voice-visualizer" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="section-label">Jarvis Voice Settings</div>
+        <div class="settings-grid">
+          <label class="toggle field-full" for="wake-word-enabled">
+            <input id="wake-word-enabled" type="checkbox" checked />
+            Enable wake phrase detection
+          </label>
+          <label class="field field-full">
+            <span>Wake phrase</span>
+            <input id="wake-word-phrase" type="text" value="Hey Jarvis" placeholder="Hey Jarvis" />
+          </label>
+          <label class="toggle field-full" for="allow-background-wake">
+            <input id="allow-background-wake" type="checkbox" checked />
+            Keep wake listener active while app is hidden/minimized
+          </label>
+          <button id="save-voice-settings" type="button" class="secondary field-full">Save voice settings</button>
         </div>
       </div>
 

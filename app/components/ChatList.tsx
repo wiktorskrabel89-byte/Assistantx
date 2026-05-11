@@ -36,6 +36,9 @@ export type ChatListProps = {
   assistantDescription: string;
   assistantIcon: LucideIcon;
   dark?: boolean;
+  ttsEnabled?: boolean;
+  autoSpeakResponses?: boolean;
+  voiceLanguage?: string;
 };
 
 export const ChatList = memo(function ChatList({
@@ -64,6 +67,9 @@ export const ChatList = memo(function ChatList({
   assistantDescription,
   assistantIcon: AssistantIcon,
   dark = false,
+  ttsEnabled = true,
+  autoSpeakResponses = false,
+  voiceLanguage = "en-US",
 }: ChatListProps) {
   const [visibleCount, setVisibleCount] = useState(MESSAGE_LOAD_BATCH_SIZE);
   const quickStarters: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
@@ -199,6 +205,9 @@ export const ChatList = memo(function ChatList({
             onReviewTextChange={(text) => onSetReviewText(entry.id, text)}
             onFork={onFork ? () => onFork(visibleStartIndex + index) : undefined}
             dark={dark}
+            ttsEnabled={ttsEnabled}
+            autoSpeakResponses={autoSpeakResponses}
+            voiceLanguage={voiceLanguage}
           />
         </div>
       ))}
