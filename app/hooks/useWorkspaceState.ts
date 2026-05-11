@@ -360,6 +360,10 @@ export function useWorkspaceState() {
     setState((prev) => ({ ...prev, dark }));
   }, []);
 
+  const setUiLanguage = useCallback((uiLanguage: string) => {
+    setState((prev) => ({ ...prev, uiLanguage }));
+  }, []);
+
   const incrementPremiumRequests = useCallback(() => {
     setState((prev) => ({ ...prev, premiumRequestsUsed: prev.premiumRequestsUsed + 1 }));
   }, []);
@@ -711,6 +715,7 @@ export function useWorkspaceState() {
     setCostMode,
     setUserPlan,
     setDark,
+    setUiLanguage,
     incrementPremiumRequests,
     setAppMode,
     setPinnedAddOns,
