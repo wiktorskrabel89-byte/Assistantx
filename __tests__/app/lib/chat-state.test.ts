@@ -324,6 +324,21 @@ describe("buildChatSessionItems", () => {
     expect(items[0].messageCount).toBe(1);
     expect(items[1].isActive).toBe(false);
   });
+
+  it("uses latest message preview and strips markdown", () => {
+    const chat: ChatThread = {
+      ...createChat("Preview test"),
+      id: "c-preview",
+      messages: [
+        createMessage({ user: "old user", ai: "old ai" }),
+        createMessage({ user: "## Title with [link](https://example.com)", ai: "assistant response" }),
+      ],
+    };
+
+    const [item] = buildChatSessionItems([chat], "other-chat");
+    expect(item.preview).toBe("Title with link");
+    expect(item.isActive).toBe(false);
+  });
 });
 
 /* ── sanitizeForStorage ────────────────────────────────────────────── */
@@ -562,5 +577,41 @@ describe("upgradeState", () => {
     const upgraded = upgradeState(state)!;
     expect(upgraded.userPlan).toBe("pro+");
     expect(upgraded.premiumRequestsUsed).toBe(200);
+  });
+
+  it("normalizes invalid settings values and state-level defaults", () => {
+    const legacyState = {
+      workspaces: [
+        {
+          id: "ws1",
+          name: "Test",
+          chats: [{ id: "ch1", title: "Chat", messages: [], createdAt: 1, updatedAt: 1 }],
+          activeChatId: "ch1",
+          settings: {
+            ...createSettings(),
+            ttsVoiceId: "not-a-real-voice",
+            personalityMode: "invalid-mode",
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceId: "missing-workspace",
+      dark: 0,
+      userPlan: "invalid-plan",
+      premiumRequestsUsed: "not-number",
+      appMode: "legacy-mode",
+      pinnedAddOns: "jarvis",
+    };
+
+    const upgraded = upgradeState(legacyState as unknown as StoredState)!;
+    expect(upgraded.activeWorkspaceId).toBe("ws1");
+    expect(upgraded.dark).toBe(false);
+    expect(upgraded.userPlan).toBe("free");
+    expect(upgraded.premiumRequestsUsed).toBe(0);
+    expect(upgraded.appMode).toBe("ai-chat");
+    expect(upgraded.pinnedAddOns).toEqual([]);
+    expect(upgraded.workspaces[0].settings.ttsVoiceId).toBe("default");
+    expect(upgraded.workspaces[0].settings.personalityMode).toBe("default");
   });
 });

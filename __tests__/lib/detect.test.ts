@@ -4,7 +4,13 @@
  * Tests for lib/detect.ts — isCodeRequest and isImageRequest helpers.
  */
 
-import { isCodeRequest, isImageRequest } from "@/lib/detect";
+import {
+  isCodeRequest,
+  isComplexCodingRequest,
+  isImageRequest,
+  isHeavyReasoningRequest,
+  isVeryLongContext,
+} from "@/lib/detect";
 
 // ---------------------------------------------------------------------------
 // isCodeRequest
@@ -99,6 +105,27 @@ describe("isCodeRequest", () => {
   });
 });
 
+describe("isComplexCodingRequest", () => {
+  it("returns false for empty/whitespace input", () => {
+    expect(isComplexCodingRequest("")).toBe(false);
+    expect(isComplexCodingRequest("   ")).toBe(false);
+  });
+
+  it("detects debugging and refactoring prompts", () => {
+    expect(isComplexCodingRequest("Help me debug this race condition in production")).toBe(true);
+    expect(isComplexCodingRequest("How can I refactor this legacy module safely?")).toBe(true);
+  });
+
+  it("detects architecture and testing complexity prompts", () => {
+    expect(isComplexCodingRequest("Design architecture for a multi-step migration")).toBe(true);
+    expect(isComplexCodingRequest("Our integration test is failing and not working")).toBe(true);
+  });
+
+  it("returns false for simple coding requests", () => {
+    expect(isComplexCodingRequest("Write a function that adds two numbers")).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // isImageRequest
 // ---------------------------------------------------------------------------
@@ -182,5 +209,37 @@ describe("isImageRequest", () => {
 
   it("returns false for an empty slash command (not /image)", () => {
     expect(isImageRequest("/help")).toBe(false);
+  });
+});
+
+describe("isHeavyReasoningRequest", () => {
+  it("returns false for empty/whitespace input", () => {
+    expect(isHeavyReasoningRequest("")).toBe(false);
+    expect(isHeavyReasoningRequest("   ")).toBe(false);
+  });
+
+  it("detects planning, analysis, and strategy prompts", () => {
+    expect(isHeavyReasoningRequest("Create a step-by-step plan for this workflow")).toBe(true);
+    expect(isHeavyReasoningRequest("Analyze the trade-off between monolith and microservices")).toBe(true);
+  });
+
+  it("detects explicit 'how should we design/build' prompts", () => {
+    expect(isHeavyReasoningRequest("How should we design this pipeline?")).toBe(true);
+    expect(isHeavyReasoningRequest("How would you build this agent workflow?")).toBe(true);
+  });
+
+  it("returns false for simple prompts", () => {
+    expect(isHeavyReasoningRequest("What time is it in London?")).toBe(false);
+  });
+});
+
+describe("isVeryLongContext", () => {
+  it("returns false when combined length is <= 6000", () => {
+    expect(isVeryLongContext("a".repeat(6000), 0)).toBe(false);
+  });
+
+  it("returns true when combined length is > 6000", () => {
+    expect(isVeryLongContext("a".repeat(6000), 1)).toBe(true);
+    expect(isVeryLongContext("hello", 7000)).toBe(true);
   });
 });
