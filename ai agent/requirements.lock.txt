@@ -16,7 +16,7 @@ dataclasses-json==0.6.7
 deprecation==2.1.0
 distro==1.9.0
 docstring_parser==0.18.0
-duckduckgo_search==6.4.2
+duckduckgo_search==8.1.1
 fastapi==0.136.1
 frozenlist==1.8.0
 fsspec==2026.4.0
