@@ -459,6 +459,9 @@ const CACHED_ANSWER_SIMILARITY_THRESHOLD = 0.9;
 const KNOWLEDGE_MATCH_COUNT = 10;
 const KNOWLEDGE_MAX_TOTAL_TOKENS = 1500;
 
+/** Matches a canonical lowercase UUID (v1–v5). */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
 
 /** Returns the OpenRouter reasoning_level string for the given request type. */
@@ -510,8 +513,7 @@ export const POST = async (req: Request) => {
   } = await req.json();
 
   // ── Validate conversationId format before any DB operation ──────────────────
-  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (conversationId !== undefined && conversationId !== null && !UUID_REGEX.test(String(conversationId))) {
+  if (typeof conversationId === "string" && !UUID_REGEX.test(conversationId)) {
     return new Response(
       JSON.stringify({ error: "Invalid conversationId format." }),
       { status: 400, headers: { "Content-Type": "application/json" } },
