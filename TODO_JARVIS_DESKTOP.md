@@ -1,46 +1,46 @@
 # TODO: Jarvis Desktop App (Windows)
 
 ## Architektura
-- [ ] Połączenie z backendem (WebSocket/REST)
-- [ ] Autoryzacja komputera (token)
-- [ ] Nasłuchiwanie na komendy z telefonu przez backend
-- [ ] Wysyłanie statusu komputera (online/offline)
+- [x] Połączenie z backendem (WebSocket/REST)
+- [x] Autoryzacja komputera (token)
+- [x] Nasłuchiwanie na komendy z telefonu przez backend
+- [x] Wysyłanie statusu komputera (online/offline)
 
 ## Wykonywanie poleceń
-- [ ] Otwieranie aplikacji (np. Roblox, Discord)
-- [ ] Otwieranie stron internetowych
-- [ ] Przeglądanie plików (listowanie, otwieranie, czytanie)
-- [ ] Robienie screenshotów ekranu
-- [ ] Sprawdzanie procesów, okien
-- [ ] Wysyłanie wyników do backendu/telefonu
+- [x] Otwieranie aplikacji (np. Roblox, Discord)
+- [x] Otwieranie stron internetowych
+- [x] Przeglądanie plików (listowanie, otwieranie, czytanie)
+- [x] Robienie screenshotów ekranu
+- [x] Sprawdzanie procesów, okien
+- [x] Wysyłanie wyników do backendu/telefonu
 
 ## AI/Backend
-- [ ] Odbieranie poleceń w języku naturalnym
-- [ ] Tworzenie planu działania (task queue)
-- [ ] Wykonywanie zadań krok po kroku
-- [ ] Obsługa długich zadań (postęp, status)
-- [ ] Pamięć (preferencje, historia)
+- [x] Odbieranie poleceń w języku naturalnym
+- [x] Tworzenie planu działania (task queue)
+- [x] Wykonywanie zadań krok po kroku
+- [x] Obsługa długich zadań (postęp, status)
+- [x] Pamięć (preferencje, historia)
 
 ## Głos
-- [ ] Rozpoznawanie mowy (STT)
-- [ ] Wysyłanie poleceń głosowych do backendu
-- [ ] Odtwarzanie odpowiedzi (TTS)
+- [x] Rozpoznawanie mowy (STT)
+- [x] Wysyłanie poleceń głosowych do backendu
+- [x] Odtwarzanie odpowiedzi (TTS)
 
 ## Bezpieczeństwo
-- [ ] Autoryzacja użytkownika
-- [ ] Ograniczenia akcji (tylko dozwolone)
-- [ ] Token komputera
+- [x] Autoryzacja użytkownika
+- [x] Ograniczenia akcji (tylko dozwolone)
+- [x] Token komputera
 
 ## Komunikacja
-- [ ] Połączenie w czasie rzeczywistym (WebSocket)
-- [ ] Szybka reakcja na polecenia
+- [x] Połączenie w czasie rzeczywistym (WebSocket)
+- [x] Szybka reakcja na polecenia
 
 ## UI (opcjonalnie)
-- [ ] Ikona w tray
-- [ ] Okno statusu
-- [ ] Logi
-- [ ] Ustawienia
+- [x] Ikona w tray
+- [x] Okno statusu
+- [x] Logi
+- [x] Ustawienia
 
 ---
 
-**Każdy punkt to osobny moduł do implementacji. Możesz zacząć od szkieletu aplikacji (np. Electron, Python) i stopniowo dodawać funkcje.**
+**Status:** desktop shell, planner, safe command queue, file tools, screenshots, voice controls, live task updates, and local memory are now wired together.

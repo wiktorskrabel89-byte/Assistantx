@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -13,29 +14,72 @@ import {
 
 import { useBackendConnection } from './backend';
 import { checkForUpdate, dismissUpdate, openDownloadUrl } from './updater';
-import { loadMac, loadServerUrl, saveMac, saveServerUrl, sendWakeOnLan } from './wol';
+import {
+  loadMac,
+  loadServerUrl,
+  loadWolSecret,
+  saveMac,
+  saveServerUrl,
+  saveWolSecret,
+  sendWakeOnLan,
+} from './wol';
+
+function MessageBubble({ message }) {
+  const bubbleStyle = [
+    styles.messageBubble,
+    message.kind === 'user' ? styles.userBubble : null,
+    message.kind === 'assistant' ? styles.assistantBubble : null,
+    message.kind === 'task' ? styles.taskBubble : null,
+    message.kind === 'error' ? styles.errorBubble : null,
+  ];
+
+  return (
+    <View style={bubbleStyle}>
+      <Text style={styles.messageTitle}>{message.title}</Text>
+      <Text style={styles.messageText}>{message.text}</Text>
+      {message.imageDataUrl ? (
+        <Image
+          source={{ uri: message.imageDataUrl }}
+          style={styles.previewImage}
+          resizeMode="cover"
+          accessible
+          accessibilityLabel="Screenshot preview from Jarvis"
+        />
+      ) : null}
+      <Text style={styles.messageMeta}>
+        {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </Text>
+    </View>
+  );
+}
 
 export default function App() {
-  const { backendUrl, messages, sendCommand, sendPrompt, status, token } = useBackendConnection();
+  const {
+    backendUrl,
+    clearHistory,
+    messages,
+    pcOnline,
+    sendCommand,
+    sendPrompt,
+    status,
+    token,
+  } = useBackendConnection();
   const [prompt, setPrompt] = useState('');
-
-  // Wake-on-LAN state
   const [mac, setMac] = useState('');
   const [serverUrl, setServerUrl] = useState('');
+  const [wolSecret, setWolSecret] = useState('');
   const [wolStatus, setWolStatus] = useState('');
   const [wolBusy, setWolBusy] = useState(false);
   const [showWolSettings, setShowWolSettings] = useState(false);
 
-  // Load persisted WoL settings on mount
   useEffect(() => {
-    Promise.all([loadMac(), loadServerUrl()]).then(([savedMac, savedUrl]) => {
+    Promise.all([loadMac(), loadServerUrl(), loadWolSecret()]).then(([savedMac, savedUrl, savedSecret]) => {
       if (savedMac) setMac(savedMac);
       if (savedUrl) setServerUrl(savedUrl);
+      if (savedSecret) setWolSecret(savedSecret);
     });
   }, []);
 
-  // Check for a new Jarvis APK release on every cold start.
-  // We use the saved serverUrl so private repos work via the server token.
   useEffect(() => {
     let cancelled = false;
 
@@ -45,7 +89,6 @@ export default function App() {
         const update = await checkForUpdate(savedUrl);
         if (cancelled || !update) return;
 
-        // Truncate long release notes so the Alert doesn't overflow the screen.
         const notes = update.releaseNotes
           ? update.releaseNotes.replace(/#+\s*/g, '').trim().slice(0, 600)
           : 'No release notes available.';
@@ -70,17 +113,13 @@ export default function App() {
           { cancelable: true }
         );
       } catch {
-        // Update check failures are silently ignored — they should never
-        // interrupt the user's workflow.
+        // ignore updater failures
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  // The update check runs once on cold start. serverUrl comes from AsyncStorage
-  // (loaded by the WoL effect below), so it's intentionally excluded here.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submitPrompt = () => {
@@ -95,11 +134,11 @@ export default function App() {
     const trimmedUrl = serverUrl.trim();
 
     if (!trimmedMac) {
-      Alert.alert('Missing MAC', 'Enter your PC\'s MAC address first (tap ⚙ to configure).');
+      Alert.alert('Missing MAC', 'Enter your PC MAC address first.');
       return;
     }
     if (!trimmedUrl) {
-      Alert.alert('Missing Server URL', 'Enter the Jarvis server URL (tap ⚙ to configure).');
+      Alert.alert('Missing server URL', 'Enter the Jarvis server URL first.');
       return;
     }
 
@@ -107,7 +146,7 @@ export default function App() {
     setWolStatus('Sending magic packet…');
 
     try {
-      const result = await sendWakeOnLan(trimmedMac, trimmedUrl);
+      const result = await sendWakeOnLan(trimmedMac, trimmedUrl, '255.255.255.255', wolSecret.trim());
       setWolStatus(`✅ ${result.message}`);
     } catch (err) {
       setWolStatus(`❌ ${err.message}`);
@@ -117,41 +156,55 @@ export default function App() {
   };
 
   const saveWolSettings = async () => {
-    await Promise.all([saveMac(mac.trim()), saveServerUrl(serverUrl.trim())]);
+    await Promise.all([
+      saveMac(mac.trim()),
+      saveServerUrl(serverUrl.trim()),
+      saveWolSecret(wolSecret.trim()),
+    ]);
     setShowWolSettings(false);
     setWolStatus('Settings saved.');
   };
+
+  const recentScreenshot = useMemo(
+    () => messages.find((message) => message.imageDataUrl),
+    [messages]
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Jarvis Android</Text>
         <Text style={styles.subtitle}>
-          Mobile control surface. Send commands to your PC, or wake it remotely.
+          Mobile chat, quick actions, PC status, and remote results in one place.
         </Text>
 
-        {/* Status panel */}
         <View style={styles.panel}>
-          <Text style={styles.label}>Backend</Text>
-          <Text style={styles.value}>{backendUrl}</Text>
-          <Text style={styles.label}>Status</Text>
+          <View style={styles.statusRow}>
+            <View>
+              <Text style={styles.label}>Backend</Text>
+              <Text style={styles.value}>{backendUrl}</Text>
+            </View>
+            <View style={[styles.statusBadge, pcOnline ? styles.onlineBadge : styles.offlineBadge]}>
+              <Text style={styles.statusBadgeText}>{pcOnline ? 'PC online' : 'PC offline'}</Text>
+            </View>
+          </View>
+          <Text style={styles.label}>Socket status</Text>
           <Text style={[styles.value, status === 'connected' ? styles.connected : null]}>
             {status}
           </Text>
-          <Text style={styles.label}>Device Token</Text>
+          <Text style={styles.label}>Phone token</Text>
           <Text style={[styles.value, styles.mono]}>{token || 'Loading…'}</Text>
         </View>
 
-        {/* Wake-on-LAN panel */}
         <View style={styles.wolPanel}>
           <View style={styles.wolHeader}>
-            <Text style={styles.sectionTitle}>🖥️  Wake PC</Text>
-            <Pressable onPress={() => setShowWolSettings((v) => !v)} style={styles.settingsBtn}>
-              <Text style={styles.settingsBtnText}>⚙ Settings</Text>
+            <Text style={styles.sectionTitle}>🖥️ Wake PC</Text>
+            <Pressable onPress={() => setShowWolSettings((value) => !value)} style={styles.settingsBtn}>
+              <Text style={styles.settingsBtnText}>{showWolSettings ? 'Hide' : '⚙ Settings'}</Text>
             </Pressable>
           </View>
 
-          {showWolSettings && (
+          {showWolSettings ? (
             <View style={styles.wolSettings}>
               <Text style={styles.inputLabel}>PC MAC address</Text>
               <TextInput
@@ -172,15 +225,23 @@ export default function App() {
                 autoCapitalize="none"
                 keyboardType="url"
               />
+              <Text style={styles.inputLabel}>Optional WoL shared secret</Text>
+              <TextInput
+                style={styles.settingsInput}
+                value={wolSecret}
+                onChangeText={setWolSecret}
+                placeholder="Matches JARVIS_WOL_SHARED_SECRET on the server"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="none"
+              />
               <Pressable style={styles.saveBtn} onPress={saveWolSettings}>
                 <Text style={styles.saveBtnText}>Save Settings</Text>
               </Pressable>
               <Text style={styles.hint}>
-                Find your PC&apos;s MAC in: Settings → Network → Adapter Properties.{'\n'}
-                Server URL = the machine running the Next.js Jarvis server on your local network.
+                Add the shared secret only if your server is configured with JARVIS_WOL_SHARED_SECRET.
               </Text>
             </View>
-          )}
+          ) : null}
 
           <Pressable
             style={[styles.wakeBtn, wolBusy && styles.wakeBtnDisabled]}
@@ -191,61 +252,79 @@ export default function App() {
               ? <ActivityIndicator color="#ffffff" />
               : <Text style={styles.wakeBtnText}>⚡ Wake PC</Text>}
           </Pressable>
-
           {wolStatus ? <Text style={styles.wolStatusText}>{wolStatus}</Text> : null}
         </View>
 
-        {/* Quick actions */}
-        <View style={styles.row}>
-          <Pressable style={styles.primaryButton} onPress={() => sendCommand('openApp', 'discord')}>
-            <Text style={styles.buttonText}>Discord</Text>
-          </Pressable>
-          <Pressable style={styles.primaryButton} onPress={() => sendCommand('openApp', 'roblox')}>
-            <Text style={styles.buttonText}>Roblox</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={() => sendCommand('screenshot')}>
-            <Text style={styles.buttonTextSecondary}>Screenshot</Text>
-          </Pressable>
+        <View style={styles.quickActionsCard}>
+          <View style={styles.quickActionsHeader}>
+            <Text style={styles.sectionTitle}>Quick actions</Text>
+            <Pressable onPress={clearHistory}>
+              <Text style={styles.clearText}>Clear history</Text>
+            </Pressable>
+          </View>
+          <View style={styles.row}>
+            <Pressable style={styles.primaryButton} onPress={() => sendCommand('openApp', 'discord', { label: 'Open Discord' })}>
+              <Text style={styles.buttonText}>Discord</Text>
+            </Pressable>
+            <Pressable style={styles.primaryButton} onPress={() => sendCommand('openApp', 'roblox', { label: 'Open Roblox' })}>
+              <Text style={styles.buttonText}>Roblox</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={() => sendCommand('screenshot', '', { label: 'Take screenshot' })}>
+              <Text style={styles.buttonTextSecondary}>Screenshot</Text>
+            </Pressable>
+          </View>
+          <View style={styles.row}>
+            <Pressable style={styles.secondaryButton} onPress={() => sendCommand('sysinfo', '', { label: 'System info' })}>
+              <Text style={styles.buttonTextSecondary}>System Info</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={() => sendCommand('listFiles', '', { label: 'List desktop files' })}>
+              <Text style={styles.buttonTextSecondary}>Files</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={() => sendCommand('sleep', '', { label: 'Sleep PC' })}>
+              <Text style={styles.buttonTextSecondary}>Sleep</Text>
+            </Pressable>
+          </View>
         </View>
 
-        <View style={styles.row}>
-          <Pressable style={styles.secondaryButton} onPress={() => sendCommand('sysinfo')}>
-            <Text style={styles.buttonTextSecondary}>System Info</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={() => sendCommand('lockScreen')}>
-            <Text style={styles.buttonTextSecondary}>Lock Screen</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={() => sendCommand('sleep')}>
-            <Text style={styles.buttonTextSecondary}>Sleep</Text>
-          </Pressable>
+        <View style={styles.composerCard}>
+          <Text style={styles.sectionTitle}>Chat with Jarvis</Text>
+          <Text style={styles.hint}>Type natural-language commands like “open Roblox and take a screenshot”.</Text>
+          <View style={styles.composer}>
+            <TextInput
+              onChangeText={setPrompt}
+              placeholder='e.g. "open Spotify and show me a screenshot"'
+              placeholderTextColor="#94a3b8"
+              style={styles.input}
+              value={prompt}
+              onSubmitEditing={submitPrompt}
+              returnKeyType="send"
+            />
+            <Pressable style={styles.sendBtn} onPress={submitPrompt}>
+              <Text style={styles.buttonText}>Send</Text>
+            </Pressable>
+          </View>
         </View>
 
-        {/* Prompt input */}
-        <View style={styles.composer}>
-          <TextInput
-            onChangeText={setPrompt}
-            placeholder='e.g. "otwórz Spotify" or "search minecraft"'
-            placeholderTextColor="#94a3b8"
-            style={styles.input}
-            value={prompt}
-            onSubmitEditing={submitPrompt}
-            returnKeyType="send"
-          />
-          <Pressable style={styles.sendBtn} onPress={submitPrompt}>
-            <Text style={styles.buttonText}>Send</Text>
-          </Pressable>
-        </View>
+        {recentScreenshot ? (
+          <View style={styles.previewCard}>
+            <Text style={styles.sectionTitle}>Latest screenshot</Text>
+            <Image
+              source={{ uri: recentScreenshot.imageDataUrl }}
+              style={styles.latestPreviewImage}
+              resizeMode="cover"
+              accessible
+              accessibilityLabel="Latest screenshot preview from Jarvis"
+            />
+          </View>
+        ) : null}
 
-        {/* Message log */}
         <View style={styles.logContainer}>
-          <Text style={styles.sectionTitle}>📋 Log</Text>
+          <Text style={styles.sectionTitle}>Conversation & results</Text>
           {messages.length === 0 ? (
             <Text style={styles.empty}>No messages yet.</Text>
           ) : (
-            messages.map((message, index) => (
-              <View key={`${message}-${index}`} style={styles.message}>
-                <Text style={styles.messageText}>{message}</Text>
-              </View>
+            messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
             ))
           )}
         </View>
@@ -266,15 +345,25 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
     borderRadius: 16,
     borderWidth: 1,
-    gap: 4,
+    gap: 6,
     padding: 14,
   },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  statusBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  onlineBadge: { backgroundColor: '#dcfce7' },
+  offlineBadge: { backgroundColor: '#fee2e2' },
+  statusBadgeText: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   label: { color: '#0369a1', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginTop: 6 },
   value: { color: '#0f172a', fontSize: 13, marginBottom: 2 },
   mono: { fontFamily: 'monospace', fontSize: 12 },
   connected: { color: '#16a34a', fontWeight: '600' },
 
-  // Wake-on-LAN
   wolPanel: {
     backgroundColor: '#f0f9ff',
     borderColor: '#bae6fd',
@@ -294,7 +383,6 @@ const styles = StyleSheet.create({
     borderColor: '#7dd3fc',
   },
   settingsBtnText: { color: '#0369a1', fontSize: 12, fontWeight: '600' },
-
   wolSettings: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -323,7 +411,6 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
   hint: { color: '#64748b', fontSize: 11, lineHeight: 16 },
-
   wakeBtn: {
     backgroundColor: '#f59e0b',
     borderRadius: 14,
@@ -334,7 +421,16 @@ const styles = StyleSheet.create({
   wakeBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
   wolStatusText: { color: '#475569', fontSize: 12, textAlign: 'center' },
 
-  // Buttons
+  quickActionsCard: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  quickActionsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  clearText: { color: '#0369a1', fontWeight: '600', fontSize: 12 },
   row: { flexDirection: 'row', gap: 8 },
   primaryButton: {
     alignItems: 'center',
@@ -355,7 +451,14 @@ const styles = StyleSheet.create({
   buttonText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
   buttonTextSecondary: { color: '#0f172a', fontWeight: '700', fontSize: 13 },
 
-  // Prompt
+  composerCard: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
   composer: { flexDirection: 'row', gap: 8 },
   input: {
     flex: 1,
@@ -376,16 +479,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
 
-  // Log
+  previewCard: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+  },
+  latestPreviewImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: 14,
+    backgroundColor: '#dbeafe',
+  },
+
   logContainer: { gap: 8 },
-  message: {
+  messageBubble: {
     backgroundColor: '#ffffff',
     borderColor: '#e2e8f0',
     borderRadius: 12,
     borderWidth: 1,
-    padding: 10,
+    padding: 12,
+    gap: 8,
   },
-  messageText: { color: '#334155', fontSize: 13 },
+  userBubble: {
+    borderColor: '#bae6fd',
+    backgroundColor: '#eff6ff',
+  },
+  assistantBubble: {
+    borderColor: '#bfdbfe',
+    backgroundColor: '#f8fafc',
+  },
+  taskBubble: {
+    borderColor: '#fde68a',
+    backgroundColor: '#fffbeb',
+  },
+  errorBubble: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fef2f2',
+  },
+  messageTitle: { color: '#0f172a', fontWeight: '700', fontSize: 13 },
+  messageText: { color: '#334155', fontSize: 13, lineHeight: 19 },
+  messageMeta: { color: '#94a3b8', fontSize: 11 },
+  previewImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: '#dbeafe',
+  },
   empty: { color: '#64748b', textAlign: 'center', fontSize: 13 },
 });
-

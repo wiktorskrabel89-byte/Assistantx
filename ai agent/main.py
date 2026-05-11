@@ -205,11 +205,19 @@ async def jarvis_websocket(websocket: WebSocket):
                         "token": token,
                     },
                 )
+                await socket_manager.send_json(
+                    websocket,
+                    {
+                        "type": "presence_snapshot",
+                        **socket_manager.summary(),
+                    },
+                )
                 await socket_manager.broadcast(
                     {
                         "type": "peer_registered",
                         "role": role or "unknown",
                         "token": token,
+                        **socket_manager.summary(),
                     },
                     exclude=websocket,
                 )
@@ -274,6 +282,16 @@ async def jarvis_websocket(websocket: WebSocket):
                 )
                 continue
 
+            if message_type in {"task_update", "command_result", "device_status"}:
+                forwarded_payload = dict(payload)
+                forwarded_payload["from_role"] = sender_role
+                forwarded_payload["token"] = sender_token
+                await socket_manager.broadcast(
+                    forwarded_payload,
+                    exclude=websocket,
+                )
+                continue
+
             await socket_manager.send_json(
                 websocket,
                 {
@@ -282,7 +300,16 @@ async def jarvis_websocket(websocket: WebSocket):
                 },
             )
     except WebSocketDisconnect:
+        disconnected_meta = socket_manager.connections.get(websocket, {"role": "unknown", "token": None})
         socket_manager.disconnect(websocket)
+        await socket_manager.broadcast(
+            {
+                "type": "peer_disconnected",
+                "role": disconnected_meta.get("role") or "unknown",
+                "token": disconnected_meta.get("token"),
+                **socket_manager.summary(),
+            },
+        )
 
 
 @app.get("/jarvis/status")
