@@ -44,8 +44,11 @@ export function ScriptsTab({ dark }: ScriptsTabProps) {
   }
 
   function deleteScript(id: string) {
-    setScripts((prev) => prev.filter((s) => s.id !== id));
-    if (selectedId === id) setSelectedId(scripts.find((s) => s.id !== id)?.id ?? null);
+    setScripts((prev) => {
+      const updated = prev.filter((s) => s.id !== id);
+      if (selectedId === id) setSelectedId(updated[0]?.id ?? null);
+      return updated;
+    });
   }
 
   function updateScript(id: string, patch: Partial<Script>) {
