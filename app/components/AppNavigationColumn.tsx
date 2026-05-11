@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { AppMode } from "../lib/chat-types";
 import { useWorkspace } from "../providers/WorkspaceProvider";
 import { Button } from "@/components/ui/button";
@@ -82,11 +82,12 @@ const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "ai-learning",      label: "AI Learning",     description: "Memory + RAG + tuning controls", icon: BrainCircuit, adminOnly: true },
 ];
 
-/** Core AI Code mode tabs — always visible in the sidebar when in AI Code mode */
-const CORE_CODE_TABS: { id: AppNavigationTab; label: string; icon: LucideIcon }[] = [
-  { id: "sandbox",  label: "Sandbox",  icon: SquareTerminal },
-  { id: "projects", label: "Projekty", icon: FolderKanban },
-  { id: "codebase", label: "Codebase", icon: Database },
+/** Core AI Code mode tabs — always visible in the sidebar when in AI Code mode.
+ *  The keyboard shortcuts Ctrl+Shift+2/3/4 correspond to indices 0/1/2 (+2 offset). */
+const CORE_CODE_TABS: { id: AppNavigationTab; label: string; icon: LucideIcon; shortcutNumber: number }[] = [
+  { id: "sandbox",  label: "Sandbox",  icon: SquareTerminal, shortcutNumber: 2 },
+  { id: "projects", label: "Projekty", icon: FolderKanban,   shortcutNumber: 3 },
+  { id: "codebase", label: "Codebase", icon: Database,       shortcutNumber: 4 },
 ];
 
 const ADD_ON_IDS = new Set(ADD_ON_ITEMS.map((a) => a.id));
@@ -167,6 +168,38 @@ export function AppNavigationColumn({
   const isChatActive = activeTab === "chat";
   const isAddOnActive = ADD_ON_IDS.has(activeTab);
 
+  /** Ordered list of all tab IDs currently visible in the sidebar. */
+  const visibleTabIds = useCallback((): AppNavigationTab[] => {
+    const ids: AppNavigationTab[] = ["chat"];
+    if (appMode === "ai-code") {
+      CORE_CODE_TABS.forEach(({ id }) => ids.push(id));
+    }
+    pinnedItems.forEach(({ id }) => ids.push(id));
+    return ids;
+  }, [appMode, pinnedItems]);
+
+  const tabsRef = useRef<HTMLDivElement>(null);
+
+  /** Handle ArrowUp/ArrowDown keyboard navigation within the tablist. */
+  const handleTabsKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const ids = visibleTabIds();
+      const currentIndex = ids.indexOf(activeTab as AppNavigationTab);
+      if (currentIndex === -1) return;
+      event.preventDefault();
+      const nextIndex =
+        event.key === "ArrowDown"
+          ? (currentIndex + 1) % ids.length
+          : (currentIndex - 1 + ids.length) % ids.length;
+      onSelectTab(ids[nextIndex]);
+      // Move focus to the newly selected tab button
+      const buttons = tabsRef.current?.querySelectorAll<HTMLButtonElement>("[role='tab']");
+      buttons?.[nextIndex]?.focus();
+    },
+    [activeTab, onSelectTab, visibleTabIds],
+  );
+
   function navButtonClass(isActive: boolean) {
     return `flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
       isActive
@@ -225,13 +258,21 @@ export function AppNavigationColumn({
       {/* ── Core nav + Chats ── */}
       <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
 
-      {/* Tabs section */}
-      <div className="flex-shrink-0 overflow-y-auto px-3 pt-4 pb-1">
+      {/* Tabs section — keyboard navigable with ArrowUp/ArrowDown */}
+      <div
+        ref={tabsRef}
+        role="tablist"
+        aria-label="Workspace tabs"
+        className="flex-shrink-0 overflow-y-auto px-3 pt-4 pb-1"
+        onKeyDown={handleTabsKeyDown}
+      >
         {/* Chat — always shown */}
         <button
           type="button"
+          role="tab"
+          aria-selected={isChatActive}
           onClick={() => onSelectTab("chat")}
-          title="Chat"
+          title="Chat (Ctrl+Shift+1)"
           aria-current={isChatActive ? "page" : undefined}
           className={navButtonClass(isChatActive)}
         >
@@ -242,12 +283,15 @@ export function AppNavigationColumn({
         {/* Core AI Code mode tabs — always visible when in AI Code mode */}
         {appMode === "ai-code" && (
           <div className="mt-1.5 space-y-0.5">
-            {CORE_CODE_TABS.map(({ id, label, icon: Icon }) => (
+            {CORE_CODE_TABS.map(({ id, label, icon: Icon, shortcutNumber }) => (
               <button
                 key={id}
                 type="button"
+                role="tab"
+                aria-selected={activeTab === id}
                 onClick={() => onSelectTab(id)}
                 aria-current={activeTab === id ? "page" : undefined}
+                title={`${label} (Ctrl+Shift+${shortcutNumber})`}
                 className={navButtonClass(activeTab === id)}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />
@@ -267,6 +311,8 @@ export function AppNavigationColumn({
                 <button
                   key={item.id}
                   type="button"
+                  role="tab"
+                  aria-selected={isActive}
                   onClick={() => onSelectTab(item.id)}
                   aria-current={isActive ? "page" : undefined}
                   title={item.beta ? `${item.label} (Beta)` : item.label}
@@ -568,7 +614,7 @@ export function AppNavigationColumn({
               <MessageSquareText className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Chat</TooltipContent>
+          <TooltipContent side="right">Chat (Ctrl+Shift+1)</TooltipContent>
         </Tooltip>
 
         {/* Pinned add-ons */}
@@ -646,7 +692,7 @@ export function AppNavigationColumn({
               <Settings2 className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Settings</TooltipContent>
+          <TooltipContent side="right">Settings (Ctrl+Shift+,)</TooltipContent>
         </Tooltip>
 
         {/* Notifications */}
@@ -674,7 +720,7 @@ export function AppNavigationColumn({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Notifications</TooltipContent>
+          <TooltipContent side="right">Notifications (Ctrl+Shift+.)</TooltipContent>
         </Tooltip>
 
         {/* User avatar */}

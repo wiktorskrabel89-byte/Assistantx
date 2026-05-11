@@ -35,6 +35,9 @@ import {
   getModelTemperature,
   getModelPromptText,
   getModelMaxTokens,
+  getFreePlanFallback,
+  isModelPremiumOnly,
+  FREE_PLAN_MODELS,
 } from "@/lib/ai-config";
 
 const MODEL_ID_PATTERN = /^[\w.-]+\/[\w.:+-]+$/;
@@ -402,5 +405,52 @@ describe("max token overrides", () => {
     expect(getModelMaxTokens("qwen/qwen3-32b")).toBe(4096);
     expect(getModelMaxTokens("meta-llama/llama-4-scout")).toBe(4096);
     expect(getModelMaxTokens("google/gemini-2.5-flash")).toBe(4096);
+  });
+});
+
+describe("premium gating helpers", () => {
+  it("marks free-plan models as not premium-only", () => {
+    expect(isModelPremiumOnly("openai/gpt-oss-120b:free")).toBe(false);
+    expect(isModelPremiumOnly("qwen/qwen3-32b")).toBe(false);
+  });
+
+  it("marks paid models as premium-only", () => {
+    expect(isModelPremiumOnly("openai/gpt-5.4")).toBe(true);
+  });
+});
+
+describe("prompt and temperature fallbacks", () => {
+  it("returns empty prompt for unknown model", () => {
+    expect(getModelPromptText("unknown/model")).toBe("");
+  });
+
+  it("uses default fallback temperatures for unknown model", () => {
+    expect(getModelTemperature("unknown/model")).toBe(0.7);
+    expect(getModelTemperature("unknown/model", { isCodeRequest: true })).toBe(0.2);
+  });
+});
+
+describe("getFreePlanFallback", () => {
+  let randomSpy: jest.SpyInstance<number, []>;
+
+  beforeEach(() => {
+    randomSpy = jest.spyOn(Math, "random");
+  });
+
+  afterEach(() => {
+    randomSpy.mockRestore();
+  });
+
+  it("returns a free chat model for non-code requests", () => {
+    randomSpy.mockReturnValue(0);
+    const modelId = getFreePlanFallback(false);
+    expect(FREE_PLAN_MODELS).toContain(modelId);
+  });
+
+  it("returns a free code model for code requests", () => {
+    randomSpy.mockReturnValue(0);
+    const modelId = getFreePlanFallback(true);
+    expect(FREE_PLAN_MODELS).toContain(modelId);
+    expect(modelId).toBe("openai/gpt-oss-120b:free");
   });
 });

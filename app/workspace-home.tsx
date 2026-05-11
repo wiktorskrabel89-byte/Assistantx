@@ -10,6 +10,7 @@ import { ChatTab } from "./components/tabs/ChatTab";
 import { useDevicePairing } from "./hooks/useDevicePairing";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
+import { isEditableElementTarget } from "./lib/keyboard";
 import { createClient } from "@/lib/client";
 import { DEVICE_PAIRING_SKIP_KEY } from "@/lib/device-pairing";
 import type { AppMode } from "./lib/chat-types";
@@ -188,6 +189,53 @@ function HomeContent() {
       void notificationsHook.markAllRead();
     }
   }, [notificationsHook]);
+
+  // Global keyboard shortcuts for workspace tab navigation.
+  // Ctrl/Cmd+Shift+1 → Chat, 2-4 → AI Code tabs (ai-code mode only),
+  // , → Settings, . → Notifications.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const mod = event.ctrlKey || event.metaKey;
+      if (!mod || !event.shiftKey) return;
+      // Don't fire when the user is typing in an input or editable area.
+      if (isEditableElementTarget(event.target)) return;
+      switch (event.key) {
+        case "1":
+          event.preventDefault();
+          handleSelectAppTab("chat");
+          break;
+        case "2":
+          if (appMode === "ai-code") {
+            event.preventDefault();
+            handleSelectAppTab("sandbox");
+          }
+          break;
+        case "3":
+          if (appMode === "ai-code") {
+            event.preventDefault();
+            handleSelectAppTab("projects");
+          }
+          break;
+        case "4":
+          if (appMode === "ai-code") {
+            event.preventDefault();
+            handleSelectAppTab("codebase");
+          }
+          break;
+        case ",":
+          event.preventDefault();
+          handleSelectAppTab("settings");
+          break;
+        case ".":
+          event.preventDefault();
+          handleSelectAppTab("notifications");
+          break;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [appMode, handleSelectAppTab]);
 
   useEffect(() => {
     const handleNavigateTab = (event: Event) => {

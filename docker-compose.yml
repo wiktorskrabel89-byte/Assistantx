@@ -1,7 +1,7 @@
 # Run both services with:  docker compose up --build
 # Pass secrets via a .env file or shell environment — never commit secrets.
 #
-# Required env vars:
+# Required env vars (cloud Supabase):
 #   NEXT_PUBLIC_SUPABASE_URL              (public, baked into Next.js bundle)
 #   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  (public, baked into Next.js bundle)
 #   OPENROUTER_API_KEY                    (runtime secret for Next.js)
@@ -10,8 +10,63 @@
 #
 # Optional:
 #   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, etc.
+#
+# ── Local Supabase (offline development) ─────────────────────────────────────
+# To develop fully offline without a cloud Supabase project, use the
+# "local-supabase" profile:
+#
+#   docker compose --profile local-supabase up
+#
+# Then set the following in your .env (these are the default local dev values):
+#   NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+#   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<anon key printed by supabase start>
+#   SUPABASE_SERVICE_ROLE_KEY=<service_role key printed by supabase start>
+#
+# The Supabase Studio UI is available at http://localhost:54323.
+# See https://supabase.com/docs/guides/local-development for more details.
 
 services:
+  # ── Local Supabase (optional, enabled via --profile local-supabase) ────────
+  supabase-db:
+    image: supabase/postgres:15.8.1.060
+    profiles: ["local-supabase"]
+    restart: unless-stopped
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+
+  supabase-api:
+    image: supabase/gotrue:v2.170.0
+    profiles: ["local-supabase"]
+    restart: unless-stopped
+    ports:
+      - "54321:9999"
+    environment:
+      API_EXTERNAL_URL: http://localhost:54321
+      GOTRUE_API_HOST: "0.0.0.0"
+      GOTRUE_API_PORT: "9999"
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: postgres://supabase_auth_admin:postgres@supabase-db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:3000
+      # ⚠️  INSECURE LOCAL-DEV DEFAULTS — never use these values in production or
+      # any shared/staging environment.  Generate your own secrets with:
+      #   openssl rand -base64 32   (for GOTRUE_JWT_SECRET)
+      # The anon/service_role keys below are the canonical Supabase local-dev
+      # test tokens signed with the secret above — they carry no real authority.
+      GOTRUE_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+      GOTRUE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYxMzUzMTk4NSwiZXhwIjoxOTI5MTA3OTg1fQ.ReNhHIoqROa2g5tBbBBMbhNb6kbmRVK8D6mNXhYD9Fg
+      GOTRUE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjEzNTMxOTg1LCJleHAiOjE5MjkxMDc5ODV9.th84OKK0Ykok-r84Y9KSjMoMoCXwMxyrTLDo9VXM0ZY
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_LOG_LEVEL: DEBUG
+    depends_on:
+      - supabase-db
+
+  # ── Application services ──────────────────────────────────────────────────
   fastapi:
     build:
       context: ./ai agent
@@ -45,3 +100,6 @@ services:
       AI_AGENT_URL: "http://fastapi:8000"
     depends_on:
       - fastapi
+
+volumes:
+  supabase-db-data:

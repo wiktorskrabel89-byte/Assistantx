@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart2, Braces, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, type LucideIcon } from "lucide-react";
+import { BarChart2, Braces, Download, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, type LucideIcon } from "lucide-react";
 import type { PersonalityMode } from "@/lib/ai-config";
 import { PERSONALITY_MODES } from "@/lib/ai-config";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ type ChatHeaderProps = {
   onCreateChat: () => void;
   onOpenWorkspaceTools: () => void;
   onOpenUsage: () => void;
+  onExportMarkdown: () => void;
   personalityMode: PersonalityMode;
   onPersonalityModeChange: (mode: PersonalityMode) => void;
 };
@@ -41,6 +42,7 @@ export function ChatHeader({
   onCreateChat,
   onOpenWorkspaceTools,
   onOpenUsage,
+  onExportMarkdown,
   personalityMode,
   onPersonalityModeChange,
 }: ChatHeaderProps) {
@@ -130,6 +132,21 @@ export function ChatHeader({
             >
               New agent
             </Button>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={onExportMarkdown}
+                  className={`${iconBtnCn}`}
+                  aria-label="Export chat as Markdown (Ctrl+Shift+S)"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Export Markdown (Ctrl+Shift+S)</TooltipContent>
+            </Tooltip>
 
             <Button
               variant="outline"
