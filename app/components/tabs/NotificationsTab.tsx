@@ -1,8 +1,9 @@
 "use client";
 
 import { AlertTriangle, Bell, CheckCircle, Info } from "lucide-react";
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
+import { ensurePushSubscription, registerPushServiceWorker, syncPushSubscription } from "@/app/lib/push-notifications";
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import type { AppNotification, UseNotificationsReturn } from "../../hooks/useNotifications";
 
@@ -127,9 +128,11 @@ export function NotificationsTab({
 
   const allNotifications = [...realtimeNotifications, ...systemNotifications];
   const hasUnread = (notificationsHook?.unreadCount ?? 0) > 0;
+  const [pushStatus, setPushStatus] = useState<string | null>(null);
 
   const sendTestNotification = async () => {
     if (!("serviceWorker" in navigator) || typeof Notification === "undefined") {
+      setPushStatus("Powiadomienia push nie są obsługiwane w tej przeglądarce.");
       return;
     }
 
@@ -137,39 +140,65 @@ export function NotificationsTab({
       const permission = await Notification.requestPermission();
       window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
       if (permission !== "granted") {
+        setPushStatus("Brak zgody na wyświetlanie powiadomień.");
         return;
       }
     }
 
     if (Notification.permission !== "granted") {
+      setPushStatus("Brak zgody na wyświetlanie powiadomień.");
       return;
     }
 
-    let registration = await navigator.serviceWorker.getRegistration();
+    const registration = await registerPushServiceWorker();
     if (!registration) {
-      registration = await navigator.serviceWorker.register("/service-worker.js");
+      setPushStatus("Nie udało się zarejestrować service workera.");
+      return;
     }
 
     await registration.showNotification("Testowa notyfikacja", {
       body: "To jest przykładowe powiadomienie push.",
       icon: "/icon-192.png",
     });
+    setPushStatus("Wysłano testowe powiadomienie push.");
   };
 
   const handleEnablePush = async () => {
-    if (!("serviceWorker" in navigator) || typeof Notification === "undefined") {
+    const setup = await ensurePushSubscription(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY);
+    window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
+
+    if (setup.state === "unsupported") {
+      setPushStatus("Ta przeglądarka nie obsługuje powiadomień push.");
+      return;
+    }
+    if (setup.state === "permission-default") {
+      setPushStatus("Nie udzielono jeszcze zgody na powiadomienia.");
+      return;
+    }
+    if (setup.state === "permission-denied") {
+      setPushStatus("Powiadomienia są zablokowane w ustawieniach przeglądarki.");
+      return;
+    }
+    if (setup.state === "registered-no-vapid") {
+      setPushStatus("Zgoda została nadana. Dodaj NEXT_PUBLIC_VAPID_PUBLIC_KEY, aby dokończyć subskrypcję push.");
+      return;
+    }
+    if (setup.state === "error") {
+      setPushStatus(setup.error ?? "Wystąpił błąd podczas konfiguracji push.");
       return;
     }
 
-    if (Notification.permission === "default") {
-      await Notification.requestPermission();
-      window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
+    if (setup.subscription) {
+      const synced = await syncPushSubscription(setup.subscription).catch(() => false);
+      setPushStatus(
+        synced
+          ? "Powiadomienia push są aktywne i subskrypcja została zapisana."
+          : "Powiadomienia aktywne lokalnie, ale nie udało się zapisać subskrypcji na serwerze."
+      );
+      return;
     }
 
-    if (Notification.permission === "granted") {
-      await navigator.serviceWorker.register("/service-worker.js");
-      window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_EVENT));
-    }
+    setPushStatus("Powiadomienia push zostały włączone.");
   };
 
   return (
@@ -203,6 +232,9 @@ export function NotificationsTab({
           <p className={`mt-2 max-w-2xl text-sm leading-7 ${dark ? "text-slate-300" : "text-slate-600"}`}>
             Przeglądaj zdarzenia systemowe i testuj powiadomienia push w jednym miejscu.
           </p>
+          {pushStatus ? (
+            <p className={`mt-3 text-sm ${dark ? "text-slate-300" : "text-slate-600"}`}>{pushStatus}</p>
+          ) : null}
 
           <div className="mt-6 flex flex-wrap gap-3">
             {notificationPermission && notificationPermission !== "granted" ? (

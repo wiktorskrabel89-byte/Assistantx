@@ -30,6 +30,7 @@ import type {
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
+import { isEditableElementTarget } from "../../lib/keyboard";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
 
@@ -567,9 +568,7 @@ export function ChatTab() {
     const handleKeyDown = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod || !event.shiftKey || event.key.toLowerCase() !== "s") return;
-      if (!(event.target instanceof HTMLElement)) return;
-      const tag = event.target.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || event.target.contentEditable === "true" || event.target.contentEditable === "plaintext-only") return;
+      if (isEditableElementTarget(event.target)) return;
       if (activeChat.messages.length === 0) return;
       event.preventDefault();
       exportMarkdown();

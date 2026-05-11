@@ -153,7 +153,7 @@ function isModerationBlocked(message: string): boolean {
   return BLOCKED_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-/** Matches a canonical UUID (v1–v5). */
+/** Matches canonical UUID string formatting (8-4-4-4-12 hex), without validating version bits. */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";

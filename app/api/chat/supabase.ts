@@ -193,7 +193,10 @@ export async function saveUserProfileFacts(userId: string, message: string, quer
         .eq("memory_key", fact.key)
         .maybeSingle();
 
-      if ((existing.data as { id?: string } | null)?.id) {
+      const existingRecord = existing.data as { id?: unknown } | null;
+      const existingMemoryId = typeof existingRecord?.id === "string" ? existingRecord.id : null;
+
+      if (existingMemoryId) {
         await supabase
           .from("user_profile_memories")
           .update({
@@ -201,7 +204,7 @@ export async function saveUserProfileFacts(userId: string, message: string, quer
             source_message: message.slice(0, 1000),
             embedding: toPgVectorLiteral(queryEmbedding),
           })
-          .eq("id", (existing.data as { id: string }).id)
+          .eq("id", existingMemoryId)
           .eq("user_id", userId);
       } else {
         await supabase.from("user_profile_memories").insert({

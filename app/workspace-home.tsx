@@ -10,6 +10,7 @@ import { ChatTab } from "./components/tabs/ChatTab";
 import { useDevicePairing } from "./hooks/useDevicePairing";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
+import { isEditableElementTarget } from "./lib/keyboard";
 import { createClient } from "@/lib/client";
 import { DEVICE_PAIRING_SKIP_KEY } from "@/lib/device-pairing";
 import type { AppMode } from "./lib/chat-types";
@@ -198,10 +199,7 @@ function HomeContent() {
       const mod = event.ctrlKey || event.metaKey;
       if (!mod || !event.shiftKey) return;
       // Don't fire when the user is typing in an input or editable area.
-      if (event.target instanceof HTMLElement) {
-        const tag = event.target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || event.target.contentEditable === "true" || event.target.contentEditable === "plaintext-only") return;
-      }
+      if (isEditableElementTarget(event.target)) return;
       switch (event.key) {
         case "1":
           event.preventDefault();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { registerPushServiceWorker } from "@/app/lib/push-notifications";
 
 function runWhenIdle(callback: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -24,7 +25,9 @@ export function AppBootTasks() {
     let cleanupIdle: () => void = () => {};
 
     const registerServiceWorker = () => {
-      void navigator.serviceWorker.register("/service-worker.js").catch(() => undefined);
+      void registerPushServiceWorker()
+        .then((registration) => registration?.update())
+        .catch(() => undefined);
     };
 
     const scheduleRegistration = () => {
