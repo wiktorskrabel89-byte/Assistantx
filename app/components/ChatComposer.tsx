@@ -4,8 +4,8 @@ import { Eye, Mic, MicOff, Paperclip, Plus, Send, StopCircle, X } from "lucide-r
 import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { type RefObject } from "react";
 import dynamic from "next/dynamic";
-import ReactMarkdown from "react-markdown";
 import type { QueuedMessage } from "../lib/chat-types";
+import { DEFAULT_WEB_WAKE_PHRASE } from "../lib/voice";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -79,6 +79,11 @@ export type ChatComposerProps = {
   onRemoveQueuedMessage: (queueId: string) => void;
   premiumLimitReached?: boolean;
   planRequestLimit?: number;
+  sttEnabled?: boolean;
+  voiceLanguage?: string;
+  wakeWordEnabled?: boolean;
+  wakeWordPhrase?: string;
+  externalVoiceActivationSignal?: number;
 };
 
 const DEFAULT_THINKING_EFFORT = 2;
@@ -108,6 +113,11 @@ export function ChatComposer({
   onRemoveQueuedMessage,
   premiumLimitReached = false,
   planRequestLimit,
+  sttEnabled = true,
+  voiceLanguage = "en-US",
+  wakeWordEnabled = true,
+  wakeWordPhrase = DEFAULT_WEB_WAKE_PHRASE,
+  externalVoiceActivationSignal = 0,
 }: ChatComposerProps) {
   // Auto-resize textarea
   const resizeComposer = useCallback(() => {
@@ -127,6 +137,7 @@ export function ChatComposer({
 
   // ── Voice input ────────────────────────────────────────────────────────────
   const [micActive, setMicActive] = useState(false);
+  const [voiceOrbMode, setVoiceOrbMode] = useState<"idle" | "listening" | "thinking">("idle");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   // useSyncExternalStore returns false on the server (prevents SSR hydration mismatch)
   // and the actual browser capability value on the client.
@@ -136,37 +147,80 @@ export function ChatComposer({
     () => false
   );
 
-  const toggleMic = useCallback(() => {
-    if (micActive) {
-      recognitionRef.current?.stop();
-      setMicActive(false);
-      return;
-    }
+  const stopMic = useCallback(() => {
+    recognitionRef.current?.stop();
+    setMicActive(false);
+    setVoiceOrbMode("idle");
+  }, []);
+
+  const startMic = useCallback((autoSubmitOnFinal: boolean) => {
     const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR || !sttEnabled) return;
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    // Use the browser's preferred language so the recogniser picks the right model
-    recognition.lang = navigator.language || "en-US";
+    recognition.lang = voiceLanguage || "en-US";
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let transcript = "";
+      let hasFinal = false;
       for (let i = 0; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;
+        if (event.results[i].isFinal) hasFinal = true;
       }
-      onMessageChange(transcript);
+      onMessageChange(transcript.trim());
+      if (autoSubmitOnFinal && hasFinal && transcript.trim()) {
+        setVoiceOrbMode("thinking");
+        onQueueMessage(DEFAULT_THINKING_EFFORT);
+        recognition.stop();
+      }
     };
-    recognition.onend = () => setMicActive(false);
-    recognition.onerror = () => setMicActive(false);
+    recognition.onend = () => {
+      setMicActive(false);
+      setVoiceOrbMode("idle");
+    };
+    recognition.onerror = () => {
+      setMicActive(false);
+      setVoiceOrbMode("idle");
+    };
     recognitionRef.current = recognition;
     recognition.start();
     setMicActive(true);
-  }, [micActive, onMessageChange]);
+    setVoiceOrbMode("listening");
+  }, [onMessageChange, onQueueMessage, sttEnabled, voiceLanguage]);
+
+  const toggleMic = useCallback(() => {
+    if (micActive) {
+      stopMic();
+      return;
+    }
+    startMic(false);
+  }, [micActive, startMic, stopMic]);
+
+  const toggleVoiceOrb = useCallback(() => {
+    if (micActive) {
+      stopMic();
+      return;
+    }
+    startMic(true);
+  }, [micActive, startMic, stopMic]);
 
   // Stop mic when component unmounts
   useEffect(() => {
     return () => { recognitionRef.current?.stop(); };
   }, []);
+
+  const lastExternalActivationRef = useRef<number>(externalVoiceActivationSignal);
+  useEffect(() => {
+    if (!wakeWordEnabled || !sttEnabled || micActive) return;
+    if (lastExternalActivationRef.current === externalVoiceActivationSignal) return;
+    lastExternalActivationRef.current = externalVoiceActivationSignal;
+    const timeoutId = window.setTimeout(() => {
+      startMic(true);
+    }, 0);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [externalVoiceActivationSignal, micActive, startMic, sttEnabled, wakeWordEnabled]);
 
   // ── Clipboard paste for images ─────────────────────────────────────────────
   const handlePaste = useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -264,6 +318,33 @@ export function ChatComposer({
           </div>
         ) : null}
 
+        <div className="flex items-center justify-center py-1">
+          <button
+            type="button"
+            onClick={toggleVoiceOrb}
+            disabled={!hasSpeechRecognition || !sttEnabled}
+            className={cn(
+              "group relative flex h-16 w-16 items-center justify-center rounded-full border transition-all duration-300",
+              voiceOrbMode === "listening"
+                ? "border-cyan-300 bg-gradient-to-br from-cyan-500 to-blue-600 shadow-[0_0_30px_rgba(59,130,246,0.45)]"
+                : voiceOrbMode === "thinking"
+                  ? "border-blue-300 bg-gradient-to-br from-blue-500 to-indigo-600 shadow-[0_0_34px_rgba(99,102,241,0.4)]"
+                  : "border-blue-200 bg-gradient-to-br from-blue-400 to-sky-500 shadow-[0_0_22px_rgba(59,130,246,0.3)]",
+              (!hasSpeechRecognition || !sttEnabled) ? "cursor-not-allowed opacity-50" : "hover:scale-105"
+            )}
+            aria-label={micActive ? "Stop voice orb" : "Start voice orb"}
+            title={micActive ? "Stop voice mode" : "Start voice mode"}
+          >
+            <span className={cn("absolute inset-0 rounded-full", voiceOrbMode !== "idle" ? "motion-safe:animate-ping bg-blue-300/25" : "")} />
+            <span className="relative text-[10px] font-semibold uppercase tracking-wider text-white">
+              {voiceOrbMode === "listening" ? "Live" : voiceOrbMode === "thinking" ? "AI" : "Voice"}
+            </span>
+          </button>
+        </div>
+        <p className="text-center text-[11px] text-muted-foreground">
+          Blue orb voice mode {wakeWordEnabled ? `• wake phrase: "${wakeWordPhrase}"` : ""}
+        </p>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -290,7 +371,7 @@ export function ChatComposer({
             <Paperclip className="h-4 w-4" />
           </Button>
 
-          {hasSpeechRecognition && (
+          {hasSpeechRecognition && sttEnabled && (
             <Button
               variant="outline"
               size="icon"

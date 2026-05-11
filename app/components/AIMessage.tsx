@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { CodeReviewPanel } from "./CodeReviewPanel";
 import { ReviewPanel } from "./ReviewPanel";
@@ -57,6 +57,9 @@ type AIMessageProps = {
   onReviewTextChange: (text: string) => void;
   onFork?: () => void;
   dark?: boolean;
+  ttsEnabled?: boolean;
+  autoSpeakResponses?: boolean;
+  voiceLanguage?: string;
 };
 
 export function AIMessage({
@@ -74,10 +77,14 @@ export function AIMessage({
   onReviewTextChange,
   onFork,
   dark = false,
+  ttsEnabled = true,
+  autoSpeakResponses = false,
+  voiceLanguage = "en-US",
 }: AIMessageProps) {
   const responseCopyId = `${entry.id}-response`;
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const ttsSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const lastAutoSpokenTextRef = useRef("");
+  const ttsSupported = ttsEnabled && typeof window !== "undefined" && "speechSynthesis" in window;
 
   const codeBlocks = useMemo(() => {
     const matches = Array.from(entry.ai.matchAll(/```([\w-]+)?\n([\s\S]*?)```/g));
@@ -97,6 +104,7 @@ export function AIMessage({
     if (!ttsSupported) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = voiceLanguage;
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     setIsSpeaking(true);
@@ -108,6 +116,21 @@ export function AIMessage({
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
   };
+
+  useEffect(() => {
+    if (!autoSpeakResponses || !ttsSupported || isStreaming || !cleanText.trim()) return;
+    if (lastAutoSpokenTextRef.current === cleanText) return;
+    lastAutoSpokenTextRef.current = cleanText;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = voiceLanguage;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, [autoSpeakResponses, cleanText, isStreaming, ttsSupported, voiceLanguage]);
 
   let codeBlockIndex = 0;
 

@@ -31,6 +31,7 @@ import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
+import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
 
 /** Poll interval for the model health endpoint (ms). */
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
@@ -139,6 +140,7 @@ export function ChatTab() {
   const [openReasoning, setOpenReasoning] = useState<Set<string>>(new Set());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedMessageContent, setEditedMessageContent] = useState("");
+  const [wakeActivationSignal, setWakeActivationSignal] = useState(0);
   const [premiumBannerHidden, setPremiumBannerHidden] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -203,6 +205,7 @@ export function ChatTab() {
 
   const googleLinked = linkedProviders.includes("google") || authProvider === "google";
   const latestEntry = activeChat.messages[activeChat.messages.length - 1];
+  const voiceSettings = activeWorkspace.settings;
 
   const {
     loading,
@@ -283,6 +286,56 @@ export function ChatTab() {
       mediaQuery.removeEventListener("change", listener);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!voiceSettings.wakeWordEnabled || !voiceSettings.sttEnabled) return;
+
+    const SpeechRecognitionCtor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) return;
+
+    let cancelled = false;
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = voiceSettings.voiceLanguage || "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      const normalized = transcript.toLowerCase();
+      const phrase = (voiceSettings.wakeWordPhrase || DEFAULT_WEB_WAKE_PHRASE).toLowerCase();
+      if (normalized.includes(phrase)) {
+        setWakeActivationSignal((current) => current + 1);
+      }
+    };
+    recognition.onend = () => {
+      if (!cancelled && document.visibilityState === "visible") {
+        try {
+          recognition.start();
+        } catch {
+          // no-op
+        }
+      }
+    };
+    try {
+      recognition.start();
+    } catch {
+      // no-op
+    }
+
+    return () => {
+      cancelled = true;
+      recognition.stop();
+    };
+  }, [
+    voiceSettings.sttEnabled,
+    voiceSettings.voiceLanguage,
+    voiceSettings.wakeWordEnabled,
+    voiceSettings.wakeWordPhrase,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !sidebarOpen) return;
@@ -739,6 +792,9 @@ export function ChatTab() {
                   assistantDescription={assistantDescription}
                   assistantIcon={assistantIcon}
                   dark={state.dark}
+                  ttsEnabled={voiceSettings.ttsEnabled}
+                  autoSpeakResponses={voiceSettings.autoSpeakResponses}
+                  voiceLanguage={voiceSettings.voiceLanguage}
                 />
               </div>
 
@@ -772,6 +828,11 @@ export function ChatTab() {
             onStopGeneration={stopCurrentGeneration}
             onQueueMessage={queueComposerMessage}
             onRemoveQueuedMessage={removeQueuedMessage}
+            sttEnabled={voiceSettings.sttEnabled}
+            voiceLanguage={voiceSettings.voiceLanguage}
+            wakeWordEnabled={voiceSettings.wakeWordEnabled}
+            wakeWordPhrase={voiceSettings.wakeWordPhrase}
+            externalVoiceActivationSignal={wakeActivationSignal}
             premiumLimitReached={(() => {
               const limit = state.userPlan === "pro"
                 ? PRO_PLAN.premiumRequestsPerMonth
