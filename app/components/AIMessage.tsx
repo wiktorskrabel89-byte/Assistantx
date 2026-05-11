@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { CodeReviewPanel } from "./CodeReviewPanel";
 import { ReviewPanel } from "./ReviewPanel";
@@ -103,7 +103,7 @@ export function AIMessage({
     return parseCitations(entry.ai);
   }, [entry.ai, entry.model]);
 
-  const createUtterance = () => {
+  const createUtterance = useCallback(() => {
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = voiceLanguage;
     const profile = getVoiceProfile(ttsVoiceId);
@@ -115,7 +115,7 @@ export function AIMessage({
     const matchedVoice = resolveSpeechVoice(availableVoices, ttsVoiceId, voiceLanguage);
     if (matchedVoice) utterance.voice = matchedVoice;
     return utterance;
-  };
+  }, [cleanText, ttsVoiceId, voiceLanguage]);
 
   const handleSpeak = () => {
     if (!ttsSupported) return;
@@ -145,7 +145,7 @@ export function AIMessage({
     return () => {
       window.speechSynthesis.cancel();
     };
-  }, [autoSpeakResponses, cleanText, isStreaming, ttsSupported, ttsVoiceId, voiceLanguage]);
+  }, [autoSpeakResponses, cleanText, createUtterance, isStreaming, ttsSupported]);
 
   let codeBlockIndex = 0;
 

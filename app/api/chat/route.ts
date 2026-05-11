@@ -891,7 +891,7 @@ export const POST = async (req: Request) => {
     systemPrompt = `${systemPrompt} ${customSystemPrompt.trim()}`.trim();
   }
 
-  if (!inferredCodeRequest && !inferredVisionRequest) {
+  if (selectedPersonality.id !== "default" && !inferredCodeRequest && !inferredVisionRequest) {
     resolvedTemperature = selectedPersonality.temperature;
   }
 
