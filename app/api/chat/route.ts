@@ -1038,6 +1038,9 @@ export const POST = async (req: Request) => {
                 modelSent = true;
               }
               // Capture actual token counts reported by the provider (preferred over estimates).
+              // OpenAI-compatible providers send a single usage object, typically in the last
+              // data chunk before [DONE]. Overwriting on each chunk is correct: the last value
+              // wins and reflects the final totals for the complete response.
               const usage = parsed.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
               if (usage?.prompt_tokens) actualInputTokens = usage.prompt_tokens;
               if (usage?.completion_tokens) actualOutputTokens = usage.completion_tokens;

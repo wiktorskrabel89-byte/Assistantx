@@ -53,6 +53,11 @@ services:
       GOTRUE_DB_DRIVER: postgres
       DATABASE_URL: postgres://supabase_auth_admin:postgres@supabase-db:5432/postgres
       GOTRUE_SITE_URL: http://localhost:3000
+      # ⚠️  INSECURE LOCAL-DEV DEFAULTS — never use these values in production or
+      # any shared/staging environment.  Generate your own secrets with:
+      #   openssl rand -base64 32   (for GOTRUE_JWT_SECRET)
+      # The anon/service_role keys below are the canonical Supabase local-dev
+      # test tokens signed with the secret above — they carry no real authority.
       GOTRUE_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
       GOTRUE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYxMzUzMTk4NSwiZXhwIjoxOTI5MTA3OTg1fQ.ReNhHIoqROa2g5tBbBBMbhNb6kbmRVK8D6mNXhYD9Fg
       GOTRUE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjEzNTMxOTg1LCJleHAiOjE5MjkxMDc5ODV9.th84OKK0Ykok-r84Y9KSjMoMoCXwMxyrTLDo9VXM0ZY
