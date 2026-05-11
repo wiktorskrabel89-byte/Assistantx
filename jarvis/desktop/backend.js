@@ -1,196 +1,68 @@
+const fs = require('fs');
 const WebSocket = require('ws');
 const { exec, execFile } = require('child_process');
 const EventEmitter = require('events');
 const os = require('os');
 const path = require('path');
+const {
+  appendHistory,
+  getFavoriteApp,
+  readState,
+  rememberApp,
+  rememberFile,
+  rememberPrompt,
+  saveTask,
+} = require('./local-state');
+const { planPrompt } = require('./task-planner');
 
-// ipcRenderer is available because this module runs in the Electron renderer
-// process (loaded via renderer.js with nodeIntegration: true).
 let ipcRenderer;
 try {
   ipcRenderer = require('electron').ipcRenderer;
 } catch {
-  // Unit-test / non-Electron environment
   ipcRenderer = null;
 }
 
 const emitter = new EventEmitter();
 const BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'ws://127.0.0.1:8000/ws';
+const USER_HOME = process.env.USERPROFILE || os.homedir();
+const DEFAULT_FILE_ROOT = path.join(USER_HOME, 'Desktop');
+const SAFE_ROOTS = [
+  USER_HOME,
+  path.join(USER_HOME, 'Desktop'),
+  path.join(USER_HOME, 'Documents'),
+  path.join(USER_HOME, 'Downloads'),
+  path.join(USER_HOME, 'Pictures'),
+].filter(Boolean);
+const REMOTE_ALLOWED_COMMANDS = new Set([
+  'openApp',
+  'closeApp',
+  'openUrl',
+  'openChromeTab',
+  'searchWeb',
+  'searchYouTube',
+  'screenshot',
+  'sysinfo',
+  'listProcesses',
+  'listDesktop',
+  'listFiles',
+  'readFile',
+  'openFile',
+  'typeText',
+  'volumeUp',
+  'volumeDown',
+  'mute',
+  'setVolume',
+  'lockScreen',
+  'sleep',
+  'cancelShutdown',
+]);
 
 let ws;
 let reconnectTimer;
 let currentToken;
-
-// --------------------------------------------------------------------------
-// Connection management
-// --------------------------------------------------------------------------
-
-function emitStatus(status, detail) {
-  emitter.emit('status', { status, detail, url: BACKEND_URL });
-}
-
-function connectToBackend(options = {}) {
-  if (options.token) {
-    currentToken = options.token;
-  }
-
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    return ws;
-  }
-
-  clearTimeout(reconnectTimer);
-  emitStatus('connecting');
-
-  ws = new WebSocket(BACKEND_URL);
-
-  ws.on('open', () => {
-    emitStatus('connected');
-    sendMessageToBackend({ type: 'register', role: 'desktop', token: currentToken });
-  });
-
-  ws.on('message', (data) => {
-    const text = data.toString();
-    emitter.emit('message', text);
-
-    try {
-      const msg = JSON.parse(text);
-      if (msg.type === 'command') {
-        handleCommand(msg);
-      }
-    } catch (error) {
-      emitStatus('warning', error.message);
-    }
-  });
-
-  ws.on('close', () => {
-    emitStatus('disconnected', 'Retrying in 3 seconds');
-    reconnectTimer = setTimeout(() => connectToBackend({ token: currentToken }), 3000);
-  });
-
-  ws.on('error', (error) => {
-    emitStatus('error', error.message);
-  });
-
-  return ws;
-}
-
-// --------------------------------------------------------------------------
-// Messaging helpers
-// --------------------------------------------------------------------------
-
-function respond(text) {
-  sendMessageToBackend({ type: 'response', text, token: currentToken });
-  emitter.emit('message', JSON.stringify({ type: 'response', text }));
-}
-
-function sendMessageToBackend(payload) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(payload));
-    return true;
-  }
-  return false;
-}
-
-function sendDesktopPrompt(text, modelSettings = {}) {
-  const payload = {
-    type: 'desktop_prompt',
-    text,
-    token: currentToken,
-    model: modelSettings.chatModel,
-    speechToTextModel: modelSettings.sttModel,
-    textToSpeechModel: modelSettings.ttsModel,
-  };
-  const sent = sendMessageToBackend(payload);
-  emitter.emit('message', JSON.stringify({ type: 'outgoing', text, sent, ...modelSettings }));
-  return sent;
-}
-
-// --------------------------------------------------------------------------
-// Shell helpers
-// --------------------------------------------------------------------------
-
-function run(command, successMessage, errorMessage) {
-  exec(command, (error) => respond(error ? `${errorMessage} ${error.message}` : successMessage));
-}
-
-// --------------------------------------------------------------------------
-// Browser / URL helpers
-// --------------------------------------------------------------------------
-
-/**
- * Open a URL in the system default browser.
- * Uses Electron's shell.openExternal via IPC (main process).
- * URL must start with http:// or https://.
- */
-function openUrl(url) {
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = 'https://' + url;
-  }
-
-  if (ipcRenderer) {
-    ipcRenderer.invoke('open-url', url)
-      .then(() => respond(`Opened URL in browser: ${url}`))
-      .catch((err) => respond(`Failed to open URL: ${err.message}`));
-  } else {
-    respond('URL opening requires Electron (ipcRenderer not available).');
-  }
-}
-
-/**
- * Open a URL in Chrome (or the default browser if Chrome isn't found).
- * Uses shell.openExternal via IPC to avoid shell injection.
- */
-function openChromeTab(url) {
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = 'https://' + url;
-  }
-
-  // Try to launch Chrome directly via execFile (no shell interpolation of url).
-  // execFile does NOT spawn a shell, so the url arg is passed literally.
-  const chromePaths = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  ];
-
-  const tryNext = (paths) => {
-    if (paths.length === 0) {
-      // Fall back to shell.openExternal via IPC
-      openUrl(url);
-      return;
-    }
-    execFile(paths[0], [url], (error) => {
-      if (error) {
-        tryNext(paths.slice(1));
-      } else {
-        respond(`Opened Chrome tab: ${url}`);
-      }
-    });
-  };
-
-  tryNext(chromePaths);
-}
-
-/**
- * Search the web for a query using the default browser.
- */
-function searchWeb(query) {
-  const encoded = encodeURIComponent(query);
-  openUrl(`https://www.google.com/search?q=${encoded}`);
-  respond(`Searching for: ${query}`);
-}
-
-/**
- * Open a YouTube search for a query.
- */
-function searchYouTube(query) {
-  const encoded = encodeURIComponent(query);
-  openUrl(`https://www.youtube.com/results?search_query=${encoded}`);
-  respond(`Searching YouTube for: ${query}`);
-}
-
-// --------------------------------------------------------------------------
-// Application maps
-// --------------------------------------------------------------------------
+let taskCounter = 0;
+let queueProcessing = false;
+const taskQueue = [];
 
 const APP_OPEN_MAP = {
   chrome: 'start chrome',
@@ -218,7 +90,7 @@ const APP_OPEN_MAP = {
   notepadpp: 'start notepad++',
 };
 
-const APP_KILL_MAP = {
+const APP_CLOSE_MAP = {
   chrome: 'chrome.exe',
   firefox: 'firefox.exe',
   edge: 'msedge.exe',
@@ -231,59 +103,189 @@ const APP_KILL_MAP = {
   vlc: 'vlc.exe',
 };
 
-function openApp(app) {
-  const command = APP_OPEN_MAP[app.toLowerCase()];
-  if (!command) {
-    respond(`Unknown app: ${app}. Supported: ${Object.keys(APP_OPEN_MAP).join(', ')}`);
-    return;
-  }
-  run(command, `Opened ${app}.`, `Failed to open ${app}.`);
+function toIsoNow() {
+  return new Date().toISOString();
 }
 
-function closeApp(app) {
-  const processName = APP_KILL_MAP[app.toLowerCase()];
-  if (!processName) {
-    respond(`Unknown app: ${app}. Supported for close: ${Object.keys(APP_KILL_MAP).join(', ')}`);
-    return;
-  }
-  run(`taskkill /IM ${processName} /F`, `Closed ${app}.`, `Failed to close ${app}.`);
+function emitStatus(status, detail) {
+  emitter.emit('status', { status, detail, url: BACKEND_URL });
 }
 
-// --------------------------------------------------------------------------
-// System helpers
-// --------------------------------------------------------------------------
+function emitRawMessage(payload) {
+  emitter.emit('message', JSON.stringify(payload));
+}
 
-function takeScreenshot() {
+function sendMessageToBackend(payload) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload));
+    return true;
+  }
+  return false;
+}
+
+function publishTaskUpdate(update) {
+  const payload = {
+    type: 'task_update',
+    createdAt: toIsoNow(),
+    ...update,
+  };
+  if (payload.task) saveTask(payload.task);
+  sendMessageToBackend({ ...payload, token: currentToken });
+  emitRawMessage(payload);
+}
+
+function publishResult(result) {
+  const payload = {
+    type: 'command_result',
+    createdAt: toIsoNow(),
+    ...result,
+  };
+  appendHistory(payload);
+  sendMessageToBackend({ ...payload, token: currentToken });
+  emitRawMessage(payload);
+  return payload;
+}
+
+function respond(text, extra = {}) {
+  return publishResult({
+    title: extra.title || 'Jarvis response',
+    summary: text,
+    text,
+    level: extra.level || 'info',
+    ...extra,
+  });
+}
+
+function execPromise(command) {
+  return new Promise((resolve, reject) => {
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr?.trim() || error.message));
+        return;
+      }
+      resolve((stdout || '').trim());
+    });
+  });
+}
+
+function execFilePromise(file, args) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr?.trim() || error.message));
+        return;
+      }
+      resolve((stdout || '').trim());
+    });
+  });
+}
+
+function ensureSafePath(targetPath) {
+  const raw = String(targetPath || '').trim();
+  const resolved = raw
+    ? path.resolve(raw.includes(':') ? raw : path.join(DEFAULT_FILE_ROOT, raw))
+    : DEFAULT_FILE_ROOT;
+  const allowed = SAFE_ROOTS.some((root) => resolved.toLowerCase().startsWith(path.resolve(root).toLowerCase()));
+  if (!allowed) {
+    throw new Error(`Access denied for path: ${resolved}`);
+  }
+  return resolved;
+}
+
+async function openUrl(url) {
+  let nextUrl = String(url || '').trim();
+  if (!nextUrl) throw new Error('Missing URL.');
+  if (!nextUrl.startsWith('http://') && !nextUrl.startsWith('https://')) {
+    nextUrl = `https://${nextUrl}`;
+  }
+  if (ipcRenderer) {
+    await ipcRenderer.invoke('open-url', nextUrl);
+  } else {
+    await execPromise(`start ${nextUrl}`);
+  }
+  return { summary: `Opened URL in browser: ${nextUrl}`, url: nextUrl };
+}
+
+async function openChromeTab(url) {
+  let nextUrl = String(url || '').trim();
+  if (!nextUrl) throw new Error('Missing URL.');
+  if (!nextUrl.startsWith('http://') && !nextUrl.startsWith('https://')) {
+    nextUrl = `https://${nextUrl}`;
+  }
+  const chromePaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ];
+  for (const chromePath of chromePaths) {
+    try {
+      await execFilePromise(chromePath, [nextUrl]);
+      return { summary: `Opened Chrome tab: ${nextUrl}`, url: nextUrl };
+    } catch {
+      // try next path
+    }
+  }
+  return openUrl(nextUrl);
+}
+
+async function searchWeb(query) {
+  const normalizedQuery = String(query || '').trim();
+  if (!normalizedQuery) throw new Error('Missing search query.');
+  await openUrl(`https://www.google.com/search?q=${encodeURIComponent(normalizedQuery)}`);
+  return { summary: `Searching the web for: ${normalizedQuery}` };
+}
+
+async function searchYouTube(query) {
+  const normalizedQuery = String(query || '').trim();
+  if (!normalizedQuery) throw new Error('Missing YouTube search query.');
+  await openUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(normalizedQuery)}`);
+  return { summary: `Searching YouTube for: ${normalizedQuery}` };
+}
+
+async function openApp(app) {
+  const normalized = String(app || '').trim().toLowerCase();
+  const command = APP_OPEN_MAP[normalized];
+  if (!command) throw new Error(`Unknown app: ${app}. Supported: ${Object.keys(APP_OPEN_MAP).join(', ')}`);
+  await execPromise(command);
+  rememberApp(normalized);
+  return { summary: `Opened ${normalized}.`, app: normalized };
+}
+
+async function closeApp(app) {
+  const normalized = String(app || '').trim().toLowerCase();
+  const processName = APP_CLOSE_MAP[normalized];
+  if (!processName) throw new Error(`Unknown app: ${app}. Supported for close: ${Object.keys(APP_CLOSE_MAP).join(', ')}`);
+  await execPromise(`taskkill /IM ${processName} /F`);
+  return { summary: `Closed ${normalized}.`, app: normalized };
+}
+
+async function takeScreenshot() {
   const ts = Date.now();
-  // Use $env:USERPROFILE (PowerShell syntax) instead of %USERPROFILE% (cmd.exe syntax)
-  // so the environment variable is correctly expanded inside the PowerShell command.
-  const screenshotPath = `$env:USERPROFILE\\Desktop\\jarvis_screenshot_${ts}.png`;
+  const screenshotPath = path.join(USER_HOME, 'Desktop', `jarvis_screenshot_${ts}.png`);
   const psCmd = [
     'Add-Type -AssemblyName System.Windows.Forms',
     'Add-Type -AssemblyName System.Drawing',
     '$b = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width,[System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height)',
     '$g = [System.Drawing.Graphics]::FromImage($b)',
     '$g.CopyFromScreen(0,0,0,0,$b.Size)',
-    `$b.Save('${screenshotPath}')`,
+    `$b.Save('${screenshotPath.replace(/\\/g, '\\\\')}')`,
     '$g.Dispose()',
     '$b.Dispose()',
   ].join('; ');
-
-  exec(`powershell -NoProfile -Command "${psCmd}"`, (error) => {
-    if (error) {
-      respond(`Screenshot failed: ${error.message}`);
-      return;
-    }
-    respond(`Screenshot saved to Desktop: jarvis_screenshot_${ts}.png`);
-    if (ipcRenderer) {
-      // Resolve Desktop path via Node.js (works outside PowerShell context)
-      const desktopPath = path.join(process.env.USERPROFILE || os.homedir(), 'Desktop');
-      ipcRenderer.invoke('open-path', desktopPath);
-    }
-  });
+  await execPromise(`powershell -NoProfile -Command "${psCmd}"`);
+  const imageDataUrl = `data:image/png;base64,${fs.readFileSync(screenshotPath).toString('base64')}`;
+  if (ipcRenderer) {
+    void ipcRenderer.invoke('open-path', path.dirname(screenshotPath));
+  }
+  rememberFile(screenshotPath);
+  return {
+    summary: `Screenshot captured: ${path.basename(screenshotPath)}`,
+    imageDataUrl,
+    path: screenshotPath,
+    title: 'Screenshot ready',
+  };
 }
 
-function getSystemInfo() {
+async function getSystemInfo() {
   const psCmd = [
     '$cpu = (Get-WmiObject Win32_Processor).Name',
     '$ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)',
@@ -291,129 +293,355 @@ function getSystemInfo() {
     '$uptime = (Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime',
     'Write-Output "OS: $os | CPU: $cpu | RAM: ${ram}GB | Uptime: $([math]::Round($uptime.TotalHours,1))h"',
   ].join('; ');
-
-  exec(`powershell -NoProfile -Command "${psCmd}"`, (error, stdout) => {
-    respond(error ? `System info failed: ${error.message}` : stdout.trim());
-  });
+  const stdout = await execPromise(`powershell -NoProfile -Command "${psCmd}"`);
+  return { summary: stdout };
 }
 
-function listProcesses() {
-  const psCmd =
-    'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Name,@{N="CPU(s)";E={[math]::Round($_.CPU,1)}},@{N="RAM(MB)";E={[math]::Round($_.WorkingSet/1MB,0)}} | Format-Table -AutoSize | Out-String';
-
-  exec(`powershell -NoProfile -Command "${psCmd}"`, (error, stdout) => {
-    respond(error ? `Failed to list processes: ${error.message}` : 'Top 10 processes:\n' + stdout.trim());
-  });
+async function listProcesses() {
+  const psCmd = 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Name,@{N="CPU(s)";E={[math]::Round($_.CPU,1)}},@{N="RAM(MB)";E={[math]::Round($_.WorkingSet/1MB,0)}} | Format-Table -AutoSize | Out-String';
+  const stdout = await execPromise(`powershell -NoProfile -Command "${psCmd}"`);
+  return { summary: `Top 10 processes:\n${stdout}` };
 }
 
-function listDesktopFiles() {
-  exec('dir %USERPROFILE%\\Desktop /B', (error, stdout) => {
-    respond(error ? `Failed to list Desktop: ${error.message}` : 'Desktop files:\n' + stdout.trim());
-  });
+async function listDesktopFiles() {
+  return listFiles(DEFAULT_FILE_ROOT);
 }
 
-function setVolume(level) {
-  // level: 0-100
-  const scalar = Math.max(0, Math.min(100, level));
-  // nircmd sets volume on a 0-65535 scale
-  const nircmdLevel = Math.round((scalar / 100) * 65535);
-  run(`nircmd.exe setsysvolume ${nircmdLevel}`, `Volume set to ${scalar}%.`, 'Volume change failed.');
+async function listFiles(targetPath) {
+  const safePath = ensureSafePath(targetPath);
+  const entries = await fs.promises.readdir(safePath, { withFileTypes: true });
+  const topEntries = entries.slice(0, 40).map((entry) => `${entry.isDirectory() ? '📁' : '📄'} ${entry.name}`);
+  rememberFile(safePath);
+  return {
+    summary: `Contents of ${safePath}:\n${topEntries.join('\n') || '(empty)'}`,
+    path: safePath,
+    entries: topEntries,
+    title: 'Directory listing',
+  };
 }
 
-function typeText(text) {
-  // Escape characters that have special meaning in SendKeys syntax.
-  // Use \[ and \] to avoid an ambiguous unescaped [ inside the character class.
-  const sendKeysEscaped = text.replace(/[\[\]+^%~(){}]/g, (ch) => `{${ch}}`);
+async function readFile(targetPath) {
+  const safePath = ensureSafePath(targetPath);
+  const stat = await fs.promises.stat(safePath);
+  if (!stat.isFile()) throw new Error('Selected path is not a file.');
+  if (stat.size > 200_000) throw new Error('File is too large to read safely.');
+  const raw = await fs.promises.readFile(safePath);
+  const text = raw.toString('utf-8');
+  rememberFile(safePath);
+  return {
+    summary: `Read ${safePath}:\n${text.slice(0, 4000)}${text.length > 4000 ? '\n…truncated…' : ''}`,
+    path: safePath,
+    title: 'File contents',
+  };
+}
 
-  // Build the PowerShell script and pass it as a base64-encoded command
-  // to avoid any shell string injection (no user content is interpolated
-  // into the command line — only the encoded script argument is passed).
+async function openFile(targetPath) {
+  const safePath = ensureSafePath(targetPath);
+  if (ipcRenderer) {
+    await ipcRenderer.invoke('open-path', safePath);
+  } else {
+    await execPromise(`start "" "${safePath}"`);
+  }
+  rememberFile(safePath);
+  return { summary: `Opened path: ${safePath}`, path: safePath };
+}
+
+async function typeText(text) {
+  const sendKeysEscaped = String(text || '').replace(/[\[\]+^%~(){}]/g, (ch) => `{${ch}}`);
   const psScript = [
     'Add-Type -AssemblyName System.Windows.Forms',
     `[System.Windows.Forms.SendKeys]::SendWait(${JSON.stringify(sendKeysEscaped)})`,
   ].join('; ');
-
   const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
-
-  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], (error) => {
-    respond(error ? `Failed to type text: ${error.message}` : `Typed text successfully.`);
-  });
+  await execFilePromise('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded]);
+  return { summary: 'Typed text successfully.' };
 }
 
-// --------------------------------------------------------------------------
-// Command dispatcher
-// --------------------------------------------------------------------------
+async function setVolume(level) {
+  const scalar = Math.max(0, Math.min(100, Number(level) || 50));
+  const nircmdLevel = Math.round((scalar / 100) * 65535);
+  await execPromise(`nircmd.exe setsysvolume ${nircmdLevel}`);
+  return { summary: `Volume set to ${scalar}%.`, level: scalar };
+}
 
-function handleCommand(msg) {
-  const { command, app: appName, url, query, text, level } = msg;
+function isCommandAllowed(command, context = {}) {
+  if (context.source !== 'remote') return true;
+  return REMOTE_ALLOWED_COMMANDS.has(command);
+}
 
-  switch (command) {
-    // Apps
-    case 'openApp':
-      return openApp(appName || '');
-    case 'closeApp':
-      return closeApp(appName || '');
+async function executeStructuredCommand(msg, context = {}) {
+  const { command, app: appName, url, query, text, level, targetPath } = msg;
+  if (!isCommandAllowed(command, context)) {
+    return respond(`Blocked remote command: ${command}`, {
+      level: 'warning',
+      title: 'Action blocked',
+      taskId: context.taskId || null,
+      source: context.source || 'remote',
+    });
+  }
 
-    // Browser / web
-    case 'openUrl':
-      return openUrl(url || appName || '');
-    case 'openChromeTab':
-      return openChromeTab(url || appName || '');
-    case 'searchWeb':
-      return searchWeb(query || text || '');
-    case 'searchYouTube':
-      return searchYouTube(query || text || '');
+  try {
+    let result;
+    switch (command) {
+      case 'openApp':
+        result = await openApp(appName || msg.appName || '');
+        break;
+      case 'closeApp':
+        result = await closeApp(appName || '');
+        break;
+      case 'openUrl':
+        result = await openUrl(url || appName || '');
+        break;
+      case 'openChromeTab':
+        result = await openChromeTab(url || appName || '');
+        break;
+      case 'searchWeb':
+        result = await searchWeb(query || text || '');
+        break;
+      case 'searchYouTube':
+        result = await searchYouTube(query || text || '');
+        break;
+      case 'volumeUp':
+        await execPromise('nircmd.exe changesysvolume 6554');
+        result = { summary: 'Volume increased.' };
+        break;
+      case 'volumeDown':
+        await execPromise('nircmd.exe changesysvolume -6554');
+        result = { summary: 'Volume decreased.' };
+        break;
+      case 'mute':
+        await execPromise('nircmd.exe mutesysvolume 2');
+        result = { summary: 'Mute toggled.' };
+        break;
+      case 'setVolume':
+        result = await setVolume(level);
+        break;
+      case 'screenshot':
+        result = await takeScreenshot();
+        break;
+      case 'sysinfo':
+      case 'systemInfo':
+        result = await getSystemInfo();
+        break;
+      case 'listProcesses':
+        result = await listProcesses();
+        break;
+      case 'listDesktop':
+        result = await listDesktopFiles();
+        break;
+      case 'listFiles':
+        result = await listFiles(targetPath || msg.path || '');
+        break;
+      case 'readFile':
+        result = await readFile(targetPath || msg.path || '');
+        break;
+      case 'openFile':
+        result = await openFile(targetPath || msg.path || '');
+        break;
+      case 'typeText':
+        result = await typeText(text || '');
+        break;
+      case 'lockScreen':
+        await execPromise('rundll32.exe user32.dll,LockWorkStation');
+        result = { summary: 'Screen locked.' };
+        break;
+      case 'shutdown':
+        await execPromise('shutdown /s /t 30');
+        result = { summary: 'Shutdown scheduled in 30 seconds.' };
+        break;
+      case 'restart':
+        await execPromise('shutdown /r /t 30');
+        result = { summary: 'Restart scheduled in 30 seconds.' };
+        break;
+      case 'sleep':
+        await execPromise('rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
+        result = { summary: 'Sleep requested.' };
+        break;
+      case 'cancelShutdown':
+        await execPromise('shutdown /a');
+        result = { summary: 'Shutdown/restart cancelled.' };
+        break;
+      default:
+        throw new Error(`Unknown command: ${command}`);
+    }
 
-    // Volume
-    case 'volumeUp':
-      return run('nircmd.exe changesysvolume 6554', 'Volume increased.', 'Volume change failed.');
-    case 'volumeDown':
-      return run('nircmd.exe changesysvolume -6554', 'Volume decreased.', 'Volume change failed.');
-    case 'mute':
-      return run('nircmd.exe mutesysvolume 2', 'Mute toggled.', 'Mute failed.');
-    case 'setVolume':
-      return setVolume(typeof level === 'number' ? level : parseInt(level, 10) || 50);
-
-    // System
-    case 'screenshot':
-      return takeScreenshot();
-    case 'sysinfo':
-    case 'systemInfo':
-      return getSystemInfo();
-    case 'listProcesses':
-      return listProcesses();
-    case 'listDesktop':
-      return listDesktopFiles();
-    case 'typeText':
-      return typeText(text || '');
-
-    // Power management
-    case 'lockScreen':
-      return run('rundll32.exe user32.dll,LockWorkStation', 'Screen locked.', 'Screen lock failed.');
-    case 'shutdown':
-      return run('shutdown /s /t 30', 'Shutdown scheduled in 30 seconds. Run `shutdown /a` to cancel.', 'Shutdown failed.');
-    case 'restart':
-      return run('shutdown /r /t 30', 'Restart scheduled in 30 seconds. Run `shutdown /a` to cancel.', 'Restart failed.');
-    case 'sleep':
-      return run('rundll32.exe powrprof.dll,SetSuspendState 0,1,0', 'Sleep requested.', 'Sleep failed.');
-    case 'cancelShutdown':
-      return run('shutdown /a', 'Shutdown/restart cancelled.', 'Cancel failed.');
-
-    default:
-      return respond(`Unknown command: ${command}`);
+    return publishResult({
+      title: result.title || 'Command completed',
+      text: result.summary,
+      summary: result.summary,
+      taskId: context.taskId || null,
+      command,
+      source: context.source || 'local',
+      origin: context.origin || 'desktop',
+      ...result,
+    });
+  } catch (error) {
+    return publishResult({
+      title: 'Command failed',
+      text: error.message,
+      summary: error.message,
+      taskId: context.taskId || null,
+      command,
+      level: 'error',
+      source: context.source || 'local',
+      origin: context.origin || 'desktop',
+    });
   }
 }
 
-// --------------------------------------------------------------------------
-// Exports
-// --------------------------------------------------------------------------
+async function processTaskQueue() {
+  if (queueProcessing) return;
+  queueProcessing = true;
+
+  while (taskQueue.length > 0) {
+    const task = taskQueue.shift();
+    task.status = 'running';
+    task.startedAt = toIsoNow();
+    publishTaskUpdate({
+      taskId: task.id,
+      status: 'running',
+      progress: 0,
+      prompt: task.prompt,
+      summary: task.summary,
+      source: task.source,
+      task,
+    });
+
+    for (let index = 0; index < task.steps.length; index += 1) {
+      const step = task.steps[index];
+      publishTaskUpdate({
+        taskId: task.id,
+        status: 'step',
+        progress: Math.round((index / task.steps.length) * 100),
+        currentStep: step.label,
+        prompt: task.prompt,
+        summary: task.summary,
+        source: task.source,
+        task,
+      });
+      await executeStructuredCommand(step, {
+        source: task.source,
+        taskId: task.id,
+        origin: task.origin,
+      });
+    }
+
+    task.status = 'completed';
+    task.completedAt = toIsoNow();
+    saveTask(task);
+    publishTaskUpdate({
+      taskId: task.id,
+      status: 'completed',
+      progress: 100,
+      prompt: task.prompt,
+      summary: task.summary,
+      source: task.source,
+      task,
+    });
+  }
+
+  queueProcessing = false;
+}
+
+function queuePromptExecution(text, meta = {}) {
+  const prompt = String(text || '').trim();
+  if (!prompt) return null;
+  rememberPrompt(prompt);
+  const plan = planPrompt(prompt, { favoriteApp: getFavoriteApp() });
+  if (plan.steps.length === 0) {
+    return respond(`I could not map this prompt to a safe desktop action: ${prompt}`, {
+      title: 'No action detected',
+      level: 'warning',
+      source: meta.source || 'local',
+    });
+  }
+
+  const task = {
+    id: `task-${Date.now()}-${++taskCounter}`,
+    prompt,
+    source: meta.source || 'local',
+    origin: meta.origin || 'desktop',
+    createdAt: toIsoNow(),
+    status: 'queued',
+    steps: plan.steps,
+    summary: plan.summary,
+    unmatched: plan.unmatched,
+  };
+  saveTask(task);
+  taskQueue.push(task);
+  publishTaskUpdate({
+    taskId: task.id,
+    status: 'queued',
+    progress: 0,
+    prompt,
+    summary: plan.summary,
+    source: task.source,
+    task,
+  });
+  void processTaskQueue();
+  return task.id;
+}
+
+function connectToBackend(options = {}) {
+  if (options.token) currentToken = options.token;
+
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    return ws;
+  }
+
+  clearTimeout(reconnectTimer);
+  emitStatus('connecting');
+  ws = new WebSocket(BACKEND_URL);
+
+  ws.on('open', () => {
+    emitStatus('connected');
+    sendMessageToBackend({ type: 'register', role: 'desktop', token: currentToken });
+    sendMessageToBackend({ type: 'device_status', role: 'desktop', status: 'online', token: currentToken });
+  });
+
+  ws.on('message', (data) => {
+    const text = data.toString();
+    try {
+      const msg = JSON.parse(text);
+      if (msg.type === 'command' && msg.from_role !== 'desktop') {
+        void executeStructuredCommand(msg, {
+          source: 'remote',
+          taskId: msg.taskId || null,
+          origin: msg.from_role || 'remote',
+        });
+      }
+      if (msg.type === 'desktop_prompt' && msg.from_role !== 'desktop') {
+        void queuePromptExecution(msg.text || '', {
+          source: 'remote',
+          origin: msg.from_role || 'remote',
+        });
+      }
+    } catch (error) {
+      emitStatus('warning', error.message);
+    }
+    emitter.emit('message', text);
+  });
+
+  ws.on('close', () => {
+    emitStatus('disconnected', 'Retrying in 3 seconds');
+    reconnectTimer = setTimeout(() => connectToBackend({ token: currentToken }), 3000);
+  });
+
+  ws.on('error', (error) => {
+    emitStatus('error', error.message);
+  });
+
+  return ws;
+}
 
 module.exports = {
   connectToBackend,
-  sendDesktopPrompt,
-  sendMessageToBackend,
+  executeStructuredCommand,
+  getBackendUrl: () => BACKEND_URL,
   getCurrentToken: () => currentToken,
+  getLocalStateSnapshot: () => readState(),
   onMessage: (callback) => emitter.on('message', callback),
   onStatus: (callback) => emitter.on('status', callback),
-  getBackendUrl: () => BACKEND_URL,
+  queuePromptExecution,
+  sendMessageToBackend,
 };

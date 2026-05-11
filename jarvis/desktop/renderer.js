@@ -1,11 +1,12 @@
 const { clearToken, getToken } = require('./auth');
-const { handlePhoneCommand } = require('./phone-commands');
 const {
 	connectToBackend,
-	sendDesktopPrompt,
+	executeStructuredCommand,
+	getLocalStateSnapshot,
 	sendMessageToBackend,
 	onMessage,
 	onStatus,
+	queuePromptExecution,
 	getBackendUrl,
 } = require('./backend');
 
@@ -116,22 +117,6 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (state === 'speaking') voiceVisualizer.classList.add('speaking');
 	}
 
-	const getModelSettings = () => ({
-		chatModel: chatModelSelect?.value || 'auto-smart',
-		sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
-		ttsModel: ttsModelSelect?.value || 'orpheus-english',
-	});
-
-	const isHardTaskPrompt = (text) => {
-		const normalized = String(text || '').toLowerCase();
-		return /\b(debug|bug|fix|refactor|architecture|design|optimi[sz]e|complex|hard|analy[sz]e|root cause|performance|scalability)\b/.test(normalized);
-	};
-
-	const resolveChatModel = (text, selectedModel) => {
-		if (selectedModel !== 'auto-smart') return selectedModel;
-		return isHardTaskPrompt(text) ? 'openai/gpt-oss-120b:free' : 'qwen/qwen3-32b';
-	};
-
 	const getVoiceLanguage = () => (
 		voiceLanguageSelect?.value
 		|| (typeof navigator !== 'undefined' ? navigator.language : null)
@@ -216,15 +201,8 @@ window.addEventListener('DOMContentLoaded', () => {
 	function submitPrompt() {
 		const text = input.value.trim();
 		if (!text) return;
-
-		const models = getModelSettings();
-		const resolvedChatModel = resolveChatModel(text, models.chatModel);
-		const routedModels = { ...models, chatModel: resolvedChatModel };
-		const sent = sendDesktopPrompt(text, routedModels);
-		const routeNote = models.chatModel === 'auto-smart'
-			? `\n(model auto-route: ${resolvedChatModel})`
-			: '';
-		appendMessage(log, sent ? 'Prompt sent' : 'Queued (offline)', `${text}${routeNote}`, sent ? 'system' : 'error');
+		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
+		appendMessage(log, 'Prompt queued', text, 'system');
 		input.value = '';
 	}
 
@@ -365,21 +343,15 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (!url.startsWith('http://') && !url.startsWith('https://')) {
 			url = 'https://' + url;
 		}
-		if (ipcRenderer) {
-			ipcRenderer.invoke('open-url', url)
-				.then(() => appendMessage(log, 'URL opened', url))
-				.catch((err) => appendMessage(log, 'URL error', err.message, 'error'));
-		} else {
-			sendMessageToBackend({ type: 'command', command: 'openUrl', url, token });
-			appendMessage(log, 'openUrl sent', url);
-		}
+		void executeStructuredCommand({ command: 'openUrl', url }, { source: 'local', origin: 'desktop' });
+		appendMessage(log, 'URL opened', url);
 		urlInput.value = '';
 	}
 
 	function doSearch() {
 		const query = urlInput.value.trim();
 		if (!query) return;
-		sendMessageToBackend({ type: 'command', command: 'searchWeb', query, token });
+		void executeStructuredCommand({ command: 'searchWeb', query }, { source: 'local', origin: 'desktop' });
 		appendMessage(log, 'Web search', query);
 		urlInput.value = '';
 	}
@@ -456,27 +428,22 @@ window.addEventListener('DOMContentLoaded', () => {
 			const [kind, payload] = value.split(':', 2);
 
 			if (kind === 'open') {
-				sendMessageToBackend({ type: 'command', command: 'openApp', app: payload, token });
+				void executeStructuredCommand({ command: 'openApp', app: payload }, { source: 'local', origin: 'desktop' });
 				appendMessage(log, 'Quick action', `Launch: ${payload}`);
 				return;
 			}
 
 			if (kind === 'command') {
-				sendMessageToBackend({ type: 'command', command: payload, token });
+				void executeStructuredCommand({ command: payload }, { source: 'local', origin: 'desktop' });
 				appendMessage(log, 'Quick action', payload);
 				return;
-			}
-
-			if (kind === 'local') {
-				handlePhoneCommand(payload.replace(/-/g, ' '));
-				appendMessage(log, 'Local command', payload);
 			}
 		});
 	});
 
 	if (openBrowserTabButton) {
 		openBrowserTabButton.addEventListener('click', () => {
-			sendMessageToBackend({ type: 'command', command: 'openChromeTab', url: 'https://www.google.com', token });
+			void executeStructuredCommand({ command: 'openChromeTab', url: 'https://www.google.com' }, { source: 'local', origin: 'desktop' });
 			appendMessage(log, 'Quick action', 'Open browser tab');
 		});
 	}
@@ -492,17 +459,44 @@ window.addEventListener('DOMContentLoaded', () => {
 	onMessage((rawMessage) => {
 		try {
 			const parsed = JSON.parse(rawMessage);
-			// parsed.text is the human-readable content; fall back to stringifying the whole object
-			const body = typeof parsed.text === 'string' ? parsed.text : JSON.stringify(parsed);
-			const title = parsed.type === 'response' ? '✅ Jarvis' : `Backend (${parsed.type || '?'})`;
-			appendMessage(log, title, body, 'system');
-			if (parsed.type === 'response') {
+			if (parsed.type === 'presence_snapshot') {
+				appendMessage(log, 'Presence', `Connected clients: ${parsed?.active_connections ?? 0}`, 'system');
+				return;
+			}
+			if (parsed.type === 'peer_registered') {
+				appendMessage(log, 'Presence', `${parsed.role || 'Device'} connected`, 'system');
+				return;
+			}
+			if (parsed.type === 'peer_disconnected') {
+				appendMessage(log, 'Presence', `${parsed.role || 'Device'} disconnected`, 'system');
+				return;
+			}
+			if (parsed.type === 'task_update') {
+				const body = parsed.currentStep
+					? `${parsed.status}: ${parsed.currentStep} (${parsed.progress ?? 0}%)`
+					: `${parsed.status}: ${parsed.summary || parsed.prompt || 'Task update'}`;
+				appendMessage(log, `Task ${parsed.taskId || ''}`.trim(), body, 'system');
+				return;
+			}
+			const body = typeof parsed.summary === 'string'
+				? parsed.summary
+				: typeof parsed.text === 'string'
+					? parsed.text
+					: JSON.stringify(parsed);
+			const title = parsed.type === 'command_result' ? (parsed.title || '✅ Jarvis') : `Backend (${parsed.type || '?'})`;
+			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system');
+			if (parsed.type === 'command_result' && parsed.level !== 'error') {
 				speakResponse(body);
 			}
 		} catch {
 			// rawMessage is not JSON — display as plain text
 			appendMessage(log, 'Backend event', rawMessage, 'system');
 		}
+	});
+
+	const stateSnapshot = getLocalStateSnapshot();
+	(stateSnapshot.history || []).slice(0, 6).reverse().forEach((entry) => {
+		appendMessage(log, entry.title || 'Recent activity', entry.summary || entry.text || 'Completed', entry.level === 'error' ? 'error' : 'system');
 	});
 
 	connectToBackend({ token });

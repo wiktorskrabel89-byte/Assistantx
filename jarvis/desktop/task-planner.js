@@ -1,0 +1,115 @@
+function normalizeText(text) {
+  return String(text || '').trim();
+}
+
+function createStep(command, payload = {}, label) {
+  return {
+    command,
+    ...payload,
+    label: label || command,
+  };
+}
+
+function splitPromptIntoSteps(text) {
+  return normalizeText(text)
+    .split(/\s+(?:and then|then|and|następnie|potem|i)\s+/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function buildFilePath(raw) {
+  return String(raw || '')
+    .replace(/^['"]|['"]$/g, '')
+    .trim();
+}
+
+function planSegment(segment, options = {}) {
+  const text = normalizeText(segment);
+  if (!text) return null;
+
+  const favoriteApp = options.favoriteApp;
+  const favoriteAwareText = favoriteApp
+    ? text.replace(/\b(my|moja|moją|moj[aąę]?|ulubion[aey]|favorite)\s+(app|game|aplikacj[aeę]?|gr[aeę])\b/gi, favoriteApp)
+    : text;
+
+  let match = favoriteAwareText.match(/(?:open|launch|start|uruchom|odpal|otw[oó]rz)\s+(?:app\s+)?(.+)/i);
+  if (match) return createStep('openApp', { app: match[1].trim() }, `Open ${match[1].trim()}`);
+
+  match = favoriteAwareText.match(/(?:close|zamknij|wy[łl][aą]cz)\s+(.+)/i);
+  if (match) return createStep('closeApp', { app: match[1].trim() }, `Close ${match[1].trim()}`);
+
+  match = favoriteAwareText.match(/(?:open\s+(?:site|url)|go to|navigate to|otw[oó]rz\s+stron[ęe]?|przejd[zź]\s+na)\s+(.+)/i);
+  if (match) return createStep('openUrl', { url: match[1].trim() }, `Open URL ${match[1].trim()}`);
+
+  match = favoriteAwareText.match(/(?:youtube|yt)\s+(.+)/i);
+  if (match) return createStep('searchYouTube', { query: match[1].trim() }, `Search YouTube for ${match[1].trim()}`);
+
+  match = favoriteAwareText.match(/(?:search(?: for)?|find|google|wyszukaj|znajd[zź]|szukaj)\s+(.+)/i);
+  if (match) return createStep('searchWeb', { query: match[1].trim() }, `Search the web for ${match[1].trim()}`);
+
+  if (/(?:screenshot|screen shot|zrzut ekranu|poka[zż] ekran)/i.test(favoriteAwareText)) {
+    return createStep('screenshot', {}, 'Capture screenshot');
+  }
+
+  if (/(?:system info|sysinfo|informacje o komputerze|info o systemie)/i.test(favoriteAwareText)) {
+    return createStep('sysinfo', {}, 'Collect system info');
+  }
+
+  if (/(?:processes|top processes|lista proces[oó]w|okna)/i.test(favoriteAwareText)) {
+    return createStep('listProcesses', {}, 'List processes');
+  }
+
+  match = favoriteAwareText.match(/(?:list|browse|show|poka[zż]|wylistuj)\s+(?:files|folder|directory|katalog|pliki)(?:\s+(?:in|for|w))?\s*(.*)/i);
+  if (match) {
+    return createStep('listFiles', { targetPath: buildFilePath(match[1]) }, `List files ${match[1] ? `in ${buildFilePath(match[1])}` : 'in the default folder'}`);
+  }
+
+  match = favoriteAwareText.match(/(?:read|show|czytaj|odczytaj)\s+file\s+(.+)/i)
+    || favoriteAwareText.match(/(?:czytaj|odczytaj|poka[zż]\s+plik)\s+(.+)/i);
+  if (match) return createStep('readFile', { targetPath: buildFilePath(match[1]) }, `Read file ${buildFilePath(match[1])}`);
+
+  match = favoriteAwareText.match(/(?:open|launch|otw[oó]rz)\s+(?:file|folder|path|plik|katalog)\s+(.+)/i);
+  if (match) return createStep('openFile', { targetPath: buildFilePath(match[1]) }, `Open path ${buildFilePath(match[1])}`);
+
+  match = favoriteAwareText.match(/(?:type|write|enter|wpisz|napisz)\s+(.+)/i);
+  if (match) return createStep('typeText', { text: match[1].trim() }, 'Type provided text');
+
+  match = favoriteAwareText.match(/(?:set volume to|ustaw g[łl]o[sś]no[sś][ćc] na)\s*(\d{1,3})/i);
+  if (match) return createStep('setVolume', { level: Number(match[1]) }, `Set volume to ${match[1]}%`);
+
+  if (/(?:volume up|g[łl]o[sś]niej|zwi[eę]ksz g[łl]o[sś]no[sś][ćc])/i.test(favoriteAwareText)) return createStep('volumeUp', {}, 'Increase volume');
+  if (/(?:volume down|ciszej|zmniejsz g[łl]o[sś]no[sś][ćc])/i.test(favoriteAwareText)) return createStep('volumeDown', {}, 'Decrease volume');
+  if (/(?:mute|wycisz)/i.test(favoriteAwareText)) return createStep('mute', {}, 'Toggle mute');
+  if (/(?:lock(?: screen)?|zablokuj)/i.test(favoriteAwareText)) return createStep('lockScreen', {}, 'Lock screen');
+  if (/(?:sleep|u[śs]pij)/i.test(favoriteAwareText)) return createStep('sleep', {}, 'Put PC to sleep');
+  if (/(?:shutdown|wy[łl][aą]cz komputer)/i.test(favoriteAwareText)) return createStep('shutdown', {}, 'Shutdown PC');
+  if (/(?:restart|uruchom ponownie|zrestartuj)/i.test(favoriteAwareText)) return createStep('restart', {}, 'Restart PC');
+  if (/(?:cancel shutdown|anuluj wy[łl][aą]czenie)/i.test(favoriteAwareText)) return createStep('cancelShutdown', {}, 'Cancel shutdown');
+
+  return null;
+}
+
+function planPrompt(text, options = {}) {
+  const steps = [];
+  const unmatched = [];
+  for (const segment of splitPromptIntoSteps(text)) {
+    const step = planSegment(segment, options);
+    if (step) steps.push(step);
+    else unmatched.push(segment);
+  }
+
+  return {
+    originalText: normalizeText(text),
+    steps,
+    unmatched,
+    summary: steps.length > 0
+      ? steps.map((step) => step.label).join(' → ')
+      : 'No executable steps detected',
+  };
+}
+
+module.exports = {
+  planPrompt,
+  planSegment,
+  splitPromptIntoSteps,
+};

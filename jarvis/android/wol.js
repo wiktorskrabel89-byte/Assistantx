@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const MAC_STORAGE_KEY = 'jarvis-wol-mac';
 const SERVER_STORAGE_KEY = 'jarvis-wol-server';
+const SECRET_STORAGE_KEY = 'jarvis-wol-secret';
 
 /** Save MAC address to persistent storage. */
 export async function saveMac(mac) {
@@ -31,6 +32,14 @@ export async function loadServerUrl() {
   return (await AsyncStorage.getItem(SERVER_STORAGE_KEY)) || 'http://192.168.1.100:3000';
 }
 
+export async function saveWolSecret(secret) {
+  await AsyncStorage.setItem(SECRET_STORAGE_KEY, secret.trim());
+}
+
+export async function loadWolSecret() {
+  return (await AsyncStorage.getItem(SECRET_STORAGE_KEY)) || '';
+}
+
 /**
  * Send a Wake-on-LAN magic packet via the Jarvis API.
  *
@@ -39,7 +48,7 @@ export async function loadServerUrl() {
  * @param {string} [broadcast] - Broadcast address, default "255.255.255.255"
  * @returns {Promise<{ ok: boolean; message: string }>}
  */
-export async function sendWakeOnLan(mac, serverUrl, broadcast = '255.255.255.255') {
+export async function sendWakeOnLan(mac, serverUrl, broadcast = '255.255.255.255', secret = '') {
   if (!mac || !serverUrl) {
     throw new Error('MAC address and server URL are required.');
   }
@@ -48,7 +57,10 @@ export async function sendWakeOnLan(mac, serverUrl, broadcast = '255.255.255.255
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(secret ? { 'x-jarvis-wol-secret': secret.trim() } : {}),
+    },
     body: JSON.stringify({ mac, broadcast }),
   });
 

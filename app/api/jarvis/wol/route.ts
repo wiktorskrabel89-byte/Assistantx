@@ -63,14 +63,22 @@ export async function POST(request: Request): Promise<Response> {
   // Require authentication — this endpoint sends UDP packets into the server's
   // network and must not be callable by anonymous users.
   const authHeader = request.headers.get("authorization");
+  const sharedSecret = request.headers.get("x-jarvis-wol-secret");
+  const configuredSharedSecret = process.env.JARVIS_WOL_SHARED_SECRET;
+
   if (!authHeader?.startsWith("Bearer ")) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    if (!configuredSharedSecret || sharedSecret !== configuredSharedSecret) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
-  const token = authHeader.slice(7);
-  const supabase = await createClient();
-  const { data, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !data.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const supabase = await createClient();
+    const { data, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !data.user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   let body: Record<string, unknown>;
