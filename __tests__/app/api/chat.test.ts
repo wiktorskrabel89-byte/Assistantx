@@ -307,7 +307,7 @@ describe("POST /api/chat — unauthenticated user uses client history", () => {
     const req = makeRequest({
       message: "What is my name?",
       mode: "chat",
-      conversationId: "conv-123",
+      conversationId: "00000000-0000-0000-0000-000000000123",
       history: [{ user: "my name is wiktor", ai: "Nice to meet you, Wiktor!" }],
     });
     const res = await POST(req);

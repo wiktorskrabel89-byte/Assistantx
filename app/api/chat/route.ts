@@ -509,6 +509,15 @@ export const POST = async (req: Request) => {
     googleContext,
   } = await req.json();
 
+  // ── Validate conversationId format before any DB operation ──────────────────
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (conversationId !== undefined && conversationId !== null && !UUID_REGEX.test(String(conversationId))) {
+    return new Response(
+      JSON.stringify({ error: "Invalid conversationId format." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   // ── Moderation: block prompt-injection and jailbreak attempts ────────────────
   if (typeof message === "string" && isModerationBlocked(message)) {
     return new Response(
