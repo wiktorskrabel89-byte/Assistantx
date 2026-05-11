@@ -34,7 +34,7 @@ test("login/register flow toggles tabs and validates required fields", async ({ 
   await page.getByLabel("Email address").fill("user@example.com");
   await page.getByLabel("Password", { exact: true }).fill("password123");
   await page.getByLabel("Confirm password").fill("different-password");
-  await page.locator("#accept-policy").check();
+  await page.getByRole("checkbox", { name: /I agree to the/i }).check();
   await page.getByRole("button", { name: "Create Account" }).click();
   await expect(page.getByText("Passwords do not match.")).toBeVisible();
 });
