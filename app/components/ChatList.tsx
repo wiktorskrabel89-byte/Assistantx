@@ -39,6 +39,7 @@ export type ChatListProps = {
   ttsEnabled?: boolean;
   autoSpeakResponses?: boolean;
   voiceLanguage?: string;
+  ttsVoiceId?: string;
 };
 
 export const ChatList = memo(function ChatList({
@@ -70,6 +71,7 @@ export const ChatList = memo(function ChatList({
   ttsEnabled = true,
   autoSpeakResponses = false,
   voiceLanguage = "en-US",
+  ttsVoiceId = "default",
 }: ChatListProps) {
   const [visibleCount, setVisibleCount] = useState(MESSAGE_LOAD_BATCH_SIZE);
   const quickStarters: Array<{ label: string; hint: string; prompt: string; mode?: Mode; icon: LucideIcon }> = [
@@ -208,6 +210,7 @@ export const ChatList = memo(function ChatList({
             ttsEnabled={ttsEnabled}
             autoSpeakResponses={autoSpeakResponses}
             voiceLanguage={voiceLanguage}
+            ttsVoiceId={ttsVoiceId}
           />
         </div>
       ))}

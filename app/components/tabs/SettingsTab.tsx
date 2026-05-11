@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BarChart2, Bot, Cloud, LogOut, MessageSquareText, Mic, MoonStar, Sparkles, Sun, Volume2, Zap } from "lucide-react";
+import { BarChart2, Bot, Cloud, LogOut, MessageSquareText, Mic, MoonStar, Sparkles, Sun, Theater, Volume2, Zap } from "lucide-react";
 import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
-import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
-import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
+import { PERSONALITY_MODES, PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
+import { DEFAULT_WEB_WAKE_PHRASE, VOICE_PROFILES } from "@/app/lib/voice";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MemorySummaryCard } from "../MemorySummaryCard";
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
@@ -54,7 +55,9 @@ export function SettingsTab() {
     setSttEnabled,
     setTtsEnabled,
     setVoiceLanguage,
+    setTtsVoiceId,
     setAutoSpeakResponses,
+    setPersonalityMode,
   } = useWorkspace();
 
   const [profile, setProfile] = useState<UserProfile>({
@@ -262,6 +265,8 @@ export function SettingsTab() {
             </div>
           </div>
 
+          <MemorySummaryCard dark={dark} />
+
           <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
               <Mic className="h-3.5 w-3.5" /> Voice controls
@@ -315,6 +320,61 @@ export function SettingsTab() {
                   <option value="es-ES">Spanish (es-ES)</option>
                 </select>
               </div>
+              <div className="grid gap-2">
+                <div className={`text-xs ${mutedClass}`}>Voice personality</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {VOICE_PROFILES.map((voice) => {
+                    const selected = voiceSettings.ttsVoiceId === voice.id;
+                    return (
+                      <button
+                        key={voice.id}
+                        type="button"
+                        onClick={() => setTtsVoiceId(voice.id)}
+                        className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                          selected
+                            ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                            : `${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`
+                        }`}
+                        aria-pressed={selected}
+                      >
+                        <div className="text-sm font-semibold">{voice.label}</div>
+                        <div className={`mt-0.5 text-xs ${mutedClass}`}>{voice.description}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+              <Theater className="h-3.5 w-3.5" /> Personality mode
+            </div>
+            <p className={`mt-2 text-xs ${mutedClass}`}>Apply ChatGPT-style behavior presets for tone and creativity.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {PERSONALITY_MODES.map((mode) => {
+                const selected = (voiceSettings.personalityMode ?? "default") === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setPersonalityMode(mode.id)}
+                    className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                      selected
+                        ? "border-violet-500 bg-violet-500/10 text-violet-700 dark:text-violet-200"
+                        : `${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`
+                    }`}
+                    aria-pressed={selected}
+                  >
+                    <div className="text-sm font-semibold">{mode.emoji} {mode.label}</div>
+                    <div className={`mt-0.5 text-xs ${mutedClass}`}>{mode.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className={`mt-2 text-[11px] ${mutedClass}`}>
+              Temperatures are estimated behavior targets and may still be adjusted by model-specific routing.
             </div>
           </div>
         </div>

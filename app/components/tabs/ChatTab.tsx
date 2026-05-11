@@ -109,6 +109,7 @@ export function ChatTab() {
     setMemoryNotes,
     setSystemPrompt,
     setEnabledTools,
+    setPersonalityMode,
     assistantName,
     assistantDescription,
     activeAgentId,
@@ -723,6 +724,8 @@ export function ChatTab() {
             onCreateChat={createChatAction}
             onOpenWorkspaceTools={() => setWorkspaceToolsOpen((prev) => !prev)}
             onOpenUsage={() => setUsageDashboardOpen((prev) => !prev)}
+            personalityMode={activeWorkspace.settings.personalityMode ?? "default"}
+            onPersonalityModeChange={setPersonalityMode}
           />
 
           <div className="min-h-0 flex-1 px-3 py-4 bg-background transition-colors duration-200">
@@ -795,6 +798,7 @@ export function ChatTab() {
                   ttsEnabled={voiceSettings.ttsEnabled}
                   autoSpeakResponses={voiceSettings.autoSpeakResponses}
                   voiceLanguage={voiceSettings.voiceLanguage}
+                  ttsVoiceId={voiceSettings.ttsVoiceId}
                 />
               </div>
 

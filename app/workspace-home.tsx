@@ -189,6 +189,19 @@ function HomeContent() {
     }
   }, [notificationsHook]);
 
+  useEffect(() => {
+    const handleNavigateTab = (event: Event) => {
+      const customEvent = event as CustomEvent<{ tab?: AppNavigationTab }>;
+      const nextTab = customEvent.detail?.tab;
+      if (!nextTab) return;
+      setActiveAppTab(nextTab);
+    };
+    window.addEventListener("assistantx:navigate-tab", handleNavigateTab as EventListener);
+    return () => {
+      window.removeEventListener("assistantx:navigate-tab", handleNavigateTab as EventListener);
+    };
+  }, []);
+
   const handleOpenInSandbox = useCallback((html: string, css: string, js: string) => {
     setSandboxInitCode({ html, css, js });
     setAppMode("ai-code");

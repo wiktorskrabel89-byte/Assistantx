@@ -1,6 +1,8 @@
 "use client";
 
 import { BarChart2, Braces, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, type LucideIcon } from "lucide-react";
+import type { PersonalityMode } from "@/lib/ai-config";
+import { PERSONALITY_MODES } from "@/lib/ai-config";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -20,6 +22,8 @@ type ChatHeaderProps = {
   onCreateChat: () => void;
   onOpenWorkspaceTools: () => void;
   onOpenUsage: () => void;
+  personalityMode: PersonalityMode;
+  onPersonalityModeChange: (mode: PersonalityMode) => void;
 };
 
 export function ChatHeader({
@@ -37,6 +41,8 @@ export function ChatHeader({
   onCreateChat,
   onOpenWorkspaceTools,
   onOpenUsage,
+  personalityMode,
+  onPersonalityModeChange,
 }: ChatHeaderProps) {
   const iconBtnCn = "hidden h-10 w-10 border-border bg-background text-foreground/85 hover:bg-accent hover:text-foreground lg:flex";
 
@@ -155,6 +161,21 @@ export function ChatHeader({
               </TooltipTrigger>
               <TooltipContent>New chat</TooltipContent>
             </Tooltip>
+
+            <select
+              id="chat-header-personality-mode"
+              name="chatHeaderPersonalityMode"
+              value={personalityMode}
+              onChange={(event) => onPersonalityModeChange(event.target.value as PersonalityMode)}
+              className="hidden h-10 rounded-lg border border-border bg-background px-2 text-xs text-foreground md:block"
+              aria-label="Quick personality mode"
+            >
+              {PERSONALITY_MODES.map((mode) => (
+                <option key={mode.id} value={mode.id}>
+                  {mode.emoji} {mode.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </TooltipProvider>
