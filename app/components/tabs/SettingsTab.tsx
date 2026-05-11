@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BarChart2, Bot, Cloud, LogOut, MessageSquareText, Mic, MoonStar, Sparkles, Sun, Theater, Volume2, Zap } from "lucide-react";
+import { BarChart2, Bot, Cloud, Globe, LogOut, MessageSquareText, Mic, MoonStar, Sparkles, Sun, Theater, Volume2, Zap } from "lucide-react";
 import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MemorySummaryCard } from "../MemorySummaryCard";
+import { getTranslations, UI_LANGUAGES } from "@/app/lib/i18n";
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
@@ -41,6 +42,7 @@ export function SettingsTab() {
     state,
     activeWorkspace,
     setDark,
+    setUiLanguage,
     cloudSyncStatus,
     cloudSyncMessage,
     userEmail,
@@ -59,6 +61,8 @@ export function SettingsTab() {
     setAutoSpeakResponses,
     setPersonalityMode,
   } = useWorkspace();
+
+  const tr = getTranslations(state.uiLanguage ?? "en");
 
   const [profile, setProfile] = useState<UserProfile>({
     avatarUrl: "",
@@ -188,40 +192,70 @@ export function SettingsTab() {
         <div className={`rounded-3xl border p-6 backdrop-blur sm:p-8 ${cardClass}`}>
           <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${chipClass}`}>
             <Sparkles className="h-3.5 w-3.5" />
-            Ustawienia aplikacji
+            {tr.settings_chip}
           </div>
-          <h2 className="mt-5 text-2xl font-semibold tracking-tight">Personalizacja</h2>
-          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>Najważniejsze opcje wyglądu i statusu workspace w jednym miejscu.</p>
+          <h2 className="mt-5 text-2xl font-semibold tracking-tight">{tr.settings_title}</h2>
+          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>{tr.settings_subtitle}</p>
 
-          <div className={`mt-6 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className={`mt-6 rounded-2xl border p-4 ${softSurfaceClass}`}>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold">Tryb ciemny</p>
-                <p className={`mt-1 text-xs ${mutedClass}`}>Włącz ciemny motyw całej aplikacji.</p>
+                <p className="text-sm font-semibold">{tr.settings_dark_mode}</p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>{tr.settings_dark_mode_desc}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Sun className={`h-4 w-4 ${dark ? "text-slate-500" : "text-amber-500"}`} />
-                <Switch checked={dark} onCheckedChange={setDark} aria-label="Włącz tryb ciemny" />
+                <Switch checked={dark} onCheckedChange={setDark} aria-label={tr.settings_dark_mode} />
                 <MoonStar className={`h-4 w-4 ${dark ? "text-sky-300" : "text-slate-400"}`} />
               </div>
+            </div>
+          </div>
+
+          {/* Language selector */}
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+              <Globe className="h-3.5 w-3.5" /> {tr.settings_language_chip}
+            </div>
+            <p className="mt-2 text-sm font-semibold">{tr.settings_language_title}</p>
+            <p className={`mt-1 text-xs ${mutedClass}`}>{tr.settings_language_subtitle}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {UI_LANGUAGES.map((lang) => {
+                const isActive = (state.uiLanguage ?? "en") === lang.code;
+                return (
+                  <button
+                    key={lang.code}
+                    type="button"
+                    onClick={() => setUiLanguage(lang.code)}
+                    aria-pressed={isActive}
+                    className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                      isActive
+                        ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                        : `${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`
+                    }`}
+                  >
+                    <div className="text-sm font-semibold">{lang.nativeLabel}</div>
+                    <div className={`mt-0.5 text-xs ${mutedClass}`}>{lang.label}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
-                <Cloud className="h-3.5 w-3.5" /> Sync
+                <Cloud className="h-3.5 w-3.5" /> {tr.settings_sync}
               </div>
               <p className="mt-2 text-sm font-semibold">{authReady ? cloudSyncStatus : "checking"}</p>
               <p className={`mt-1 text-xs ${mutedClass}`}>{cloudSyncMessage}</p>
             </div>
             <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
-                <MessageSquareText className="h-3.5 w-3.5" /> Workspace
+                <MessageSquareText className="h-3.5 w-3.5" /> {tr.settings_workspace}
               </div>
               <p className="mt-2 text-sm font-semibold">{activeWorkspace.name}</p>
               <p className={`mt-1 text-xs ${mutedClass}`}>
-                Plan: {state.userPlan.toUpperCase()} • Tryb: {appModeLabel}
+                {tr.settings_plan}: {state.userPlan.toUpperCase()} • {tr.settings_mode}: {appModeLabel}
               </p>
               {userEmail ? <p className={`mt-1 text-xs ${mutedClass}`}>{userEmail}</p> : null}
             </div>
@@ -382,19 +416,19 @@ export function SettingsTab() {
         {/* Profile card */}
         <div className={`rounded-3xl border p-6 backdrop-blur sm:p-8 ${cardClass}`}>
           <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${chipClass}`}>
-            Ustawienia profilu
+            {tr.settings_profile_chip}
           </div>
-          <h2 className="mt-5 text-2xl font-semibold tracking-tight">Edytuj profil</h2>
-          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>Zarządzaj profilem i informacjami widocznymi w przestrzeni AssistantX.</p>
+          <h2 className="mt-5 text-2xl font-semibold tracking-tight">{tr.settings_profile_title}</h2>
+          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>{tr.settings_profile_subtitle}</p>
 
           {saveStatus === "success" && (
             <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
-              Profil zapisany pomyślnie.
+              {tr.settings_profile_saved}
             </div>
           )}
           {saveStatus === "error" && (
             <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700">
-              Błąd: {errorMessage || "Nie udało się zapisać profilu."}
+              {tr.settings_profile_error}: {errorMessage || tr.settings_profile_save_failed}
             </div>
           )}
 
@@ -407,27 +441,27 @@ export function SettingsTab() {
         <div className={`rounded-3xl border p-6 backdrop-blur sm:p-8 ${cardClass}`}>
           <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${chipClass}`}>
             <BarChart2 className="h-3.5 w-3.5" />
-            Użycie
+            {tr.settings_usage_chip}
           </div>
-          <h2 className="mt-5 text-2xl font-semibold tracking-tight">Statystyki użycia</h2>
-          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>Przegląd aktywności i limitu planu.</p>
+          <h2 className="mt-5 text-2xl font-semibold tracking-tight">{tr.settings_usage_title}</h2>
+          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>{tr.settings_usage_subtitle}</p>
 
           {statsLoading ? (
-            <p className={`mt-6 text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>Ładowanie statystyk…</p>
+            <p className={`mt-6 text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>{tr.settings_usage_loading}</p>
           ) : (
             <div className="mt-6 flex flex-col gap-5">
               {/* KPI row */}
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
                   <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${dark ? "text-slate-400" : "text-slate-500"}`}>
-                    <MessageSquareText className="h-3.5 w-3.5" /> Wiadomości
+                    <MessageSquareText className="h-3.5 w-3.5" /> {tr.settings_messages}
                   </div>
                   <div className="mt-2 text-2xl font-bold">{totalMessages.toLocaleString()}</div>
                 </div>
 
                 <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
                   <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${dark ? "text-slate-400" : "text-slate-500"}`}>
-                    <MessageSquareText className="h-3.5 w-3.5" /> Rozmowy
+                    <MessageSquareText className="h-3.5 w-3.5" /> {tr.settings_conversations}
                   </div>
                   <div className="mt-2 text-2xl font-bold">{totalConversations.toLocaleString()}</div>
                 </div>
@@ -435,7 +469,7 @@ export function SettingsTab() {
                 {planLimit !== null && (
                   <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
                     <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${dark ? "text-slate-400" : "text-slate-500"}`}>
-                      <Zap className="h-3.5 w-3.5" /> Zapytania premium
+                      <Zap className="h-3.5 w-3.5" /> {tr.settings_premium_requests}
                     </div>
                     <div className="mt-2 text-2xl font-bold">
                       {premiumRequestsUsed}
@@ -456,7 +490,7 @@ export function SettingsTab() {
                 <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
                   <div className="mb-3 flex items-center gap-2">
                     <Bot className="h-4 w-4 text-sky-500" />
-                    <span className={`text-sm font-semibold ${dark ? "text-slate-200" : "text-slate-700"}`}>Najczęściej używane modele</span>
+                    <span className={`text-sm font-semibold ${dark ? "text-slate-200" : "text-slate-700"}`}>{tr.settings_top_models}</span>
                   </div>
                   <div className="space-y-3">
                     {topModels.map((m, i) => (

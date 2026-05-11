@@ -5,13 +5,13 @@ export function WorkspaceBackupPanel({ onBackup, onRestore }: { onBackup: () => 
 
   return (
     <div className="p-6 border rounded-2xl bg-slate-50 dark:bg-slate-900 mt-6">
-      <h2 className="text-lg font-bold mb-2">Backup i przywracanie workspace</h2>
+      <h2 className="text-lg font-bold mb-2">Workspace Backup &amp; Restore</h2>
       <div className="flex gap-4 items-center mb-4">
         <button
           className="rounded bg-blue-600 px-4 py-2 text-white font-semibold hover:bg-blue-700"
           onClick={onBackup}
         >
-          Pobierz backup
+          Download backup
         </button>
         <input
           type="file"
@@ -25,10 +25,10 @@ export function WorkspaceBackupPanel({ onBackup, onRestore }: { onBackup: () => 
           disabled={!restoreFile}
           onClick={() => restoreFile && onRestore(restoreFile)}
         >
-          Przywróć workspace
+          Restore workspace
         </button>
       </div>
-      <div className="text-xs text-slate-500">Backup obejmuje całą strukturę workspace i czaty. Plik backupu jest w formacie JSON.</div>
+      <div className="text-xs text-slate-500">Backup includes the full workspace structure and all chats. The backup file is in JSON format.</div>
     </div>
   );
 }

@@ -73,12 +73,12 @@ type AddOnItem = {
 
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
-  { id: "jarvis",           label: "Jarvis",          description: "Asystent głosowy AI",   icon: BrainCircuit, beta: true },
-  { id: "clinical",         label: "Clinical",        description: "Narzędzia kliniczne",   icon: Stethoscope },
-  { id: "learning",         label: "Learning",        description: "Materiały do nauki",    icon: BookOpen },
-  { id: "prompt-library",   label: "Prompt Library",  description: "Biblioteka promptów",   icon: LibraryBig },
-  { id: "knowledge-export", label: "Knowledge Export", description: "Eksportuj wiedzę",     icon: Share2 },
-  { id: "website-creator",  label: "Website Creator", description: "Stwórz i hostuj stronę AI", icon: Globe2 },
+  { id: "jarvis",           label: "Jarvis",          description: "AI voice assistant",              icon: BrainCircuit, beta: true },
+  { id: "clinical",         label: "Clinical",        description: "Clinical tools",                   icon: Stethoscope },
+  { id: "learning",         label: "Learning",        description: "Learning materials",               icon: BookOpen },
+  { id: "prompt-library",   label: "Prompt Library",  description: "Prompt library",                   icon: LibraryBig },
+  { id: "knowledge-export", label: "Knowledge Export", description: "Export knowledge",                icon: Share2 },
+  { id: "website-creator",  label: "Website Creator", description: "Create and host an AI-powered site", icon: Globe2 },
   { id: "ai-learning",      label: "AI Learning",     description: "Memory + RAG + tuning controls", icon: BrainCircuit, adminOnly: true },
 ];
 
@@ -86,7 +86,7 @@ const ADD_ON_ITEMS: AddOnItem[] = [
  *  The keyboard shortcuts Ctrl+Shift+2/3/4 correspond to indices 0/1/2 (+2 offset). */
 const CORE_CODE_TABS: { id: AppNavigationTab; label: string; icon: LucideIcon; shortcutNumber: number }[] = [
   { id: "sandbox",  label: "Sandbox",  icon: SquareTerminal, shortcutNumber: 2 },
-  { id: "projects", label: "Projekty", icon: FolderKanban,   shortcutNumber: 3 },
+  { id: "projects", label: "Projects", icon: FolderKanban,   shortcutNumber: 3 },
   { id: "codebase", label: "Codebase", icon: Database,       shortcutNumber: 4 },
 ];
 
@@ -375,7 +375,7 @@ export function AppNavigationColumn({
                 name="appsSearchDesktop"
                 value={appsSearch}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
-                placeholder="Szukaj aplikacji..."
+                placeholder="Search applications..."
                 className="flex-1 border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground"
               />
               {appsSearch && (
@@ -388,7 +388,7 @@ export function AppNavigationColumn({
             {/* Add-on list */}
             <div className="max-h-[380px] overflow-y-auto py-1.5">
               {eligibleAddOns.length === 0 && (
-                <p className="px-4 py-3 text-xs opacity-50">Brak aplikacji</p>
+                <p className="px-4 py-3 text-xs opacity-50">No applications</p>
               )}
               {eligibleAddOns.map((item) => {
                 const Icon = item.icon;
@@ -430,7 +430,7 @@ export function AppNavigationColumn({
                       variant="outline"
                       size="icon"
                       onClick={() => togglePin(item.id)}
-                      title={isPinned ? "Usuń z zakładek" : "Dodaj do zakładek"}
+                      title={isPinned ? "Remove from tabs" : "Add to tabs"}
                       className={cn(
                         "h-6 w-6 flex-shrink-0 rounded-lg",
                         isPinned
@@ -451,7 +451,7 @@ export function AppNavigationColumn({
             {/* Footer hint */}
             <div className={`border-t px-3 py-2 ${dividerClassName}`}>
               <p className="text-[10px] text-muted-foreground">
-                Kliknij <Plus className="inline h-2.5 w-2.5" /> aby przypiąć aplikację do paska bocznego.
+                Click <Plus className="inline h-2.5 w-2.5" /> to pin an application to the sidebar.
               </p>
             </div>
           </div>
@@ -547,7 +547,7 @@ export function AppNavigationColumn({
             </AvatarFallback>
           </Avatar>
           <span className="flex-1 truncate text-left text-sm text-sidebar-foreground/60">
-            {userEmail ? userEmail.split("@")[0] : "Konto"}
+            {userEmail ? userEmail.split("@")[0] : "Account"}
           </span>
           <Settings2 className="h-4 w-4 text-sidebar-foreground/60" />
         </button>
@@ -729,7 +729,7 @@ export function AppNavigationColumn({
             <button
               type="button"
               onClick={() => onSelectTab("settings")}
-              aria-label={userEmail ?? "Konto"}
+              aria-label={userEmail ?? "Account"}
               className="mt-1"
             >
               <Avatar className={cn("h-9 w-9 text-[11px] font-bold transition-colors", "hover:ring-2 hover:ring-border")}>
@@ -739,7 +739,7 @@ export function AppNavigationColumn({
               </Avatar>
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right">{userEmail ?? "Konto"}</TooltipContent>
+          <TooltipContent side="right">{userEmail ?? "Account"}</TooltipContent>
         </Tooltip>
       </nav>
       </TooltipProvider>
@@ -762,7 +762,7 @@ export function AppNavigationColumn({
                 name="appsSearchMobile"
                 value={appsSearch}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAppsSearch(e.target.value)}
-                placeholder="Szukaj aplikacji..."
+                placeholder="Search applications..."
                 className="flex-1 border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground"
               />
               {appsSearch && (
@@ -774,7 +774,7 @@ export function AppNavigationColumn({
             {/* Add-on list */}
             <div className="max-h-[55vh] overflow-y-auto py-1.5">
               {eligibleAddOns.length === 0 && (
-                <p className="px-4 py-3 text-xs opacity-50">Brak aplikacji</p>
+                <p className="px-4 py-3 text-xs opacity-50">No applications</p>
               )}
               {eligibleAddOns.map((item) => {
                 const Icon = item.icon;
@@ -811,7 +811,7 @@ export function AppNavigationColumn({
                       variant="outline"
                       size="icon"
                       onClick={() => togglePin(item.id)}
-                      title={isPinned ? "Usuń z zakładek" : "Dodaj do zakładek"}
+                      title={isPinned ? "Remove from tabs" : "Add to tabs"}
                       className={cn(
                         "h-6 w-6 flex-shrink-0 rounded-lg",
                         isPinned
@@ -827,7 +827,7 @@ export function AppNavigationColumn({
             </div>
             <div className="border-t border-border px-3 py-2">
               <p className="text-[10px] text-muted-foreground">
-                Kliknij <Plus className="inline h-2.5 w-2.5" /> aby przypiąć do paska bocznego.
+                Click <Plus className="inline h-2.5 w-2.5" /> to pin to the sidebar.
               </p>
             </div>
           </div>

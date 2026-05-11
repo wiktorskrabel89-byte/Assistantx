@@ -14,13 +14,13 @@ export default function AdminPanel() {
         <button className={`px-4 py-2 rounded ${tab==="workspaces" ? "bg-blue-600 text-white" : "bg-gray-200"}`} onClick={()=>setTab("workspaces")}>Workspaces</button>
         <button className={`px-4 py-2 rounded ${tab==="models" ? "bg-blue-600 text-white" : "bg-gray-200"}`} onClick={()=>setTab("models")}>Models</button>
       </div>
-      {tab === "users" && <div>Lista użytkowników (do wdrożenia)</div>}
+      {tab === "users" && <div>User list (coming soon)</div>}
       {tab === "workspaces" && (
         <>
-          <div>Zarządzanie workspace (do wdrożenia)</div>
+          <div>Workspace management</div>
           <WorkspaceBackupPanel
             onBackup={() => {
-              // Pobierz backup z localStorage (przykład, do rozbudowy o Supabase)
+              // Download backup from localStorage (extend with Supabase sync)
               const data = localStorage.getItem("workspace-state");
               const blob = new Blob([data ?? "{}"], { type: "application/json" });
               const url = URL.createObjectURL(blob);
@@ -35,11 +35,11 @@ export default function AdminPanel() {
               reader.onload = (e) => {
                 try {
                   const json = JSON.parse(e.target?.result as string);
-                  // Przykład: zapisz do localStorage (do rozbudowy o Supabase)
+                  // Save to localStorage (extend with Supabase sync)
                   localStorage.setItem("workspace-state", JSON.stringify(json));
-                  alert("Backup przywrócony! Odśwież stronę.");
+                  alert("Backup restored! Please refresh the page.");
                 } catch {
-                  alert("Nieprawidłowy plik backupu.");
+                  alert("Invalid backup file.");
                 }
               };
               reader.readAsText(file);
@@ -47,7 +47,7 @@ export default function AdminPanel() {
           />
         </>
       )}
-      {tab === "models" && <div>Zarządzanie modelami AI (do wdrożenia)</div>}
+      {tab === "models" && <div>AI model management (coming soon)</div>}
     </div>
   );
 }
