@@ -37,4 +37,5 @@ test("login/register flow toggles tabs and validates required fields", async ({ 
   await page.getByRole("checkbox", { name: /I agree to the/i }).check();
   await page.getByRole("button", { name: "Create Account" }).click();
   await expect(page.getByText("Passwords do not match.")).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/login$/);
 });
