@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { CodeReviewPanel } from "./CodeReviewPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import ReactMarkdown from "react-markdown";
 import type { ChatEntry, MessageFeedback, ResponseAction } from "../lib/chat-types";
+import { getVoiceProfile, resolveSpeechVoice } from "../lib/voice";
 
 // Lazily load the syntax highlighter so the large Prism bundle is excluded from
 // the initial page JavaScript, significantly reducing Total Blocking Time.
@@ -60,6 +61,7 @@ type AIMessageProps = {
   ttsEnabled?: boolean;
   autoSpeakResponses?: boolean;
   voiceLanguage?: string;
+  ttsVoiceId?: string;
 };
 
 export function AIMessage({
@@ -80,6 +82,7 @@ export function AIMessage({
   ttsEnabled = true,
   autoSpeakResponses = false,
   voiceLanguage = "en-US",
+  ttsVoiceId = "default",
 }: AIMessageProps) {
   const responseCopyId = `${entry.id}-response`;
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -100,11 +103,24 @@ export function AIMessage({
     return parseCitations(entry.ai);
   }, [entry.ai, entry.model]);
 
+  const createUtterance = useCallback(() => {
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = voiceLanguage;
+    const profile = getVoiceProfile(ttsVoiceId);
+    utterance.rate = profile.rate;
+    utterance.pitch = profile.pitch;
+    const availableVoices = typeof window.speechSynthesis.getVoices === "function"
+      ? window.speechSynthesis.getVoices()
+      : [];
+    const matchedVoice = resolveSpeechVoice(availableVoices, ttsVoiceId, voiceLanguage);
+    if (matchedVoice) utterance.voice = matchedVoice;
+    return utterance;
+  }, [cleanText, ttsVoiceId, voiceLanguage]);
+
   const handleSpeak = () => {
     if (!ttsSupported) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = voiceLanguage;
+    const utterance = createUtterance();
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     setIsSpeaking(true);
@@ -122,15 +138,14 @@ export function AIMessage({
     if (lastAutoSpokenTextRef.current === cleanText) return;
     lastAutoSpokenTextRef.current = cleanText;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = voiceLanguage;
+    const utterance = createUtterance();
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     window.speechSynthesis.speak(utterance);
     return () => {
       window.speechSynthesis.cancel();
     };
-  }, [autoSpeakResponses, cleanText, isStreaming, ttsSupported, voiceLanguage]);
+  }, [autoSpeakResponses, cleanText, createUtterance, isStreaming, ttsSupported]);
 
   let codeBlockIndex = 0;
 

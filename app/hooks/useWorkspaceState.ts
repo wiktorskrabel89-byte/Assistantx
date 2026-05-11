@@ -464,10 +464,24 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setTtsVoiceId = useCallback((ttsVoiceId: string) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, ttsVoiceId },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const setAutoSpeakResponses = useCallback((autoSpeakResponses: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
       settings: { ...workspace.settings, autoSpeakResponses },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setPersonalityMode = useCallback((personalityMode: import("@/lib/ai-config").PersonalityMode) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, personalityMode },
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
@@ -709,7 +723,9 @@ export function useWorkspaceState() {
     setSttEnabled,
     setTtsEnabled,
     setVoiceLanguage,
+    setTtsVoiceId,
     setAutoSpeakResponses,
+    setPersonalityMode,
     clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,
