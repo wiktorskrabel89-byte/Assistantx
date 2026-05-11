@@ -36,6 +36,10 @@ export async function reportChatTokenUsage(params: {
   reply: string;
   routeReason: string;
   cached: boolean;
+  /** Actual input token count from provider stream (preferred over estimate). */
+  actualInputTokens?: number;
+  /** Actual output token count from provider stream (preferred over estimate). */
+  actualOutputTokens?: number;
 }) {
   const supabase = await getSupabase();
   await logUsageEvent({
@@ -45,11 +49,12 @@ export async function reportChatTokenUsage(params: {
     provider: resolveProvider(params.model),
     model: params.model,
     route: "/api/chat",
-    tokenInput: estimateInputTokens(params.messages),
-    tokenOutput: estimateOutputTokens(params.reply),
+    tokenInput: params.actualInputTokens ?? estimateInputTokens(params.messages),
+    tokenOutput: params.actualOutputTokens ?? estimateOutputTokens(params.reply),
     metadata: {
       cached: params.cached,
       routeReason: params.routeReason,
+      tokenCountSource: params.actualInputTokens !== undefined ? "provider" : "estimate",
     },
   });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { toast } from "sonner";
 import { createClient as createSupabaseClient } from "@/lib/client";
 import { getLinkedProviders, getOAuthQueryParams, getOAuthScopes, getProviderLabel, isOAuthProvider, type OAuthProvider } from "@/lib/integrations";
 import {
@@ -258,7 +259,9 @@ export function useWorkspaceSync({ loaded, state, setState, stateRef }: UseWorks
         setCloudSyncMessage("All workspace changes synced.");
       } catch (error) {
         setCloudSyncStatus("error");
-        setCloudSyncMessage(error instanceof Error ? error.message : "Failed to save workspace changes.");
+        const message = error instanceof Error ? error.message : "Failed to save workspace changes.";
+        setCloudSyncMessage(message);
+        toast.error(message, { duration: 4000 });
       }
     }, 700);
 

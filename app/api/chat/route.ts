@@ -834,6 +834,9 @@ export const POST = async (req: Request) => {
       let fullReply = "";
       let effectiveModel = selectedModel;
       let effectiveRouteReason = routeReason;
+      // Actual token counts from provider stream usage chunk (preferred over estimates).
+      let actualInputTokens: number | undefined;
+      let actualOutputTokens: number | undefined;
       const safeEnqueue = (payload: string) => {
         if (closed || requestSignal.aborted) return;
         // Collect assistant tokens for saving
@@ -861,6 +864,8 @@ export const POST = async (req: Request) => {
               reply: fullReply.trim(),
               routeReason: effectiveRouteReason,
               cached: false,
+              actualInputTokens,
+              actualOutputTokens,
             });
           }
           controller.close();
@@ -1032,6 +1037,10 @@ export const POST = async (req: Request) => {
                 safeEnqueue(`data: ${JSON.stringify({ model: label, routeReason: effectiveRouteReason, status: "Writing response..." })}\n\n`);
                 modelSent = true;
               }
+              // Capture actual token counts reported by the provider (preferred over estimates).
+              const usage = parsed.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
+              if (usage?.prompt_tokens) actualInputTokens = usage.prompt_tokens;
+              if (usage?.completion_tokens) actualOutputTokens = usage.completion_tokens;
               const reasoning = parsed.choices?.[0]?.delta?.reasoning;
               if (reasoning) {
                 safeEnqueue(`data: ${JSON.stringify({ reasoning })}\n\n`);

@@ -2,6 +2,7 @@
 
 import { Image as ImageIcon, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 type GeneratedImage = {
   id: string;
@@ -45,13 +46,14 @@ export function ImageStudioTab({ dark }: { dark: boolean }) {
   const generate = useCallback(async () => {
     if (!prompt.trim()) return;
     setLoading(true);
+    const toastId = toast.loading("Generating image…");
     try {
       const response = await fetch("/api/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, quality, enhancePrompt }),
       });
-      const payload = await response.json() as { url?: string; provider?: string; model?: string; promptUsed?: string };
+      const payload = await response.json() as { url?: string; provider?: string; model?: string; promptUsed?: string; error?: string };
       if (payload.url) {
         setLatestImage({
           id: `latest-${Date.now()}`,
@@ -63,8 +65,13 @@ export function ImageStudioTab({ dark }: { dark: boolean }) {
           image_url: payload.url,
           created_at: new Date().toISOString(),
         });
+        toast.success("Image generated", { id: toastId });
+      } else {
+        toast.error(payload.error ?? "Image generation failed", { id: toastId });
       }
       await loadHistory();
+    } catch {
+      toast.error("Image generation failed", { id: toastId });
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { headers } from "next/headers";
+import { Toaster } from "sonner";
 import { AppBootTasks } from "./components/AppBootTasks";
 import { QueryProvider } from "./components/QueryProvider";
 import "./globals.css";
@@ -66,6 +67,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>
         <AppBootTasks />
+        <Toaster richColors closeButton position="bottom-right" />
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/client";
 import { ALL_MODELS } from "@/lib/ai-config";
 import { BUILT_IN_AGENTS, createId, createMessage, deriveTitle, NEW_CHAT_TITLE } from "../lib/chat-state";
@@ -379,12 +380,27 @@ export function useChatTransport({
         formData.append("file", queuedMessage.file);
         formData.append("message", userMsg || `What is in ${queuedMessage.file.name}?`);
 
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-          signal: requestAbortController.signal,
-        });
-        await consumeStream(response, workspaceId, chatId);
+        const toastId = toast.loading(`Uploading ${queuedMessage.file.name}…`);
+        try {
+          const response = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+            signal: requestAbortController.signal,
+          });
+          if (response.ok) {
+            toast.success("File uploaded successfully", { id: toastId });
+          } else {
+            toast.error("File upload failed", { id: toastId });
+          }
+          await consumeStream(response, workspaceId, chatId);
+        } catch (err) {
+          if (!isAbortLikeError(err)) {
+            toast.error("File upload failed", { id: toastId });
+          } else {
+            toast.dismiss(toastId);
+          }
+          throw err;
+        }
         return;
       }
 
