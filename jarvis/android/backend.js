@@ -114,7 +114,13 @@ export function useBackendConnection() {
   }, []);
 
   useEffect(() => {
-    void AsyncStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(trimMessages(messages))).catch(() => null);
+    const timeoutId = setTimeout(() => {
+      void AsyncStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(trimMessages(messages))).catch(() => null);
+    }, 250);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [messages]);
 
   const pushMessage = useCallback((message) => {

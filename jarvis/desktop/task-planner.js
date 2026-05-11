@@ -29,7 +29,7 @@ function planSegment(segment, options = {}) {
 
   const favoriteApp = options.favoriteApp;
   const favoriteAwareText = favoriteApp
-    ? text.replace(/\b(my|moja|moją|moj[aąę]?|ulubion[aey]|favorite)\s+(app|game|aplikacj[aeę]?|gr[aeę])\b/gi, favoriteApp)
+    ? text.replace(/\b(?:(?:my|moja|moją|moj[aąę]?)\s+)?(?:favorite|ulubion[aey])\s+(app|game|aplikacj[aeę]?|gr[aeę])\b/gi, favoriteApp)
     : text;
 
   let match = favoriteAwareText.match(/(?:open|launch|start|uruchom|odpal|otw[oó]rz)\s+(?:app\s+)?(.+)/i);

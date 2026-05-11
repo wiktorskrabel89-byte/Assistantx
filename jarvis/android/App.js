@@ -42,6 +42,8 @@ function MessageBubble({ message }) {
           source={{ uri: message.imageDataUrl }}
           style={styles.previewImage}
           resizeMode="cover"
+          accessible
+          accessibilityLabel="Screenshot preview from Jarvis"
         />
       ) : null}
       <Text style={styles.messageMeta}>
@@ -306,7 +308,13 @@ export default function App() {
         {recentScreenshot ? (
           <View style={styles.previewCard}>
             <Text style={styles.sectionTitle}>Latest screenshot</Text>
-            <Image source={{ uri: recentScreenshot.imageDataUrl }} style={styles.latestPreviewImage} resizeMode="cover" />
+            <Image
+              source={{ uri: recentScreenshot.imageDataUrl }}
+              style={styles.latestPreviewImage}
+              resizeMode="cover"
+              accessible
+              accessibilityLabel="Latest screenshot preview from Jarvis"
+            />
           </View>
         ) : null}
 

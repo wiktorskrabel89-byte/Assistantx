@@ -3,7 +3,6 @@ const {
 	connectToBackend,
 	executeStructuredCommand,
 	getLocalStateSnapshot,
-	sendMessageToBackend,
 	onMessage,
 	onStatus,
 	queuePromptExecution,
@@ -59,9 +58,6 @@ window.addEventListener('DOMContentLoaded', () => {
 	const urlInput = document.getElementById('url-input');
 	const urlGo = document.getElementById('url-go');
 	const urlSearch = document.getElementById('url-search');
-	const chatModelSelect = document.getElementById('chat-model');
-	const sttModelSelect = document.getElementById('stt-model');
-	const ttsModelSelect = document.getElementById('tts-model');
 	const voiceLanguageSelect = document.getElementById('voice-language');
 	const speechToTextButton = document.getElementById('speech-to-text');
 	const autoTtsToggle = document.getElementById('auto-tts');

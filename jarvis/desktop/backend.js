@@ -1,6 +1,6 @@
 const fs = require('fs');
 const WebSocket = require('ws');
-const { exec, execFile } = require('child_process');
+const { execFile } = require('child_process');
 const EventEmitter = require('events');
 const os = require('os');
 const path = require('path');
@@ -156,18 +156,6 @@ function respond(text, extra = {}) {
   });
 }
 
-function execPromise(command) {
-  return new Promise((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(stderr?.trim() || error.message));
-        return;
-      }
-      resolve((stdout || '').trim());
-    });
-  });
-}
-
 function execFilePromise(file, args) {
   return new Promise((resolve, reject) => {
     execFile(file, args, (error, stdout, stderr) => {
@@ -183,7 +171,7 @@ function execFilePromise(file, args) {
 function ensureSafePath(targetPath) {
   const raw = String(targetPath || '').trim();
   const resolved = raw
-    ? path.resolve(raw.includes(':') ? raw : path.join(DEFAULT_FILE_ROOT, raw))
+    ? path.resolve(path.normalize(raw.includes(':') ? raw : path.join(DEFAULT_FILE_ROOT, raw)))
     : DEFAULT_FILE_ROOT;
   const allowed = SAFE_ROOTS.some((root) => resolved.toLowerCase().startsWith(path.resolve(root).toLowerCase()));
   if (!allowed) {
@@ -201,7 +189,7 @@ async function openUrl(url) {
   if (ipcRenderer) {
     await ipcRenderer.invoke('open-url', nextUrl);
   } else {
-    await execPromise(`start ${nextUrl}`);
+    await execFilePromise('cmd.exe', ['/c', 'start', '', nextUrl]);
   }
   return { summary: `Opened URL in browser: ${nextUrl}`, url: nextUrl };
 }
@@ -243,9 +231,9 @@ async function searchYouTube(query) {
 
 async function openApp(app) {
   const normalized = String(app || '').trim().toLowerCase();
-  const command = APP_OPEN_MAP[normalized];
-  if (!command) throw new Error(`Unknown app: ${app}. Supported: ${Object.keys(APP_OPEN_MAP).join(', ')}`);
-  await execPromise(command);
+  const target = APP_OPEN_MAP[normalized];
+  if (!target) throw new Error(`Unknown app: ${app}. Supported: ${Object.keys(APP_OPEN_MAP).join(', ')}`);
+  await execFilePromise('cmd.exe', ['/c', 'start', '', target]);
   rememberApp(normalized);
   return { summary: `Opened ${normalized}.`, app: normalized };
 }
@@ -254,25 +242,26 @@ async function closeApp(app) {
   const normalized = String(app || '').trim().toLowerCase();
   const processName = APP_CLOSE_MAP[normalized];
   if (!processName) throw new Error(`Unknown app: ${app}. Supported for close: ${Object.keys(APP_CLOSE_MAP).join(', ')}`);
-  await execPromise(`taskkill /IM ${processName} /F`);
+  await execFilePromise('taskkill.exe', ['/IM', processName, '/F']);
   return { summary: `Closed ${normalized}.`, app: normalized };
 }
 
 async function takeScreenshot() {
   const ts = Date.now();
   const screenshotPath = path.join(USER_HOME, 'Desktop', `jarvis_screenshot_${ts}.png`);
+  const escapedPath = screenshotPath.replace(/'/g, "''");
   const psCmd = [
     'Add-Type -AssemblyName System.Windows.Forms',
     'Add-Type -AssemblyName System.Drawing',
     '$b = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width,[System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height)',
     '$g = [System.Drawing.Graphics]::FromImage($b)',
     '$g.CopyFromScreen(0,0,0,0,$b.Size)',
-    `$b.Save('${screenshotPath.replace(/\\/g, '\\\\')}')`,
+    `$b.Save('${escapedPath}')`,
     '$g.Dispose()',
     '$b.Dispose()',
   ].join('; ');
-  await execPromise(`powershell -NoProfile -Command "${psCmd}"`);
-  const imageDataUrl = `data:image/png;base64,${fs.readFileSync(screenshotPath).toString('base64')}`;
+  await execFilePromise('powershell.exe', ['-NoProfile', '-Command', psCmd]);
+  const imageDataUrl = `data:image/png;base64,${(await fs.promises.readFile(screenshotPath)).toString('base64')}`;
   if (ipcRenderer) {
     void ipcRenderer.invoke('open-path', path.dirname(screenshotPath));
   }
@@ -293,13 +282,13 @@ async function getSystemInfo() {
     '$uptime = (Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime',
     'Write-Output "OS: $os | CPU: $cpu | RAM: ${ram}GB | Uptime: $([math]::Round($uptime.TotalHours,1))h"',
   ].join('; ');
-  const stdout = await execPromise(`powershell -NoProfile -Command "${psCmd}"`);
+  const stdout = await execFilePromise('powershell.exe', ['-NoProfile', '-Command', psCmd]);
   return { summary: stdout };
 }
 
 async function listProcesses() {
   const psCmd = 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Name,@{N="CPU(s)";E={[math]::Round($_.CPU,1)}},@{N="RAM(MB)";E={[math]::Round($_.WorkingSet/1MB,0)}} | Format-Table -AutoSize | Out-String';
-  const stdout = await execPromise(`powershell -NoProfile -Command "${psCmd}"`);
+  const stdout = await execFilePromise('powershell.exe', ['-NoProfile', '-Command', psCmd]);
   return { summary: `Top 10 processes:\n${stdout}` };
 }
 
@@ -340,7 +329,7 @@ async function openFile(targetPath) {
   if (ipcRenderer) {
     await ipcRenderer.invoke('open-path', safePath);
   } else {
-    await execPromise(`start "" "${safePath}"`);
+    await execFilePromise('cmd.exe', ['/c', 'start', '', safePath]);
   }
   rememberFile(safePath);
   return { summary: `Opened path: ${safePath}`, path: safePath };
@@ -360,7 +349,7 @@ async function typeText(text) {
 async function setVolume(level) {
   const scalar = Math.max(0, Math.min(100, Number(level) || 50));
   const nircmdLevel = Math.round((scalar / 100) * 65535);
-  await execPromise(`nircmd.exe setsysvolume ${nircmdLevel}`);
+  await execFilePromise('nircmd.exe', ['setsysvolume', String(nircmdLevel)]);
   return { summary: `Volume set to ${scalar}%.`, level: scalar };
 }
 
@@ -402,15 +391,15 @@ async function executeStructuredCommand(msg, context = {}) {
         result = await searchYouTube(query || text || '');
         break;
       case 'volumeUp':
-        await execPromise('nircmd.exe changesysvolume 6554');
+        await execFilePromise('nircmd.exe', ['changesysvolume', '6554']);
         result = { summary: 'Volume increased.' };
         break;
       case 'volumeDown':
-        await execPromise('nircmd.exe changesysvolume -6554');
+        await execFilePromise('nircmd.exe', ['changesysvolume', '-6554']);
         result = { summary: 'Volume decreased.' };
         break;
       case 'mute':
-        await execPromise('nircmd.exe mutesysvolume 2');
+        await execFilePromise('nircmd.exe', ['mutesysvolume', '2']);
         result = { summary: 'Mute toggled.' };
         break;
       case 'setVolume':
@@ -442,23 +431,23 @@ async function executeStructuredCommand(msg, context = {}) {
         result = await typeText(text || '');
         break;
       case 'lockScreen':
-        await execPromise('rundll32.exe user32.dll,LockWorkStation');
+        await execFilePromise('rundll32.exe', ['user32.dll,LockWorkStation']);
         result = { summary: 'Screen locked.' };
         break;
       case 'shutdown':
-        await execPromise('shutdown /s /t 30');
+        await execFilePromise('shutdown.exe', ['/s', '/t', '30']);
         result = { summary: 'Shutdown scheduled in 30 seconds.' };
         break;
       case 'restart':
-        await execPromise('shutdown /r /t 30');
+        await execFilePromise('shutdown.exe', ['/r', '/t', '30']);
         result = { summary: 'Restart scheduled in 30 seconds.' };
         break;
       case 'sleep':
-        await execPromise('rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
+        await execFilePromise('rundll32.exe', ['powrprof.dll,SetSuspendState', '0,1,0']);
         result = { summary: 'Sleep requested.' };
         break;
       case 'cancelShutdown':
-        await execPromise('shutdown /a');
+        await execFilePromise('shutdown.exe', ['/a']);
         result = { summary: 'Shutdown/restart cancelled.' };
         break;
       default:

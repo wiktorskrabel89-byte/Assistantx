@@ -1,4 +1,5 @@
 import dgram from "node:dgram";
+import { timingSafeEqual } from "node:crypto";
 import { createClient } from "@/lib/server";
 
 /** Parse a MAC address string into a 6-byte Buffer.
@@ -59,6 +60,14 @@ function sendMagicPacket(
 /** Wake-on-LAN ports that are standard and safe to accept from callers. */
 const ALLOWED_WOL_PORTS = [7, 9];
 
+function secretsMatch(provided: string | null, expected: string | undefined) {
+  if (!provided || !expected) return false;
+  const providedBuffer = Buffer.from(provided);
+  const expectedBuffer = Buffer.from(expected);
+  if (providedBuffer.length !== expectedBuffer.length) return false;
+  return timingSafeEqual(providedBuffer, expectedBuffer);
+}
+
 export async function POST(request: Request): Promise<Response> {
   // Require authentication — this endpoint sends UDP packets into the server's
   // network and must not be callable by anonymous users.
@@ -67,7 +76,7 @@ export async function POST(request: Request): Promise<Response> {
   const configuredSharedSecret = process.env.JARVIS_WOL_SHARED_SECRET;
 
   if (!authHeader?.startsWith("Bearer ")) {
-    if (!configuredSharedSecret || sharedSecret !== configuredSharedSecret) {
+    if (!secretsMatch(sharedSecret, configuredSharedSecret)) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
