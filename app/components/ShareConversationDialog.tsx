@@ -75,11 +75,13 @@ export function ShareConversationDialog({
             <span>Download VS Code bundle</span>
             <Download className="h-4 w-4 text-slate-400" />
           </button>
-          <button onClick={onExportMarkdown} className={`rounded-2xl border px-4 py-3 text-left text-sm ${dark ? "border-slate-800 bg-slate-900 hover:bg-slate-800" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}>
-            Export Markdown
+          <button onClick={onExportMarkdown} className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm ${dark ? "border-slate-800 bg-slate-900 hover:bg-slate-800" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}>
+            <span>Export Markdown</span>
+            <Download className="h-4 w-4 text-slate-400" />
           </button>
-          <button onClick={onExportJson} className={`rounded-2xl border px-4 py-3 text-left text-sm ${dark ? "border-slate-800 bg-slate-900 hover:bg-slate-800" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}>
-            Export JSON
+          <button onClick={onExportJson} className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm ${dark ? "border-slate-800 bg-slate-900 hover:bg-slate-800" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}>
+            <span>Export JSON</span>
+            <Download className="h-4 w-4 text-slate-400" />
           </button>
         </div>
 

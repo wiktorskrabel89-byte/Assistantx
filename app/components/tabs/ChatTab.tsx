@@ -561,6 +561,23 @@ export function ChatTab() {
     URL.revokeObjectURL(url);
   }, [activeChat]);
 
+  // Global keyboard shortcut: Ctrl/Cmd+Shift+S → export current chat as Markdown.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || !event.shiftKey || event.key.toLowerCase() !== "s") return;
+      if (!(event.target instanceof HTMLElement)) return;
+      const tag = event.target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || event.target.contentEditable === "true" || event.target.contentEditable === "plaintext-only") return;
+      if (activeChat.messages.length === 0) return;
+      event.preventDefault();
+      exportMarkdown();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeChat.messages.length, exportMarkdown]);
+
   const exportJson = useCallback(() => {
     const blob = new Blob([JSON.stringify(activeChat, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -724,6 +741,7 @@ export function ChatTab() {
             onCreateChat={createChatAction}
             onOpenWorkspaceTools={() => setWorkspaceToolsOpen((prev) => !prev)}
             onOpenUsage={() => setUsageDashboardOpen((prev) => !prev)}
+            onExportMarkdown={exportMarkdown}
             personalityMode={activeWorkspace.settings.personalityMode ?? "default"}
             onPersonalityModeChange={setPersonalityMode}
           />

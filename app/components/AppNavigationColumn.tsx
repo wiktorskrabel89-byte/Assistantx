@@ -82,11 +82,12 @@ const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "ai-learning",      label: "AI Learning",     description: "Memory + RAG + tuning controls", icon: BrainCircuit, adminOnly: true },
 ];
 
-/** Core AI Code mode tabs — always visible in the sidebar when in AI Code mode */
-const CORE_CODE_TABS: { id: AppNavigationTab; label: string; icon: LucideIcon }[] = [
-  { id: "sandbox",  label: "Sandbox",  icon: SquareTerminal },
-  { id: "projects", label: "Projekty", icon: FolderKanban },
-  { id: "codebase", label: "Codebase", icon: Database },
+/** Core AI Code mode tabs — always visible in the sidebar when in AI Code mode.
+ *  The keyboard shortcuts Ctrl+Shift+2/3/4 correspond to indices 0/1/2 (+2 offset). */
+const CORE_CODE_TABS: { id: AppNavigationTab; label: string; icon: LucideIcon; shortcutNumber: number }[] = [
+  { id: "sandbox",  label: "Sandbox",  icon: SquareTerminal, shortcutNumber: 2 },
+  { id: "projects", label: "Projekty", icon: FolderKanban,   shortcutNumber: 3 },
+  { id: "codebase", label: "Codebase", icon: Database,       shortcutNumber: 4 },
 ];
 
 const ADD_ON_IDS = new Set(ADD_ON_ITEMS.map((a) => a.id));
@@ -231,7 +232,7 @@ export function AppNavigationColumn({
         <button
           type="button"
           onClick={() => onSelectTab("chat")}
-          title="Chat"
+          title="Chat (Ctrl+Shift+1)"
           aria-current={isChatActive ? "page" : undefined}
           className={navButtonClass(isChatActive)}
         >
@@ -242,12 +243,13 @@ export function AppNavigationColumn({
         {/* Core AI Code mode tabs — always visible when in AI Code mode */}
         {appMode === "ai-code" && (
           <div className="mt-1.5 space-y-0.5">
-            {CORE_CODE_TABS.map(({ id, label, icon: Icon }) => (
+            {CORE_CODE_TABS.map(({ id, label, icon: Icon, shortcutNumber }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => onSelectTab(id)}
                 aria-current={activeTab === id ? "page" : undefined}
+                title={`${label} (Ctrl+Shift+${shortcutNumber})`}
                 className={navButtonClass(activeTab === id)}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />
@@ -568,7 +570,7 @@ export function AppNavigationColumn({
               <MessageSquareText className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Chat</TooltipContent>
+          <TooltipContent side="right">Chat (Ctrl+Shift+1)</TooltipContent>
         </Tooltip>
 
         {/* Pinned add-ons */}
@@ -646,7 +648,7 @@ export function AppNavigationColumn({
               <Settings2 className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Settings</TooltipContent>
+          <TooltipContent side="right">Settings (Ctrl+Shift+,)</TooltipContent>
         </Tooltip>
 
         {/* Notifications */}
@@ -674,7 +676,7 @@ export function AppNavigationColumn({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Notifications</TooltipContent>
+          <TooltipContent side="right">Notifications (Ctrl+Shift+.)</TooltipContent>
         </Tooltip>
 
         {/* User avatar */}

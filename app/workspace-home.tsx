@@ -189,6 +189,56 @@ function HomeContent() {
     }
   }, [notificationsHook]);
 
+  // Global keyboard shortcuts for workspace tab navigation.
+  // Ctrl/Cmd+Shift+1 → Chat, 2-4 → AI Code tabs (ai-code mode only),
+  // , → Settings, . → Notifications.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const mod = event.ctrlKey || event.metaKey;
+      if (!mod || !event.shiftKey) return;
+      // Don't fire when the user is typing in an input or editable area.
+      if (event.target instanceof HTMLElement) {
+        const tag = event.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || event.target.contentEditable === "true" || event.target.contentEditable === "plaintext-only") return;
+      }
+      switch (event.key) {
+        case "1":
+          event.preventDefault();
+          handleSelectAppTab("chat");
+          break;
+        case "2":
+          if (appMode === "ai-code") {
+            event.preventDefault();
+            handleSelectAppTab("sandbox");
+          }
+          break;
+        case "3":
+          if (appMode === "ai-code") {
+            event.preventDefault();
+            handleSelectAppTab("projects");
+          }
+          break;
+        case "4":
+          if (appMode === "ai-code") {
+            event.preventDefault();
+            handleSelectAppTab("codebase");
+          }
+          break;
+        case ",":
+          event.preventDefault();
+          handleSelectAppTab("settings");
+          break;
+        case ".":
+          event.preventDefault();
+          handleSelectAppTab("notifications");
+          break;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [appMode, handleSelectAppTab]);
+
   useEffect(() => {
     const handleNavigateTab = (event: Event) => {
       const customEvent = event as CustomEvent<{ tab?: AppNavigationTab }>;
