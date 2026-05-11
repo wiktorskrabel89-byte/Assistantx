@@ -17,6 +17,8 @@ try {
 	ipcRenderer = null;
 }
 
+const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
+
 function appendMessage(log, title, body, tone = 'system') {
 	const item = document.createElement('div');
 	item.className = `message ${tone}`;
@@ -76,7 +78,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	const defaultVoiceSettings = {
 		wakeWordEnabled: true,
-		wakeWordPhrase: 'Hey Jarvis',
+		wakeWordPhrase: DEFAULT_JARVIS_WAKE_PHRASE,
 		allowBackgroundWake: true,
 		voiceLanguage: voiceLanguageSelect?.value || 'en-US',
 		autoTts: true,
@@ -102,7 +104,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	let voiceSettings = readVoiceSettings();
 	if (wakeWordEnabledToggle) wakeWordEnabledToggle.checked = !!voiceSettings.wakeWordEnabled;
-	if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || 'Hey Jarvis';
+	if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
 	if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
 	if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
 	if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
@@ -287,7 +289,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			voiceSettings = {
 				...voiceSettings,
 				wakeWordEnabled: Boolean(wakeWordEnabledToggle?.checked),
-				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || 'Hey Jarvis',
+				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
 				allowBackgroundWake: Boolean(allowBackgroundWakeToggle?.checked),
 				voiceLanguage: voiceLanguageSelect?.value || 'en-US',
 				autoTts: Boolean(autoTtsToggle?.checked),
@@ -331,7 +333,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		wakeRecognition.onresult = (event) => {
 			if (!voiceSettings.wakeWordEnabled) return;
 			if (!voiceSettings.allowBackgroundWake && !document.hasFocus()) return;
-			const phrase = String(voiceSettings.wakeWordPhrase || 'Hey Jarvis').toLowerCase();
+			const phrase = String(voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE).toLowerCase();
 			let transcript = '';
 			for (let i = event.resultIndex; i < event.results.length; i += 1) {
 				transcript += event.results[i][0].transcript;
@@ -350,8 +352,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		};
 		try {
 			wakeRecognition.start();
-		} catch {
-			// no-op
+		} catch (error) {
+			appendMessage(log, 'Wake word', `Wake listener failed to start: ${error?.message || 'unknown error'}`, 'error');
 		}
 	}
 	setupWakeWordListener();

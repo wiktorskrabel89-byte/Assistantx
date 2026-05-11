@@ -31,6 +31,7 @@ import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
+import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
 
 /** Poll interval for the model health endpoint (ms). */
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
@@ -305,7 +306,7 @@ export function ChatTab() {
         transcript += event.results[i][0].transcript;
       }
       const normalized = transcript.toLowerCase();
-      const phrase = (voiceSettings.wakeWordPhrase || "Hey AssistantX").toLowerCase();
+      const phrase = (voiceSettings.wakeWordPhrase || DEFAULT_WEB_WAKE_PHRASE).toLowerCase();
       if (normalized.includes(phrase)) {
         setWakeActivationSignal((current) => current + 1);
       }

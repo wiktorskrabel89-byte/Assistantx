@@ -6,6 +6,7 @@ import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
 import { PRO_PLAN, PRO_PLUS_PLAN } from "@/lib/ai-config";
+import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -269,14 +270,14 @@ export function SettingsTab() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">Wake word</p>
-                  <p className={`text-xs ${mutedClass}`}>Use "Hey AssistantX" in web chat voice mode.</p>
+                  <p className={`text-xs ${mutedClass}`}>Use your configured phrase (&quot;{voiceSettings.wakeWordPhrase || DEFAULT_WEB_WAKE_PHRASE}&quot;) in web chat voice mode.</p>
                 </div>
                 <Switch checked={voiceSettings.wakeWordEnabled} onCheckedChange={setWakeWordEnabled} aria-label="Toggle wake word" />
               </div>
               <Input
                 value={voiceSettings.wakeWordPhrase}
                 onChange={(event) => setWakeWordPhrase(event.target.value)}
-                placeholder="Hey AssistantX"
+                placeholder={DEFAULT_WEB_WAKE_PHRASE}
               />
               <div className="flex items-center justify-between gap-3">
                 <div>

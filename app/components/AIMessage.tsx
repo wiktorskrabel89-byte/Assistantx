@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { CodeReviewPanel } from "./CodeReviewPanel";
 import { ReviewPanel } from "./ReviewPanel";
@@ -83,6 +83,7 @@ export function AIMessage({
 }: AIMessageProps) {
   const responseCopyId = `${entry.id}-response`;
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const lastAutoSpokenTextRef = useRef("");
   const ttsSupported = ttsEnabled && typeof window !== "undefined" && "speechSynthesis" in window;
 
   const codeBlocks = useMemo(() => {
@@ -118,16 +119,16 @@ export function AIMessage({
 
   useEffect(() => {
     if (!autoSpeakResponses || !ttsSupported || isStreaming || !cleanText.trim()) return;
+    if (lastAutoSpokenTextRef.current === cleanText) return;
+    lastAutoSpokenTextRef.current = cleanText;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = voiceLanguage;
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
-    setIsSpeaking(true);
     window.speechSynthesis.speak(utterance);
     return () => {
       window.speechSynthesis.cancel();
-      setIsSpeaking(false);
     };
   }, [autoSpeakResponses, cleanText, isStreaming, ttsSupported, voiceLanguage]);
 

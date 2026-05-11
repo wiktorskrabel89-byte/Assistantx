@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "
 import { type RefObject } from "react";
 import dynamic from "next/dynamic";
 import type { QueuedMessage } from "../lib/chat-types";
+import { DEFAULT_WEB_WAKE_PHRASE } from "../lib/voice";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -115,7 +116,7 @@ export function ChatComposer({
   sttEnabled = true,
   voiceLanguage = "en-US",
   wakeWordEnabled = true,
-  wakeWordPhrase = "Hey AssistantX",
+  wakeWordPhrase = DEFAULT_WEB_WAKE_PHRASE,
   externalVoiceActivationSignal = 0,
 }: ChatComposerProps) {
   // Auto-resize textarea
@@ -158,7 +159,7 @@ export function ChatComposer({
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = voiceLanguage || navigator.language || "en-US";
+    recognition.lang = voiceLanguage || "en-US";
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let transcript = "";
       let hasFinal = false;
@@ -208,9 +209,17 @@ export function ChatComposer({
     return () => { recognitionRef.current?.stop(); };
   }, []);
 
+  const lastExternalActivationRef = useRef<number>(externalVoiceActivationSignal);
   useEffect(() => {
-    if (!externalVoiceActivationSignal || !wakeWordEnabled || !sttEnabled || micActive) return;
-    startMic(true);
+    if (!wakeWordEnabled || !sttEnabled || micActive) return;
+    if (lastExternalActivationRef.current === externalVoiceActivationSignal) return;
+    lastExternalActivationRef.current = externalVoiceActivationSignal;
+    const timeoutId = window.setTimeout(() => {
+      startMic(true);
+    }, 0);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [externalVoiceActivationSignal, micActive, startMic, sttEnabled, wakeWordEnabled]);
 
   // ── Clipboard paste for images ─────────────────────────────────────────────
@@ -326,7 +335,7 @@ export function ChatComposer({
             aria-label={micActive ? "Stop voice orb" : "Start voice orb"}
             title={micActive ? "Stop voice mode" : "Start voice mode"}
           >
-            <span className={cn("absolute inset-0 rounded-full", voiceOrbMode !== "idle" ? "animate-ping bg-blue-300/25" : "")} />
+            <span className={cn("absolute inset-0 rounded-full", voiceOrbMode !== "idle" ? "motion-safe:animate-ping bg-blue-300/25" : "")} />
             <span className="relative text-[10px] font-semibold uppercase tracking-wider text-white">
               {voiceOrbMode === "listening" ? "Live" : voiceOrbMode === "thinking" ? "AI" : "Voice"}
             </span>

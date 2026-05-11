@@ -22,6 +22,7 @@ import type {
   Workspace,
   WorkspaceSettings,
 } from "./chat-types";
+import { DEFAULT_WEB_WAKE_PHRASE } from "./voice";
 
 type AutoRoutedMode = Exclude<Mode, "image" | "upload">;
 
@@ -162,7 +163,7 @@ export function createSettings(): WorkspaceSettings {
     systemPrompt: "",
     enabledTools: [],
     wakeWordEnabled: true,
-    wakeWordPhrase: "Hey AssistantX",
+    wakeWordPhrase: DEFAULT_WEB_WAKE_PHRASE,
     sttEnabled: true,
     ttsEnabled: true,
     voiceLanguage: "en-US",
