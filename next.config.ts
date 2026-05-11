@@ -82,11 +82,12 @@ const nextConfig = {
     'mdast-util-mdx-jsx',
     'mdast-util-mdxjs-esm',
   ],
-   headers: async () => [
-    {
-      // Security headers for all responses
-      source: '/(.*)',
-      headers: [
+  headers: async () => {
+    const headers = [
+      {
+        // Security headers for all responses
+        source: '/(.*)',
+        headers: [
         // Prevent clickjacking (belt-and-suspenders alongside frame-ancestors in CSP)
         { key: 'X-Frame-Options', value: 'DENY' },
         // Prevent MIME-type sniffing
@@ -122,16 +123,22 @@ const nextConfig = {
             "form-action 'self'",
           ].join('; '),
         },
-      ],
-    },
-    {
-      // Long-lived immutable cache for hashed Next.js static assets
-      source: '/_next/static/:path*',
-      headers: [
-        { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
-      ],
-    },
-  ],
+        ],
+      },
+    ]
+
+    if (process.env.NODE_ENV === 'production') {
+      headers.push({
+        // Long-lived immutable cache for hashed Next.js static assets
+        source: '/_next/static/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      })
+    }
+
+    return headers
+  },
 };
 
 export default nextConfig;

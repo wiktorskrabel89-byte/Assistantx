@@ -32,7 +32,7 @@
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
     "radix-ui": "^1.4.3",
-    "react": "19.2.4",
+    "react": "19.2.6",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",
@@ -65,7 +65,9 @@
   },
   "overrides": {
     "glob": "^13.0.0",
-    "babel-plugin-istanbul": "^8.0.0"
+    "babel-plugin-istanbul": "^8.0.0",
+    "dompurify": "3.4.0",
+    "postcss": "8.5.10"
   },
   "optionalDependencies": {
     "@tailwindcss/oxide-linux-x64-gnu": "^4.2.2",
