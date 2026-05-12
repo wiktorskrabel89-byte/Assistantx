@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,28 @@ export default function JarvisTab({
   onOpenPairingDialog?: () => void;
   onShowPhonePairingBanner?: () => void;
 }) {
+  const [latestGithubVersion, setLatestGithubVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/jarvis/version");
+        if (!res.ok) return;
+
+        const payload = (await res.json()) as { version?: string };
+        if (cancelled) return;
+        if (payload.version) setLatestGithubVersion(payload.version);
+      } catch {
+        // Keep download actions available even if version lookup fails.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function downloadForWindows() {
     let arch = "x64";
@@ -78,6 +101,11 @@ export default function JarvisTab({
             <CardDescription className="max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
               Keep your AssistantX assistant close at hand. Install Jarvis on Windows or Android and continue your workflows with updated models and voice features.
             </CardDescription>
+            {latestGithubVersion && (
+              <p className="text-xs font-medium text-sky-700">
+                Latest Jarvis release on GitHub: {latestGithubVersion}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
