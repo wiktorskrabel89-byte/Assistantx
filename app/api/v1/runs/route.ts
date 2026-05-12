@@ -43,11 +43,14 @@ export async function GET(request: Request) {
   const status = rawStatus as ValidStatus | null;
   const rawLimit = searchParams.get("limit");
   const parsedLimit = rawLimit ? Number(rawLimit) : 50;
-  if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
-    const err: ApiV1Error = { error: "limit must be a positive integer.", code: "invalid_limit" };
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+    const err: ApiV1Error = {
+      error: "limit must be an integer between 1 and 100.",
+      code: "invalid_limit",
+    };
     return Response.json(err, { status: 400 });
   }
-  const limit = Math.min(100, Math.max(1, parsedLimit));
+  const limit = parsedLimit;
   const requestedOrgId = searchParams.get("organizationId") ?? actorResult.actor.organizationId;
 
   let runs: ApiV1RunSummary[] = [];
