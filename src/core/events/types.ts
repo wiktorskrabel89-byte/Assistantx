@@ -5,6 +5,7 @@ export const RUNTIME_EVENT_TYPES = {
   WORKFLOW_FAILED: "WORKFLOW_FAILED",
   WORKFLOW_CANCELLED: "WORKFLOW_CANCELLED",
   WORKFLOW_CHECKPOINT: "WORKFLOW_CHECKPOINT",
+  START_GAMING_REQUESTED: "START_GAMING_REQUESTED",
   // Task lifecycle
   TASK_CREATED: "TASK_CREATED",
   TASK_COMPLETED: "TASK_COMPLETED",
@@ -44,4 +45,3 @@ export type RuntimeEvent = {
   executionId?: string;
   payload: Record<string, unknown>;
 };
-

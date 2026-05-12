@@ -51,6 +51,31 @@ export async function executeRuntimeRequest(
     payload: { workflow: request.workflow },
   });
 
+  // Durable template workflow path: queue in Inngest and return immediately.
+  if (request.workflow === "start_gaming") {
+    await eventBus.publish({
+      type: RUNTIME_EVENT_TYPES.START_GAMING_REQUESTED,
+      timestamp: startedAt,
+      actorUserId: request.actor.userId,
+      organizationId: request.actor.organizationId,
+      executionId,
+      payload: {
+        workflow: request.workflow,
+        input: request.input,
+      },
+    });
+
+    return {
+      executionId,
+      status: "queued",
+      output: {
+        workflow: "start_gaming",
+        orchestrator: "inngest",
+        queued: true,
+      },
+    };
+  }
+
   // Update status to running.
   if (hasPersistentRecord) {
     try {

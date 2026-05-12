@@ -8,6 +8,7 @@
 export { workflowExecuteFunction } from "@/src/inngest/functions/workflow-execute";
 export { approvalRequestedFunction } from "@/src/inngest/functions/approval-lifecycle";
 export { agentTaskFunction } from "@/src/inngest/functions/agent-task";
+export { startGamingFunction } from "@/src/inngest/functions/start-gaming";
 
 export const ALL_INNGEST_FUNCTIONS = [
   // Dynamically imported at serve time to avoid circular deps.

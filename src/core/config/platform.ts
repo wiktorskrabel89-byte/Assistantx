@@ -9,7 +9,7 @@
  * 1. Inngest  = locked-in orchestration backbone (not provisional)
  * 2. Org-first multitenancy = must precede all public APIs and SDK surfaces
  * 3. High-risk tools = deny-until-approved on ALL paid tiers
- * 4. FastAPI = Jarvis compatibility bridge only (no new shared runtime logic)
+ * 4. FastAPI = long-term Jarvis orchestration core, Node realtime is optional edge
  */
 
 export type WorkflowOrchestrator = "inngest";
@@ -17,7 +17,7 @@ export type IdentityProvider = "supabase-auth";
 export type VectorProvider = "supabase-pgvector" | "pinecone" | "weaviate";
 export type BackendHost = "railway" | "render" | "fly-io";
 export type HighRiskToolPolicy = "deny_until_approved";
-export type FastApiMode = "compatibility_only";
+export type FastApiMode = "compatibility_only" | "orchestration_core";
 export type OrgMultitenancyPolicy = "org_first_before_public_apis";
 
 export type PlatformDecisions = {
@@ -37,9 +37,10 @@ export type PlatformDecisions = {
   identityProvider: IdentityProvider;
 
   /**
-   * FastAPI remains a compatibility bridge for Jarvis ONLY.
-   * No new shared runtime logic should be added to FastAPI.
-   * All new capabilities must land in Node.js / TypeScript.
+   * FastAPI is the long-term Jarvis orchestration core (AI planning,
+   * secure command routing, automation and local-agent coordination).
+   * Node.js realtime gateway is optional and edge-scoped for low-latency
+   * fanout, presence, streaming UI updates, and signaling.
    */
   fastApiMode: FastApiMode;
 
@@ -78,11 +79,10 @@ export const PLATFORM_DECISIONS: PlatformDecisions = {
   workflowOrchestrator: "inngest",
   cacheProvider: "upstash-redis",
   identityProvider: "supabase-auth",
-  fastApiMode: "compatibility_only",
+  fastApiMode: "orchestration_core",
   vectorProviderV1: "supabase-pgvector",
   backendHost: "railway",
   multitenancyPolicy: "org_first_before_public_apis",
   highRiskToolPolicy: "deny_until_approved",
   orgEnforcementComplete: false,
 };
-
