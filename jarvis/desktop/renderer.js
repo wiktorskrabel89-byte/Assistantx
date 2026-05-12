@@ -8,6 +8,14 @@ const {
 	queuePromptExecution,
 	getBackendUrl,
 } = require('./backend');
+const {
+	addSchedule,
+	getSchedules,
+	syncToCloud,
+	loadFromCloud,
+} = require('./local-state');
+const { startScheduler } = require('./scheduler');
+const { getAccountSession, setAccountSession, clearAccountSession, getLinkedAccounts } = require('./accounts');
 
 // ipcRenderer for URL opening via main process
 let ipcRenderer;
@@ -58,7 +66,22 @@ window.addEventListener('DOMContentLoaded', () => {
 	const urlInput = document.getElementById('url-input');
 	const urlGo = document.getElementById('url-go');
 	const urlSearch = document.getElementById('url-search');
-	const voiceLanguageSelect = document.getElementById('voice-language');
+	const clipboardReadButton = document.getElementById('clipboard-read');
+	const clipboardWriteButton = document.getElementById('clipboard-write');
+	const clipboardWriteInput = document.getElementById('clipboard-write-input');
+	const screenshotDisplaySelect = document.getElementById('screenshot-display');
+	const screenshotCaptureButton = document.getElementById('screenshot-capture');
+	const accountStatusNode = document.getElementById('account-status');
+	const accountBadge = document.getElementById('account-badge');
+	const accountLoginButton = document.getElementById('account-login');
+	const accountSyncButton = document.getElementById('account-sync');
+	const openLinkedAccountsButton = document.getElementById('open-linked-accounts');
+	const linkedAccountsList = document.getElementById('linked-accounts-list');
+	const schedulesList = document.getElementById('schedules-list');
+	const scheduleLabel = document.getElementById('schedule-label');
+	const scheduleCommand = document.getElementById('schedule-command');
+	const scheduleCron = document.getElementById('schedule-cron');
+	const scheduleAddButton = document.getElementById('schedule-add');
 	const speechToTextButton = document.getElementById('speech-to-text');
 	const autoTtsToggle = document.getElementById('auto-tts');
 	const voiceVisualizer = document.getElementById('voice-visualizer');
@@ -494,6 +517,202 @@ window.addEventListener('DOMContentLoaded', () => {
 	(stateSnapshot.history || []).slice(0, 6).reverse().forEach((entry) => {
 		appendMessage(log, entry.title || 'Recent activity', entry.summary || entry.text || 'Completed', entry.level === 'error' ? 'error' : 'system');
 	});
+
+	// ── Clipboard handlers ───────────────────────────────────────────────────
+	if (clipboardReadButton) {
+		clipboardReadButton.addEventListener('click', () => {
+			void executeStructuredCommand({ command: 'readClipboard' }, { source: 'local', origin: 'desktop' });
+			appendMessage(log, 'Clipboard', 'Reading clipboard…');
+		});
+	}
+	if (clipboardWriteButton && clipboardWriteInput) {
+		clipboardWriteButton.addEventListener('click', () => {
+			const showing = clipboardWriteInput.style.display !== 'none';
+			clipboardWriteInput.style.display = showing ? 'none' : '';
+			if (!showing) clipboardWriteInput.focus();
+		});
+		clipboardWriteInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				const text = clipboardWriteInput.value.trim();
+				if (!text) return;
+				void executeStructuredCommand({ command: 'writeClipboard', text }, { source: 'local', origin: 'desktop' });
+				appendMessage(log, 'Clipboard', `Copied to clipboard: ${text}`);
+				clipboardWriteInput.value = '';
+				clipboardWriteInput.style.display = 'none';
+			}
+		});
+	}
+
+	// ── Multi-monitor screenshot ─────────────────────────────────────────────
+	async function populateDisplays() {
+		if (!screenshotDisplaySelect || !ipcRenderer) return;
+		try {
+			const displays = await ipcRenderer.invoke('get-displays').catch(() => null);
+			if (!displays || !displays.length) return;
+			screenshotDisplaySelect.innerHTML = '';
+			displays.forEach((d, i) => {
+				const opt = document.createElement('option');
+				opt.value = String(i);
+				opt.textContent = d.label || (d.isPrimary ? `Primary (${d.bounds.width}×${d.bounds.height})` : `Display ${i + 1} (${d.bounds.width}×${d.bounds.height})`);
+				screenshotDisplaySelect.appendChild(opt);
+			});
+		} catch { /* ignore */ }
+	}
+	void populateDisplays();
+
+	if (screenshotCaptureButton) {
+		screenshotCaptureButton.addEventListener('click', () => {
+			const displayIndex = Number(screenshotDisplaySelect?.value || 0);
+			void executeStructuredCommand({ command: 'screenshot', displayIndex }, { source: 'local', origin: 'desktop' });
+			appendMessage(log, 'Screenshot', `Capturing monitor ${displayIndex}…`);
+		});
+	}
+
+	// ── Account / Cloud sync ─────────────────────────────────────────────────
+	function refreshAccountUI() {
+		const session = getAccountSession();
+		if (session?.email) {
+			if (accountStatusNode) accountStatusNode.textContent = `Signed in as ${session.email}`;
+			if (accountBadge) accountBadge.textContent = `AssistantX · ${session.email}`;
+			if (accountLoginButton) accountLoginButton.textContent = '🔓 Sign out';
+			if (accountSyncButton) accountSyncButton.disabled = false;
+		} else {
+			if (accountStatusNode) accountStatusNode.textContent = 'Not signed in';
+			if (accountBadge) accountBadge.textContent = 'AssistantX AI Agent';
+			if (accountLoginButton) accountLoginButton.textContent = '🔑 Sign in';
+			if (accountSyncButton) accountSyncButton.disabled = true;
+		}
+	}
+
+	function refreshLinkedAccounts() {
+		if (!linkedAccountsList) return;
+		const accounts = getLinkedAccounts();
+		if (!accounts.length) {
+			linkedAccountsList.textContent = 'None linked';
+			return;
+		}
+		linkedAccountsList.innerHTML = accounts.map((a) =>
+			`<span>✅ ${a.provider}</span>`,
+		).join('<br>');
+	}
+
+	refreshAccountUI();
+	refreshLinkedAccounts();
+
+	// Cloud sync on startup if signed in
+	const initialSession = getAccountSession();
+	if (initialSession?.accessToken && process.env.JARVIS_API_URL) {
+		void loadFromCloud(process.env.JARVIS_API_URL, initialSession.accessToken).then((res) => {
+			if (res.ok) appendMessage(log, 'Cloud sync', 'Memory loaded from account cloud.', 'system');
+		});
+	}
+
+	if (accountLoginButton) {
+		accountLoginButton.addEventListener('click', async () => {
+			const session = getAccountSession();
+			if (session?.email) {
+				clearAccountSession();
+				refreshAccountUI();
+				refreshLinkedAccounts();
+				appendMessage(log, 'Account', 'Signed out of AssistantX account.');
+				return;
+			}
+			if (ipcRenderer) {
+				try {
+					const result = await ipcRenderer.invoke('open-account-login');
+					if (result?.email) {
+						setAccountSession(result);
+						refreshAccountUI();
+						refreshLinkedAccounts();
+						appendMessage(log, 'Account', `Signed in as ${result.email}. Syncing memory…`);
+						if (process.env.JARVIS_API_URL) {
+							await loadFromCloud(process.env.JARVIS_API_URL, result.accessToken);
+						}
+					}
+				} catch (err) {
+					appendMessage(log, 'Account', `Sign-in failed: ${err.message}`, 'error');
+				}
+			} else {
+				appendMessage(log, 'Account', 'Account login requires Electron runtime.', 'error');
+			}
+		});
+	}
+
+	if (accountSyncButton) {
+		accountSyncButton.addEventListener('click', async () => {
+			const session = getAccountSession();
+			if (!session?.accessToken || !process.env.JARVIS_API_URL) {
+				appendMessage(log, 'Cloud sync', 'Sign in first to sync.', 'error');
+				return;
+			}
+			accountSyncButton.disabled = true;
+			const res = await syncToCloud(process.env.JARVIS_API_URL, session.accessToken);
+			accountSyncButton.disabled = false;
+			appendMessage(log, 'Cloud sync', res.ok ? '✅ Memory synced to cloud.' : `Sync failed: ${res.reason || res.status}`, res.ok ? 'system' : 'error');
+		});
+	}
+
+	if (openLinkedAccountsButton && ipcRenderer) {
+		openLinkedAccountsButton.addEventListener('click', () => {
+			const session = getAccountSession();
+			if (!session?.email) {
+				appendMessage(log, 'Linked accounts', 'Sign into your AssistantX account first.', 'error');
+				return;
+			}
+			const webUrl = `${process.env.JARVIS_WEB_URL || 'http://localhost:3000'}/jarvis/linked-accounts`;
+			void ipcRenderer.invoke('open-url', webUrl);
+		});
+	}
+
+	// ── Scheduler UI ─────────────────────────────────────────────────────────
+	function refreshSchedulesUI() {
+		if (!schedulesList) return;
+		const schedules = getSchedules();
+		if (!schedules.length) {
+			schedulesList.textContent = 'No schedules yet';
+			return;
+		}
+		schedulesList.innerHTML = schedules.map((s) => {
+			const next = s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : 'n/a';
+			return `<span>${s.enabled ? '🟢' : '⏸'} <strong>${s.label || s.command}</strong> · ${s.cronExpr} · next: ${next}</span>`;
+		}).join('<br>');
+	}
+	refreshSchedulesUI();
+
+	if (scheduleAddButton) {
+		scheduleAddButton.addEventListener('click', () => {
+			const label = scheduleLabel?.value.trim();
+			const command = scheduleCommand?.value.trim();
+			const cronExpr = scheduleCron?.value.trim();
+			if (!command || !cronExpr) {
+				appendMessage(log, 'Scheduler', 'Fill in command and schedule expression.', 'error');
+				return;
+			}
+			addSchedule({ label: label || command, command, cronExpr });
+			refreshSchedulesUI();
+			appendMessage(log, 'Scheduler', `Added schedule: "${label || command}" — ${cronExpr}`);
+			if (scheduleLabel) scheduleLabel.value = '';
+			if (scheduleCommand) scheduleCommand.value = '';
+			if (scheduleCron) scheduleCron.value = '';
+		});
+	}
+
+	// Start the scheduler — fires executeStructuredCommand for due schedules
+	startScheduler((sched) => {
+		appendMessage(log, 'Scheduler', `⏰ Running: ${sched.label || sched.command}`);
+		void executeStructuredCommand(
+			{ command: sched.command, ...sched.args },
+			{ source: 'local', origin: 'scheduler' },
+		);
+	});
+
+	// Periodic cloud sync (every 5 minutes) if signed in
+	setInterval(async () => {
+		const session = getAccountSession();
+		if (session?.accessToken && process.env.JARVIS_API_URL) {
+			await syncToCloud(process.env.JARVIS_API_URL, session.accessToken).catch(() => null);
+		}
+	}, 5 * 60_000);
 
 	connectToBackend({ token });
 	updateStatus('ready');

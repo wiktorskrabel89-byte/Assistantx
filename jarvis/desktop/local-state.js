@@ -10,6 +10,7 @@ const MAX_TASKS = 40;
 const DEFAULT_STATE = {
   history: [],
   tasks: [],
+  schedules: [],
   preferences: {
     appLaunchCount: {},
     recentApps: [],
@@ -28,6 +29,7 @@ function normalizeState(raw) {
     ...raw,
     history: Array.isArray(raw?.history) ? raw.history : [],
     tasks: Array.isArray(raw?.tasks) ? raw.tasks : [],
+    schedules: Array.isArray(raw?.schedules) ? raw.schedules : [],
     preferences: {
       ...DEFAULT_STATE.preferences,
       ...(raw?.preferences && typeof raw.preferences === 'object' ? raw.preferences : {}),
@@ -144,13 +146,138 @@ function getFavoriteApp() {
   return entries[0]?.[0] || null;
 }
 
+// ── Scheduled tasks (#9) ──────────────────────────────────────────────────────
+// schedule shape: { id, label, command, args, cronExpr, enabled, lastRunAt, nextRunAt }
+// cronExpr examples: 'every 30 minutes', 'daily at 08:00', 'every 2 hours'
+
+function parseNextRun(cronExpr) {
+  const now = Date.now();
+  const match = String(cronExpr || '').trim().match(
+    /^every\s+(\d+)\s+(minutes?|hours?|days?)|^daily\s+at\s+(\d{1,2}):(\d{2})/i,
+  );
+  if (!match) return null;
+  if (match[1] && match[2]) {
+    const n = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    const ms = unit.startsWith('minute') ? n * 60_000
+      : unit.startsWith('hour') ? n * 3_600_000
+        : n * 86_400_000;
+    return new Date(now + ms).toISOString();
+  }
+  if (match[3] !== undefined) {
+    const next = new Date();
+    next.setHours(Number(match[3]), Number(match[4]), 0, 0);
+    if (next.getTime() <= now) next.setDate(next.getDate() + 1);
+    return next.toISOString();
+  }
+  return null;
+}
+
+function addSchedule(schedule) {
+  const nextRunAt = parseNextRun(schedule.cronExpr);
+  return updateState((current) => ({
+    ...current,
+    schedules: [
+      {
+        id: schedule.id || `sched-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        label: schedule.label || schedule.command,
+        command: schedule.command,
+        args: schedule.args || {},
+        cronExpr: schedule.cronExpr || '',
+        enabled: schedule.enabled !== false,
+        lastRunAt: null,
+        nextRunAt,
+        createdAt: new Date().toISOString(),
+        ...schedule,
+      },
+      ...current.schedules,
+    ],
+  }));
+}
+
+function removeSchedule(id) {
+  return updateState((current) => ({
+    ...current,
+    schedules: current.schedules.filter((s) => s.id !== id),
+  }));
+}
+
+function updateScheduleRun(id, nextRunAt) {
+  return updateState((current) => ({
+    ...current,
+    schedules: current.schedules.map((s) =>
+      s.id === id
+        ? { ...s, lastRunAt: new Date().toISOString(), nextRunAt }
+        : s,
+    ),
+  }));
+}
+
+function getSchedules() {
+  return readState().schedules;
+}
+
+// ── Cloud memory sync (#14) ───────────────────────────────────────────────────
+// Sync preferences + recent history to a workspace API endpoint.
+async function syncToCloud(apiUrl, token) {
+  if (!apiUrl || !token) return { ok: false, reason: 'missing-config' };
+  try {
+    const state = readState();
+    const payload = {
+      preferences: state.preferences,
+      history: state.history.slice(0, 30),
+    };
+    const response = await fetch(`${apiUrl}/api/workspaces/jarvis-state`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    return { ok: response.ok, status: response.status };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  }
+}
+
+async function loadFromCloud(apiUrl, token) {
+  if (!apiUrl || !token) return { ok: false, reason: 'missing-config' };
+  try {
+    const response = await fetch(`${apiUrl}/api/workspaces/jarvis-state`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return { ok: false, status: response.status };
+    const remote = await response.json();
+    if (remote?.preferences) {
+      updateState((current) => ({
+        ...current,
+        preferences: { ...current.preferences, ...remote.preferences },
+        history: remote.history?.length
+          ? [...(remote.history || []), ...current.history].slice(0, MAX_HISTORY)
+          : current.history,
+      }));
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  }
+}
+
 module.exports = {
+  addSchedule,
   appendHistory,
   getFavoriteApp,
+  getSchedules,
+  loadFromCloud,
+  parseNextRun,
   readState,
   rememberApp,
   rememberFile,
   rememberPrompt,
+  removeSchedule,
   saveTask,
   statePath: STATE_PATH,
+  syncToCloud,
+  updateScheduleRun,
 };
