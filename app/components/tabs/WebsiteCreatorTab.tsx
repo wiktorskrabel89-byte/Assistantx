@@ -1266,6 +1266,12 @@ ${js ? `<script>\n${js}\n<\/script>` : ""}
             {/* Custom domain */}
             <div className={`flex-shrink-0 border-t p-3 ${dark2 ? "border-slate-700" : "border-slate-200"}`}>
               <p className={`mb-2 text-[10px] font-semibold uppercase tracking-wide ${dark2 ? "text-slate-500" : "text-slate-400"}`}>Własna domena</p>
+              <p className={`mb-1 text-[10px] ${dark2 ? "text-slate-500" : "text-slate-500"}`}>
+                Frontend providers: <span className="font-medium">Northflank, Vercel, Netlify</span> (Vercel is a frontend hosting provider).
+              </p>
+              <p className={`mb-2 text-[10px] ${dark2 ? "text-slate-500" : "text-slate-500"}`}>
+                Domain providers: <span className="font-medium">Cloudflare, Namecheap, GoDaddy</span>.
+              </p>
               <div className="flex gap-2">
                 <input id="subdomain-input" name="subdomainInput" value={subdomainInput} onChange={(e) => setSubdomainInput(e.target.value)}
                   placeholder="twoja-subdomena"
