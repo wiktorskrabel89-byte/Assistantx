@@ -1,42 +1,47 @@
-// Inngest client boundary.
-// In Phase 2 the client is a typed stub so the runtime can safely import it
-// before the INNGEST_EVENT_KEY environment variable is available in CI.
-// Replace the stub with the real @inngest/next client when INNGEST_EVENT_KEY is set.
+/**
+ * Inngest client — AssistantX runtime backbone.
+ *
+ * Inngest is the LOCKED-IN orchestration engine for AssistantX.
+ * This is NOT a provisional choice. All durable workflows, agent tasks,
+ * approvals, and event-driven execution go through this client.
+ *
+ * The client degrades gracefully when INNGEST_EVENT_KEY is absent
+ * (local dev / CI) so the app remains bootable without credentials.
+ */
+
+import { Inngest } from "inngest";
 
 export type InngestEventPayload = {
   name: string;
   data: Record<string, unknown>;
 };
 
-class InngestClientStub {
-  private readonly ready: boolean;
+export const inngest = new Inngest({
+  id: "assistantx",
+  /**
+   * In development/CI (no INNGEST_SIGNING_KEY) the SDK operates in "dev" mode,
+   * forwarding events to the Inngest Dev Server on http://localhost:8288.
+   * In production the signing key enables secure request validation.
+   */
+  ...(process.env.INNGEST_SIGNING_KEY
+    ? {}
+    : { baseUrl: process.env.INNGEST_DEV_SERVER_URL ?? "http://localhost:8288" }),
+});
 
-  constructor() {
-    this.ready = Boolean(process.env.INNGEST_EVENT_KEY);
-  }
-
+/**
+ * Thin compatibility shim so existing callers of `inngestClient.send()` still
+ * work without a large refactor.  New code should import `inngest` directly.
+ */
+class InngestClientShim {
   isReady(): boolean {
-    return this.ready;
+    return Boolean(process.env.INNGEST_EVENT_KEY);
   }
 
   async send(events: InngestEventPayload | InngestEventPayload[]): Promise<void> {
-    if (!this.ready) {
-      // No INNGEST_EVENT_KEY is set — events are intentionally dropped.
-      // This is expected behavior in local development and CI environments.
-      // Set INNGEST_EVENT_KEY to enable event dispatch.
-      return;
-    }
-
     const payload = Array.isArray(events) ? events : [events];
-    const key = process.env.INNGEST_EVENT_KEY ?? "";
-    const baseUrl = process.env.INNGEST_BASE_URL ?? "https://inn.gs/e";
-
-    await fetch(`${baseUrl}/${key}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    // Use the real SDK to send — it handles auth, retries, and dev mode.
+    await inngest.send(payload as Parameters<typeof inngest.send>[0]);
   }
 }
 
-export const inngestClient = new InngestClientStub();
+export const inngestClient = new InngestClientShim();

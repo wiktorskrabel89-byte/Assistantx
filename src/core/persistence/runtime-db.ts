@@ -1,5 +1,5 @@
 /**
- * Runtime DB Persistence — Phase 1 Foundation Hardening
+ * Runtime DB Persistence — Phase 1 + Phase 2 Foundation
  *
  * Thin helpers that write runtime execution records to Supabase.  All writes
  * are best-effort for audit/observability tables (fail-open) and fail-closed
@@ -10,17 +10,22 @@
  */
 
 import { randomUUID } from "node:crypto";
+import type { RuntimeAgentRole } from "@/src/agents/runtime/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types mirroring DB schema columns
 // ─────────────────────────────────────────────────────────────────────────────
+
+export type WorkflowRunStatus =
+  | "queued" | "running" | "waiting_for_approval"
+  | "completed" | "failed" | "cancelled" | "retrying" | "expired";
 
 export type WorkflowRunRow = {
   execution_id: string;
   workflow_id: string;
   user_id: string | null;
   organization_id: string | null;
-  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled" | "retrying" | "expired";
+  status: WorkflowRunStatus;
   trigger: string;
   input: Record<string, unknown>;
   output?: Record<string, unknown> | null;
@@ -60,6 +65,46 @@ export type RuntimeEventRow = {
   organization_id?: string | null;
   execution_id?: string | null;
   payload: Record<string, unknown>;
+};
+
+export type ApprovalRequestRow = {
+  id: string;
+  execution_id: string;
+  tool_id?: string | null;
+  workflow_id?: string | null;
+  requested_by: string;
+  organization_id?: string | null;
+  reason: string;
+  context: Record<string, unknown>;
+  status: "pending" | "approved" | "rejected" | "expired";
+  expires_at?: string | null;
+};
+
+export type AgentTaskRow = {
+  task_id: string;
+  execution_id: string;
+  role: RuntimeAgentRole;
+  goal: string;
+  input: Record<string, unknown>;
+  user_id?: string | null;
+  organization_id?: string | null;
+  status: WorkflowRunStatus;
+  output?: Record<string, unknown> | null;
+  error?: string | null;
+  completed_at?: string | null;
+};
+
+export type CostRecordRow = {
+  user_id: string;
+  organization_id?: string | null;
+  execution_id?: string | null;
+  workflow_id?: string | null;
+  tool_id?: string | null;
+  lane: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_usd: number;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,3 +290,186 @@ export async function storeIdempotencyResult(
     { onConflict: "idempotency_key" },
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Approval requests (Phase 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Persist a new approval request.
+ */
+export async function insertApprovalRequest(row: ApprovalRequestRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("approval_requests").insert({
+    id: row.id,
+    execution_id: row.execution_id,
+    tool_id: row.tool_id ?? null,
+    workflow_id: row.workflow_id ?? null,
+    requested_by: row.requested_by,
+    organization_id: row.organization_id ?? null,
+    reason: row.reason,
+    context: row.context,
+    status: row.status,
+    expires_at: row.expires_at ?? null,
+    created_at: new Date().toISOString(),
+  });
+
+  if (error) throw new Error(`insertApprovalRequest: ${error.message}`);
+}
+
+/**
+ * Update approval request status and optional resolution fields.
+ */
+export async function updateApprovalRequest(
+  approvalId: string,
+  status: "approved" | "rejected" | "expired",
+  resolvedBy?: string,
+  note?: string,
+): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("approval_requests")
+    .update({
+      status,
+      resolved_by: resolvedBy ?? null,
+      resolution_note: note ?? null,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", approvalId);
+
+  if (error) throw new Error(`updateApprovalRequest: ${error.message}`);
+}
+
+/**
+ * List pending approvals for an organization.
+ */
+export async function listPendingApprovals(
+  organizationId: string,
+): Promise<ApprovalRequestRow[]> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("approval_requests")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(`listPendingApprovals: ${error.message}`);
+  return (data ?? []) as ApprovalRequestRow[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent tasks (Phase 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Persist a new agent task record.
+ */
+export async function insertAgentTask(row: AgentTaskRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("agent_tasks").insert({
+    task_id: row.task_id,
+    execution_id: row.execution_id,
+    role: row.role,
+    goal: row.goal,
+    input: row.input,
+    user_id: row.user_id ?? null,
+    organization_id: row.organization_id ?? null,
+    status: row.status,
+    output: row.output ?? null,
+    error: row.error ?? null,
+    created_at: new Date().toISOString(),
+  });
+
+  if (error) throw new Error(`insertAgentTask: ${error.message}`);
+}
+
+/**
+ * Update agent task result.
+ */
+export async function updateAgentTask(
+  taskId: string,
+  patch: {
+    status: WorkflowRunStatus;
+    output?: Record<string, unknown> | null;
+    error?: string | null;
+    completed_at?: string | null;
+  },
+): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("agent_tasks")
+    .update(patch)
+    .eq("task_id", taskId);
+
+  if (error) throw new Error(`updateAgentTask: ${error.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cost records (Phase 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Persist a cost record.  Best-effort — callers should catch errors.
+ */
+export async function insertCostRecord(row: CostRecordRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("cost_records").insert({
+    id: randomUUID(),
+    ...row,
+    created_at: new Date().toISOString(),
+  });
+
+  if (error) throw new Error(`insertCostRecord: ${error.message}`);
+}
+
+/**
+ * Sum cost (USD) for a user within an optional date range.
+ */
+export async function sumCostForUser(
+  userId: string,
+  since?: Date,
+): Promise<number> {
+  const supabase = await getClient();
+  let query = supabase
+    .from("cost_records")
+    .select("estimated_usd")
+    .eq("user_id", userId);
+
+  if (since) {
+    query = query.gte("created_at", since.toISOString());
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`sumCostForUser: ${error.message}`);
+  return (data ?? []).reduce(
+    (sum: number, r: { estimated_usd: number }) => sum + r.estimated_usd,
+    0,
+  );
+}
+
+/**
+ * Sum cost (USD) for an organization within an optional date range.
+ */
+export async function sumCostForOrg(
+  organizationId: string,
+  since?: Date,
+): Promise<number> {
+  const supabase = await getClient();
+  let query = supabase
+    .from("cost_records")
+    .select("estimated_usd")
+    .eq("organization_id", organizationId);
+
+  if (since) {
+    query = query.gte("created_at", since.toISOString());
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`sumCostForOrg: ${error.message}`);
+  return (data ?? []).reduce(
+    (sum: number, r: { estimated_usd: number }) => sum + r.estimated_usd,
+    0,
+  );
+}
+

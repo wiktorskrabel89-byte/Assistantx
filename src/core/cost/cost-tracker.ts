@@ -6,8 +6,16 @@ import { randomUUID } from "node:crypto";
 
 const eventBus = createEventBus();
 
+/**
+ * Cost Tracker — Phase 2 persistent implementation.
+ *
+ * Cost records are persisted to `cost_records` in Supabase.
+ * The in-memory ledger is kept as a short-term cache / fallback.
+ * Quota enforcement reads from Supabase for accurate cross-session totals.
+ */
 class CostTracker {
-  private readonly ledger: CostRecord[] = [];
+  /** Short-term in-process cache — not the source of truth. */
+  private readonly cache: CostRecord[] = [];
 
   async record(params: {
     userId: string;
@@ -35,7 +43,27 @@ class CostTracker {
       estimatedUsd,
       createdAt: new Date().toISOString(),
     };
-    this.ledger.push(record);
+
+    // Persist to Supabase (best-effort — never fail the request for a cost write).
+    try {
+      const { insertCostRecord } = await import("@/src/core/persistence/runtime-db");
+      await insertCostRecord({
+        user_id: record.userId,
+        organization_id: record.organizationId,
+        execution_id: record.executionId ?? null,
+        workflow_id: record.workflowId ?? null,
+        tool_id: record.toolId ?? null,
+        lane: record.lane,
+        model: record.model,
+        input_tokens: record.inputTokens,
+        output_tokens: record.outputTokens,
+        estimated_usd: record.estimatedUsd,
+      });
+    } catch {
+      // Fall back to in-memory cache on DB error.
+      this.cache.push(record);
+    }
+
     await eventBus.publish({
       type: RUNTIME_EVENT_TYPES.COST_RECORDED,
       timestamp: record.createdAt,
@@ -53,20 +81,38 @@ class CostTracker {
     return record;
   }
 
-  totalForUser(userId: string, since?: Date): number {
-    return this.ledger
-      .filter((r) => r.userId === userId && (!since || new Date(r.createdAt) >= since))
-      .reduce((sum, r) => sum + r.estimatedUsd, 0);
+  /**
+   * Total cost for a user.  Reads from Supabase for cross-session accuracy;
+   * falls back to the in-memory cache on DB error.
+   */
+  async totalForUser(userId: string, since?: Date): Promise<number> {
+    try {
+      const { sumCostForUser } = await import("@/src/core/persistence/runtime-db");
+      return await sumCostForUser(userId, since);
+    } catch {
+      // Fallback: use in-memory cache.
+      return this.cache
+        .filter((r) => r.userId === userId && (!since || new Date(r.createdAt) >= since))
+        .reduce((sum, r) => sum + r.estimatedUsd, 0);
+    }
   }
 
-  totalForOrg(organizationId: string, since?: Date): number {
-    return this.ledger
-      .filter(
-        (r) =>
-          r.organizationId === organizationId &&
-          (!since || new Date(r.createdAt) >= since),
-      )
-      .reduce((sum, r) => sum + r.estimatedUsd, 0);
+  /**
+   * Total cost for an organization.  Reads from Supabase for accuracy.
+   */
+  async totalForOrg(organizationId: string, since?: Date): Promise<number> {
+    try {
+      const { sumCostForOrg } = await import("@/src/core/persistence/runtime-db");
+      return await sumCostForOrg(organizationId, since);
+    } catch {
+      return this.cache
+        .filter(
+          (r) =>
+            r.organizationId === organizationId &&
+            (!since || new Date(r.createdAt) >= since),
+        )
+        .reduce((sum, r) => sum + r.estimatedUsd, 0);
+    }
   }
 }
 

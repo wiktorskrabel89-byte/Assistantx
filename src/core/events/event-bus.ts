@@ -1,19 +1,9 @@
-import { PLATFORM_DECISIONS } from "@/src/core/config/platform";
 import { inngestClient } from "@/src/core/events/inngest-client";
 import type { RuntimeEvent } from "@/src/core/events/types";
 
 export type EventBus = {
   publish: (event: RuntimeEvent) => Promise<void>;
 };
-
-class InMemoryEventBus implements EventBus {
-  // Phase-1 fallback when Inngest wiring is not yet activated.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async publish(_event: RuntimeEvent): Promise<void> {
-    // Temporary no-op sink until the Inngest transport is wired.
-    return;
-  }
-}
 
 class InngestEventBus implements EventBus {
   // Routes runtime events to Inngest and persists to the replayable events
@@ -50,9 +40,7 @@ class InngestEventBus implements EventBus {
   }
 }
 
+// Inngest is the locked-in orchestration backbone — no fallback.
 export function createEventBus(): EventBus {
-  if (PLATFORM_DECISIONS.workflowOrchestrator === "inngest") {
-    return new InngestEventBus();
-  }
-  return new InMemoryEventBus();
+  return new InngestEventBus();
 }
