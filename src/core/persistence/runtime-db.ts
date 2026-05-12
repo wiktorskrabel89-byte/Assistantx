@@ -607,6 +607,27 @@ export async function consumeRateLimitEntry(params: {
   windowMs: number;
 }): Promise<{ allowed: boolean; retryAfterMs: number }> {
   const supabase = await getClient();
+
+  // Preferred path: atomic DB function (handles concurrent increments safely).
+  try {
+    const { data, error } = await supabase.rpc("consume_rate_limit_entry", {
+      p_key: params.key,
+      p_limit: params.limit,
+      p_window_ms: params.windowMs,
+    });
+
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : null;
+    if (row && typeof row.allowed === "boolean") {
+      return {
+        allowed: row.allowed,
+        retryAfterMs: Number(row.retry_after_ms ?? 0),
+      };
+    }
+  } catch {
+    // Fall through to non-RPC compatibility path when function is unavailable.
+  }
+
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const windowEndIso = new Date(now + params.windowMs).toISOString();
