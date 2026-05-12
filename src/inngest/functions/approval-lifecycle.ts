@@ -126,7 +126,7 @@ export const approvalRequestedFunction = inngest.createFunction(
     // Runtime validation: only accept known resolution statuses.
     if (rawStatus !== "approved" && rawStatus !== "rejected") {
       throw new Error(
-        `Invalid approval resolution status: "${rawStatus}". Expected "approved" or "rejected".`,
+        `Invalid approval resolution event status: "${rawStatus}". Expected "approved" or "rejected" for a resolution event.`,
       );
     }
     const { resolvedBy, note } = resolution.data;

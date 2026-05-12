@@ -19,7 +19,8 @@ import type {
 
 export function estimateTokens(text: string): number {
   // GPT-family: ~4 characters per token on average.
-  // TODO: Replace with tiktoken for exact token counts to improve budget accuracy.
+  // This intentionally uses a lightweight heuristic until a tokenizer-backed
+  // implementation is introduced for tighter budget accounting.
   return Math.ceil(text.length / 4);
 }
 
