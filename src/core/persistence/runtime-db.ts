@@ -672,3 +672,338 @@ export async function consumeRateLimitEntry(params: {
   if (updateError) throw new Error(`consumeRateLimitEntry(update): ${updateError.message}`);
   return { allowed: true, retryAfterMs: 0 };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plugin manifests (Phase 4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PluginManifestRow = {
+  plugin_id: string;
+  name: string;
+  version: string;
+  description?: string | null;
+  author?: string | null;
+  homepage?: string | null;
+  capabilities: Record<string, unknown>[];
+  required_scopes: string[];
+  sandboxed: boolean;
+  trusted_publisher: boolean;
+  status: "pending" | "approved" | "rejected" | "deprecated";
+  organization_id?: string | null;
+};
+
+export async function upsertPluginManifest(row: PluginManifestRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("plugin_manifests").upsert(
+    {
+      plugin_id: row.plugin_id,
+      name: row.name,
+      version: row.version,
+      description: row.description ?? null,
+      author: row.author ?? null,
+      homepage: row.homepage ?? null,
+      capabilities: row.capabilities,
+      required_scopes: row.required_scopes,
+      sandboxed: row.sandboxed,
+      trusted_publisher: row.trusted_publisher,
+      status: row.status,
+      organization_id: row.organization_id ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "plugin_id" },
+  );
+
+  if (error) throw new Error(`upsertPluginManifest: ${error.message}`);
+}
+
+export async function getPluginManifest(
+  pluginId: string,
+): Promise<PluginManifestRow | null> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("plugin_manifests")
+    .select(
+      "plugin_id, name, version, description, author, homepage, capabilities, required_scopes, sandboxed, trusted_publisher, status, organization_id",
+    )
+    .eq("plugin_id", pluginId)
+    .maybeSingle();
+
+  if (error) throw new Error(`getPluginManifest: ${error.message}`);
+  return (data as PluginManifestRow | null) ?? null;
+}
+
+export async function listPluginManifests(options?: {
+  trustedOnly?: boolean;
+  status?: PluginManifestRow["status"];
+  organizationId?: string | null;
+}): Promise<PluginManifestRow[]> {
+  const supabase = await getClient();
+  let query = supabase
+    .from("plugin_manifests")
+    .select(
+      "plugin_id, name, version, description, author, homepage, capabilities, required_scopes, sandboxed, trusted_publisher, status, organization_id",
+    );
+
+  if (options?.status) {
+    query = query.eq("status", options.status);
+  }
+
+  if (options?.trustedOnly) {
+    query = query.eq("trusted_publisher", true);
+  }
+
+  if (options?.organizationId === null) {
+    query = query.is("organization_id", null);
+  } else if (options?.organizationId) {
+    query = query.or(
+      `organization_id.eq.${options.organizationId},organization_id.is.null`,
+    );
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) throw new Error(`listPluginManifests: ${error.message}`);
+  return (data ?? []) as PluginManifestRow[];
+}
+
+export async function updatePluginManifestStatus(
+  pluginId: string,
+  status: PluginManifestRow["status"],
+  reviewedBy?: string,
+): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("plugin_manifests")
+    .update({
+      status,
+      reviewed_by: reviewedBy ?? null,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("plugin_id", pluginId);
+
+  if (error) throw new Error(`updatePluginManifestStatus: ${error.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Marketplace (Phase 5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type MarketplaceListingRow = {
+  plugin_id: string;
+  trust_level: "community" | "verified" | "official";
+  category: string;
+  downloads: number;
+  rating: number;
+  review_count: number;
+};
+
+export type MarketplaceSubmissionRow = {
+  plugin_id: string;
+  submitted_by?: string | null;
+  category: string;
+  repository_url?: string | null;
+  status: "pending_review" | "approved" | "rejected";
+  review_notes?: string | null;
+  reviewed_by?: string | null;
+};
+
+export async function upsertMarketplaceListing(
+  row: MarketplaceListingRow,
+): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("marketplace_listings").upsert(
+    {
+      plugin_id: row.plugin_id,
+      trust_level: row.trust_level,
+      category: row.category,
+      downloads: row.downloads,
+      rating: row.rating,
+      review_count: row.review_count,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "plugin_id" },
+  );
+
+  if (error) throw new Error(`upsertMarketplaceListing: ${error.message}`);
+}
+
+export async function getMarketplaceListing(
+  pluginId: string,
+): Promise<MarketplaceListingRow | null> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("marketplace_listings")
+    .select(
+      "plugin_id, trust_level, category, downloads, rating, review_count, listed_at",
+    )
+    .eq("plugin_id", pluginId)
+    .maybeSingle();
+
+  if (error) throw new Error(`getMarketplaceListing: ${error.message}`);
+  return (data as MarketplaceListingRow | null) ?? null;
+}
+
+export async function listMarketplaceListings(options?: {
+  category?: string;
+  trustLevel?: string;
+  limit?: number;
+}): Promise<(MarketplaceListingRow & { listed_at: string })[]> {
+  const supabase = await getClient();
+  let query = supabase
+    .from("marketplace_listings")
+    .select(
+      "plugin_id, trust_level, category, downloads, rating, review_count, listed_at",
+    );
+
+  if (options?.category) {
+    query = query.eq("category", options.category);
+  }
+
+  if (options?.trustLevel) {
+    query = query.eq("trust_level", options.trustLevel);
+  }
+
+  query = query.order("downloads", { ascending: false });
+
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`listMarketplaceListings: ${error.message}`);
+  return (data ?? []) as (MarketplaceListingRow & { listed_at: string })[];
+}
+
+export async function insertMarketplaceSubmission(
+  row: MarketplaceSubmissionRow,
+): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("marketplace_submissions").insert({
+    plugin_id: row.plugin_id,
+    submitted_by: row.submitted_by ?? null,
+    category: row.category,
+    repository_url: row.repository_url ?? null,
+    status: row.status,
+    submitted_at: new Date().toISOString(),
+  });
+
+  if (error) throw new Error(`insertMarketplaceSubmission: ${error.message}`);
+}
+
+export async function updateMarketplaceSubmission(
+  pluginId: string,
+  update: {
+    status: "approved" | "rejected";
+    reviewedBy?: string;
+    reviewNotes?: string;
+  },
+): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("marketplace_submissions")
+    .update({
+      status: update.status,
+      reviewed_by: update.reviewedBy ?? null,
+      review_notes: update.reviewNotes ?? null,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("plugin_id", pluginId)
+    .eq("status", "pending_review");
+
+  if (error) throw new Error(`updateMarketplaceSubmission: ${error.message}`);
+}
+
+export async function listMarketplaceSubmissions(
+  status?: "pending_review" | "approved" | "rejected",
+): Promise<(MarketplaceSubmissionRow & { submitted_at: string })[]> {
+  const supabase = await getClient();
+  let query = supabase
+    .from("marketplace_submissions")
+    .select(
+      "plugin_id, submitted_by, category, repository_url, status, review_notes, reviewed_by, submitted_at",
+    );
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  query = query.order("submitted_at", { ascending: false });
+
+  const { data, error } = await query;
+  if (error) throw new Error(`listMarketplaceSubmissions: ${error.message}`);
+  return (data ?? []) as (MarketplaceSubmissionRow & { submitted_at: string })[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ecosystem adapter requests (Phase 5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type EcosystemRequestRow = {
+  kind: "webhook" | "sdk" | "external_agent" | "mcp_client";
+  source_id: string;
+  workflow_id: string;
+  execution_id?: string | null;
+  status: "queued" | "rejected" | "completed" | "failed";
+  metadata?: Record<string, unknown>;
+};
+
+export async function insertEcosystemRequest(row: EcosystemRequestRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("ecosystem_requests").insert({
+    id: randomUUID(),
+    kind: row.kind,
+    source_id: row.source_id,
+    workflow_id: row.workflow_id,
+    execution_id: row.execution_id ?? null,
+    status: row.status,
+    metadata: row.metadata ?? {},
+    created_at: new Date().toISOString(),
+  });
+
+  if (error) throw new Error(`insertEcosystemRequest: ${error.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Runtime metrics (Phase 5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RuntimeMetricsSnapshot = {
+  activeWorkflows: number;
+  failedWorkflows24h: number;
+  costUsd24h: number;
+};
+
+export async function queryRuntimeMetrics(): Promise<RuntimeMetricsSnapshot> {
+  const supabase = await getClient();
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const [activeResult, failedResult, costResult] = await Promise.allSettled([
+    supabase
+      .from("workflow_runs")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["running", "queued", "waiting_for_approval"]),
+    supabase
+      .from("workflow_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "failed")
+      .gte("created_at", since24h),
+    supabase
+      .from("cost_records")
+      .select("estimated_usd")
+      .gte("created_at", since24h),
+  ]);
+
+  const activeWorkflows =
+    activeResult.status === "fulfilled" ? (activeResult.value.count ?? 0) : 0;
+  const failedWorkflows24h =
+    failedResult.status === "fulfilled" ? (failedResult.value.count ?? 0) : 0;
+  const costUsd24h =
+    costResult.status === "fulfilled"
+      ? (costResult.value.data ?? []).reduce(
+          (sum: number, r: { estimated_usd: number }) => sum + r.estimated_usd,
+          0,
+        )
+      : 0;
+
+  return { activeWorkflows, failedWorkflows24h, costUsd24h };
+}
