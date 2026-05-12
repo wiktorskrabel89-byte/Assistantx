@@ -423,8 +423,8 @@ async function takeScreenshot(displayIndex = 0) {
   const screenshotPath = path.join(desktopDir, `jarvis_screenshot_${ts}.png`);
 
   if (PLATFORM === 'darwin') {
-    // macOS: use screencapture (display indices are 1-based in screencapture -D)
-    const displayArg = displayIndex > 0 ? ['-D', String(displayIndex + 1)] : [];
+    // macOS: screencapture -D uses 1-based display indices (1 = primary, 2 = second, etc.)
+    const displayArg = ['-D', String(displayIndex + 1)];
     await execFilePromise('screencapture', ['-x', '-t', 'png', ...displayArg, screenshotPath]);
   } else {
     // Windows: PowerShell GDI capture with optional multi-monitor bounds
@@ -594,10 +594,14 @@ function writeClipboard(text) {
 
 async function typeText(text) {
   if (PLATFORM === 'darwin') {
-    const escaped = String(text || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    await execFilePromise('osascript', ['-e', `tell application "System Events" to keystroke "${escaped}"`]);
+    // Use keystroke with a string literal via AppleScript — we pass the text as
+    // a quoted AppleScript string. Escape backslashes and double-quotes so the
+    // interpreter cannot break out of the string context.
+    const safe = String(text || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    await execFilePromise('osascript', ['-e', `tell application "System Events" to keystroke "${safe}"`]);
     return { summary: 'Typed text successfully.' };
   }
+  // Windows: use SendKeys via PowerShell EncodedCommand (base64, no shell expansion)
   const sendKeysEscaped = String(text || '').replace(/[\[\]+^%~(){}]/g, (ch) => `{${ch}}`);
   const psScript = [
     'Add-Type -AssemblyName System.Windows.Forms',

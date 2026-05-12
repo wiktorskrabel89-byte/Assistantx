@@ -21,7 +21,22 @@ export async function POST(req: NextRequest) {
   }
 
   const url = new URL(req.url);
-  const action = url.searchParams.get('action') || (await req.json().catch(() => ({}))).action as string;
+  const actionFromQuery = url.searchParams.get('action');
+  let action: string;
+  let cachedBody: Record<string, unknown> | null = null;
+
+  if (actionFromQuery) {
+    action = actionFromQuery;
+  } else {
+    cachedBody = await req.json().catch(() => ({})) as Record<string, unknown>;
+    action = (cachedBody.action as string) || '';
+  }
+
+  const getBody = async (): Promise<Record<string, unknown>> => {
+    if (cachedBody !== null) return cachedBody;
+    cachedBody = await req.json().catch(() => ({})) as Record<string, unknown>;
+    return cachedBody;
+  };
 
   // ── Initiate OAuth ────────────────────────────────────────────────────────
   if (action === 'initiate') {
@@ -36,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   // ── OAuth callback — exchange code for token ──────────────────────────────
   if (action === 'callback') {
-    const body = await req.json().catch(() => ({}));
+    const body = await getBody();
     const code = body.code as string | undefined;
     if (!code) return NextResponse.json({ error: 'Missing code' }, { status: 400 });
 
@@ -71,7 +86,7 @@ export async function POST(req: NextRequest) {
 
   // ── Proxy GitHub API calls ────────────────────────────────────────────────
   if (action === 'proxy') {
-    const body = await req.json().catch(() => ({}));
+    const body = await getBody();
     const { path: ghPath, method = 'GET', body: proxyBody } = body as {
       path?: string; method?: string; body?: unknown;
     };

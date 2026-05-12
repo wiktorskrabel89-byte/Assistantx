@@ -659,7 +659,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				appendMessage(log, 'Linked accounts', 'Sign into your AssistantX account first.', 'error');
 				return;
 			}
-			const webUrl = `${process.env.JARVIS_WEB_URL || 'http://localhost:3000'}/jarvis/linked-accounts?token=${encodeURIComponent(session.accessToken || '')}`;
+			const webUrl = `${process.env.JARVIS_WEB_URL || 'http://localhost:3000'}/jarvis/linked-accounts`;
 			void ipcRenderer.invoke('open-url', webUrl);
 		});
 	}

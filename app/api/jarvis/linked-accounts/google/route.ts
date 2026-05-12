@@ -25,7 +25,24 @@ export async function POST(req: NextRequest) {
   }
 
   const url = new URL(req.url);
-  const action = url.searchParams.get('action') || (await req.json().catch(() => ({}))).action as string;
+  // Prefer query param for action (avoids consuming request body prematurely)
+  const actionFromQuery = url.searchParams.get('action');
+  let action: string;
+  let cachedBody: Record<string, unknown> | null = null;
+
+  if (actionFromQuery) {
+    action = actionFromQuery;
+  } else {
+    cachedBody = await req.json().catch(() => ({})) as Record<string, unknown>;
+    action = (cachedBody.action as string) || '';
+  }
+
+  // Helper to get body (uses cached value if already parsed)
+  const getBody = async (): Promise<Record<string, unknown>> => {
+    if (cachedBody !== null) return cachedBody;
+    cachedBody = await req.json().catch(() => ({})) as Record<string, unknown>;
+    return cachedBody;
+  };
 
   // ── Initiate OAuth ────────────────────────────────────────────────────────
   if (action === 'initiate') {
@@ -46,7 +63,7 @@ export async function POST(req: NextRequest) {
 
   // ── Callback — exchange code for tokens ───────────────────────────────────
   if (action === 'callback') {
-    const body = await req.json().catch(() => ({}));
+    const body = await getBody();
     const code = body.code as string | undefined;
     if (!code) return NextResponse.json({ error: 'Missing code' }, { status: 400 });
 
@@ -94,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   // ── Gmail proxy ───────────────────────────────────────────────────────────
   if (action === 'gmail-proxy') {
-    const body = await req.json().catch(() => ({}));
+    const body = await getBody();
     const { action: gmailAction, to, subject, body: emailBody, messageId } = body as {
       action?: string; to?: string; subject?: string; body?: string; messageId?: string;
     };

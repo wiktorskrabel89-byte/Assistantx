@@ -39,61 +39,64 @@ function LinkedAccountsContent() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
+  const provider = searchParams.get("provider");
+  const code = searchParams.get("code");
 
-  async function fetchAccounts() {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/jarvis/linked-accounts");
-      const data = await res.json() as { accounts?: Account[] };
-      setAccounts(data.accounts ?? []);
-    } catch { /* ignore */ }
-    setLoading(false);
-  }
-
-  // Handle OAuth callback code in URL
+  // Fetch accounts once on mount
   useEffect(() => {
-    const provider = searchParams.get("provider");
-    const code = searchParams.get("code");
-    if (!provider || !code) return;
-
-    setStatus(`Completing ${provider} login…`);
-    fetch(`/api/jarvis/linked-accounts/${provider}?action=callback`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    })
+    let cancelled = false;
+    fetch('/api/jarvis/linked-accounts')
       .then((r) => r.json())
-      .then((d: { ok?: boolean; error?: string }) => {
-        if (d.ok) {
-          setStatus(`✅ ${provider} linked successfully!`);
-          fetchAccounts();
-        } else {
-          setStatus(`❌ Failed: ${d.error ?? "unknown error"}`);
-        }
+      .then((data: { accounts?: Account[] }) => {
+        if (!cancelled) setAccounts(data.accounts ?? []);
       })
-      .catch(() => setStatus("❌ Network error during linking"));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
+  // Handle OAuth callback from query params
   useEffect(() => {
-    fetchAccounts();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!provider || !code) return;
+    let cancelled = false;
+    void fetch(`/api/jarvis/linked-accounts/${provider}?action=callback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    }).then((r) => r.json()).then((d: { ok?: boolean; error?: string }) => {
+      if (cancelled) return;
+      if (d.ok) {
+        setStatus(`✅ ${provider} linked successfully!`);
+        // Re-fetch accounts after linking
+        fetch('/api/jarvis/linked-accounts')
+          .then((r) => r.json())
+          .then((data: { accounts?: Account[] }) => { if (!cancelled) setAccounts(data.accounts ?? []); })
+          .catch(() => null);
+      } else {
+        setStatus(`❌ Failed: ${d.error ?? 'unknown error'}`);
+      }
+    }).catch(() => {
+      if (!cancelled) setStatus('❌ Network error during linking');
+    });
+    return () => { cancelled = true; };
+  }, [provider, code]);
 
-  async function linkProvider(provider: string) {
-    const res = await fetch(`/api/jarvis/linked-accounts/${provider}?action=initiate`, { method: "POST" });
+  async function linkProvider(providerToLink: string) {
+    const res = await fetch(`/api/jarvis/linked-accounts/${providerToLink}?action=initiate`, { method: "POST" });
     const data = await res.json() as { authUrl?: string; error?: string };
     if (data.authUrl) {
-      window.location.href = data.authUrl;
+      window.location.assign(data.authUrl);
     } else {
       setStatus(`❌ ${data.error ?? "Failed to start linking"}`);
     }
   }
 
-  async function unlinkProvider(provider: string) {
-    await fetch(`/api/jarvis/linked-accounts/${provider}`, { method: "DELETE" });
-    setAccounts((prev) => prev.filter((a) => a.provider !== provider));
-    setStatus(`✅ ${provider} unlinked.`);
+  async function unlinkProvider(providerToUnlink: string) {
+    await fetch(`/api/jarvis/linked-accounts/${providerToUnlink}`, { method: "DELETE" });
+    setAccounts((prev) => prev.filter((a) => a.provider !== providerToUnlink));
+    setStatus(`✅ ${providerToUnlink} unlinked.`);
   }
 
   return (
