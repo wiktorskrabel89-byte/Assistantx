@@ -123,6 +123,16 @@ export type WorkspaceSettings = {
   activeJarvisModeId: string | null;
   actionModes: ActionMode[];
   activeActionModeId: string | null;
+  syncChatHistory: boolean;
+  syncMemories: boolean;
+  syncTasksReminders: boolean;
+  syncVoiceSettings: boolean;
+  syncAnalyticsUsage: boolean;
+  syncAutomations: boolean;
+  syncLocalFiles: boolean;
+  localOnlyMode: boolean;
+  encryptedSync: boolean;
+  pauseSync: boolean;
 };
 
 export type Workspace = {

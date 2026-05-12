@@ -16,6 +16,18 @@ const DEFAULT_STATE = {
     recentApps: [],
     recentFiles: [],
     recentPrompts: [],
+    syncOptions: {
+      syncChatHistory: true,
+      syncMemories: true,
+      syncTasksReminders: true,
+      syncVoiceSettings: true,
+      syncAnalyticsUsage: false,
+      syncAutomations: true,
+      syncLocalFiles: false,
+      localOnlyMode: false,
+      encryptedSync: false,
+      pauseSync: false,
+    },
   },
 };
 
@@ -223,9 +235,18 @@ async function syncToCloud(apiUrl, token) {
   if (!apiUrl || !token) return { ok: false, reason: 'missing-config' };
   try {
     const state = readState();
+    const syncOptions = state.preferences?.syncOptions || DEFAULT_STATE.preferences.syncOptions;
     const payload = {
       preferences: state.preferences,
-      history: state.history.slice(0, 30),
+      history: state.history.slice(0, 50),
+      tasks: state.tasks.slice(0, MAX_TASKS),
+      schedules: state.schedules.slice(0, MAX_TASKS),
+      syncOptions,
+      syncMetadata: {
+        schemaVersion: 1,
+        sourceDevice: 'jarvis-desktop',
+        clientUpdatedAt: new Date().toISOString(),
+      },
     };
     const response = await fetch(`${apiUrl}/api/workspaces/jarvis-state`, {
       method: 'PUT',
@@ -250,12 +271,32 @@ async function loadFromCloud(apiUrl, token) {
     if (!response.ok) return { ok: false, status: response.status };
     const remote = await response.json();
     if (remote?.preferences) {
+      const remoteTasks = Array.isArray(remote.tasks) ? remote.tasks : [];
+      const remoteSchedules = Array.isArray(remote.schedules) ? remote.schedules : [];
+      const mergeByIdNewest = (localItems, incomingItems) => {
+        const map = new Map();
+        [...localItems, ...incomingItems].forEach((item) => {
+          const id = String(item?.id || '');
+          if (!id) return;
+          const existing = map.get(id);
+          if (!existing) {
+            map.set(id, item);
+            return;
+          }
+          const existingTs = Date.parse(existing.updatedAt || existing.createdAt || 0);
+          const incomingTs = Date.parse(item.updatedAt || item.createdAt || 0);
+          if (incomingTs >= existingTs) map.set(id, item);
+        });
+        return Array.from(map.values());
+      };
       updateState((current) => ({
         ...current,
         preferences: { ...current.preferences, ...remote.preferences },
         history: remote.history?.length
           ? [...(remote.history || []), ...current.history].slice(0, MAX_HISTORY)
           : current.history,
+        tasks: mergeByIdNewest(current.tasks, remoteTasks).slice(0, MAX_TASKS),
+        schedules: mergeByIdNewest(current.schedules, remoteSchedules).slice(0, MAX_TASKS),
       }));
     }
     return { ok: true };

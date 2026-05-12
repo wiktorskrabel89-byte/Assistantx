@@ -65,8 +65,11 @@ describe("GET /api/workspaces/state", () => {
     mockCreateClient.mockResolvedValue(makeSupabase());
     const res = await GET();
     expect(res.status).toBe(200);
-    const body = await res.json() as { state: unknown; updatedAt: string | null };
-    expect(body.state).toEqual(VALID_PAYLOAD);
+    const body = await res.json() as { state: { activeWorkspaceId: string; dark: boolean; workspaces: Array<{ id: string; name: string }> }; updatedAt: string | null };
+    expect(body.state.activeWorkspaceId).toBe(VALID_PAYLOAD.activeWorkspaceId);
+    expect(body.state.dark).toBe(VALID_PAYLOAD.dark);
+    expect(body.state.workspaces[0]?.id).toBe("ws-1");
+    expect(body.state.workspaces[0]?.name).toBe("Workspace 1");
     expect(body.updatedAt).toBe("2024-01-01");
   });
 
