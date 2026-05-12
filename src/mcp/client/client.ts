@@ -10,7 +10,7 @@ export async function callMcpTool(
   executionId: string,
   actorUserId: string | null,
 ): Promise<McpToolCallResult> {
-  const server = getMcpServer(request.serverId);
+  const server = await getMcpServer(request.serverId);
   if (!server) {
     return {
       ok: false,

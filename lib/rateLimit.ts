@@ -57,6 +57,25 @@ export function checkRateLimit(
 }
 
 /**
+ * Persistent rate limit check backed by Supabase, with in-memory fallback.
+ *
+ * This enables cross-instance limits for runtime paths that require stronger
+ * enforcement while preserving existing behavior during DB outages.
+ */
+export async function checkRateLimitPersistent(
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<{ allowed: boolean; retryAfterMs: number }> {
+  try {
+    const { consumeRateLimitEntry } = await import("@/src/core/persistence/runtime-db");
+    return await consumeRateLimitEntry({ key, limit, windowMs });
+  } catch {
+    return checkRateLimit(key, limit, windowMs);
+  }
+}
+
+/**
  * Derive a stable rate-limit key from the incoming request.
  *
  * Authenticated requests are keyed by the last 40 characters of the Bearer

@@ -5,16 +5,33 @@ import type { TenantContext } from "@/src/shared/multitenancy/tenant-context";
 export function tenantHasPermission(
   ctx: TenantContext,
   permission: RbacPermission,
-): boolean {
-  if (!ctx.orgRole) return false;
-  return hasPermission(ctx.orgRole as OrgRole, permission);
+): Promise<boolean> {
+  const roleAllowed = ctx.orgRole
+    ? hasPermission(ctx.orgRole as OrgRole, permission)
+    : false;
+  if (roleAllowed) {
+    return Promise.resolve(true);
+  }
+
+  return (async () => {
+    try {
+      const { hasExplicitPermission } = await import("@/src/core/persistence/runtime-db");
+      return await hasExplicitPermission({
+        userId: ctx.userId,
+        permission,
+        organizationId: ctx.organizationId,
+      });
+    } catch {
+      return false;
+    }
+  })();
 }
 
-export function assertOrgPermission(
+export async function assertOrgPermission(
   ctx: TenantContext,
   permission: RbacPermission,
-): void {
-  if (!tenantHasPermission(ctx, permission)) {
+): Promise<void> {
+  if (!(await tenantHasPermission(ctx, permission))) {
     throw new Error(
       `Permission denied: '${permission}' requires at least org role '${ctx.orgRole ?? "none"}'.`,
     );

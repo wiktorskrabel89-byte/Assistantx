@@ -107,6 +107,17 @@ export type CostRecordRow = {
   estimated_usd: number;
 };
 
+export type McpServerRegistrationRow = {
+  id: string;
+  name: string;
+  url: string;
+  trust_level: "trusted" | "verified" | "sandboxed";
+  capabilities: Record<string, unknown>[];
+  credential_ref?: string | null;
+  organization_id?: string | null;
+  enabled: boolean;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Client factory (lazy, avoids importing server client in edge bundles)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -473,3 +484,170 @@ export async function sumCostForOrg(
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP server registrations (Phase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function upsertMcpServerRegistration(
+  row: McpServerRegistrationRow,
+): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("mcp_server_registrations").upsert(
+    {
+      id: row.id,
+      name: row.name,
+      url: row.url,
+      trust_level: row.trust_level,
+      capabilities: row.capabilities,
+      credential_ref: row.credential_ref ?? null,
+      organization_id: row.organization_id ?? null,
+      enabled: row.enabled,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) throw new Error(`upsertMcpServerRegistration: ${error.message}`);
+}
+
+export async function getMcpServerRegistration(
+  id: string,
+): Promise<McpServerRegistrationRow | null> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("mcp_server_registrations")
+    .select("id, name, url, trust_level, capabilities, credential_ref, organization_id, enabled")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw new Error(`getMcpServerRegistration: ${error.message}`);
+  return (data as McpServerRegistrationRow | null) ?? null;
+}
+
+export async function listMcpServerRegistrations(
+  organizationId?: string | null,
+): Promise<McpServerRegistrationRow[]> {
+  const supabase = await getClient();
+  let query = supabase
+    .from("mcp_server_registrations")
+    .select("id, name, url, trust_level, capabilities, credential_ref, organization_id, enabled")
+    .eq("enabled", true);
+
+  if (organizationId === null) {
+    query = query.is("organization_id", null);
+  } else if (organizationId) {
+    query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) throw new Error(`listMcpServerRegistrations: ${error.message}`);
+  return (data ?? []) as McpServerRegistrationRow[];
+}
+
+export async function setMcpServerEnabled(id: string, enabled: boolean): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("mcp_server_registrations")
+    .update({ enabled, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) throw new Error(`setMcpServerEnabled: ${error.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Explicit permissions (Phase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function hasExplicitPermission(params: {
+  userId: string;
+  permission: string;
+  organizationId?: string | null;
+  resourceType?: string;
+  resourceId?: string;
+}): Promise<boolean> {
+  const supabase = await getClient();
+  let query = supabase
+    .from("permissions")
+    .select("id, expires_at")
+    .eq("user_id", params.userId)
+    .eq("permission", params.permission)
+    .limit(25);
+
+  if (params.organizationId === null) {
+    query = query.is("organization_id", null);
+  } else if (params.organizationId) {
+    query = query.or(`organization_id.eq.${params.organizationId},organization_id.is.null`);
+  }
+
+  if (params.resourceType) {
+    query = query.eq("resource_type", params.resourceType);
+  }
+
+  if (params.resourceId) {
+    query = query.eq("resource_id", params.resourceId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`hasExplicitPermission: ${error.message}`);
+
+  const now = Date.now();
+  return (data ?? []).some((row: { expires_at?: string | null }) => {
+    if (!row.expires_at) return true;
+    return new Date(row.expires_at).getTime() > now;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Persistent rate limit entries (Phase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function consumeRateLimitEntry(params: {
+  key: string;
+  limit: number;
+  windowMs: number;
+}): Promise<{ allowed: boolean; retryAfterMs: number }> {
+  const supabase = await getClient();
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const windowEndIso = new Date(now + params.windowMs).toISOString();
+
+  const { data, error } = await supabase
+    .from("rate_limit_entries")
+    .select("key, count, window_end")
+    .eq("key", params.key)
+    .maybeSingle();
+
+  if (error) throw new Error(`consumeRateLimitEntry(select): ${error.message}`);
+
+  if (!data || new Date(data.window_end).getTime() <= now) {
+    const { error: upsertError } = await supabase.from("rate_limit_entries").upsert(
+      {
+        key: params.key,
+        count: 1,
+        window_start: nowIso,
+        window_end: windowEndIso,
+      },
+      { onConflict: "key" },
+    );
+    if (upsertError) throw new Error(`consumeRateLimitEntry(upsert): ${upsertError.message}`);
+    return { allowed: true, retryAfterMs: 0 };
+  }
+
+  const currentCount = Number(data.count ?? 0);
+  const windowEndTs = new Date(data.window_end).getTime();
+
+  if (currentCount >= params.limit) {
+    return {
+      allowed: false,
+      retryAfterMs: Math.max(windowEndTs - now, 0),
+    };
+  }
+
+  const { error: updateError } = await supabase
+    .from("rate_limit_entries")
+    .update({ count: currentCount + 1 })
+    .eq("key", params.key);
+
+  if (updateError) throw new Error(`consumeRateLimitEntry(update): ${updateError.message}`);
+  return { allowed: true, retryAfterMs: 0 };
+}

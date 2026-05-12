@@ -18,7 +18,7 @@ import type {
   ToolExecutionRequest,
   ToolExecutionResult,
 } from "@/src/tools/router/types";
-import { checkRateLimit } from "@/lib/rateLimit";
+import { checkRateLimitPersistent } from "@/lib/rateLimit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default rate limit configuration
@@ -95,7 +95,7 @@ export class ToolRouter {
 
     // ── 4. RATE LIMIT ────────────────────────────────────────────────────────
     const rateLimitKey = `tool:${request.toolId}:${context.actor.userId ?? "anon"}`;
-    const { allowed: rateLimitOk, retryAfterMs } = checkRateLimit(
+    const { allowed: rateLimitOk, retryAfterMs } = await checkRateLimitPersistent(
       rateLimitKey,
       TOOL_RATE_LIMIT_MAX_CALLS,
       TOOL_RATE_LIMIT_WINDOW_MS,
@@ -237,4 +237,3 @@ export class ToolRouter {
     }
   }
 }
-
