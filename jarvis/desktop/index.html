@@ -475,7 +475,7 @@
     <div>
       <div class="app-title">Jarvis Desktop</div>
     </div>
-    <div class="app-subtitle">AssistantX AI Agent</div>
+    <div class="app-subtitle" id="account-badge">AssistantX AI Agent</div>
   </header>
 
   <div class="app">
@@ -489,6 +489,23 @@
       <div class="stack">
         <div class="section-label">Connection</div>
         <div id="connection-status" class="value">Starting…</div>
+      </div>
+
+      <!-- Account / Cloud Sync -->
+      <div class="stack">
+        <div class="section-label">Account</div>
+        <div id="account-status" class="value">Not signed in</div>
+        <div style="display:grid;gap:6px;grid-template-columns:1fr 1fr;">
+          <button type="button" id="account-login" class="secondary sm">🔑 Sign in</button>
+          <button type="button" id="account-sync" class="secondary sm" disabled>☁️ Sync now</button>
+        </div>
+      </div>
+
+      <!-- Linked Accounts -->
+      <div class="stack">
+        <div class="section-label">Linked Accounts</div>
+        <div id="linked-accounts-list" class="value" style="font-size:12px;line-height:1.8;">None linked</div>
+        <button type="button" id="open-linked-accounts" class="secondary sm">🔗 Manage linked accounts</button>
       </div>
 
       <div class="stack">
@@ -531,6 +548,31 @@
 
       <hr>
 
+      <!-- Clipboard -->
+      <div class="stack">
+        <div class="section-label">Clipboard</div>
+        <div style="display:grid;gap:6px;grid-template-columns:1fr 1fr;">
+          <button type="button" id="clipboard-read" class="secondary sm">📋 Read</button>
+          <button type="button" id="clipboard-write" class="secondary sm">📝 Write</button>
+        </div>
+        <input id="clipboard-write-input" type="text" placeholder="Text to copy to clipboard…" style="display:none;">
+      </div>
+
+      <hr>
+
+      <!-- Screenshot monitor selector -->
+      <div class="stack">
+        <div class="section-label">Screenshot</div>
+        <div style="display:grid;gap:6px;grid-template-columns:1fr auto;">
+          <select id="screenshot-display" title="Select monitor">
+            <option value="0">Primary monitor</option>
+          </select>
+          <button type="button" id="screenshot-capture" class="sm">📸 Capture</button>
+        </div>
+      </div>
+
+      <hr>
+
       <!-- Quick Actions -->
       <div class="stack">
         <div class="section-label">Quick Actions</div>
@@ -541,7 +583,6 @@
           <button type="button" id="open-browser-tab">🪟 New Tab</button>
           <button type="button" data-command="open:roblox">🎮 Roblox</button>
           <button type="button" data-command="open:steam">🎯 Steam</button>
-          <button type="button" data-command="command:screenshot">📸 Screenshot</button>
           <button type="button" data-command="command:sysinfo" class="secondary">💻 System Info</button>
           <button type="button" data-command="command:listProcesses" class="secondary">📋 Processes</button>
           <button type="button" data-command="command:volumeUp" class="secondary">🔊 Vol +</button>
@@ -550,6 +591,19 @@
           <button type="button" data-command="command:lockScreen" class="secondary">🔒 Lock</button>
           <button type="button" data-command="command:sleep" class="secondary">💤 Sleep</button>
           <button type="button" data-command="command:shutdown" class="danger">⏻ Shutdown</button>
+        </div>
+      </div>
+
+      <!-- Scheduler -->
+      <hr>
+      <div class="stack">
+        <div class="section-label">Scheduled Tasks</div>
+        <div id="schedules-list" style="font-size:12px;color:#64748b;line-height:1.8;">No schedules yet</div>
+        <div style="display:grid;gap:6px;">
+          <input id="schedule-label" type="text" placeholder="Label (e.g. Morning screenshot)" />
+          <input id="schedule-command" type="text" placeholder="Command (e.g. screenshot)" />
+          <input id="schedule-cron" type="text" placeholder="When (e.g. daily at 08:00, every 30 minutes)" />
+          <button type="button" id="schedule-add" class="secondary sm">+ Add schedule</button>
         </div>
       </div>
     </aside>

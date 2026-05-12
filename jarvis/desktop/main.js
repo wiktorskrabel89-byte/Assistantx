@@ -299,6 +299,58 @@ ipcMain.handle('install-update', () => {
   return { ok: true };
 });
 
+// ── Account login via browser window ─────────────────────────────────────────
+// Opens the AssistantX web login page in a child BrowserWindow, waits for the
+// OAuth callback URL to contain a session token, then closes the window and
+// returns the session to the renderer.
+ipcMain.handle('open-account-login', async () => {
+  const webUrl = process.env.JARVIS_WEB_URL || 'http://localhost:3000';
+  const loginUrl = `${webUrl}/auth/login?client=jarvis-desktop`;
+
+  return new Promise((resolve, reject) => {
+    const loginWin = new BrowserWindow({
+      width: 480,
+      height: 680,
+      title: 'Sign in to AssistantX',
+      parent: win || undefined,
+      modal: true,
+      webPreferences: { nodeIntegration: false, contextIsolation: true },
+    });
+
+    loginWin.loadURL(loginUrl);
+
+    // Detect callback URL carrying the session token
+    loginWin.webContents.on('will-redirect', (_event, url) => {
+      parseCallbackUrl(url, loginWin, resolve, reject);
+    });
+    loginWin.webContents.on('did-navigate', (_event, url) => {
+      parseCallbackUrl(url, loginWin, resolve, reject);
+    });
+
+    loginWin.on('closed', () => resolve(null));
+  });
+});
+
+function parseCallbackUrl(url, loginWin, resolve, reject) {
+  try {
+    const parsed = new URL(url);
+    // Look for /auth/callback with an access_token fragment or query param
+    if (!parsed.pathname.includes('/auth/callback') && !parsed.pathname.includes('/jarvis/callback')) return;
+
+    const params = new URLSearchParams(parsed.hash.slice(1));
+    const accessToken = params.get('access_token') || parsed.searchParams.get('access_token');
+    const email = params.get('email') || parsed.searchParams.get('email') || '';
+    const userId = params.get('sub') || params.get('user_id') || parsed.searchParams.get('user_id') || '';
+
+    if (accessToken) {
+      loginWin.close();
+      resolve({ accessToken, email, userId, signedInAt: new Date().toISOString() });
+    }
+  } catch {
+    reject(new Error('Could not parse auth callback URL'));
+  }
+}
+
 app.whenReady().then(() => {
   createWindow();
   createTray();
