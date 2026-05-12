@@ -201,7 +201,7 @@ begin
       ar.organization_id, ar.status, ar.resolved_by, ar.reason, ar.context,
       ar.created_at, ar.resolved_at, ar.expires_at
     from public.approval_requests ar
-    where ar.execution_id ~* '^[0-9a-f-]{36}$'
+    where ar.execution_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       and not exists (select 1 from public.approvals a where a.id = ar.id);
   end if;
 exception

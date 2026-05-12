@@ -53,7 +53,18 @@ export async function POST(request: Request) {
 
     const fingerprint = normalizeFingerprint(payload.device.fingerprint);
     const fingerprintHash = fingerprint ? sha256(fingerprint) : null;
+    if (!fingerprintHash && pendingTarget.fingerprint_hash) {
+      return Response.json({
+        code: "fingerprint_required",
+        error: "Device fingerprint is required to pair with this runtime.",
+      }, { status: 400 });
+    }
     if (fingerprintHash && pendingTarget.fingerprint_hash && fingerprintHash === pendingTarget.fingerprint_hash) {
+      return Response.json({ code: "same_device", error: "Cannot pair a device with itself." }, { status: 400 });
+    }
+    if (!fingerprintHash && !pendingTarget.fingerprint_hash
+      && payload.device.platform === pendingTarget.platform
+      && payload.device.role === pendingTarget.role) {
       return Response.json({ code: "same_device", error: "Cannot pair a device with itself." }, { status: 400 });
     }
 
@@ -91,4 +102,3 @@ export async function POST(request: Request) {
     return Response.json(payload, { status });
   }
 }
-

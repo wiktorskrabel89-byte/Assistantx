@@ -27,9 +27,17 @@ const hostname = "0.0.0.0";
 const port = parseInt(process.env.PORT || "3000", 10);
 
 // ── Optional Node realtime edge gateway ─────────────────────────────────────
-const REALTIME_PATH = process.env.ASSISTANTX_REALTIME_PATH || "/realtime";
-const REALTIME_HEARTBEAT_TIMEOUT_MS = Number(process.env.ASSISTANTX_REALTIME_HEARTBEAT_TIMEOUT_MS || 45_000);
-const REALTIME_CLEANUP_INTERVAL_MS = Number(process.env.ASSISTANTX_REALTIME_CLEANUP_INTERVAL_MS || 15_000);
+const REALTIME_PATH = process.env.JARVIS_REALTIME_PATH || process.env.ASSISTANTX_REALTIME_PATH || "/realtime";
+const REALTIME_HEARTBEAT_TIMEOUT_MS = Number(
+  process.env.JARVIS_REALTIME_HEARTBEAT_TIMEOUT_MS
+  || process.env.ASSISTANTX_REALTIME_HEARTBEAT_TIMEOUT_MS
+  || 45_000,
+);
+const REALTIME_CLEANUP_INTERVAL_MS = Number(
+  process.env.JARVIS_REALTIME_CLEANUP_INTERVAL_MS
+  || process.env.ASSISTANTX_REALTIME_CLEANUP_INTERVAL_MS
+  || 15_000,
+);
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -135,7 +143,8 @@ async function areTrustedPair(meta, targetDeviceId) {
       .in("id", [meta.deviceId, targetDeviceId]);
     if (error) return false;
     return Array.isArray(data) && data.length === 2;
-  } catch {
+  } catch (error) {
+    console.warn("[realtime-edge] trusted-device check failed:", error instanceof Error ? error.message : "unknown error");
     return false;
   }
 }

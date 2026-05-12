@@ -422,7 +422,7 @@ async function resolveApprovalTableName(supabase: Awaited<ReturnType<typeof getC
 export async function insertApprovalRequest(row: ApprovalRequestRow): Promise<void> {
   const supabase = await getClient();
   const table = await resolveApprovalTableName(supabase);
-  const payload = table === "approvals" ? {
+  const payload: Record<string, unknown> = table === "approvals" ? {
     id: row.id,
     execution_id: row.execution_id,
     tool_id: row.tool_id ?? null,
@@ -447,7 +447,7 @@ export async function insertApprovalRequest(row: ApprovalRequestRow): Promise<vo
     expires_at: row.expires_at ?? null,
     created_at: new Date().toISOString(),
   };
-  const { error } = await supabase.from(table).insert(payload);
+  const { error } = await supabase.from(table).insert(payload as never);
 
   if (error) throw new Error(`insertApprovalRequest: ${error.message}`);
 }
@@ -463,9 +463,10 @@ export async function updateApprovalRequest(
 ): Promise<void> {
   const supabase = await getClient();
   const table = await resolveApprovalTableName(supabase);
-  const patch = table === "approvals" ? {
+  const patch: Record<string, unknown> = table === "approvals" ? {
     status,
     resolved_by: resolvedBy ?? null,
+    ...(note ? { reason: note } : {}),
     resolved_at: new Date().toISOString(),
   } : {
     status,
@@ -475,7 +476,7 @@ export async function updateApprovalRequest(
   };
   const { error } = await supabase
     .from(table)
-    .update(patch)
+    .update(patch as never)
     .eq("id", approvalId);
 
   if (error) throw new Error(`updateApprovalRequest: ${error.message}`);
@@ -496,9 +497,9 @@ export async function listPendingApprovals(
     .eq("status", "pending");
 
   if (table === "approvals") {
-    query = query.order("requested_at", { ascending: true, nullsFirst: false });
+    query = query.order("requested_at", { ascending: true });
   } else {
-    query = query.order("created_at", { ascending: true, nullsFirst: false });
+    query = query.order("created_at", { ascending: true });
   }
   const { data, error } = await query;
 
@@ -572,7 +573,7 @@ export async function upsertDevice(row: DeviceRow): Promise<DeviceRow> {
           last_seen_at: payload.last_seen_at,
           updated_at: payload.updated_at,
         })
-        .eq("id", (existing as { id: string }).id)
+        .eq("id", existing.id)
         .select("*")
         .single();
       if (updateError) throw new Error(`upsertDevice(update): ${updateError.message}`);

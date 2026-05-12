@@ -135,7 +135,7 @@ function buildPresencePayload() {
     status: queueProcessing ? 'busy' : 'online',
     activeApps: [],
     cpu: null,
-    networkMode: REALTIME_EDGE_URL ? 'unknown' : 'relay',
+    networkMode: REALTIME_EDGE_URL ? 'relay' : 'unknown',
   };
 }
 
@@ -225,12 +225,24 @@ function ensureSafePath(targetPath) {
   return resolved;
 }
 
-async function openUrl(url) {
-  let nextUrl = String(url || '').trim();
-  if (!nextUrl) throw new Error('Missing URL.');
-  if (!nextUrl.startsWith('http://') && !nextUrl.startsWith('https://')) {
-    nextUrl = `https://${nextUrl}`;
+function normalizeHttpUrl(rawUrl) {
+  const input = String(rawUrl || '').trim();
+  if (!input) throw new Error('Missing URL.');
+  if (/[\r\n]/.test(input)) {
+    throw new Error('Invalid URL.');
   }
+  const withProtocol = input.startsWith('http://') || input.startsWith('https://')
+    ? input
+    : `https://${input}`;
+  const parsed = new URL(withProtocol);
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http/https URLs are allowed.');
+  }
+  return parsed.toString();
+}
+
+async function openUrl(url) {
+  const nextUrl = normalizeHttpUrl(url);
   if (ipcRenderer) {
     await ipcRenderer.invoke('open-url', nextUrl);
   } else {
@@ -240,11 +252,7 @@ async function openUrl(url) {
 }
 
 async function openChromeTab(url) {
-  let nextUrl = String(url || '').trim();
-  if (!nextUrl) throw new Error('Missing URL.');
-  if (!nextUrl.startsWith('http://') && !nextUrl.startsWith('https://')) {
-    nextUrl = `https://${nextUrl}`;
-  }
+  const nextUrl = normalizeHttpUrl(url);
   const chromePaths = [
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -629,7 +637,6 @@ function connectToRealtimeEdge() {
 
   realtimeWs = new WebSocket(realtimeUrl);
   realtimeWs.on('open', () => {
-    sendRealtimeEdge({ type: 'resume', resumeToken: currentResumeToken });
     publishHeartbeat();
   });
 
@@ -640,6 +647,9 @@ function connectToRealtimeEdge() {
       if (msg.type === 'connected') {
         currentSessionId = msg.sessionId || currentSessionId;
         currentResumeToken = msg.resumeToken || currentResumeToken;
+        if (currentResumeToken) {
+          sendRealtimeEdge({ type: 'resume', resumeToken: currentResumeToken });
+        }
       }
       if (msg.type === 'runtime_command') {
         void executeStructuredCommand(

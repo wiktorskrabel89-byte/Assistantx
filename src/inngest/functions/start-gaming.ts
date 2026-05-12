@@ -56,7 +56,23 @@ export const startGamingFunction = inngest.createFunction(
       });
     });
 
-    await step.sleep("wait-for-runtime-online", "10s");
+    await step.run("wait-for-runtime-online", async () => {
+      const { getDeviceById } = await import("@/src/core/persistence/runtime-db");
+      const targetDeviceId = typeof input.targetDeviceId === "string" ? input.targetDeviceId : null;
+      if (!targetDeviceId) {
+        return { observedOnline: false, reason: "no_target_device_id" };
+      }
+
+      const maxAttempts = 10;
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const target = await getDeviceById(targetDeviceId);
+        if (target?.last_seen_at && Date.now() - new Date(target.last_seen_at).getTime() < 30_000) {
+          return { observedOnline: true, attempt };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+      return { observedOnline: false, reason: "timeout_waiting_for_presence" };
+    });
 
     await step.run("checkpoint-runtime-ready", async () => {
       const { upsertWorkflowCheckpoint } = await import("@/src/core/persistence/runtime-db");
@@ -75,7 +91,7 @@ export const startGamingFunction = inngest.createFunction(
     });
 
     const launchApps = Array.isArray(input.apps)
-      ? input.apps.filter((x): x is string => typeof x === "string").slice(0, 10)
+      ? (input.apps as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 10)
       : ["Discord", "Roblox", "Spotify"];
 
     await step.run("checkpoint-launch-sequence", async () => {
@@ -130,4 +146,3 @@ export const startGamingFunction = inngest.createFunction(
     return { executionId, workflow: "start_gaming", launchApps };
   },
 );
-

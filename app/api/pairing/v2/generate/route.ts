@@ -14,6 +14,9 @@ import {
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
+const MIN_PAIR_CODE_LIFETIME_SECONDS = 60;
+const MAX_PAIR_CODE_LIFETIME_SECONDS = 1800;
+const DEFAULT_PAIR_CODE_LIFETIME_SECONDS = 300;
 
 export async function POST(request: Request) {
   if (!hasPairingConfig()) {
@@ -36,8 +39,8 @@ export async function POST(request: Request) {
     }
 
     const expiresInSeconds = typeof payload.expiresInSeconds === "number"
-      ? Math.min(Math.max(Math.floor(payload.expiresInSeconds), 60), 1800)
-      : 300;
+      ? Math.min(Math.max(Math.floor(payload.expiresInSeconds), MIN_PAIR_CODE_LIFETIME_SECONDS), MAX_PAIR_CODE_LIFETIME_SECONDS)
+      : DEFAULT_PAIR_CODE_LIFETIME_SECONDS;
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
     const fingerprint = normalizeFingerprint(payload.device.fingerprint);
     const fingerprintHash = fingerprint ? sha256(fingerprint) : null;
