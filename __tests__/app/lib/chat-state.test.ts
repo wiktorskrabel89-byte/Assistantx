@@ -7,6 +7,7 @@ import {
   createMessage,
   createDefaultPromptTemplates,
   createDefaultJarvisModes,
+  createDefaultActionModes,
   modeInstructionsPreview,
   createSettings,
   createChat,
@@ -111,6 +112,42 @@ describe("createDefaultPromptTemplates", () => {
   });
 });
 
+/* ── createDefaultActionModes ──────────────────────────────────────── */
+
+describe("createDefaultActionModes", () => {
+  it("returns exactly 5 default action modes", () => {
+    expect(createDefaultActionModes()).toHaveLength(5);
+  });
+
+  it("all are marked as default", () => {
+    for (const mode of createDefaultActionModes()) {
+      expect(mode.isDefault).toBe(true);
+    }
+  });
+
+  it("each mode has at least one step", () => {
+    for (const mode of createDefaultActionModes()) {
+      expect(mode.steps.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("every step has an id, type, and label", () => {
+    for (const mode of createDefaultActionModes()) {
+      for (const step of mode.steps) {
+        expect(typeof step.id).toBe("string");
+        expect(typeof step.type).toBe("string");
+        expect(typeof step.label).toBe("string");
+      }
+    }
+  });
+
+  it("includes a Gaming mode and a Study mode", () => {
+    const names = createDefaultActionModes().map((m) => m.name);
+    expect(names).toContain("Gaming");
+    expect(names).toContain("Study");
+  });
+});
+
 /* ── createDefaultJarvisModes ──────────────────────────────────────── */
 
 describe("createDefaultJarvisModes", () => {
@@ -194,6 +231,9 @@ describe("createSettings", () => {
     expect(Array.isArray(s.jarvisModes)).toBe(true);
     expect(s.jarvisModes).toHaveLength(5);
     expect(s.activeJarvisModeId).toBeNull();
+    expect(Array.isArray(s.actionModes)).toBe(true);
+    expect(s.actionModes).toHaveLength(5);
+    expect(s.activeActionModeId).toBeNull();
   });
 });
 

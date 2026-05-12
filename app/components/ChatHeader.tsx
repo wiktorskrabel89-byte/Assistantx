@@ -3,7 +3,7 @@
 import { BarChart2, Braces, Download, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
 import type { PersonalityMode } from "@/lib/ai-config";
 import { PERSONALITY_MODES } from "@/lib/ai-config";
-import type { JarvisMode } from "@/app/lib/chat-types";
+import type { ActionMode } from "@/app/lib/chat-types";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ type ChatHeaderProps = {
   onExportMarkdown: () => void;
   personalityMode: PersonalityMode;
   onPersonalityModeChange: (mode: PersonalityMode) => void;
-  activeJarvisMode?: JarvisMode | null;
+  activeJarvisMode?: ActionMode | null;
   onDeactivateJarvisMode?: () => void;
 };
 

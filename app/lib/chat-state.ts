@@ -11,6 +11,8 @@ import {
 import type { CostMode, ModelPreset, UserPlan } from "@/lib/ai-config";
 import type {
   Artifact,
+  ActionMode,
+  ActionStep,
   BuiltInAgent,
   ChatEntry,
   ChatSessionItem,
@@ -212,6 +214,76 @@ export function modeInstructionsPreview(instructions: string, maxBullets = 3): s
     .slice(0, maxBullets);
 }
 
+function makeStep(type: ActionStep["type"], label: string, extra: Partial<ActionStep> = {}): ActionStep {
+  return { id: `step-${Math.random().toString(36).slice(2, 9)}`, type, label, ...extra };
+}
+
+type DefaultActionModeDef = Omit<ActionMode, "id" | "createdAt" | "updatedAt">;
+
+const DEFAULT_ACTION_MODES: DefaultActionModeDef[] = [
+  {
+    name: "Gaming",
+    icon: "🎮",
+    description: "Fire up your gaming setup — opens your games and chat apps.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open Roblox", { url: "https://www.roblox.com" }),
+      makeStep("open_url", "Open Discord", { url: "https://discord.com/app" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Gaming personality", { jarvisModeId: "jarvis-mode-default-1" }),
+    ],
+  },
+  {
+    name: "Study",
+    icon: "📚",
+    description: "Open study resources and put Jarvis in teacher mode.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open YouTube", { url: "https://www.youtube.com" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Study personality", { jarvisModeId: "jarvis-mode-default-3" }),
+    ],
+  },
+  {
+    name: "Work",
+    icon: "💼",
+    description: "Open work tools and switch Jarvis to focused mode.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open Notion", { url: "https://www.notion.so" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Focus personality", { jarvisModeId: "jarvis-mode-default-2" }),
+    ],
+  },
+  {
+    name: "Music",
+    icon: "🎵",
+    description: "Open your music app and chill out.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open Spotify", { url: "https://open.spotify.com" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Chill personality", { jarvisModeId: "jarvis-mode-default-5" }),
+    ],
+  },
+  {
+    name: "Creative",
+    icon: "✨",
+    description: "Get into creative mode — open your tools and brainstorm.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open Figma", { url: "https://www.figma.com" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Creative personality", { jarvisModeId: "jarvis-mode-default-4" }),
+    ],
+  },
+];
+
+export function createDefaultActionModes(): ActionMode[] {
+  const now = Date.now();
+  return DEFAULT_ACTION_MODES.map((mode, index) => ({
+    ...mode,
+    id: `action-mode-default-${index + 1}`,
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
 export function createSettings(): WorkspaceSettings {
   return {
     activeAgentId: BUILT_IN_AGENTS[0].id,
@@ -240,6 +312,8 @@ export function createSettings(): WorkspaceSettings {
     personalityMode: "default",
     jarvisModes: createDefaultJarvisModes(),
     activeJarvisModeId: null,
+    actionModes: createDefaultActionModes(),
+    activeActionModeId: null,
   };
 }
 
@@ -436,6 +510,18 @@ export function upgradeState(value: StoredState | null): StoredState | null {
       && jarvisModes.some((m) => m.id === rawSettings.activeJarvisModeId)
         ? rawSettings.activeJarvisModeId
         : (rawSettings.activeJarvisModeId === null ? null : (rawSettings as Record<string, unknown>).activeJarvisModeId as null ?? null);
+
+    const defaultActionModes = createDefaultActionModes();
+    const existingActionModes: ActionMode[] = Array.isArray(rawSettings.actionModes) ? rawSettings.actionModes as ActionMode[] : [];
+    const defaultActionIds = new Set(defaultActionModes.map((m) => m.id));
+    const userActionModes = existingActionModes.filter((m) => !defaultActionIds.has(m.id));
+    const actionModes = [...defaultActionModes, ...userActionModes];
+    const activeActionModeId =
+      typeof rawSettings.activeActionModeId === "string"
+      && actionModes.some((m) => m.id === rawSettings.activeActionModeId)
+        ? rawSettings.activeActionModeId
+        : null;
+
     const settings = {
       ...createSettings(),
       ...rawSettings,
@@ -451,6 +537,8 @@ export function upgradeState(value: StoredState | null): StoredState | null {
           : "default",
       jarvisModes,
       activeJarvisModeId,
+      actionModes,
+      activeActionModeId,
     };
 
     return {

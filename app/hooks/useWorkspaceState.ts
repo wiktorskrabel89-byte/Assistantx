@@ -17,6 +17,8 @@ import {
   upgradeState,
 } from "../lib/chat-state";
 import type {
+  ActionMode,
+  ActionStep,
   ChatEntry,
   ChatThread,
   CustomAgent,
@@ -648,6 +650,64 @@ export function useWorkspaceState() {
     }));
   }, []);
 
+  const createActionMode = useCallback((mode: { name: string; icon: string; description: string; steps: ActionStep[] }) => {
+    const now = Date.now();
+    const newMode: ActionMode = {
+      id: createId(),
+      name: mode.name,
+      icon: mode.icon,
+      description: mode.description,
+      steps: mode.steps,
+      isDefault: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        actionModes: [...workspace.settings.actionModes, newMode],
+      },
+    }));
+    return newMode.id;
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const updateActionMode = useCallback((modeId: string, patch: { name?: string; icon?: string; description?: string; steps?: ActionStep[] }) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        actionModes: workspace.settings.actionModes.map((m) =>
+          m.id === modeId ? { ...m, ...patch, updatedAt: Date.now() } : m
+        ),
+      },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const deleteActionMode = useCallback((modeId: string) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => {
+      const target = workspace.settings.actionModes.find((m) => m.id === modeId);
+      if (target?.isDefault) return workspace;
+      return {
+        ...workspace,
+        settings: {
+          ...workspace.settings,
+          actionModes: workspace.settings.actionModes.filter((m) => m.id !== modeId),
+          activeActionModeId: workspace.settings.activeActionModeId === modeId
+            ? null
+            : workspace.settings.activeActionModeId,
+        },
+      };
+    });
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setActiveActionMode = useCallback((modeId: string | null) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, activeActionModeId: modeId },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const createJarvisMode = useCallback((mode: { name: string; description: string; instructions: string; icon?: string }) => {
     const now = Date.now();
     const newMode: JarvisMode = {
@@ -805,6 +865,10 @@ export function useWorkspaceState() {
     updateJarvisMode,
     deleteJarvisMode,
     setActiveJarvisMode,
+    createActionMode,
+    updateActionMode,
+    deleteActionMode,
+    setActiveActionMode,
     activeCustomAgent,
     activeBuiltInAgent,
     assistantName,
