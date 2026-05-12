@@ -1,4 +1,5 @@
 import { ToolRouter } from "@/src/tools/router/router";
+import { resolveActor, extractBearerToken } from "@/src/core/auth/actor-resolver";
 import type { ApiV1ToolInvokeRequest, ApiV1ToolInvokeResponse } from "@/src/api/v1/types";
 import { randomUUID } from "node:crypto";
 
@@ -8,8 +9,7 @@ export const maxDuration = 30;
 const toolRouter = new ToolRouter();
 
 export async function POST(request: Request) {
-  const authHeader = request.headers.get("Authorization") ?? "";
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const token = extractBearerToken(request.headers.get("Authorization"));
   if (!token) {
     return Response.json({ error: "Authorization header required." }, { status: 401 });
   }
@@ -22,15 +22,28 @@ export async function POST(request: Request) {
     return Response.json({ error: "input must be an object." }, { status: 400 });
   }
 
+  const actorResult = await resolveActor({
+    bearerToken: token,
+    requestedOrganizationId:
+      typeof body.organizationId === "string" ? body.organizationId : null,
+  });
+
+  if (!actorResult.ok) {
+    return Response.json({ error: actorResult.error }, { status: actorResult.status });
+  }
+
   const executionId = randomUUID();
   const result = await toolRouter.execute(
-    { toolId: body.toolId, input: body.input },
+    {
+      toolId: body.toolId,
+      input: body.input,
+      idempotencyKey:
+        typeof body.idempotencyKey === "string" ? body.idempotencyKey : undefined,
+    },
     {
       executionId,
       workflowId: "v1/tools",
-      // TODO: resolve token to actual userId/organizationId via Supabase Auth
-      // before this route is exposed to production traffic.
-      actor: { userId: null, organizationId: null, sessionId: token.slice(0, 32) },
+      actor: actorResult.actor,
     },
   );
 

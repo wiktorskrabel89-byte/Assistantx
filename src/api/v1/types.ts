@@ -4,11 +4,13 @@
 export type ApiV1WorkflowRequest = {
   workflow: string;
   input: Record<string, unknown>;
+  /** Optional organization scope for multi-tenant execution. */
+  organizationId?: string;
 };
 
 export type ApiV1WorkflowResponse = {
   executionId: string;
-  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed";
+  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled" | "retrying" | "expired";
   output?: Record<string, unknown>;
   error?: string;
 };
@@ -35,6 +37,13 @@ export type ApiV1MemorySearchResponse = {
 export type ApiV1ToolInvokeRequest = {
   toolId: string;
   input: Record<string, unknown>;
+  /** Optional organization scope. */
+  organizationId?: string;
+  /**
+   * Caller-provided idempotency key.  When supplied, a repeated request with
+   * the same key returns the cached result without re-executing the tool.
+   */
+  idempotencyKey?: string;
 };
 
 export type ApiV1ToolInvokeResponse = {
