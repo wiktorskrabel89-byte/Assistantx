@@ -5,6 +5,16 @@ import type { ApiV1Error, ApiV1RunSummary } from "@/src/api/v1/types";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+const VALID_STATUSES = [
+  "queued",
+  "running",
+  "waiting_for_approval",
+  "completed",
+  "failed",
+] as const;
+type ValidStatus = (typeof VALID_STATUSES)[number];
+const VALID_STATUS_SET = new Set<string>(VALID_STATUSES);
+
 export async function GET(request: Request) {
   const token = extractBearerToken(request.headers.get("Authorization"));
   if (!token) {
@@ -26,13 +36,18 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const rawStatus = searchParams.get("status");
-  const VALID_STATUSES = new Set([
-    "queued", "running", "waiting_for_approval", "completed", "failed",
-  ] as const);
-  const status = VALID_STATUSES.has(rawStatus as "queued") ? rawStatus as
-    | "queued" | "running" | "waiting_for_approval" | "completed" | "failed"
-    : undefined;
-  const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 50)));
+  if (rawStatus && !VALID_STATUS_SET.has(rawStatus)) {
+    const err: ApiV1Error = { error: "Invalid status filter.", code: "invalid_status" };
+    return Response.json(err, { status: 400 });
+  }
+  const status = rawStatus as ValidStatus | null;
+  const rawLimit = searchParams.get("limit");
+  const parsedLimit = rawLimit ? Number(rawLimit) : 50;
+  if (!Number.isFinite(parsedLimit) || parsedLimit < 1) {
+    const err: ApiV1Error = { error: "limit must be a positive number.", code: "invalid_limit" };
+    return Response.json(err, { status: 400 });
+  }
+  const limit = Math.min(100, Math.max(1, parsedLimit));
   const requestedOrgId = searchParams.get("organizationId") ?? actorResult.actor.organizationId;
 
   let runs: ApiV1RunSummary[] = [];
@@ -40,7 +55,7 @@ export async function GET(request: Request) {
     const rows = await listWorkflowRuns({
       userId: resolvedUserId,
       organizationId: requestedOrgId,
-      status,
+      status: status ?? undefined,
       limit,
     });
 

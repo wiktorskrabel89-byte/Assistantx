@@ -1,5 +1,6 @@
 import type { McpToolCallResult } from "@/src/mcp/client/types";
 import { listPlugins } from "@/src/plugins/registry";
+import { toolRegistry } from "@/src/tools/router/registry";
 import { ToolRouter } from "@/src/tools/router/router";
 import { randomUUID } from "node:crypto";
 
@@ -30,8 +31,11 @@ export async function handleMcpServerRequest(
 ): Promise<McpToolCallResult & { serverSide: true }> {
   const tools = await buildMcpServerToolList();
   const found = tools.find((t) => t.name === toolName);
+  const internalToolId = toolRegistry.has(toolName)
+    ? toolName
+    : toolName.replace("/", ".");
 
-  if (!found) {
+  if (!found || !toolRegistry.has(internalToolId)) {
     return {
       ok: false,
       serverId: "assistantx",
@@ -46,7 +50,7 @@ export async function handleMcpServerRequest(
   const toolRouter = new ToolRouter();
   const executionId = randomUUID();
   const result = await toolRouter.execute(
-    { toolId: toolName, input },
+    { toolId: internalToolId, input },
     {
       executionId,
       workflowId: "mcp/server",
