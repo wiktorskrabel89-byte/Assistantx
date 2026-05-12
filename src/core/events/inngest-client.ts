@@ -19,12 +19,12 @@ export type InngestEventPayload = {
 export const inngest = new Inngest({
   id: "assistantx",
   /**
-   * In development/CI (no INNGEST_SIGNING_KEY) the SDK operates in "dev" mode,
-   * forwarding events to the Inngest Dev Server on http://localhost:8288.
-   * In production the signing key enables secure request validation.
+   * Explicitly set the mode based on environment:
+   * - With INNGEST_SIGNING_KEY: production mode, signatures validated.
+   * - Without: dev mode, forwards to local Inngest Dev Server.
    */
   ...(process.env.INNGEST_SIGNING_KEY
-    ? {}
+    ? { signingKey: process.env.INNGEST_SIGNING_KEY }
     : { baseUrl: process.env.INNGEST_DEV_SERVER_URL ?? "http://localhost:8288" }),
 });
 

@@ -122,18 +122,28 @@ export const approvalRequestedFunction = inngest.createFunction(
     }
 
     // ── STEP 4: Persist resolution ───────────────────────────────────────────
-    const { status, resolvedBy, note } = resolution.data;
+    const rawStatus = resolution.data.status;
+    // Runtime validation: only accept known resolution statuses.
+    if (rawStatus !== "approved" && rawStatus !== "rejected") {
+      throw new Error(
+        `Invalid approval resolution status: "${rawStatus}". Expected "approved" or "rejected".`,
+      );
+    }
+    const { resolvedBy, note } = resolution.data;
+    const resolvedStatus = rawStatus;
     await step.run("persist-resolution", async () => {
       const { updateApprovalRequest, updateWorkflowRun } = await import(
         "@/src/core/persistence/runtime-db"
       );
-      await updateApprovalRequest(approvalId, status as "approved" | "rejected", resolvedBy, note);
+      await updateApprovalRequest(approvalId, resolvedStatus, resolvedBy, note);
 
       // Resume or fail the workflow run based on resolution.
-      const newStatus = status === "approved" ? "running" : "failed";
+      const newStatus = resolvedStatus === "approved" ? "running" : "failed";
       await updateWorkflowRun(executionId, {
         status: newStatus,
-        error: status === "rejected" ? `Approval rejected by ${resolvedBy}: ${note ?? "no reason given"}` : null,
+        error: resolvedStatus === "rejected"
+          ? `Approval rejected by ${resolvedBy}: ${note ?? "no reason given"}`
+          : null,
       });
     });
 
@@ -144,16 +154,16 @@ export const approvalRequestedFunction = inngest.createFunction(
         data: {
           executionId,
           approvalId,
-          status,
+          status: resolvedStatus,
           resolvedBy,
           note,
           timestamp: new Date().toISOString(),
           organizationId,
-          payload: { status, resolvedBy, note },
+          payload: { status: resolvedStatus, resolvedBy, note },
         },
       });
     });
 
-    return { approvalId, outcome: status };
+    return { approvalId, outcome: resolvedStatus };
   },
 );

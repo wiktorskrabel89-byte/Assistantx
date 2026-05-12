@@ -22,8 +22,13 @@ export async function POST(request: Request) {
     return Response.json({ error: actorResult.error }, { status: actorResult.status });
   }
 
+  const resolvedUserId = actorResult.actor.userId;
+  if (!resolvedUserId) {
+    return Response.json({ error: "User identity could not be resolved." }, { status: 401 });
+  }
+
   const result = await memoryService.search({
-    userId: actorResult.actor.userId!,
+    userId: resolvedUserId,
     organizationId: actorResult.actor.organizationId,
     layer: body.layer,
     limit: body.limit ?? 20,

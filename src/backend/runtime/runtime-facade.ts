@@ -22,12 +22,12 @@ export async function executeRuntimeRequest(
   const startedAt = new Date().toISOString();
 
   // Persist the workflow run record (authoritative state — fail-closed).
-  let dbRowId: string | null = null;
+  let hasPersistentRecord = false;
   try {
     const { insertWorkflowRun } = await import(
       "@/src/core/persistence/runtime-db"
     );
-    dbRowId = await insertWorkflowRun({
+    await insertWorkflowRun({
       execution_id: executionId,
       workflow_id: request.workflow,
       user_id: request.actor.userId,
@@ -37,6 +37,7 @@ export async function executeRuntimeRequest(
       input: request.input,
       started_at: startedAt,
     });
+    hasPersistentRecord = true;
   } catch {
     // If we can't persist the run record, continue but note it is not durable.
   }
@@ -51,7 +52,7 @@ export async function executeRuntimeRequest(
   });
 
   // Update status to running.
-  if (dbRowId) {
+  if (hasPersistentRecord) {
     try {
       const { updateWorkflowRun } = await import(
         "@/src/core/persistence/runtime-db"
@@ -118,7 +119,7 @@ export async function executeRuntimeRequest(
   const completedAt = new Date().toISOString();
 
   // Update authoritative run record.
-  if (dbRowId) {
+  if (hasPersistentRecord) {
     try {
       const { updateWorkflowRun } = await import(
         "@/src/core/persistence/runtime-db"

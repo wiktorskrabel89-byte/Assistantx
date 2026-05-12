@@ -99,8 +99,9 @@ export function compressEntry(
     };
   }
 
-  // Strategy 2: hard truncation
-  const hardTruncated = entry.content.slice(0, targetChars - TRUNCATION_SUFFIX_MARGIN) + TRUNCATION_SUFFIX;
+  // Strategy 2: hard truncation — guard against tiny targets.
+  const sliceEnd = Math.max(0, targetChars - TRUNCATION_SUFFIX_MARGIN);
+  const hardTruncated = entry.content.slice(0, sliceEnd) + TRUNCATION_SUFFIX;
   return {
     ...entry,
     content: hardTruncated,

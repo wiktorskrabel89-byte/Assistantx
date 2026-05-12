@@ -68,6 +68,7 @@ class ApprovalQueue {
   async resolve(
     approvalId: string,
     resolution: ApprovalResolution,
+    context?: { organizationId?: string | null; executionId?: string },
   ): Promise<ApprovalRequest | null> {
     // Try DB-backed resolution first.
     try {
@@ -96,12 +97,16 @@ class ApprovalQueue {
 
     // Reconstruct a response object for callers.
     const resolvedAt = new Date().toISOString();
+    const fallbackEntry = this.fallback.get(approvalId);
+    const orgId = context?.organizationId ?? fallbackEntry?.organizationId;
+    const execId = context?.executionId ?? fallbackEntry?.executionId;
+
     await eventBus.publish({
       type: RUNTIME_EVENT_TYPES.APPROVAL_RESOLVED,
       timestamp: resolvedAt,
       actorUserId: resolution.resolvedBy,
-      organizationId: undefined,
-      executionId: undefined,
+      organizationId: orgId ?? null,
+      executionId: execId,
       payload: {
         approvalId,
         status: resolution.status,
@@ -109,7 +114,6 @@ class ApprovalQueue {
       },
     });
 
-    const fallbackEntry = this.fallback.get(approvalId);
     if (fallbackEntry) {
       return {
         ...fallbackEntry,

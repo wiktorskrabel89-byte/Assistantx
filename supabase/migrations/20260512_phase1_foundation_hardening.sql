@@ -172,16 +172,21 @@ begin
       'completed', 'failed', 'cancelled', 'retrying', 'expired'
     ));
 
-  -- Same extension for agent_tasks.
-  alter table public.agent_tasks
-    drop constraint if exists agent_tasks_status_check;
+  -- Same extension for agent_tasks (only if table exists).
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'agent_tasks'
+  ) then
+    alter table public.agent_tasks
+      drop constraint if exists agent_tasks_status_check;
 
-  alter table public.agent_tasks
-    add constraint agent_tasks_status_check
-    check (status in (
-      'queued', 'running', 'waiting_for_approval',
-      'completed', 'failed', 'cancelled', 'retrying', 'expired'
-    ));
+    alter table public.agent_tasks
+      add constraint agent_tasks_status_check
+      check (status in (
+        'queued', 'running', 'waiting_for_approval',
+        'completed', 'failed', 'cancelled', 'retrying', 'expired'
+      ));
+  end if;
 exception
   when others then
     -- Constraint may not exist on older schemas; ignore.
