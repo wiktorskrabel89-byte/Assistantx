@@ -18,6 +18,12 @@ export async function GET(request: Request) {
     return Response.json(err, { status: actorResult.status });
   }
 
+  const resolvedUserId = actorResult.actor.userId;
+  if (!resolvedUserId) {
+    const err: ApiV1Error = { error: "User identity could not be resolved.", code: "unauthorized" };
+    return Response.json(err, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status") as
     | "queued" | "running" | "waiting_for_approval" | "completed" | "failed"
@@ -28,7 +34,7 @@ export async function GET(request: Request) {
   let runs: ApiV1RunSummary[] = [];
   try {
     const rows = await listWorkflowRuns({
-      userId: actorResult.actor.userId!,
+      userId: resolvedUserId,
       organizationId: requestedOrgId,
       status,
       limit,

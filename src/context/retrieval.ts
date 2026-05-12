@@ -19,8 +19,7 @@ import type {
 
 export function estimateTokens(text: string): number {
   // GPT-family: ~4 characters per token on average.
-  // TODO: Replace with tiktoken for exact token counts when available.
-  // Track in: https://github.com/wiktorskrabel89-byte/Assistantx/issues (open a tiktoken migration issue)
+  // TODO: Replace with tiktoken for exact token counts to improve budget accuracy.
   return Math.ceil(text.length / 4);
 }
 

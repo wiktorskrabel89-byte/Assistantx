@@ -20,6 +20,15 @@ import type {
 } from "@/src/tools/router/types";
 import { checkRateLimit } from "@/lib/rateLimit";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Default rate limit configuration
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Maximum tool invocations per user per tool per rate-limit window. */
+const TOOL_RATE_LIMIT_MAX_CALLS = 50;
+/** Sliding window duration in milliseconds for per-tool rate limiting. */
+const TOOL_RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+
 export class ToolRouter {
   private readonly eventBus = createEventBus();
 
@@ -88,8 +97,8 @@ export class ToolRouter {
     const rateLimitKey = `tool:${request.toolId}:${context.actor.userId ?? "anon"}`;
     const { allowed: rateLimitOk, retryAfterMs } = checkRateLimit(
       rateLimitKey,
-      50,     // 50 tool calls…
-      60_000, // …per minute per user per tool
+      TOOL_RATE_LIMIT_MAX_CALLS,
+      TOOL_RATE_LIMIT_WINDOW_MS,
     );
     if (!rateLimitOk) {
       void this.emitEvent(RUNTIME_EVENT_TYPES.TOOL_RATE_LIMITED, context, {
