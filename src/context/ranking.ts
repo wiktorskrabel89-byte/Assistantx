@@ -15,6 +15,17 @@
 import type { ContextAssemblyConfig, ContextEntry } from "@/src/context/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Content overlap fraction above which two entries are considered duplicates.
+ * 80% keyword overlap reliably catches paraphrases and near-identical chunks
+ * while allowing distinct entries that share domain vocabulary to coexist.
+ */
+const DEDUPLICATION_THRESHOLD = 0.8;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Keyword overlap scoring
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -105,7 +116,7 @@ export function deduplicateEntries(entries: ContextEntry[]): ContextEntry[] {
   for (const entry of entries) {
     const isDuplicate = seen.some((s) => {
       const overlap = keywordOverlap(s.content, entry.content);
-      return overlap > 0.8;
+      return overlap > DEDUPLICATION_THRESHOLD;
     });
     if (!isDuplicate) seen.push(entry);
   }

@@ -1,4 +1,23 @@
 import type { RegisteredTool } from "@/src/tools/router/types";
+import type { MemoryLayer } from "@/src/memory/service/types";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VALID_MEMORY_LAYERS: readonly MemoryLayer[] = [
+  "short_term",
+  "episodic",
+  "semantic",
+  "procedural",
+] as const;
+
+function validateMemoryLayer(value: unknown): MemoryLayer {
+  if (typeof value === "string" && (VALID_MEMORY_LAYERS as readonly string[]).includes(value)) {
+    return value as MemoryLayer;
+  }
+  return "short_term";
+}
 
 export const BUILTIN_TOOLS: RegisteredTool[] = [
   // ───────────────────────────────────────────────────────────────────────────
@@ -66,11 +85,7 @@ export const BUILTIN_TOOLS: RegisteredTool[] = [
       if (typeof input.content !== "string" || !input.content.trim()) {
         throw new Error("memory.write: content is required.");
       }
-      const validLayers = ["short_term", "episodic", "semantic", "procedural"] as const;
-      type MemoryLayer = typeof validLayers[number];
-      const layer: MemoryLayer = validLayers.includes(input.layer as MemoryLayer)
-        ? (input.layer as MemoryLayer)
-        : "short_term";
+      const layer = validateMemoryLayer(input.layer);
 
       const { memoryService } = await import("@/src/memory/service/memory-service");
       const entry = await memoryService.write({

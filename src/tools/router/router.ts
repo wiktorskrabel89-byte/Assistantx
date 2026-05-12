@@ -167,6 +167,7 @@ export class ToolRouter {
           request.idempotencyKey,
           context.executionId,
           output,
+          context.actor.userId,
         );
       } catch {
         // Best-effort — don't fail the response.
@@ -214,7 +215,7 @@ export class ToolRouter {
         user_id: context.actor.userId,
         organization_id: context.actor.organizationId,
         policy_allowed: policyAllowed,
-        risk_level: tool.policy.riskLevel === "critical" ? "high" : tool.policy.riskLevel,
+        risk_level: tool.policy.riskLevel,
         input_summary: JSON.stringify(Object.keys(request.input)).slice(0, 500),
         output_summary: output
           ? JSON.stringify(Object.keys(output)).slice(0, 500)

@@ -165,8 +165,9 @@ export class SupabaseMemoryAdapter {
       .select("id, user_id, memory_key, memory_value, created_at, updated_at")
       .eq("user_id", query.userId)
       .like("memory_key", `${keyPrefix}%`)
+      .gt("updated_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()) // ignore entries older than 90 days
       .order("updated_at", { ascending: false })
-      .limit((query.limit ?? 20) * 3); // over-fetch to allow filtering
+      .limit((query.limit ?? 20) * 2); // slight over-fetch to allow expiry filtering
 
     if (error) {
       throw new Error(`SupabaseMemoryAdapter.search: ${error.message}`);

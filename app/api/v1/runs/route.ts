@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       executionId: row.execution_id,
       workflowId: row.workflow_id,
       status: row.status,
-      createdAt: "",   // not returned by the query helper yet — added in next wiring
+      createdAt: row.created_at ?? new Date(0).toISOString(),
       completedAt: row.completed_at ?? undefined,
     }));
   } catch {

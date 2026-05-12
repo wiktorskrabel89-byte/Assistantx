@@ -20,7 +20,7 @@ export type WorkflowRunRow = {
   workflow_id: string;
   user_id: string | null;
   organization_id: string | null;
-  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed";
+  status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled" | "retrying" | "expired";
   trigger: string;
   input: Record<string, unknown>;
   output?: Record<string, unknown> | null;
@@ -28,6 +28,7 @@ export type WorkflowRunRow = {
   cost_usd?: number | null;
   started_at?: string | null;
   completed_at?: string | null;
+  created_at?: string;
 };
 
 export type ToolCallRow = {
@@ -36,7 +37,7 @@ export type ToolCallRow = {
   user_id: string | null;
   organization_id: string | null;
   policy_allowed: boolean;
-  risk_level: "low" | "medium" | "high";
+  risk_level: "low" | "medium" | "high" | "critical";
   input_summary?: string | null;
   output_summary?: string | null;
   error?: string | null;
@@ -128,7 +129,7 @@ export async function listWorkflowRuns(params: {
   const supabase = await getClient();
   let query = supabase
     .from("workflow_runs")
-    .select("*")
+    .select("execution_id, workflow_id, user_id, organization_id, status, input, output, error, cost_usd, started_at, completed_at, created_at")
     .order("created_at", { ascending: false })
     .limit(params.limit ?? 50);
 
@@ -229,12 +230,14 @@ export async function storeIdempotencyResult(
   key: string,
   executionId: string,
   result: Record<string, unknown>,
+  userId?: string | null,
 ): Promise<void> {
   const supabase = await getClient();
   await supabase.from("execution_checkpoints").upsert(
     {
       idempotency_key: key,
       execution_id: executionId,
+      user_id: userId ?? null,
       result,
       expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       created_at: new Date().toISOString(),

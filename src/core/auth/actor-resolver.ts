@@ -55,6 +55,13 @@ export async function resolveActor(params: {
     return { ok: false, error: "Authorization header required.", status: 401 };
   }
 
+  // Basic structural check: Supabase JWTs are base64url-encoded dot-separated
+  // three-part strings.  This avoids sending malformed tokens to the auth server.
+  const jwtParts = bearerToken.split(".");
+  if (jwtParts.length !== 3 || jwtParts.some((p) => !p)) {
+    return { ok: false, error: "Malformed authorization token.", status: 401 };
+  }
+
   // Dynamic import keeps the server-only Supabase client out of edge bundles.
   const { createClient } = await import("@/lib/server");
 

@@ -16,6 +16,15 @@ import { estimateTokens } from "@/src/context/retrieval";
 import type { ContextEntry } from "@/src/context/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The " [...]" suffix appended when hard-truncating content. */
+const TRUNCATION_SUFFIX = " [...]";
+/** Character margin reserved for the truncation suffix + safety padding. */
+const TRUNCATION_SUFFIX_MARGIN = TRUNCATION_SUFFIX.length + 4;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sentence splitting
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -91,7 +100,7 @@ export function compressEntry(
   }
 
   // Strategy 2: hard truncation
-  const hardTruncated = entry.content.slice(0, targetChars - 10) + " [...]";
+  const hardTruncated = entry.content.slice(0, targetChars - TRUNCATION_SUFFIX_MARGIN) + TRUNCATION_SUFFIX;
   return {
     ...entry,
     content: hardTruncated,
