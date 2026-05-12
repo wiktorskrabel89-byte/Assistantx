@@ -16,11 +16,18 @@ const {
 const { planPrompt } = require('./task-planner');
 
 let ipcRenderer;
+let clipboard;
 try {
-  ipcRenderer = require('electron').ipcRenderer;
+  const electron = require('electron');
+  ipcRenderer = electron.ipcRenderer;
+  clipboard = electron.clipboard;
 } catch {
   ipcRenderer = null;
+  clipboard = null;
 }
+
+// ── Platform detection ───────────────────────────────────────────────────────
+const PLATFORM = process.platform; // 'win32', 'darwin', 'linux'
 
 const emitter = new EventEmitter();
 const BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'ws://127.0.0.1:8000/ws';
@@ -44,6 +51,7 @@ const REMOTE_ALLOWED_COMMANDS = new Set([
   'searchYouTube',
   'screenshot',
   'sysinfo',
+  'systemInfo',
   'listProcesses',
   'listDesktop',
   'listFiles',
@@ -57,7 +65,45 @@ const REMOTE_ALLOWED_COMMANDS = new Set([
   'lockScreen',
   'sleep',
   'cancelShutdown',
+  'readClipboard',
+  'writeClipboard',
 ]);
+
+// ── Command risk tiers ───────────────────────────────────────────────────────
+// low    → auto-execute
+// medium → require valid pairing token
+// high   → require explicit phone approval before execution
+const COMMAND_RISK_TIER = {
+  screenshot: 'low',
+  sysinfo: 'low',
+  systemInfo: 'low',
+  listProcesses: 'low',
+  listDesktop: 'low',
+  listFiles: 'low',
+  readFile: 'low',
+  readClipboard: 'low',
+  volumeUp: 'low',
+  volumeDown: 'low',
+  mute: 'low',
+  openApp: 'medium',
+  closeApp: 'medium',
+  openUrl: 'medium',
+  openChromeTab: 'medium',
+  searchWeb: 'medium',
+  searchYouTube: 'medium',
+  typeText: 'medium',
+  openFile: 'medium',
+  setVolume: 'medium',
+  lockScreen: 'medium',
+  cancelShutdown: 'medium',
+  writeClipboard: 'medium',
+  sleep: 'high',
+  shutdown: 'high',
+  restart: 'high',
+};
+
+// Pending approval requests from remote commands (approvalId → resolve fn)
+const PENDING_APPROVALS = new Map();
 
 let ws;
 let realtimeWs;
@@ -97,6 +143,30 @@ const APP_OPEN_MAP = {
   notepadpp: 'start notepad++',
 };
 
+// macOS app name mappings (used with `open -a <name>`)
+const APP_OPEN_MAP_DARWIN = {
+  chrome: 'Google Chrome',
+  firefox: 'Firefox',
+  safari: 'Safari',
+  edge: 'Microsoft Edge',
+  notepad: 'TextEdit',
+  roblox: 'Roblox',
+  spotify: 'Spotify',
+  discord: 'Discord',
+  steam: 'Steam',
+  explorer: 'Finder',
+  calc: 'Calculator',
+  calculator: 'Calculator',
+  taskmgr: 'Activity Monitor',
+  vlc: 'VLC',
+  word: 'Microsoft Word',
+  excel: 'Microsoft Excel',
+  powerpoint: 'Microsoft PowerPoint',
+  teams: 'Microsoft Teams',
+  zoom: 'zoom.us',
+  vscode: 'Visual Studio Code',
+};
+
 const APP_CLOSE_MAP = {
   chrome: 'chrome.exe',
   firefox: 'firefox.exe',
@@ -108,6 +178,20 @@ const APP_CLOSE_MAP = {
   zoom: 'Zoom.exe',
   vscode: 'Code.exe',
   vlc: 'vlc.exe',
+};
+
+// macOS close via AppleScript `quit`
+const APP_CLOSE_MAP_DARWIN = {
+  chrome: 'Google Chrome',
+  firefox: 'Firefox',
+  safari: 'Safari',
+  edge: 'Microsoft Edge',
+  discord: 'Discord',
+  spotify: 'Spotify',
+  teams: 'Microsoft Teams',
+  zoom: 'zoom.us',
+  vscode: 'Visual Studio Code',
+  vlc: 'VLC',
 };
 
 function toIsoNow() {
@@ -130,11 +214,32 @@ function sendMessageToBackend(payload) {
   return false;
 }
 
-function buildPresencePayload() {
+async function buildPresencePayload() {
+  const loadAvg = os.loadavg();
+  const cpuLoad = Math.round(loadAvg[0] * 10) / 10;
+  const totalRamMb = Math.round(os.totalmem() / 1024 / 1024);
+  const freeRamMb = Math.round(os.freemem() / 1024 / 1024);
+
+  let activeApps = [];
+  try {
+    if (PLATFORM === 'win32') {
+      const psCmd = 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 -ExpandProperty Name | Get-Unique';
+      const stdout = await execFilePromise('powershell.exe', ['-NoProfile', '-Command', psCmd]).catch(() => '');
+      activeApps = stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+    } else if (PLATFORM === 'darwin') {
+      const stdout = await execFilePromise('bash', ['-c', "ps -axco command -r | head -6 | tail -5"]).catch(() => '');
+      activeApps = stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+    }
+  } catch {
+    // presence data is best-effort
+  }
+
   return {
     status: queueProcessing ? 'busy' : 'online',
-    activeApps: [],
-    cpu: null,
+    activeApps,
+    cpu: cpuLoad,
+    freeRamMb,
+    totalRamMb,
     networkMode: REALTIME_EDGE_URL ? 'relay' : 'unknown',
   };
 }
@@ -147,14 +252,16 @@ function sendRealtimeEdge(payload) {
   return false;
 }
 
-function publishHeartbeat() {
-  const presence = buildPresencePayload();
+async function publishHeartbeat() {
+  const presence = await buildPresencePayload();
   const heartbeatPayload = {
     type: 'device_status',
     role: 'desktop',
     status: presence.status,
     activeApps: presence.activeApps,
     cpu: presence.cpu,
+    freeRamMb: presence.freeRamMb,
+    totalRamMb: presence.totalRamMb,
     networkMode: presence.networkMode,
     token: currentToken,
     createdAt: toIsoNow(),
@@ -284,6 +391,12 @@ async function searchYouTube(query) {
 
 async function openApp(app) {
   const normalized = String(app || '').trim().toLowerCase();
+  if (PLATFORM === 'darwin') {
+    const appName = APP_OPEN_MAP_DARWIN[normalized] || normalized;
+    await execFilePromise('open', ['-a', appName]);
+    rememberApp(normalized);
+    return { summary: `Opened ${appName}.`, app: normalized };
+  }
   const target = APP_OPEN_MAP[normalized];
   if (!target) throw new Error(`Unknown app: ${app}. Supported: ${Object.keys(APP_OPEN_MAP).join(', ')}`);
   await execFilePromise('cmd.exe', ['/c', 'start', '', target]);
@@ -293,41 +406,116 @@ async function openApp(app) {
 
 async function closeApp(app) {
   const normalized = String(app || '').trim().toLowerCase();
+  if (PLATFORM === 'darwin') {
+    const appName = APP_CLOSE_MAP_DARWIN[normalized] || normalized;
+    await execFilePromise('osascript', ['-e', `tell application "${appName}" to quit`]);
+    return { summary: `Closed ${appName}.`, app: normalized };
+  }
   const processName = APP_CLOSE_MAP[normalized];
   if (!processName) throw new Error(`Unknown app: ${app}. Supported for close: ${Object.keys(APP_CLOSE_MAP).join(', ')}`);
   await execFilePromise('taskkill.exe', ['/IM', processName, '/F']);
   return { summary: `Closed ${normalized}.`, app: normalized };
 }
 
-async function takeScreenshot() {
+async function takeScreenshot(displayIndex = 0) {
   const ts = Date.now();
-  const screenshotPath = path.join(USER_HOME, 'Desktop', `jarvis_screenshot_${ts}.png`);
-  const escapedPath = screenshotPath.replace(/'/g, "''");
-  const psCmd = [
-    'Add-Type -AssemblyName System.Windows.Forms',
-    'Add-Type -AssemblyName System.Drawing',
-    '$b = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width,[System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height)',
-    '$g = [System.Drawing.Graphics]::FromImage($b)',
-    '$g.CopyFromScreen(0,0,0,0,$b.Size)',
-    `$b.Save('${escapedPath}')`,
-    '$g.Dispose()',
-    '$b.Dispose()',
-  ].join('; ');
-  await execFilePromise('powershell.exe', ['-NoProfile', '-Command', psCmd]);
+  const desktopDir = PLATFORM === 'darwin' ? path.join(os.homedir(), 'Desktop') : path.join(USER_HOME, 'Desktop');
+  const screenshotPath = path.join(desktopDir, `jarvis_screenshot_${ts}.png`);
+
+  if (PLATFORM === 'darwin') {
+    // macOS: use screencapture (display indices are 1-based in screencapture -D)
+    const displayArg = displayIndex > 0 ? ['-D', String(displayIndex + 1)] : [];
+    await execFilePromise('screencapture', ['-x', '-t', 'png', ...displayArg, screenshotPath]);
+  } else {
+    // Windows: PowerShell GDI capture with optional multi-monitor bounds
+    let boundsArgs = [
+      '$b = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width,[System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height)',
+      '$g = [System.Drawing.Graphics]::FromImage($b)',
+      '$g.CopyFromScreen(0,0,0,0,$b.Size)',
+    ];
+    if (ipcRenderer) {
+      try {
+        const displays = await ipcRenderer.invoke('get-displays').catch(() => null);
+        if (displays && displays[displayIndex]) {
+          const { x, y, width, height } = displays[displayIndex].bounds;
+          boundsArgs = [
+            `$b = New-Object System.Drawing.Bitmap(${width},${height})`,
+            '$g = [System.Drawing.Graphics]::FromImage($b)',
+            `$g.CopyFromScreen(${x},${y},0,0,$b.Size)`,
+          ];
+        }
+      } catch { /* fall back to primary */ }
+    }
+    const escapedPath = screenshotPath.replace(/'/g, "''");
+    const psCmd = [
+      'Add-Type -AssemblyName System.Windows.Forms',
+      'Add-Type -AssemblyName System.Drawing',
+      ...boundsArgs,
+      `$b.Save('${escapedPath}')`,
+      '$g.Dispose()',
+      '$b.Dispose()',
+    ].join('; ');
+    await execFilePromise('powershell.exe', ['-NoProfile', '-Command', psCmd]);
+  }
+
   const imageDataUrl = `data:image/png;base64,${(await fs.promises.readFile(screenshotPath)).toString('base64')}`;
   if (ipcRenderer) {
     void ipcRenderer.invoke('open-path', path.dirname(screenshotPath));
   }
   rememberFile(screenshotPath);
+
+  // Vision: describe screen content if API key is configured
+  const description = await describeScreenshot(imageDataUrl);
+
   return {
-    summary: `Screenshot captured: ${path.basename(screenshotPath)}`,
+    summary: description
+      ? `Screenshot captured: ${path.basename(screenshotPath)}\n\nScreen content:\n${description}`
+      : `Screenshot captured: ${path.basename(screenshotPath)}`,
     imageDataUrl,
     path: screenshotPath,
     title: 'Screenshot ready',
+    screenDescription: description || null,
   };
 }
 
+// ── Vision / OCR ─────────────────────────────────────────────────────────────
+// Describe a screenshot using Gemini vision API (requires JARVIS_VISION_API_KEY).
+async function describeScreenshot(imageDataUrl) {
+  const apiKey = process.env.JARVIS_VISION_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, '');
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: 'Briefly describe what is visible on this computer screen: open applications, visible text, and any notable UI elements. Be concise (3-5 sentences).' },
+              { inlineData: { mimeType: 'image/png', data: base64Data } },
+            ],
+          }],
+        }),
+      },
+    );
+    const data = await response.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getSystemInfo() {
+  if (PLATFORM === 'darwin') {
+    const cpuBrand = await execFilePromise('sysctl', ['-n', 'machdep.cpu.brand_string']).catch(() => 'Unknown CPU');
+    const memBytes = await execFilePromise('sysctl', ['-n', 'hw.memsize']).catch(() => '0');
+    const osVer = await execFilePromise('sw_vers', ['-productVersion']).catch(() => 'Unknown');
+    const uptimeSec = await execFilePromise('sysctl', ['-n', 'kern.boottime']).catch(() => '');
+    const ramGb = (parseInt(memBytes, 10) / 1024 / 1024 / 1024).toFixed(1);
+    return { summary: `OS: macOS ${osVer} | CPU: ${cpuBrand} | RAM: ${ramGb}GB | Boot: ${uptimeSec.slice(0, 40)}` };
+  }
   const psCmd = [
     '$cpu = (Get-WmiObject Win32_Processor).Name',
     '$ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)',
@@ -340,6 +528,10 @@ async function getSystemInfo() {
 }
 
 async function listProcesses() {
+  if (PLATFORM === 'darwin') {
+    const stdout = await execFilePromise('bash', ['-c', 'ps -axco pid,pcpu,pmem,command -r | head -11']).catch(() => '');
+    return { summary: `Top processes:\n${stdout}` };
+  }
   const psCmd = 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Name,@{N="CPU(s)";E={[math]::Round($_.CPU,1)}},@{N="RAM(MB)";E={[math]::Round($_.WorkingSet/1MB,0)}} | Format-Table -AutoSize | Out-String';
   const stdout = await execFilePromise('powershell.exe', ['-NoProfile', '-Command', psCmd]);
   return { summary: `Top 10 processes:\n${stdout}` };
@@ -388,7 +580,24 @@ async function openFile(targetPath) {
   return { summary: `Opened path: ${safePath}`, path: safePath };
 }
 
+// ── Clipboard ─────────────────────────────────────────────────────────────────
+function readClipboard() {
+  const text = clipboard ? clipboard.readText() : '';
+  return { summary: text ? `Clipboard contents:\n${text}` : 'Clipboard is empty.', text };
+}
+
+function writeClipboard(text) {
+  if (!clipboard) throw new Error('Clipboard is not available in this environment.');
+  clipboard.writeText(String(text || ''));
+  return { summary: 'Text copied to clipboard.' };
+}
+
 async function typeText(text) {
+  if (PLATFORM === 'darwin') {
+    const escaped = String(text || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    await execFilePromise('osascript', ['-e', `tell application "System Events" to keystroke "${escaped}"`]);
+    return { summary: 'Typed text successfully.' };
+  }
   const sendKeysEscaped = String(text || '').replace(/[\[\]+^%~(){}]/g, (ch) => `{${ch}}`);
   const psScript = [
     'Add-Type -AssemblyName System.Windows.Forms',
@@ -401,6 +610,10 @@ async function typeText(text) {
 
 async function setVolume(level) {
   const scalar = Math.max(0, Math.min(100, Number(level) || 50));
+  if (PLATFORM === 'darwin') {
+    await execFilePromise('osascript', ['-e', `set volume output volume ${scalar}`]);
+    return { summary: `Volume set to ${scalar}%.`, level: scalar };
+  }
   const nircmdLevel = Math.round((scalar / 100) * 65535);
   await execFilePromise('nircmd.exe', ['setsysvolume', String(nircmdLevel)]);
   return { summary: `Volume set to ${scalar}%.`, level: scalar };
@@ -420,6 +633,48 @@ async function executeStructuredCommand(msg, context = {}) {
       taskId: context.taskId || null,
       source: context.source || 'remote',
     });
+  }
+
+  // ── Risk tier enforcement ────────────────────────────────────────────────
+  if (context.source === 'remote' && !msg.confirmed) {
+    const tier = COMMAND_RISK_TIER[command] || 'medium';
+    if (tier === 'high') {
+      const approvalId = `approval-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      // Ask phone for confirmation — phone must reply with an approval_response
+      sendMessageToBackend({
+        type: 'approval_required',
+        approvalId,
+        command,
+        tier,
+        token: currentToken,
+        createdAt: toIsoNow(),
+        message: `⚠️ High-risk command "${command}" requires phone confirmation (approvalId: ${approvalId}).`,
+      });
+      emitRawMessage({
+        type: 'approval_required',
+        approvalId,
+        command,
+        tier,
+        createdAt: toIsoNow(),
+      });
+
+      // Wait up to 30 s for phone approval
+      const approved = await new Promise((resolve) => {
+        const tid = setTimeout(() => {
+          PENDING_APPROVALS.delete(approvalId);
+          resolve(false);
+        }, 30_000);
+        PENDING_APPROVALS.set(approvalId, { resolve, timeoutId: tid });
+      });
+
+      if (!approved) {
+        return respond(`⏱ High-risk command "${command}" timed out waiting for phone approval.`, {
+          level: 'warning',
+          title: 'Approval timeout',
+          taskId: context.taskId || null,
+        });
+      }
+    }
   }
 
   try {
@@ -444,22 +699,34 @@ async function executeStructuredCommand(msg, context = {}) {
         result = await searchYouTube(query || text || '');
         break;
       case 'volumeUp':
-        await execFilePromise('nircmd.exe', ['changesysvolume', '6554']);
+        if (PLATFORM === 'darwin') {
+          await execFilePromise('osascript', ['-e', 'set volume output volume (output volume of (get volume settings) + 10)']);
+        } else {
+          await execFilePromise('nircmd.exe', ['changesysvolume', '6554']);
+        }
         result = { summary: 'Volume increased.' };
         break;
       case 'volumeDown':
-        await execFilePromise('nircmd.exe', ['changesysvolume', '-6554']);
+        if (PLATFORM === 'darwin') {
+          await execFilePromise('osascript', ['-e', 'set volume output volume (output volume of (get volume settings) - 10)']);
+        } else {
+          await execFilePromise('nircmd.exe', ['changesysvolume', '-6554']);
+        }
         result = { summary: 'Volume decreased.' };
         break;
       case 'mute':
-        await execFilePromise('nircmd.exe', ['mutesysvolume', '2']);
+        if (PLATFORM === 'darwin') {
+          await execFilePromise('osascript', ['-e', 'set volume output muted (not output muted of (get volume settings))']);
+        } else {
+          await execFilePromise('nircmd.exe', ['mutesysvolume', '2']);
+        }
         result = { summary: 'Mute toggled.' };
         break;
       case 'setVolume':
-        result = await setVolume(level);
+        result = await setVolume(level || msg.level);
         break;
       case 'screenshot':
-        result = await takeScreenshot();
+        result = await takeScreenshot(Number(msg.displayIndex) || 0);
         break;
       case 'sysinfo':
       case 'systemInfo':
@@ -483,28 +750,59 @@ async function executeStructuredCommand(msg, context = {}) {
       case 'typeText':
         result = await typeText(text || '');
         break;
+      case 'readClipboard':
+        result = readClipboard();
+        break;
+      case 'writeClipboard':
+        result = writeClipboard(text || msg.clipboardText || '');
+        break;
       case 'lockScreen':
-        await execFilePromise('rundll32.exe', ['user32.dll,LockWorkStation']);
+        if (PLATFORM === 'darwin') {
+          await execFilePromise('pmset', ['displaysleepnow']);
+        } else {
+          await execFilePromise('rundll32.exe', ['user32.dll,LockWorkStation']);
+        }
         result = { summary: 'Screen locked.' };
         break;
       case 'shutdown':
-        await execFilePromise('shutdown.exe', ['/s', '/t', '30']);
+        if (PLATFORM === 'darwin') {
+          await execFilePromise('osascript', ['-e', 'tell application "System Events" to shut down']);
+        } else {
+          await execFilePromise('shutdown.exe', ['/s', '/t', '30']);
+        }
         result = { summary: 'Shutdown scheduled in 30 seconds.' };
         break;
       case 'restart':
-        await execFilePromise('shutdown.exe', ['/r', '/t', '30']);
+        if (PLATFORM === 'darwin') {
+          await execFilePromise('osascript', ['-e', 'tell application "System Events" to restart']);
+        } else {
+          await execFilePromise('shutdown.exe', ['/r', '/t', '30']);
+        }
         result = { summary: 'Restart scheduled in 30 seconds.' };
         break;
       case 'sleep':
-        await execFilePromise('rundll32.exe', ['powrprof.dll,SetSuspendState', '0,1,0']);
+        if (PLATFORM === 'darwin') {
+          await execFilePromise('pmset', ['sleepnow']);
+        } else {
+          await execFilePromise('rundll32.exe', ['powrprof.dll,SetSuspendState', '0,1,0']);
+        }
         result = { summary: 'Sleep requested.' };
         break;
       case 'cancelShutdown':
-        await execFilePromise('shutdown.exe', ['/a']);
+        if (PLATFORM !== 'darwin') {
+          await execFilePromise('shutdown.exe', ['/a']);
+        }
         result = { summary: 'Shutdown/restart cancelled.' };
         break;
-      default:
-        throw new Error(`Unknown command: ${command}`);
+      default: {
+        // ── Plugin commands ──────────────────────────────────────────────
+        const plugin = PLUGIN_COMMANDS[command];
+        if (plugin) {
+          result = await plugin.execute(msg);
+        } else {
+          throw new Error(`Unknown command: ${command}`);
+        }
+      }
     }
 
     return publishResult({
@@ -590,12 +888,23 @@ function queuePromptExecution(text, meta = {}) {
   if (!prompt) return null;
   rememberPrompt(prompt);
   const plan = planPrompt(prompt, { favoriteApp: getFavoriteApp() });
+
   if (plan.steps.length === 0) {
-    return respond(`I could not map this prompt to a safe desktop action: ${prompt}`, {
-      title: 'No action detected',
-      level: 'warning',
+    // AI fallback: send unmatched prompt to backend for AI interpretation
+    respond(`🤖 Routing to AI: "${prompt}"`, {
+      title: 'AI fallback',
+      level: 'info',
       source: meta.source || 'local',
     });
+    sendMessageToBackend({
+      type: 'desktop_prompt',
+      text: prompt,
+      token: currentToken,
+      source: meta.source || 'local',
+      origin: meta.origin || 'desktop',
+      createdAt: toIsoNow(),
+    });
+    return null;
   }
 
   const task = {
@@ -637,7 +946,7 @@ function connectToRealtimeEdge() {
 
   realtimeWs = new WebSocket(realtimeUrl);
   realtimeWs.on('open', () => {
-    publishHeartbeat();
+    void publishHeartbeat();
   });
 
   realtimeWs.on('message', (data) => {
@@ -691,9 +1000,9 @@ function connectToBackend(options = {}) {
   ws.on('open', () => {
     emitStatus('connected');
     sendMessageToBackend({ type: 'register', role: 'desktop', token: currentToken });
-    publishHeartbeat();
+    void publishHeartbeat();
     clearInterval(heartbeatTimer);
-    heartbeatTimer = setInterval(() => publishHeartbeat(), HEARTBEAT_INTERVAL_MS);
+    heartbeatTimer = setInterval(() => void publishHeartbeat(), HEARTBEAT_INTERVAL_MS);
     connectToRealtimeEdge();
   });
 
@@ -714,6 +1023,15 @@ function connectToBackend(options = {}) {
           origin: msg.from_role || 'remote',
         });
       }
+      // Handle phone approval responses for high-risk commands
+      if (msg.type === 'approval_response' && msg.approvalId) {
+        const pending = PENDING_APPROVALS.get(msg.approvalId);
+        if (pending) {
+          clearTimeout(pending.timeoutId);
+          PENDING_APPROVALS.delete(msg.approvalId);
+          pending.resolve(msg.approved === true);
+        }
+      }
     } catch (error) {
       emitStatus('warning', error.message);
     }
@@ -733,6 +1051,45 @@ function connectToBackend(options = {}) {
   return ws;
 }
 
+// ── Plugin Extension API ──────────────────────────────────────────────────────
+// Drop a .js file into ~/.config/JarvisDesktop/plugins/ (or %APPDATA%/JarvisDesktop/plugins/).
+// Each plugin must export: { name: string, description: string, execute: async (msg) => { summary } }
+const PLUGINS_DIR = path.join(
+  process.env.APPDATA || path.join(os.homedir(), '.config'),
+  'JarvisDesktop',
+  'plugins',
+);
+
+function loadPlugins() {
+  const pluginCommands = {};
+  try {
+    if (!fs.existsSync(PLUGINS_DIR)) {
+      fs.mkdirSync(PLUGINS_DIR, { recursive: true });
+      return pluginCommands;
+    }
+    const files = fs.readdirSync(PLUGINS_DIR).filter((f) => f.endsWith('.js'));
+    for (const file of files) {
+      try {
+        const pluginPath = path.join(PLUGINS_DIR, file);
+        // Clear require cache so plugins can be hot-reloaded
+        delete require.cache[require.resolve(pluginPath)];
+        const plugin = require(pluginPath);
+        if (plugin && typeof plugin.name === 'string' && typeof plugin.execute === 'function') {
+          pluginCommands[plugin.name] = plugin;
+          console.log(`[plugins] Loaded: ${plugin.name} — ${plugin.description || '(no description)'}`);
+        }
+      } catch (err) {
+        console.error(`[plugins] Failed to load ${file}:`, err.message);
+      }
+    }
+  } catch {
+    // plugin dir not accessible; continue without plugins
+  }
+  return pluginCommands;
+}
+
+const PLUGIN_COMMANDS = loadPlugins();
+
 module.exports = {
   connectToBackend,
   executeStructuredCommand,
@@ -741,6 +1098,7 @@ module.exports = {
   getLocalStateSnapshot: () => readState(),
   onMessage: (callback) => emitter.on('message', callback),
   onStatus: (callback) => emitter.on('status', callback),
+  pluginsDir: PLUGINS_DIR,
   queuePromptExecution,
   sendMessageToBackend,
 };

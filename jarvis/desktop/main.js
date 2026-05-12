@@ -257,6 +257,17 @@ ipcMain.handle('get-app-meta', () => {
   };
 });
 
+ipcMain.handle('get-displays', () => {
+  const { screen } = require('electron');
+  return screen.getAllDisplays().map((display) => ({
+    id: display.id,
+    label: display.label || `Display ${display.id}`,
+    bounds: display.bounds,
+    scaleFactor: display.scaleFactor,
+    isPrimary: display.bounds.x === 0 && display.bounds.y === 0,
+  }));
+});
+
 ipcMain.handle('check-for-updates', () => {
   return checkForUpdates();
 });
