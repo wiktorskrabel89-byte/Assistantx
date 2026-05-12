@@ -25,9 +25,13 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const status = searchParams.get("status") as
+  const rawStatus = searchParams.get("status");
+  const VALID_STATUSES = new Set([
+    "queued", "running", "waiting_for_approval", "completed", "failed",
+  ] as const);
+  const status = VALID_STATUSES.has(rawStatus as "queued") ? rawStatus as
     | "queued" | "running" | "waiting_for_approval" | "completed" | "failed"
-    | undefined;
+    : undefined;
   const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 50)));
   const requestedOrgId = searchParams.get("organizationId") ?? actorResult.actor.organizationId;
 
