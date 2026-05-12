@@ -24,6 +24,8 @@ try {
 
 const emitter = new EventEmitter();
 const BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'ws://127.0.0.1:8000/ws';
+const REALTIME_EDGE_URL = process.env.JARVIS_REALTIME_URL || '';
+const HEARTBEAT_INTERVAL_MS = Number(process.env.JARVIS_HEARTBEAT_INTERVAL_MS || 5000);
 const USER_HOME = process.env.USERPROFILE || os.homedir();
 const DEFAULT_FILE_ROOT = path.join(USER_HOME, 'Desktop');
 const SAFE_ROOTS = [
@@ -58,8 +60,13 @@ const REMOTE_ALLOWED_COMMANDS = new Set([
 ]);
 
 let ws;
+let realtimeWs;
 let reconnectTimer;
+let heartbeatTimer;
+let realtimeReconnectTimer;
 let currentToken;
+let currentSessionId = null;
+let currentResumeToken = null;
 let taskCounter = 0;
 let queueProcessing = false;
 const taskQueue = [];
@@ -121,6 +128,44 @@ function sendMessageToBackend(payload) {
     return true;
   }
   return false;
+}
+
+function buildPresencePayload() {
+  return {
+    status: queueProcessing ? 'busy' : 'online',
+    activeApps: [],
+    cpu: null,
+    networkMode: REALTIME_EDGE_URL ? 'unknown' : 'relay',
+  };
+}
+
+function sendRealtimeEdge(payload) {
+  if (realtimeWs && realtimeWs.readyState === WebSocket.OPEN) {
+    realtimeWs.send(JSON.stringify(payload));
+    return true;
+  }
+  return false;
+}
+
+function publishHeartbeat() {
+  const presence = buildPresencePayload();
+  const heartbeatPayload = {
+    type: 'device_status',
+    role: 'desktop',
+    status: presence.status,
+    activeApps: presence.activeApps,
+    cpu: presence.cpu,
+    networkMode: presence.networkMode,
+    token: currentToken,
+    createdAt: toIsoNow(),
+  };
+  sendMessageToBackend(heartbeatPayload);
+  sendRealtimeEdge({
+    type: 'heartbeat',
+    id: `hb-${Date.now()}`,
+    ...presence,
+    sessionId: currentSessionId,
+  });
 }
 
 function publishTaskUpdate(update) {
@@ -571,6 +616,57 @@ function queuePromptExecution(text, meta = {}) {
   return task.id;
 }
 
+function connectToRealtimeEdge() {
+  if (!REALTIME_EDGE_URL || !currentToken) return null;
+  if (realtimeWs && (realtimeWs.readyState === WebSocket.OPEN || realtimeWs.readyState === WebSocket.CONNECTING)) {
+    return realtimeWs;
+  }
+
+  clearTimeout(realtimeReconnectTimer);
+  const separator = REALTIME_EDGE_URL.includes('?') ? '&' : '?';
+  const resumeParam = currentResumeToken ? `&resumeToken=${encodeURIComponent(currentResumeToken)}` : '';
+  const realtimeUrl = `${REALTIME_EDGE_URL}${separator}channel=runtime&token=${encodeURIComponent(currentToken)}&deviceId=${encodeURIComponent(currentToken)}${resumeParam}`;
+
+  realtimeWs = new WebSocket(realtimeUrl);
+  realtimeWs.on('open', () => {
+    sendRealtimeEdge({ type: 'resume', resumeToken: currentResumeToken });
+    publishHeartbeat();
+  });
+
+  realtimeWs.on('message', (data) => {
+    const text = data.toString();
+    try {
+      const msg = JSON.parse(text);
+      if (msg.type === 'connected') {
+        currentSessionId = msg.sessionId || currentSessionId;
+        currentResumeToken = msg.resumeToken || currentResumeToken;
+      }
+      if (msg.type === 'runtime_command') {
+        void executeStructuredCommand(
+          { command: msg.command, ...msg.args },
+          { source: 'remote', taskId: msg.workflowId || null, origin: 'mobile' },
+        );
+      }
+    } catch {
+      // ignore parse failures from edge logs/noise
+    }
+  });
+
+  realtimeWs.on('close', () => {
+    realtimeReconnectTimer = setTimeout(() => connectToRealtimeEdge(), 3000);
+  });
+
+  realtimeWs.on('error', () => {
+    try {
+      realtimeWs.close();
+    } catch {
+      // noop
+    }
+  });
+
+  return realtimeWs;
+}
+
 function connectToBackend(options = {}) {
   if (options.token) currentToken = options.token;
 
@@ -585,7 +681,10 @@ function connectToBackend(options = {}) {
   ws.on('open', () => {
     emitStatus('connected');
     sendMessageToBackend({ type: 'register', role: 'desktop', token: currentToken });
-    sendMessageToBackend({ type: 'device_status', role: 'desktop', status: 'online', token: currentToken });
+    publishHeartbeat();
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(() => publishHeartbeat(), HEARTBEAT_INTERVAL_MS);
+    connectToRealtimeEdge();
   });
 
   ws.on('message', (data) => {
@@ -613,6 +712,7 @@ function connectToBackend(options = {}) {
 
   ws.on('close', () => {
     emitStatus('disconnected', 'Retrying in 3 seconds');
+    clearInterval(heartbeatTimer);
     reconnectTimer = setTimeout(() => connectToBackend({ token: currentToken }), 3000);
   });
 

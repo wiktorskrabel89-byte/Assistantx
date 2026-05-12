@@ -80,6 +80,106 @@ export type ApprovalRequestRow = {
   expires_at?: string | null;
 };
 
+export type DeviceTrustState = "pending" | "trusted" | "revoked" | "compromised";
+export type DevicePlatform = "android" | "desktop" | "web" | "server";
+export type DeviceRole = "control" | "runtime" | "operator";
+
+export type DeviceRow = {
+  id?: string;
+  user_id: string;
+  organization_id?: string | null;
+  platform: DevicePlatform;
+  role: DeviceRole;
+  label?: string | null;
+  fingerprint_hash?: string | null;
+  trust_state: DeviceTrustState;
+  pair_code?: string | null;
+  pair_code_expires_at?: string | null;
+  trust_key_hash?: string | null;
+  consent_profile?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  last_seen_at?: string | null;
+};
+
+export type DeviceSessionRow = {
+  id?: string;
+  device_id: string;
+  user_id: string;
+  organization_id?: string | null;
+  session_token_hash: string;
+  resume_token_hash?: string | null;
+  status: "active" | "closed" | "expired" | "revoked";
+  last_heartbeat_at?: string;
+  ended_at?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type DevicePresenceRow = {
+  device_id: string;
+  user_id: string;
+  organization_id?: string | null;
+  status: "offline" | "booting" | "online" | "busy" | "gaming" | "sleeping" | "idle";
+  active_apps?: string[];
+  cpu_percent?: number | null;
+  ram_percent?: number | null;
+  network_mode?: "mesh_direct" | "relay" | "lan" | "unknown";
+  is_online: boolean;
+  last_heartbeat_at?: string;
+};
+
+export type NetworkPeerRow = {
+  id?: string;
+  device_id: string;
+  user_id: string;
+  organization_id?: string | null;
+  provider: "tailscale" | "relay" | "lan" | "custom";
+  node_id?: string | null;
+  mesh_ip?: string | null;
+  hostname?: string | null;
+  mac_address?: string | null;
+  direct_connected?: boolean;
+  relay_connected?: boolean;
+  eligible_for_wake?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type RuntimeCapabilityRow = {
+  id?: string;
+  device_id: string;
+  user_id: string;
+  organization_id?: string | null;
+  capability_key: string;
+  enabled: boolean;
+  requires_consent?: boolean;
+  consent_version?: number;
+  consented_at?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type WorkflowCheckpointRow = {
+  id?: string;
+  execution_id: string;
+  workflow_id: string;
+  user_id?: string | null;
+  organization_id?: string | null;
+  step_key: string;
+  status: WorkflowRunStatus;
+  payload?: Record<string, unknown>;
+  error?: string | null;
+};
+
+export type ApprovalPolicyRow = {
+  id?: string;
+  organization_id?: string | null;
+  user_id?: string | null;
+  device_id?: string | null;
+  action_pattern: string;
+  risk_level: "low" | "medium" | "high" | "critical";
+  approval_mode: "per_action" | "workflow_token" | "pre_approved" | "deny";
+  is_enabled: boolean;
+  metadata?: Record<string, unknown>;
+};
+
 export type AgentTaskRow = {
   task_id: string;
   execution_id: string;
@@ -303,15 +403,38 @@ export async function storeIdempotencyResult(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Approval requests (Phase 2)
+// Approvals (canonical table: approvals)
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function resolveApprovalTableName(supabase: Awaited<ReturnType<typeof getClient>>) {
+  try {
+    const { error } = await supabase.from("approvals").select("id").limit(1);
+    if (!error) return "approvals";
+  } catch {
+    // ignore
+  }
+  return "approval_requests";
+}
 
 /**
  * Persist a new approval request.
  */
 export async function insertApprovalRequest(row: ApprovalRequestRow): Promise<void> {
   const supabase = await getClient();
-  const { error } = await supabase.from("approval_requests").insert({
+  const table = await resolveApprovalTableName(supabase);
+  const payload = table === "approvals" ? {
+    id: row.id,
+    execution_id: row.execution_id,
+    tool_id: row.tool_id ?? null,
+    workflow_id: row.workflow_id ?? null,
+    requested_by: row.requested_by,
+    organization_id: row.organization_id ?? null,
+    reason: row.reason,
+    context: row.context,
+    status: row.status,
+    expires_at: row.expires_at ?? null,
+    requested_at: new Date().toISOString(),
+  } : {
     id: row.id,
     execution_id: row.execution_id,
     tool_id: row.tool_id ?? null,
@@ -323,7 +446,8 @@ export async function insertApprovalRequest(row: ApprovalRequestRow): Promise<vo
     status: row.status,
     expires_at: row.expires_at ?? null,
     created_at: new Date().toISOString(),
-  });
+  };
+  const { error } = await supabase.from(table).insert(payload);
 
   if (error) throw new Error(`insertApprovalRequest: ${error.message}`);
 }
@@ -338,14 +462,20 @@ export async function updateApprovalRequest(
   note?: string,
 ): Promise<void> {
   const supabase = await getClient();
+  const table = await resolveApprovalTableName(supabase);
+  const patch = table === "approvals" ? {
+    status,
+    resolved_by: resolvedBy ?? null,
+    resolved_at: new Date().toISOString(),
+  } : {
+    status,
+    resolved_by: resolvedBy ?? null,
+    resolution_note: note ?? null,
+    resolved_at: new Date().toISOString(),
+  };
   const { error } = await supabase
-    .from("approval_requests")
-    .update({
-      status,
-      resolved_by: resolvedBy ?? null,
-      resolution_note: note ?? null,
-      resolved_at: new Date().toISOString(),
-    })
+    .from(table)
+    .update(patch)
     .eq("id", approvalId);
 
   if (error) throw new Error(`updateApprovalRequest: ${error.message}`);
@@ -358,15 +488,355 @@ export async function listPendingApprovals(
   organizationId: string,
 ): Promise<ApprovalRequestRow[]> {
   const supabase = await getClient();
-  const { data, error } = await supabase
-    .from("approval_requests")
+  const table = await resolveApprovalTableName(supabase);
+  let query = supabase
+    .from(table)
     .select("*")
     .eq("organization_id", organizationId)
-    .eq("status", "pending")
-    .order("created_at", { ascending: true });
+    .eq("status", "pending");
+
+  if (table === "approvals") {
+    query = query.order("requested_at", { ascending: true, nullsFirst: false });
+  } else {
+    query = query.order("created_at", { ascending: true, nullsFirst: false });
+  }
+  const { data, error } = await query;
 
   if (error) throw new Error(`listPendingApprovals: ${error.message}`);
   return (data ?? []) as ApprovalRequestRow[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Devices / sessions / presence / capabilities / checkpoints (Sprint 1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function upsertDevice(row: DeviceRow): Promise<DeviceRow> {
+  const supabase = await getClient();
+  const payload = {
+    id: row.id ?? randomUUID(),
+    user_id: row.user_id,
+    organization_id: row.organization_id ?? null,
+    platform: row.platform,
+    role: row.role,
+    label: row.label ?? null,
+    fingerprint_hash: row.fingerprint_hash ?? null,
+    trust_state: row.trust_state,
+    pair_code: row.pair_code ?? null,
+    pair_code_expires_at: row.pair_code_expires_at ?? null,
+    trust_key_hash: row.trust_key_hash ?? null,
+    consent_profile: row.consent_profile ?? {},
+    metadata: row.metadata ?? {},
+    last_seen_at: row.last_seen_at ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (row.id) {
+    const { data, error } = await supabase
+      .from("devices")
+      .upsert(payload, { onConflict: "id" })
+      .select("*")
+      .single();
+    if (error) throw new Error(`upsertDevice: ${error.message}`);
+    return data as DeviceRow;
+  }
+
+  const { data, error } = await supabase
+    .from("devices")
+    .insert(payload)
+    .select("*")
+    .single();
+  if (!error) return data as DeviceRow;
+
+  // Deduplicate by fingerprint when available.
+  if (payload.fingerprint_hash) {
+    const { data: existing, error: existingError } = await supabase
+      .from("devices")
+      .select("*")
+      .eq("user_id", payload.user_id)
+      .eq("fingerprint_hash", payload.fingerprint_hash)
+      .maybeSingle();
+    if (existingError) throw new Error(`upsertDevice(existing): ${existingError.message}`);
+    if (existing) {
+      const { data: updated, error: updateError } = await supabase
+        .from("devices")
+        .update({
+          platform: payload.platform,
+          role: payload.role,
+          label: payload.label,
+          trust_state: payload.trust_state,
+          pair_code: payload.pair_code,
+          pair_code_expires_at: payload.pair_code_expires_at,
+          trust_key_hash: payload.trust_key_hash,
+          consent_profile: payload.consent_profile,
+          metadata: payload.metadata,
+          last_seen_at: payload.last_seen_at,
+          updated_at: payload.updated_at,
+        })
+        .eq("id", (existing as { id: string }).id)
+        .select("*")
+        .single();
+      if (updateError) throw new Error(`upsertDevice(update): ${updateError.message}`);
+      return updated as DeviceRow;
+    }
+  }
+
+  throw new Error(`upsertDevice: ${error.message}`);
+}
+
+export async function getDeviceById(deviceId: string): Promise<DeviceRow | null> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("devices")
+    .select("*")
+    .eq("id", deviceId)
+    .maybeSingle();
+  if (error) throw new Error(`getDeviceById: ${error.message}`);
+  return (data as DeviceRow | null) ?? null;
+}
+
+export async function getDeviceByPairCode(params: {
+  userId: string;
+  pairCode: string;
+}): Promise<DeviceRow | null> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("devices")
+    .select("*")
+    .eq("user_id", params.userId)
+    .eq("pair_code", params.pairCode)
+    .eq("trust_state", "pending")
+    .maybeSingle();
+  if (error) throw new Error(`getDeviceByPairCode: ${error.message}`);
+  return (data as DeviceRow | null) ?? null;
+}
+
+export async function listDevicesForUser(params: {
+  userId: string;
+  organizationId?: string | null;
+  trustState?: DeviceTrustState;
+}): Promise<DeviceRow[]> {
+  const supabase = await getClient();
+  let query = supabase
+    .from("devices")
+    .select("*")
+    .eq("user_id", params.userId)
+    .order("created_at", { ascending: false });
+  if (params.organizationId) {
+    query = query.eq("organization_id", params.organizationId);
+  }
+  if (params.trustState) {
+    query = query.eq("trust_state", params.trustState);
+  }
+  const { data, error } = await query;
+  if (error) throw new Error(`listDevicesForUser: ${error.message}`);
+  return (data ?? []) as DeviceRow[];
+}
+
+export async function updateDeviceTrust(params: {
+  deviceId: string;
+  trustState: DeviceTrustState;
+  trustKeyHash?: string | null;
+  pairCode?: string | null;
+  pairCodeExpiresAt?: string | null;
+  consentProfile?: Record<string, unknown>;
+}): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("devices")
+    .update({
+      trust_state: params.trustState,
+      trust_key_hash: params.trustKeyHash ?? undefined,
+      pair_code: params.pairCode ?? undefined,
+      pair_code_expires_at: params.pairCodeExpiresAt ?? undefined,
+      consent_profile: params.consentProfile ?? undefined,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.deviceId);
+  if (error) throw new Error(`updateDeviceTrust: ${error.message}`);
+}
+
+export async function insertDeviceSession(row: DeviceSessionRow): Promise<string> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("device_sessions")
+    .insert({
+      id: row.id ?? randomUUID(),
+      device_id: row.device_id,
+      user_id: row.user_id,
+      organization_id: row.organization_id ?? null,
+      session_token_hash: row.session_token_hash,
+      resume_token_hash: row.resume_token_hash ?? null,
+      status: row.status,
+      last_heartbeat_at: row.last_heartbeat_at ?? new Date().toISOString(),
+      ended_at: row.ended_at ?? null,
+      metadata: row.metadata ?? {},
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(`insertDeviceSession: ${error.message}`);
+  return (data as { id: string }).id;
+}
+
+export async function touchDeviceSession(sessionId: string): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("device_sessions")
+    .update({ last_heartbeat_at: new Date().toISOString() })
+    .eq("id", sessionId);
+  if (error) throw new Error(`touchDeviceSession: ${error.message}`);
+}
+
+export async function closeDeviceSession(sessionId: string, status: "closed" | "expired" | "revoked"): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("device_sessions")
+    .update({
+      status,
+      ended_at: new Date().toISOString(),
+      last_heartbeat_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId);
+  if (error) throw new Error(`closeDeviceSession: ${error.message}`);
+}
+
+export async function upsertDevicePresence(row: DevicePresenceRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("device_presence")
+    .upsert(
+      {
+        device_id: row.device_id,
+        user_id: row.user_id,
+        organization_id: row.organization_id ?? null,
+        status: row.status,
+        active_apps: row.active_apps ?? [],
+        cpu_percent: row.cpu_percent ?? null,
+        ram_percent: row.ram_percent ?? null,
+        network_mode: row.network_mode ?? "unknown",
+        is_online: row.is_online,
+        last_heartbeat_at: row.last_heartbeat_at ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "device_id" },
+    );
+  if (error) throw new Error(`upsertDevicePresence: ${error.message}`);
+}
+
+export async function upsertNetworkPeer(row: NetworkPeerRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("network_peers")
+    .upsert(
+      {
+        id: row.id ?? randomUUID(),
+        device_id: row.device_id,
+        user_id: row.user_id,
+        organization_id: row.organization_id ?? null,
+        provider: row.provider,
+        node_id: row.node_id ?? null,
+        mesh_ip: row.mesh_ip ?? null,
+        hostname: row.hostname ?? null,
+        mac_address: row.mac_address ?? null,
+        direct_connected: row.direct_connected ?? false,
+        relay_connected: row.relay_connected ?? false,
+        eligible_for_wake: row.eligible_for_wake ?? false,
+        metadata: row.metadata ?? {},
+        last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "device_id,provider" },
+    );
+  if (error) throw new Error(`upsertNetworkPeer: ${error.message}`);
+}
+
+export async function upsertRuntimeCapability(row: RuntimeCapabilityRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("runtime_capabilities")
+    .upsert(
+      {
+        id: row.id ?? randomUUID(),
+        device_id: row.device_id,
+        user_id: row.user_id,
+        organization_id: row.organization_id ?? null,
+        capability_key: row.capability_key,
+        enabled: row.enabled,
+        requires_consent: row.requires_consent ?? true,
+        consent_version: row.consent_version ?? 1,
+        consented_at: row.consented_at ?? null,
+        metadata: row.metadata ?? {},
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "device_id,capability_key" },
+    );
+  if (error) throw new Error(`upsertRuntimeCapability: ${error.message}`);
+}
+
+export async function upsertWorkflowCheckpoint(row: WorkflowCheckpointRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("workflow_checkpoints")
+    .upsert(
+      {
+        id: row.id ?? randomUUID(),
+        execution_id: row.execution_id,
+        workflow_id: row.workflow_id,
+        user_id: row.user_id ?? null,
+        organization_id: row.organization_id ?? null,
+        step_key: row.step_key,
+        status: row.status,
+        payload: row.payload ?? {},
+        error: row.error ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "execution_id,step_key" },
+    );
+  if (error) throw new Error(`upsertWorkflowCheckpoint: ${error.message}`);
+}
+
+export async function listWorkflowCheckpoints(executionId: string): Promise<WorkflowCheckpointRow[]> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("workflow_checkpoints")
+    .select("*")
+    .eq("execution_id", executionId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listWorkflowCheckpoints: ${error.message}`);
+  return (data ?? []) as WorkflowCheckpointRow[];
+}
+
+export async function upsertApprovalPolicy(row: ApprovalPolicyRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("approval_policies")
+    .upsert({
+      id: row.id ?? randomUUID(),
+      organization_id: row.organization_id ?? null,
+      user_id: row.user_id ?? null,
+      device_id: row.device_id ?? null,
+      action_pattern: row.action_pattern,
+      risk_level: row.risk_level,
+      approval_mode: row.approval_mode,
+      is_enabled: row.is_enabled,
+      metadata: row.metadata ?? {},
+      updated_at: new Date().toISOString(),
+    });
+  if (error) throw new Error(`upsertApprovalPolicy: ${error.message}`);
+}
+
+export async function listApprovalPolicies(params: {
+  organizationId?: string | null;
+  userId?: string | null;
+  deviceId?: string | null;
+}): Promise<ApprovalPolicyRow[]> {
+  const supabase = await getClient();
+  let query = supabase.from("approval_policies").select("*").eq("is_enabled", true);
+  if (params.organizationId) query = query.eq("organization_id", params.organizationId);
+  if (params.userId) query = query.eq("user_id", params.userId);
+  if (params.deviceId) query = query.eq("device_id", params.deviceId);
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) throw new Error(`listApprovalPolicies: ${error.message}`);
+  return (data ?? []) as ApprovalPolicyRow[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

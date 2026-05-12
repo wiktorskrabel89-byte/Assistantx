@@ -18,6 +18,7 @@ import { inngest } from "@/src/core/events/inngest-client";
 import { workflowExecuteFunction } from "@/src/inngest/functions/workflow-execute";
 import { approvalRequestedFunction } from "@/src/inngest/functions/approval-lifecycle";
 import { agentTaskFunction } from "@/src/inngest/functions/agent-task";
+import { startGamingFunction } from "@/src/inngest/functions/start-gaming";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -28,6 +29,7 @@ const handler = serve({
     workflowExecuteFunction,
     approvalRequestedFunction,
     agentTaskFunction,
+    startGamingFunction,
   ],
 });
 
