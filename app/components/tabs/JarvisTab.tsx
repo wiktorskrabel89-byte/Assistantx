@@ -30,7 +30,7 @@ export default function JarvisTab({
 
     (async () => {
       try {
-        const res = await fetch("/api/jarvis/version", { cache: "no-store" });
+        const res = await fetch("/api/jarvis/version");
         if (!res.ok) return;
 
         const payload = (await res.json()) as { version?: string };
@@ -103,7 +103,7 @@ export default function JarvisTab({
             </CardDescription>
             {latestGithubVersion && (
               <p className="text-xs font-medium text-sky-700">
-                Newest on GitHub: {latestGithubVersion}
+                Latest Jarvis release on GitHub: {latestGithubVersion}
               </p>
             )}
           </CardHeader>
