@@ -1,12 +1,12 @@
 import { memoryService } from "@/src/memory/service/memory-service";
+import { resolveActor, extractBearerToken } from "@/src/core/auth/actor-resolver";
 import type { ApiV1MemorySearchRequest, ApiV1MemorySearchResponse } from "@/src/api/v1/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(request: Request) {
-  const authHeader = request.headers.get("Authorization") ?? "";
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const token = extractBearerToken(request.headers.get("Authorization"));
   if (!token) {
     return Response.json({ error: "Authorization header required." }, { status: 401 });
   }
@@ -16,10 +16,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "query is required." }, { status: 400 });
   }
 
+  const actorResult = await resolveActor({ bearerToken: token });
+
+  if (!actorResult.ok) {
+    return Response.json({ error: actorResult.error }, { status: actorResult.status });
+  }
+
+  const resolvedUserId = actorResult.actor.userId;
+  if (!resolvedUserId) {
+    return Response.json({ error: "User identity could not be resolved." }, { status: 401 });
+  }
+
   const result = await memoryService.search({
-    // TODO: resolve token to actual userId via Supabase Auth
-    // before this route is exposed to production traffic.
-    userId: `api:${token.slice(0, 16)}`,
+    userId: resolvedUserId,
+    organizationId: actorResult.actor.organizationId,
     layer: body.layer,
     limit: body.limit ?? 20,
   });

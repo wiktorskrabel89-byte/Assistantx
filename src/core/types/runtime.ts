@@ -3,7 +3,10 @@ export type RuntimeExecutionStatus =
   | "running"
   | "waiting_for_approval"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled"
+  | "retrying"
+  | "expired";
 
 export type RuntimeActor = {
   userId: string | null;

@@ -37,10 +37,33 @@ export async function acceptExternalRequest(
     actor: { userId: null, organizationId: null, sessionId: null },
   });
 
+  const accepted = result.status !== "failed";
+  const responseStatus: "queued" | "rejected" = accepted ? "queued" : "rejected";
+
+  // Log the external request to the ecosystem_requests audit table.
+  try {
+    const { insertEcosystemRequest } = await import(
+      "@/src/core/persistence/runtime-db"
+    );
+    await insertEcosystemRequest({
+      kind: request.kind,
+      source_id: request.sourceId,
+      workflow_id: request.workflow,
+      execution_id: result.executionId,
+      status: responseStatus,
+      metadata: {
+        ...(request.metadata ?? {}),
+        callbackUrl: request.callbackUrl ?? null,
+      },
+    });
+  } catch {
+    // Audit write is best-effort — do not fail the response.
+  }
+
   return {
     executionId: result.executionId,
-    accepted: result.status !== "failed",
-    status: result.status === "failed" ? "rejected" : "queued",
+    accepted,
+    status: responseStatus,
     error: result.error,
   };
 }
@@ -53,13 +76,27 @@ export type RuntimeHealthMetrics = {
   costUsd24h: number;
 };
 
-export function collectRuntimeMetrics(): RuntimeHealthMetrics {
-  // Phase-5 scaffold: replace with live instrumentation data from OpenTelemetry/Langfuse.
-  return {
-    uptime: process.uptime(),
-    activeWorkflows: 0,
-    failedWorkflows24h: 0,
-    avgLatencyMs: 0,
-    costUsd24h: 0,
-  };
+export async function collectRuntimeMetrics(): Promise<RuntimeHealthMetrics> {
+  const base = { uptime: process.uptime(), avgLatencyMs: 0 };
+
+  try {
+    const { queryRuntimeMetrics } = await import(
+      "@/src/core/persistence/runtime-db"
+    );
+    const snapshot = await queryRuntimeMetrics();
+    return {
+      ...base,
+      activeWorkflows: snapshot.activeWorkflows,
+      failedWorkflows24h: snapshot.failedWorkflows24h,
+      costUsd24h: snapshot.costUsd24h,
+    };
+  } catch {
+    // Fallback when DB is unavailable.
+    return {
+      ...base,
+      activeWorkflows: 0,
+      failedWorkflows24h: 0,
+      costUsd24h: 0,
+    };
+  }
 }

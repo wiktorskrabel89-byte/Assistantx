@@ -1,4 +1,5 @@
 import { executeRuntimeRequest } from "@/src/backend/runtime/runtime-facade";
+import { resolveActor, extractBearerToken } from "@/src/core/auth/actor-resolver";
 import type { ApiV1WorkflowRequest, ApiV1WorkflowResponse } from "@/src/api/v1/types";
 
 export const runtime = "nodejs";
@@ -13,18 +14,25 @@ export async function POST(request: Request) {
     return Response.json({ error: "input must be an object." }, { status: 400 });
   }
 
-  const authHeader = request.headers.get("Authorization") ?? "";
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const token = extractBearerToken(request.headers.get("Authorization"));
   if (!token) {
     return Response.json({ error: "Authorization header required." }, { status: 401 });
+  }
+
+  const actorResult = await resolveActor({
+    bearerToken: token,
+    requestedOrganizationId:
+      typeof body.organizationId === "string" ? body.organizationId : null,
+  });
+
+  if (!actorResult.ok) {
+    return Response.json({ error: actorResult.error }, { status: actorResult.status });
   }
 
   const result = await executeRuntimeRequest({
     workflow: body.workflow,
     input: body.input,
-    // TODO: resolve token to actual userId/organizationId via Supabase Auth
-    // before this route is exposed to production traffic.
-    actor: { userId: null, organizationId: null, sessionId: token.slice(0, 32) },
+    actor: actorResult.actor,
   });
 
   const response: ApiV1WorkflowResponse = {

@@ -1,4 +1,12 @@
-export type CostLane = "classification" | "chat" | "reasoning" | "premium";
+export type CostLane =
+  | "classification"
+  | "chat"
+  | "reasoning"
+  | "premium"
+  | "embedding"
+  | "web_search"
+  | "plugin"
+  | "mcp";
 
 export type CostRecord = {
   id: string;
@@ -37,6 +45,9 @@ export function estimateCost(model: string, inputTokens: number, outputTokens: n
     "default": { input: 0.15, output: 0.6 },
     "gemini": { input: 0.075, output: 0.3 },
     "gpt-oss": { input: 2.5, output: 10 },
+    // Costed as flat per-call — tokens are minimal for these lanes.
+    "embedding": { input: 0.02, output: 0 },
+    "web_search": { input: 0, output: 0 },  // costed separately as per-call fee
   };
   const key = Object.keys(rates).find((k) => model.includes(k)) ?? "default";
   const rate = rates[key];

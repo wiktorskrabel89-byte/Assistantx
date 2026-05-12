@@ -1,5 +1,8 @@
 import type { McpToolCallResult } from "@/src/mcp/client/types";
 import { listPlugins } from "@/src/plugins/registry";
+import { toolRegistry } from "@/src/tools/router/registry";
+import { ToolRouter } from "@/src/tools/router/router";
+import { randomUUID } from "node:crypto";
 
 export type McpServerToolDefinition = {
   name: string;
@@ -7,8 +10,8 @@ export type McpServerToolDefinition = {
   inputSchema: Record<string, unknown>;
 };
 
-export function buildMcpServerToolList(): McpServerToolDefinition[] {
-  const plugins = listPlugins({ trustedOnly: false });
+export async function buildMcpServerToolList(): Promise<McpServerToolDefinition[]> {
+  const plugins = await listPlugins({ trustedOnly: false });
   return plugins.flatMap((p) =>
     p.capabilities.map((cap) => ({
       name: `${p.id}/${cap.name}`,
@@ -26,12 +29,13 @@ export async function handleMcpServerRequest(
   input: Record<string, unknown>,
   actorUserId: string | null,
 ): Promise<McpToolCallResult & { serverSide: true }> {
-  // Phase-4 scaffold: entry point for external AI systems to call AssistantX tools.
-  // Schema validation, policy enforcement, and audit logging are wired here.
-  const tools = buildMcpServerToolList();
+  const tools = await buildMcpServerToolList();
   const found = tools.find((t) => t.name === toolName);
+  const internalToolId = toolRegistry.has(toolName)
+    ? toolName
+    : toolName.replace("/", ".");
 
-  if (!found) {
+  if (!found || !toolRegistry.has(internalToolId)) {
     return {
       ok: false,
       serverId: "assistantx",
@@ -41,16 +45,34 @@ export async function handleMcpServerRequest(
     };
   }
 
+  // Route through the governed ToolRouter pipeline so policy, rate-limit,
+  // approval and audit steps all apply to inbound MCP server calls.
+  const toolRouter = new ToolRouter();
+  const executionId = randomUUID();
+  const result = await toolRouter.execute(
+    { toolId: internalToolId, input },
+    {
+      executionId,
+      workflowId: "mcp/server",
+      actor: { userId: actorUserId, organizationId: null, sessionId: null },
+    },
+  );
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      serverId: "assistantx",
+      capabilityName: toolName,
+      error: result.error ?? "Tool execution failed.",
+      serverSide: true,
+    };
+  }
+
   return {
     ok: true,
     serverId: "assistantx",
     capabilityName: toolName,
-    output: {
-      status: "delegated",
-      tool: found.name,
-      actorUserId,
-      inputKeys: Object.keys(input),
-    },
+    output: result.output,
     serverSide: true,
   };
 }

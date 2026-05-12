@@ -1,37 +1,36 @@
-// Inngest route handler (App Router adapter).
-// When INNGEST_SIGNING_KEY and INNGEST_EVENT_KEY are set, Inngest uses this
-// route to deliver function calls and handle the serve() handshake.
-// Without the keys the route responds with a 501 so the app remains bootable.
+/**
+ * Inngest route handler — AssistantX runtime backbone.
+ *
+ * Uses the real @inngest/next serve() adapter.  All registered Inngest
+ * functions are delivered through this endpoint.
+ *
+ * Required environment variables:
+ *   INNGEST_SIGNING_KEY   — validates incoming Inngest requests
+ *   INNGEST_EVENT_KEY     — used by the client to send events to Inngest Cloud
+ *
+ * In local development: set INNGEST_SIGNING_KEY=any-string and
+ * INNGEST_EVENT_KEY=any-string to activate Inngest Dev Server mode.
+ * Run `npx inngest-cli dev` to start the local dev server.
+ */
+
+import { serve } from "inngest/next";
+import { inngest } from "@/src/core/events/inngest-client";
+import { workflowExecuteFunction } from "@/src/inngest/functions/workflow-execute";
+import { approvalRequestedFunction } from "@/src/inngest/functions/approval-lifecycle";
+import { agentTaskFunction } from "@/src/inngest/functions/agent-task";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-export async function GET() {
-  if (!process.env.INNGEST_SIGNING_KEY) {
-    return new Response(
-      JSON.stringify({ error: "Inngest not configured. Set INNGEST_SIGNING_KEY." }),
-      { status: 501, headers: { "Content-Type": "application/json" } },
-    );
-  }
-  return new Response(
-    JSON.stringify({ ok: true, service: "inngest", mode: "ready" }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
-  );
-}
+const handler = serve({
+  client: inngest,
+  functions: [
+    workflowExecuteFunction,
+    approvalRequestedFunction,
+    agentTaskFunction,
+  ],
+});
 
-export async function POST() {
-  if (!process.env.INNGEST_SIGNING_KEY) {
-    return new Response(
-      JSON.stringify({ error: "Inngest not configured. Set INNGEST_SIGNING_KEY." }),
-      { status: 501, headers: { "Content-Type": "application/json" } },
-    );
-  }
-  return new Response(
-    JSON.stringify({ ok: true, service: "inngest", mode: "ready" }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
-  );
-}
-
-export async function PUT() {
-  return POST();
-}
+export const GET = handler.GET;
+export const POST = handler.POST;
+export const PUT = handler.PUT;
