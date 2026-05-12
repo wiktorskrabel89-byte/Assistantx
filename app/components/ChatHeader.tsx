@@ -27,7 +27,7 @@ type ChatHeaderProps = {
   personalityMode: PersonalityMode;
   onPersonalityModeChange: (mode: PersonalityMode) => void;
   activeJarvisMode?: ActionMode | null;
-  onDeactivateJarvisMode?: () => void;
+  onDeactivateActionMode?: () => void;
 };
 
 export function ChatHeader({
@@ -49,7 +49,7 @@ export function ChatHeader({
   personalityMode,
   onPersonalityModeChange,
   activeJarvisMode,
-  onDeactivateJarvisMode,
+  onDeactivateActionMode,
 }: ChatHeaderProps) {
   const iconBtnCn = "hidden h-10 w-10 border-border bg-background text-foreground/85 hover:bg-accent hover:text-foreground lg:flex";
 
@@ -76,7 +76,7 @@ export function ChatHeader({
             {activeJarvisMode && (
               <button
                 type="button"
-                onClick={onDeactivateJarvisMode}
+                onClick={onDeactivateActionMode}
                 title={`${activeJarvisMode.name} Mode active — click to deactivate`}
                 className="ml-1 flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800 transition-colors hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-950/60 dark:text-sky-300 dark:hover:bg-sky-900/60"
               >

@@ -215,7 +215,7 @@ export function modeInstructionsPreview(instructions: string, maxBullets = 3): s
 }
 
 function makeStep(type: ActionStep["type"], label: string, extra: Partial<ActionStep> = {}): ActionStep {
-  return { id: `step-${Math.random().toString(36).slice(2, 9)}`, type, label, ...extra };
+  return { id: createId(), type, label, ...extra };
 }
 
 type DefaultActionModeDef = Omit<ActionMode, "id" | "createdAt" | "updatedAt">;
@@ -505,11 +505,13 @@ export function upgradeState(value: StoredState | null): StoredState | null {
     const defaultIds = new Set(defaultModes.map((m) => m.id));
     const userModes = existingModes.filter((m) => !defaultIds.has(m.id));
     const jarvisModes = [...defaultModes, ...userModes];
-    const activeJarvisModeId =
-      typeof rawSettings.activeJarvisModeId === "string"
-      && jarvisModes.some((m) => m.id === rawSettings.activeJarvisModeId)
-        ? rawSettings.activeJarvisModeId
-        : (rawSettings.activeJarvisModeId === null ? null : (rawSettings as Record<string, unknown>).activeJarvisModeId as null ?? null);
+    const activeJarvisModeId: string | null =
+      rawSettings.activeJarvisModeId === null
+        ? null
+        : typeof rawSettings.activeJarvisModeId === "string"
+          && jarvisModes.some((m) => m.id === rawSettings.activeJarvisModeId)
+          ? rawSettings.activeJarvisModeId
+          : null;
 
     const defaultActionModes = createDefaultActionModes();
     const existingActionModes: ActionMode[] = Array.isArray(rawSettings.actionModes) ? rawSettings.actionModes as ActionMode[] : [];

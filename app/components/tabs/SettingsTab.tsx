@@ -419,7 +419,10 @@ export function SettingsTab() {
               <Sliders className="h-3.5 w-3.5" /> Jarvis Modes
             </div>
             <p className={`mt-2 text-xs ${mutedClass}`}>
-              Activate a personality preset that shapes how Jarvis responds. The active mode&apos;s instructions are automatically injected into every chat. You can also set up what apps open when you say &ldquo;start [mode] mode&rdquo; in the <strong>Modes</strong> tab.
+              Activate a personality preset that shapes how Jarvis responds. The active mode&apos;s instructions are automatically injected into every chat.
+            </p>
+            <p className={`mt-1 text-xs ${mutedClass}`}>
+              To configure what apps open when a mode is activated, visit the <strong>Modes</strong> tab.
             </p>
             {voiceSettings.activeJarvisModeId && (
               <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">

@@ -80,6 +80,10 @@ const UsageDashboard = dynamic(
 );
 
 
+// Module-level constants — avoid recompiling regexes on every call
+const MODE_ACTIVATE_PATTERN = /^(?:hey\s+jarvis[,]?\s+)?(?:start|turn\s+on|activate|enable|open)\s+(.+?)\s+mode\s*$/i;
+const MODE_DEACTIVATE_PATTERN = /^(?:hey\s+jarvis[,]?\s+)?(?:stop|turn\s+off|deactivate|disable|exit|close)\s+(?:(.+?)\s+)?mode\s*$/i;
+
 export function ChatTab() {
   const {
     state,
@@ -244,10 +248,7 @@ export function ChatTab() {
   // Check if a composer message is a mode activation voice command.
   // If so, run the mode steps and swallow the message (don't send to AI).
   const tryHandleModeCommand = useCallback((text: string): boolean => {
-    const activatePattern = /^(?:hey\s+jarvis[,]?\s+)?(?:start|turn\s+on|activate|enable|open)\s+(.+?)\s+mode\s*$/i;
-    const deactivatePattern = /^(?:hey\s+jarvis[,]?\s+)?(?:stop|turn\s+off|deactivate|disable|exit|close)\s+(?:(.+?)\s+)?mode\s*$/i;
-
-    const activateMatch = activatePattern.exec(text.trim());
+    const activateMatch = MODE_ACTIVATE_PATTERN.exec(text.trim());
     if (activateMatch) {
       const requestedName = activateMatch[1].toLowerCase();
       const matched = (activeWorkspace.settings.actionModes ?? []).find(
@@ -270,7 +271,7 @@ export function ChatTab() {
       }
     }
 
-    const deactivateMatch = deactivatePattern.exec(text.trim());
+    const deactivateMatch = MODE_DEACTIVATE_PATTERN.exec(text.trim());
     if (deactivateMatch && activeWorkspace.settings.activeActionModeId) {
       setActiveActionMode(null);
       updateChat(activeWorkspace.id, activeChat.id, (chat) => ({
@@ -803,7 +804,7 @@ export function ChatTab() {
             personalityMode={activeWorkspace.settings.personalityMode ?? "default"}
             onPersonalityModeChange={setPersonalityMode}
             activeJarvisMode={activeJarvisMode}
-            onDeactivateJarvisMode={() => setActiveActionMode(null)}
+            onDeactivateActionMode={() => setActiveActionMode(null)}
           />
 
           <div className="min-h-0 flex-1 px-3 py-4 bg-background transition-colors duration-200">
