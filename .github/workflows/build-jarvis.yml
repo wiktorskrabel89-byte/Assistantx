@@ -19,6 +19,9 @@ jobs:
     permissions:
       contents: write
 
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -96,7 +99,6 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-          cache-dependency-path: jarvis/android/android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Install desktop dependencies
         working-directory: jarvis/desktop
