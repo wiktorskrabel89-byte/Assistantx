@@ -15,6 +15,7 @@ import {
   Search,
   Settings2,
   Share2,
+  Sliders,
   SquareTerminal,
   Stethoscope,
   X,
@@ -44,6 +45,7 @@ export type AppNavigationTab =
   | "notifications"
   | "ai-learning"
   | "jarvis"
+  | "modes"
   | "website-creator";
 
 type AppNavigationColumnProps = {
@@ -74,6 +76,7 @@ type AddOnItem = {
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "jarvis",           label: "Jarvis",          description: "AI voice assistant",              icon: BrainCircuit, beta: true },
+  { id: "modes",            label: "Modes",           description: "Custom Jarvis behaviour presets",  icon: Sliders },
   { id: "clinical",         label: "Clinical",        description: "Clinical tools",                   icon: Stethoscope },
   { id: "learning",         label: "Learning",        description: "Learning materials",               icon: BookOpen },
   { id: "prompt-library",   label: "Prompt Library",  description: "Prompt library",                   icon: LibraryBig },

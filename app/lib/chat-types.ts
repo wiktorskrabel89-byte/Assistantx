@@ -48,6 +48,17 @@ export type PromptTemplate = {
   updatedAt: number;
 };
 
+export type JarvisMode = {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  icon?: string;
+  isDefault?: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type CustomAgent = {
   id: string;
   name: string;
@@ -83,6 +94,8 @@ export type WorkspaceSettings = {
   ttsVoiceId: string;
   autoSpeakResponses: boolean;
   personalityMode: PersonalityMode;
+  jarvisModes: JarvisMode[];
+  activeJarvisModeId: string | null;
 };
 
 export type Workspace = {

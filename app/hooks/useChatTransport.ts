@@ -444,7 +444,13 @@ export function useChatTransport({
         userPlan: stateRef.current.userPlan,
         thinkingEffort: queuedMessage.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
         modelProfile: activeSettings.modelProfile ?? "default",
-        systemPrompt: activeSettings.systemPrompt ?? "",
+        systemPrompt: (() => {
+          const activeMode = activeSettings.activeJarvisModeId
+            ? activeSettings.jarvisModes?.find((m) => m.id === activeSettings.activeJarvisModeId)
+            : null;
+          const base = activeSettings.systemPrompt ?? "";
+          return activeMode ? `[${activeMode.name} Mode]\n${activeMode.instructions}\n\n${base}`.trim() : base;
+        })(),
         personalityMode: activeSettings.personalityMode ?? "default",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,

@@ -122,7 +122,12 @@ export function ChatTab() {
     cloudBootstrapped,
     signInWithProvider,
     stateRef,
+    setActiveJarvisMode,
   } = useWorkspace();
+
+  const activeJarvisMode = activeWorkspace.settings.jarvisModes?.find(
+    (m) => m.id === activeWorkspace.settings.activeJarvisModeId
+  ) ?? null;
 
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
@@ -743,6 +748,8 @@ export function ChatTab() {
             onExportMarkdown={exportMarkdown}
             personalityMode={activeWorkspace.settings.personalityMode ?? "default"}
             onPersonalityModeChange={setPersonalityMode}
+            activeJarvisMode={activeJarvisMode}
+            onDeactivateJarvisMode={() => setActiveJarvisMode(null)}
           />
 
           <div className="min-h-0 flex-1 px-3 py-4 bg-background transition-colors duration-200">

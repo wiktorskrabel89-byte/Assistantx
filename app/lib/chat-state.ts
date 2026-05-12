@@ -16,6 +16,7 @@ import type {
   ChatSessionItem,
   ChatThread,
   CloudSyncErrorPayload,
+  JarvisMode,
   Mode,
   PromptTemplate,
   StoredState,
@@ -145,6 +146,72 @@ export function createDefaultPromptTemplates(): PromptTemplate[] {
   }));
 }
 
+const DEFAULT_JARVIS_MODES: Array<Omit<JarvisMode, "id" | "createdAt" | "updatedAt">> = [
+  {
+    name: "Gaming",
+    icon: "🎮",
+    description: "Hyped, game-savvy assistant tuned for gaming sessions.",
+    instructions:
+      "You are in Gaming Mode. Be casual, energetic, and hype. Prioritise gaming tips, performance advice, and meta knowledge. When the user asks technical questions, frame answers in gaming context first. Keep responses short and punchy. Use gaming slang naturally but don't overdo it.",
+    isDefault: true,
+  },
+  {
+    name: "Focus",
+    icon: "🎯",
+    description: "Minimal, direct, no-fluff mode for deep work.",
+    instructions:
+      "You are in Focus Mode. The user wants to get things done. Be concise and direct. Omit pleasantries and filler text. Provide actionable answers only. No small talk. Prioritise clarity and efficiency above everything else.",
+    isDefault: true,
+  },
+  {
+    name: "Study",
+    icon: "📚",
+    description: "Patient teacher mode — explains step-by-step with analogies.",
+    instructions:
+      "You are in Study Mode. Explain concepts step-by-step using clear language. Use analogies and real-world examples. When the user seems confused, try a different explanation approach. Encourage questions. Check understanding by summarising key points at the end of complex explanations.",
+    isDefault: true,
+  },
+  {
+    name: "Creative",
+    icon: "✨",
+    description: "Imaginative brainstorming partner for creative work.",
+    instructions:
+      "You are in Creative Mode. Be imaginative, expressive, and metaphor-rich. Embrace unconventional ideas and lateral thinking. When brainstorming, generate diverse options without filtering. Invite the user to explore ideas further. Tone should feel inspired and collaborative.",
+    isDefault: true,
+  },
+  {
+    name: "Chill",
+    icon: "😎",
+    description: "Relaxed, conversational — like chatting with a friend.",
+    instructions:
+      "You are in Chill Mode. Keep the conversation relaxed and friendly. Light humour is welcome. There is no rush — explore topics at a comfortable pace. Feel free to go on tangents if they are interesting. Be warm and laid-back.",
+    isDefault: true,
+  },
+];
+
+export function createDefaultJarvisModes(): JarvisMode[] {
+  const now = Date.now();
+  return DEFAULT_JARVIS_MODES.map((mode, index) => ({
+    ...mode,
+    id: `jarvis-mode-default-${index + 1}`,
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
+/**
+ * Derives a short bullet-point preview from a mode's instructions string.
+ * Splits on sentence boundaries and returns up to `maxBullets` items.
+ */
+export function modeInstructionsPreview(instructions: string, maxBullets = 3): string[] {
+  if (!instructions.trim()) return [];
+  return instructions
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, maxBullets);
+}
+
 export function createSettings(): WorkspaceSettings {
   return {
     activeAgentId: BUILT_IN_AGENTS[0].id,
@@ -171,6 +238,8 @@ export function createSettings(): WorkspaceSettings {
     ttsVoiceId: "default",
     autoSpeakResponses: false,
     personalityMode: "default",
+    jarvisModes: createDefaultJarvisModes(),
+    activeJarvisModeId: null,
   };
 }
 
@@ -356,6 +425,17 @@ export function upgradeState(value: StoredState | null): StoredState | null {
       : chats[0].id;
 
     const rawSettings = workspace.settings ?? {};
+    const defaultModes = createDefaultJarvisModes();
+    const existingModes: JarvisMode[] = Array.isArray(rawSettings.jarvisModes) ? rawSettings.jarvisModes as JarvisMode[] : [];
+    // Merge: keep user-created modes, ensure all defaults are present
+    const defaultIds = new Set(defaultModes.map((m) => m.id));
+    const userModes = existingModes.filter((m) => !defaultIds.has(m.id));
+    const jarvisModes = [...defaultModes, ...userModes];
+    const activeJarvisModeId =
+      typeof rawSettings.activeJarvisModeId === "string"
+      && jarvisModes.some((m) => m.id === rawSettings.activeJarvisModeId)
+        ? rawSettings.activeJarvisModeId
+        : (rawSettings.activeJarvisModeId === null ? null : (rawSettings as Record<string, unknown>).activeJarvisModeId as null ?? null);
     const settings = {
       ...createSettings(),
       ...rawSettings,
@@ -369,6 +449,8 @@ export function upgradeState(value: StoredState | null): StoredState | null {
         && PERSONALITY_MODES.some((mode) => mode.id === rawSettings.personalityMode)
           ? rawSettings.personalityMode
           : "default",
+      jarvisModes,
+      activeJarvisModeId,
     };
 
     return {
