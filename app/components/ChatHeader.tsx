@@ -1,8 +1,9 @@
 "use client";
 
-import { BarChart2, Braces, Download, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, type LucideIcon } from "lucide-react";
+import { BarChart2, Braces, Download, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
 import type { PersonalityMode } from "@/lib/ai-config";
 import { PERSONALITY_MODES } from "@/lib/ai-config";
+import type { ActionMode } from "@/app/lib/chat-types";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,8 @@ type ChatHeaderProps = {
   onExportMarkdown: () => void;
   personalityMode: PersonalityMode;
   onPersonalityModeChange: (mode: PersonalityMode) => void;
+  activeJarvisMode?: ActionMode | null;
+  onDeactivateActionMode?: () => void;
 };
 
 export function ChatHeader({
@@ -45,6 +48,8 @@ export function ChatHeader({
   onExportMarkdown,
   personalityMode,
   onPersonalityModeChange,
+  activeJarvisMode,
+  onDeactivateActionMode,
 }: ChatHeaderProps) {
   const iconBtnCn = "hidden h-10 w-10 border-border bg-background text-foreground/85 hover:bg-accent hover:text-foreground lg:flex";
 
@@ -68,6 +73,18 @@ export function ChatHeader({
               <div className="truncate text-base font-semibold text-foreground">{assistantName}</div>
               <div className="truncate text-xs text-muted-foreground">{activeChatTitle}</div>
             </div>
+            {activeJarvisMode && (
+              <button
+                type="button"
+                onClick={onDeactivateActionMode}
+                title={`${activeJarvisMode.name} Mode active — click to deactivate`}
+                className="ml-1 flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800 transition-colors hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-950/60 dark:text-sky-300 dark:hover:bg-sky-900/60"
+              >
+                <span>{activeJarvisMode.icon ?? "🤖"}</span>
+                <span className="hidden sm:inline">{activeJarvisMode.name}</span>
+                <X className="h-2.5 w-2.5 opacity-70" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

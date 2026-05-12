@@ -6,6 +6,9 @@ import {
   createId,
   createMessage,
   createDefaultPromptTemplates,
+  createDefaultJarvisModes,
+  createDefaultActionModes,
+  modeInstructionsPreview,
   createSettings,
   createChat,
   createWorkspace,
@@ -109,7 +112,111 @@ describe("createDefaultPromptTemplates", () => {
   });
 });
 
-/* ── createSettings ────────────────────────────────────────────────── */
+/* ── createDefaultActionModes ──────────────────────────────────────── */
+
+describe("createDefaultActionModes", () => {
+  it("returns exactly 5 default action modes", () => {
+    expect(createDefaultActionModes()).toHaveLength(5);
+  });
+
+  it("all are marked as default", () => {
+    for (const mode of createDefaultActionModes()) {
+      expect(mode.isDefault).toBe(true);
+    }
+  });
+
+  it("each mode has at least one step", () => {
+    for (const mode of createDefaultActionModes()) {
+      expect(mode.steps.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("every step has an id, type, and label", () => {
+    for (const mode of createDefaultActionModes()) {
+      for (const step of mode.steps) {
+        expect(typeof step.id).toBe("string");
+        expect(typeof step.type).toBe("string");
+        expect(typeof step.label).toBe("string");
+      }
+    }
+  });
+
+  it("includes a Gaming mode and a Study mode", () => {
+    const names = createDefaultActionModes().map((m) => m.name);
+    expect(names).toContain("Gaming");
+    expect(names).toContain("Study");
+  });
+});
+
+/* ── createDefaultJarvisModes ──────────────────────────────────────── */
+
+describe("createDefaultJarvisModes", () => {
+  it("returns exactly 5 default modes", () => {
+    const modes = createDefaultJarvisModes();
+    expect(modes).toHaveLength(5);
+  });
+
+  it("all modes are marked as default", () => {
+    for (const mode of createDefaultJarvisModes()) {
+      expect(mode.isDefault).toBe(true);
+    }
+  });
+
+  it("each mode has required fields", () => {
+    for (const mode of createDefaultJarvisModes()) {
+      expect(typeof mode.id).toBe("string");
+      expect(typeof mode.name).toBe("string");
+      expect(mode.name.length).toBeGreaterThan(0);
+      expect(typeof mode.description).toBe("string");
+      expect(typeof mode.instructions).toBe("string");
+      expect(mode.instructions.length).toBeGreaterThan(0);
+      expect(typeof mode.createdAt).toBe("number");
+      expect(typeof mode.updatedAt).toBe("number");
+    }
+  });
+
+  it("includes a Gaming mode and a Focus mode", () => {
+    const names = createDefaultJarvisModes().map((m) => m.name);
+    expect(names).toContain("Gaming");
+    expect(names).toContain("Focus");
+  });
+
+  it("returns stable IDs across calls", () => {
+    const first = createDefaultJarvisModes().map((m) => m.id);
+    const second = createDefaultJarvisModes().map((m) => m.id);
+    expect(first).toEqual(second);
+  });
+});
+
+/* ── modeInstructionsPreview ───────────────────────────────────────── */
+
+describe("modeInstructionsPreview", () => {
+  it("returns empty array for empty instructions", () => {
+    expect(modeInstructionsPreview("")).toEqual([]);
+    expect(modeInstructionsPreview("   ")).toEqual([]);
+  });
+
+  it("splits on sentence boundaries", () => {
+    const result = modeInstructionsPreview("Be concise. Avoid pleasantries. Keep it short.");
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBe("Be concise.");
+    expect(result[1]).toBe("Avoid pleasantries.");
+    expect(result[2]).toBe("Keep it short.");
+  });
+
+  it("respects the maxBullets limit", () => {
+    const text = "One. Two. Three. Four. Five.";
+    expect(modeInstructionsPreview(text, 2)).toHaveLength(2);
+    expect(modeInstructionsPreview(text, 10)).toHaveLength(5);
+  });
+
+  it("handles single-sentence instructions", () => {
+    const result = modeInstructionsPreview("Be helpful.");
+    expect(result).toEqual(["Be helpful."]);
+  });
+});
+
+/* ── createSettings (jarvisModes) ──────────────────────────────────── */
 
 describe("createSettings", () => {
   it("returns default workspace settings", () => {
@@ -121,6 +228,12 @@ describe("createSettings", () => {
     expect(s.costMode).toBe("balanced");
     expect(Array.isArray(s.promptTemplates)).toBe(true);
     expect(Array.isArray(s.customAgents)).toBe(true);
+    expect(Array.isArray(s.jarvisModes)).toBe(true);
+    expect(s.jarvisModes).toHaveLength(5);
+    expect(s.activeJarvisModeId).toBeNull();
+    expect(Array.isArray(s.actionModes)).toBe(true);
+    expect(s.actionModes).toHaveLength(5);
+    expect(s.activeActionModeId).toBeNull();
   });
 });
 

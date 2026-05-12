@@ -24,6 +24,16 @@ const PROGRAMMING_LANGUAGE_HINTS: Array<{ name: string; patterns: RegExp[]; exte
 const ALL_MODEL_IDS = ALL_MODELS.map((model) => model.id);
 const DEFAULT_THINKING_EFFORT = 2;
 
+function buildSystemPromptWithMode(
+  settings: { activeJarvisModeId?: string | null; jarvisModes?: Array<{ id: string; name: string; instructions: string }>; systemPrompt?: string }
+): string {
+  const base = settings.systemPrompt ?? "";
+  if (!settings.activeJarvisModeId || !settings.jarvisModes) return base;
+  const activeMode = settings.jarvisModes.find((m) => m.id === settings.activeJarvisModeId);
+  if (!activeMode) return base;
+  return `[${activeMode.name} Mode]\n${activeMode.instructions}\n\n${base}`.trim();
+}
+
 function getFileExtension(name?: string | null) {
   if (!name) return "";
   const parts = name.toLowerCase().split(".");
@@ -444,7 +454,7 @@ export function useChatTransport({
         userPlan: stateRef.current.userPlan,
         thinkingEffort: queuedMessage.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
         modelProfile: activeSettings.modelProfile ?? "default",
-        systemPrompt: activeSettings.systemPrompt ?? "",
+        systemPrompt: buildSystemPromptWithMode(activeSettings),
         personalityMode: activeSettings.personalityMode ?? "default",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,

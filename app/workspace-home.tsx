@@ -87,6 +87,10 @@ const JarvisTab = dynamic(
   () => import("./components/tabs/JarvisTab"),
   { ssr: false, loading: () => <TabSkeleton /> },
 );
+const ModesTab = dynamic(
+  () => import("./components/tabs/ModesTab").then((m) => m.ModesTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
 
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
   "sandbox", "codebase", "projects",
@@ -147,6 +151,8 @@ function TabContent({
           onShowPhonePairingBanner={onShowPhonePairingBanner}
         />
       );
+    case "modes":
+      return <ModesTab />;
     default:
       return null;
   }

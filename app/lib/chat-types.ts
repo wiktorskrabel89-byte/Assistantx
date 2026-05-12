@@ -48,6 +48,42 @@ export type PromptTemplate = {
   updatedAt: number;
 };
 
+export type JarvisMode = {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  icon?: string;
+  isDefault?: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ActionStepType = "open_url" | "switch_jarvis_mode" | "send_message";
+
+export type ActionStep = {
+  id: string;
+  type: ActionStepType;
+  label: string;
+  /** For open_url: the URL or deep-link to open */
+  url?: string;
+  /** For switch_jarvis_mode: id of a JarvisMode preset */
+  jarvisModeId?: string;
+  /** For send_message: message text to queue in chat */
+  message?: string;
+};
+
+export type ActionMode = {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  steps: ActionStep[];
+  isDefault?: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type CustomAgent = {
   id: string;
   name: string;
@@ -83,6 +119,10 @@ export type WorkspaceSettings = {
   ttsVoiceId: string;
   autoSpeakResponses: boolean;
   personalityMode: PersonalityMode;
+  jarvisModes: JarvisMode[];
+  activeJarvisModeId: string | null;
+  actionModes: ActionMode[];
+  activeActionModeId: string | null;
 };
 
 export type Workspace = {

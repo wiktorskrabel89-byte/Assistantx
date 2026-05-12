@@ -12,6 +12,7 @@ import { ThinkingIndicator } from "../ThinkingIndicator";
 import { useWorkspaceQueries } from "../../hooks/useWorkspaceQueries";
 import {
   buildChatSessionItems,
+  createId,
   fromBase64,
   MODE_PANEL_OPTIONS,
   QUICK_CHIPS,
@@ -30,6 +31,7 @@ import type {
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
+import { executeActionModeSteps } from "../tabs/ModesTab";
 import { isEditableElementTarget } from "../../lib/keyboard";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
@@ -78,6 +80,10 @@ const UsageDashboard = dynamic(
 );
 
 
+// Module-level constants — avoid recompiling regexes on every call
+const MODE_ACTIVATE_PATTERN = /^(?:hey\s+jarvis[,]?\s+)?(?:start|turn\s+on|activate|enable|open)\s+(.+?)\s+mode\s*$/i;
+const MODE_DEACTIVATE_PATTERN = /^(?:hey\s+jarvis[,]?\s+)?(?:stop|turn\s+off|deactivate|disable|exit|close)\s+(?:(.+?)\s+)?mode\s*$/i;
+
 export function ChatTab() {
   const {
     state,
@@ -122,7 +128,13 @@ export function ChatTab() {
     cloudBootstrapped,
     signInWithProvider,
     stateRef,
+    setActiveJarvisMode,
+    setActiveActionMode,
   } = useWorkspace();
+
+  const activeJarvisMode = activeWorkspace.settings.actionModes?.find(
+    (m) => m.id === activeWorkspace.settings.activeActionModeId
+  ) ?? null;
 
   const [message, setMessage] = useState("");
   const [composerPreview, setComposerPreview] = useState(false);
@@ -233,6 +245,48 @@ export function ChatTab() {
     updateLastMessage,
   });
 
+  // Check if a composer message is a mode activation voice command.
+  // If so, run the mode steps and swallow the message (don't send to AI).
+  const tryHandleModeCommand = useCallback((text: string): boolean => {
+    const activateMatch = MODE_ACTIVATE_PATTERN.exec(text.trim());
+    if (activateMatch) {
+      const requestedName = activateMatch[1].toLowerCase();
+      const matched = (activeWorkspace.settings.actionModes ?? []).find(
+        (m) => m.name.toLowerCase() === requestedName
+      );
+      if (matched) {
+        setActiveActionMode(matched.id);
+        executeActionModeSteps(matched.steps, activeWorkspace.settings.jarvisModes ?? [], {
+          setActiveJarvisMode,
+          queueChatMessage: undefined,
+        });
+        updateChat(activeWorkspace.id, activeChat.id, (chat) => ({
+          ...chat,
+          messages: [
+            ...chat.messages,
+            { id: createId(), user: text, ai: `${matched.icon} **${matched.name} Mode** activated! Running ${matched.steps.length} step${matched.steps.length === 1 ? "" : "s"}…`, model: null, createdAt: Date.now() },
+          ],
+        }));
+        return true;
+      }
+    }
+
+    const deactivateMatch = MODE_DEACTIVATE_PATTERN.exec(text.trim());
+    if (deactivateMatch && activeWorkspace.settings.activeActionModeId) {
+      setActiveActionMode(null);
+      updateChat(activeWorkspace.id, activeChat.id, (chat) => ({
+        ...chat,
+        messages: [
+          ...chat.messages,
+          { id: createId(), user: text, ai: "Mode deactivated.", model: null, createdAt: Date.now() },
+        ],
+      }));
+      return true;
+    }
+
+    return false;
+  }, [activeChat.id, activeWorkspace, setActiveActionMode, setActiveJarvisMode, updateChat]);
+
   const queueComposerMessage = useCallback((thinkingEffort: number) => {
     // Block paid users who have exhausted their monthly request quota
     const planLimit = state.userPlan === "pro"
@@ -244,6 +298,12 @@ export function ChatTab() {
       return;
     }
 
+    // Intercept mode voice commands before sending to AI
+    if (tryHandleModeCommand(message)) {
+      setMessage("");
+      return;
+    }
+
     // Count each sent message against the plan request quota.
     const selectedModelId = activeWorkspace.settings.preferredModelId;
     if ((state.userPlan === "pro" || state.userPlan === "pro+") &&
@@ -252,7 +312,7 @@ export function ChatTab() {
     }
 
     transportQueueMessage(thinkingEffort);
-  }, [activeWorkspace.settings.preferredModelId, incrementPremiumRequests, state.premiumRequestsUsed, state.userPlan, transportQueueMessage]);
+  }, [activeWorkspace.settings.preferredModelId, incrementPremiumRequests, message, setMessage, state.premiumRequestsUsed, state.userPlan, transportQueueMessage, tryHandleModeCommand]);
 
   // Fork conversation at a specific message index
   const handleFork = useCallback((messageIndex: number) => {
@@ -743,6 +803,8 @@ export function ChatTab() {
             onExportMarkdown={exportMarkdown}
             personalityMode={activeWorkspace.settings.personalityMode ?? "default"}
             onPersonalityModeChange={setPersonalityMode}
+            activeJarvisMode={activeJarvisMode}
+            onDeactivateActionMode={() => setActiveActionMode(null)}
           />
 
           <div className="min-h-0 flex-1 px-3 py-4 bg-background transition-colors duration-200">

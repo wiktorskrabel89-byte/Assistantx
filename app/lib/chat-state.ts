@@ -11,11 +11,14 @@ import {
 import type { CostMode, ModelPreset, UserPlan } from "@/lib/ai-config";
 import type {
   Artifact,
+  ActionMode,
+  ActionStep,
   BuiltInAgent,
   ChatEntry,
   ChatSessionItem,
   ChatThread,
   CloudSyncErrorPayload,
+  JarvisMode,
   Mode,
   PromptTemplate,
   StoredState,
@@ -145,6 +148,142 @@ export function createDefaultPromptTemplates(): PromptTemplate[] {
   }));
 }
 
+const DEFAULT_JARVIS_MODES: Array<Omit<JarvisMode, "id" | "createdAt" | "updatedAt">> = [
+  {
+    name: "Gaming",
+    icon: "🎮",
+    description: "Hyped, game-savvy assistant tuned for gaming sessions.",
+    instructions:
+      "You are in Gaming Mode. Be casual, energetic, and hype. Prioritise gaming tips, performance advice, and meta knowledge. When the user asks technical questions, frame answers in gaming context first. Keep responses short and punchy. Use gaming slang naturally but don't overdo it.",
+    isDefault: true,
+  },
+  {
+    name: "Focus",
+    icon: "🎯",
+    description: "Minimal, direct, no-fluff mode for deep work.",
+    instructions:
+      "You are in Focus Mode. The user wants to get things done. Be concise and direct. Omit pleasantries and filler text. Provide actionable answers only. No small talk. Prioritise clarity and efficiency above everything else.",
+    isDefault: true,
+  },
+  {
+    name: "Study",
+    icon: "📚",
+    description: "Patient teacher mode — explains step-by-step with analogies.",
+    instructions:
+      "You are in Study Mode. Explain concepts step-by-step using clear language. Use analogies and real-world examples. When the user seems confused, try a different explanation approach. Encourage questions. Check understanding by summarising key points at the end of complex explanations.",
+    isDefault: true,
+  },
+  {
+    name: "Creative",
+    icon: "✨",
+    description: "Imaginative brainstorming partner for creative work.",
+    instructions:
+      "You are in Creative Mode. Be imaginative, expressive, and metaphor-rich. Embrace unconventional ideas and lateral thinking. When brainstorming, generate diverse options without filtering. Invite the user to explore ideas further. Tone should feel inspired and collaborative.",
+    isDefault: true,
+  },
+  {
+    name: "Chill",
+    icon: "😎",
+    description: "Relaxed, conversational — like chatting with a friend.",
+    instructions:
+      "You are in Chill Mode. Keep the conversation relaxed and friendly. Light humour is welcome. There is no rush — explore topics at a comfortable pace. Feel free to go on tangents if they are interesting. Be warm and laid-back.",
+    isDefault: true,
+  },
+];
+
+export function createDefaultJarvisModes(): JarvisMode[] {
+  const now = Date.now();
+  return DEFAULT_JARVIS_MODES.map((mode, index) => ({
+    ...mode,
+    id: `jarvis-mode-default-${index + 1}`,
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
+/**
+ * Derives a short bullet-point preview from a mode's instructions string.
+ * Splits on sentence boundaries and returns up to `maxBullets` items.
+ */
+export function modeInstructionsPreview(instructions: string, maxBullets = 3): string[] {
+  if (!instructions.trim()) return [];
+  return instructions
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, maxBullets);
+}
+
+function makeStep(type: ActionStep["type"], label: string, extra: Partial<ActionStep> = {}): ActionStep {
+  return { id: createId(), type, label, ...extra };
+}
+
+type DefaultActionModeDef = Omit<ActionMode, "id" | "createdAt" | "updatedAt">;
+
+const DEFAULT_ACTION_MODES: DefaultActionModeDef[] = [
+  {
+    name: "Gaming",
+    icon: "🎮",
+    description: "Fire up your gaming setup — opens your games and chat apps.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open Roblox", { url: "https://www.roblox.com" }),
+      makeStep("open_url", "Open Discord", { url: "https://discord.com/app" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Gaming personality", { jarvisModeId: "jarvis-mode-default-1" }),
+    ],
+  },
+  {
+    name: "Study",
+    icon: "📚",
+    description: "Open study resources and put Jarvis in teacher mode.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open YouTube", { url: "https://www.youtube.com" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Study personality", { jarvisModeId: "jarvis-mode-default-3" }),
+    ],
+  },
+  {
+    name: "Work",
+    icon: "💼",
+    description: "Open work tools and switch Jarvis to focused mode.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open Notion", { url: "https://www.notion.so" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Focus personality", { jarvisModeId: "jarvis-mode-default-2" }),
+    ],
+  },
+  {
+    name: "Music",
+    icon: "🎵",
+    description: "Open your music app and chill out.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open Spotify", { url: "https://open.spotify.com" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Chill personality", { jarvisModeId: "jarvis-mode-default-5" }),
+    ],
+  },
+  {
+    name: "Creative",
+    icon: "✨",
+    description: "Get into creative mode — open your tools and brainstorm.",
+    isDefault: true,
+    steps: [
+      makeStep("open_url", "Open Figma", { url: "https://www.figma.com" }),
+      makeStep("switch_jarvis_mode", "Switch Jarvis to Creative personality", { jarvisModeId: "jarvis-mode-default-4" }),
+    ],
+  },
+];
+
+export function createDefaultActionModes(): ActionMode[] {
+  const now = Date.now();
+  return DEFAULT_ACTION_MODES.map((mode, index) => ({
+    ...mode,
+    id: `action-mode-default-${index + 1}`,
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
 export function createSettings(): WorkspaceSettings {
   return {
     activeAgentId: BUILT_IN_AGENTS[0].id,
@@ -171,6 +310,10 @@ export function createSettings(): WorkspaceSettings {
     ttsVoiceId: "default",
     autoSpeakResponses: false,
     personalityMode: "default",
+    jarvisModes: createDefaultJarvisModes(),
+    activeJarvisModeId: null,
+    actionModes: createDefaultActionModes(),
+    activeActionModeId: null,
   };
 }
 
@@ -356,6 +499,31 @@ export function upgradeState(value: StoredState | null): StoredState | null {
       : chats[0].id;
 
     const rawSettings = workspace.settings ?? {};
+    const defaultModes = createDefaultJarvisModes();
+    const existingModes: JarvisMode[] = Array.isArray(rawSettings.jarvisModes) ? rawSettings.jarvisModes as JarvisMode[] : [];
+    // Merge: keep user-created modes, ensure all defaults are present
+    const defaultIds = new Set(defaultModes.map((m) => m.id));
+    const userModes = existingModes.filter((m) => !defaultIds.has(m.id));
+    const jarvisModes = [...defaultModes, ...userModes];
+    const activeJarvisModeId: string | null =
+      rawSettings.activeJarvisModeId === null
+        ? null
+        : typeof rawSettings.activeJarvisModeId === "string"
+          && jarvisModes.some((m) => m.id === rawSettings.activeJarvisModeId)
+          ? rawSettings.activeJarvisModeId
+          : null;
+
+    const defaultActionModes = createDefaultActionModes();
+    const existingActionModes: ActionMode[] = Array.isArray(rawSettings.actionModes) ? rawSettings.actionModes as ActionMode[] : [];
+    const defaultActionIds = new Set(defaultActionModes.map((m) => m.id));
+    const userActionModes = existingActionModes.filter((m) => !defaultActionIds.has(m.id));
+    const actionModes = [...defaultActionModes, ...userActionModes];
+    const activeActionModeId =
+      typeof rawSettings.activeActionModeId === "string"
+      && actionModes.some((m) => m.id === rawSettings.activeActionModeId)
+        ? rawSettings.activeActionModeId
+        : null;
+
     const settings = {
       ...createSettings(),
       ...rawSettings,
@@ -369,6 +537,10 @@ export function upgradeState(value: StoredState | null): StoredState | null {
         && PERSONALITY_MODES.some((mode) => mode.id === rawSettings.personalityMode)
           ? rawSettings.personalityMode
           : "default",
+      jarvisModes,
+      activeJarvisModeId,
+      actionModes,
+      activeActionModeId,
     };
 
     return {
