@@ -348,6 +348,109 @@ function normalizeHttpUrl(rawUrl) {
   return parsed.toString();
 }
 
+function getHttpBaseUrl(url) {
+  return String(url || '')
+    .replace(/^wss?:\/\//, (match) => (match === 'wss://' ? 'https://' : 'http://'))
+    .replace(/\/ws\/?$/, '')
+    .replace(/\/$/, '');
+}
+
+function getJarvisAiEndpointCandidates() {
+  const candidates = [
+    process.env.JARVIS_AI_URL,
+    process.env.JARVIS_API_URL ? `${String(process.env.JARVIS_API_URL).replace(/\/$/, '')}/api/chat` : null,
+    process.env.JARVIS_WEB_URL ? `${String(process.env.JARVIS_WEB_URL).replace(/\/$/, '')}/api/chat` : null,
+    `${getHttpBaseUrl(BACKEND_URL)}/chat`,
+  ].filter(Boolean);
+
+  return [...new Set(candidates)];
+}
+
+async function extractAiResponseText(response) {
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+
+  if (contentType.includes('application/json')) {
+    const payload = await response.json();
+    return String(payload?.text || payload?.response || payload?.answer || '').trim();
+  }
+
+  const raw = await response.text();
+  let collected = '';
+
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.startsWith('data:')) continue;
+    const data = line.slice(5).trim();
+    if (!data || data === '[DONE]') continue;
+
+    try {
+      const parsed = JSON.parse(data);
+      if (typeof parsed.token === 'string') {
+        collected += parsed.token;
+      } else if (typeof parsed.text === 'string') {
+        collected += parsed.text;
+      } else if (typeof parsed.error === 'string') {
+        throw new Error(parsed.error);
+      }
+    } catch (error) {
+      if (!data.startsWith('{') && !data.startsWith('[')) {
+        collected += data;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return collected.trim();
+}
+
+async function runAiPrompt(prompt, meta = {}) {
+  let lastError = null;
+
+  for (const endpoint of getJarvisAiEndpointCandidates()) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: prompt,
+          mode: 'auto',
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI request failed (${response.status}) at ${endpoint}`);
+      }
+
+      const answer = await extractAiResponseText(response);
+      if (!answer) {
+        throw new Error(`AI endpoint returned an empty response at ${endpoint}`);
+      }
+
+      return publishResult({
+        title: 'Jarvis AI',
+        text: answer,
+        summary: answer,
+        source: meta.source || 'local',
+        origin: meta.origin || 'desktop',
+        taskId: meta.taskId || null,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  return publishResult({
+    title: 'AI unavailable',
+    text: lastError?.message || 'Jarvis could not reach any AI endpoint.',
+    summary: lastError?.message || 'Jarvis could not reach any AI endpoint.',
+    level: 'error',
+    source: meta.source || 'local',
+    origin: meta.origin || 'desktop',
+    taskId: meta.taskId || null,
+  });
+}
+
 async function openUrl(url) {
   const nextUrl = normalizeHttpUrl(url);
   if (ipcRenderer) {
@@ -390,29 +493,46 @@ async function searchYouTube(query) {
 }
 
 async function openApp(app) {
-  const normalized = String(app || '').trim().toLowerCase();
+  const rawApp = String(app || '').trim();
+  const normalized = rawApp.toLowerCase();
+  if (!rawApp) throw new Error('Missing app name.');
+
   if (PLATFORM === 'darwin') {
-    const appName = APP_OPEN_MAP_DARWIN[normalized] || normalized;
+    const appName = APP_OPEN_MAP_DARWIN[normalized] || rawApp;
     await execFilePromise('open', ['-a', appName]);
     rememberApp(normalized);
     return { summary: `Opened ${appName}.`, app: normalized };
   }
+
   const targets = APP_OPEN_MAP[normalized];
-  if (!targets) throw new Error(`Unknown app: ${app}. Supported: ${Object.keys(APP_OPEN_MAP).join(', ')}`);
-  const launchCandidates = Array.isArray(targets) ? targets : [targets];
+  const launchCandidates = targets
+    ? (Array.isArray(targets) ? targets : [targets])
+    : [...new Set([
+      rawApp,
+      rawApp.replace(/^['"]|['"]$/g, ''),
+      rawApp.toLowerCase().endsWith('.exe') ? null : `${rawApp}.exe`,
+    ].filter(Boolean))];
   let lastError = null;
+
   for (const candidate of launchCandidates) {
     try {
-      await execFilePromise('cmd.exe', ['/c', 'start', '', candidate]);
+      if (targets) {
+        await execFilePromise('cmd.exe', ['/c', 'start', '', candidate]);
+      } else {
+        await execFilePromise('powershell.exe', [
+          '-NoProfile',
+          '-Command',
+          `Start-Process -FilePath ${JSON.stringify(candidate)}`,
+        ]);
+      }
       rememberApp(normalized);
-      return { summary: `Opened ${normalized}.`, app: normalized };
+      return { summary: `Opened ${rawApp}.`, app: normalized };
     } catch (error) {
       lastError = error;
     }
   }
-  throw new Error(
-    `${lastError?.message || `Failed to open app: ${normalized}`}. Tried: ${launchCandidates.join(', ')}`,
-  );
+
+  throw new Error(`${lastError?.message || `Failed to open app: ${rawApp}`}. Tried: ${launchCandidates.join(', ')}`);
 }
 
 async function closeApp(app) {
@@ -905,20 +1025,7 @@ function queuePromptExecution(text, meta = {}) {
   const plan = planPrompt(prompt, { favoriteApp: getFavoriteApp() });
 
   if (plan.steps.length === 0) {
-    // AI fallback: send unmatched prompt to backend for AI interpretation
-    respond(`🤖 Routing to AI: "${prompt}"`, {
-      title: 'AI fallback',
-      level: 'info',
-      source: meta.source || 'local',
-    });
-    sendMessageToBackend({
-      type: 'desktop_prompt',
-      text: prompt,
-      token: currentToken,
-      source: meta.source || 'local',
-      origin: meta.origin || 'desktop',
-      createdAt: toIsoNow(),
-    });
+    void runAiPrompt(prompt, meta);
     return null;
   }
 

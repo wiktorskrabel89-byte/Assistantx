@@ -1,19 +1,19 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { app, BrowserWindow, dialog, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
-const { autoUpdater } = require('electron-updater');
 
 let win;
 let tray;
 let updateInterval = null;
 let lastUpdateCheckAt = 0;
 const UPDATE_CHECK_INTERVAL_MS = Number(process.env.JARVIS_UPDATE_CHECK_INTERVAL_MS || 15 * 60 * 1000);
-const AUTO_INSTALL_ON_DOWNLOAD = process.env.JARVIS_AUTO_INSTALL_ON_DOWNLOAD === '1';
 const UPDATE_CHECK_DEBOUNCE_MS = 10_000;
 let updateState = {
   status: 'idle',
   detail: 'Waiting to check for updates.',
   downloaded: false,
+  downloadUrl: null,
 };
 
 function sendToRenderer(channel, payload) {
@@ -30,6 +30,65 @@ function emitUpdateStatus(status, detail, extra = {}) {
     ...extra,
   };
   sendToRenderer('auto-update-status', updateState);
+}
+
+function getJarvisWebBaseUrl() {
+  return String(process.env.JARVIS_WEB_URL || process.env.JARVIS_API_URL || 'http://localhost:3000').replace(/\/$/, '');
+}
+
+function getJarvisDownloadUrl() {
+  const arch = os.arch() === 'arm64' ? 'arm64' : 'x64';
+  return `${getJarvisWebBaseUrl()}/api/jarvis/download?platform=windows&arch=${arch}`;
+}
+
+function compareVersions(left, right) {
+  const parse = (value) => String(value || '')
+    .replace(/^v/i, '')
+    .split('.')
+    .map((segment) => Number.parseInt(segment, 10) || 0);
+
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const diff = (leftParts[index] || 0) - (rightParts[index] || 0);
+    if (diff !== 0) return diff;
+  }
+
+  return 0;
+}
+
+async function fetchLatestJarvisRelease() {
+  const response = await fetch(`${getJarvisWebBaseUrl()}/api/jarvis/version`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(8_000),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from Jarvis update endpoint`);
+  }
+
+  const payload = await response.json();
+  if (!payload?.available || !payload?.version) {
+    return null;
+  }
+
+  return {
+    version: payload.version,
+    releaseNotes: String(payload.releaseNotes || ''),
+    downloadUrl: payload.downloadUrlWindows || getJarvisDownloadUrl(),
+  };
+}
+
+async function openUpdateDownload() {
+  const downloadUrl = updateState.downloadUrl || getJarvisDownloadUrl();
+  await shell.openExternal(downloadUrl);
+  emitUpdateStatus('download-opened', 'Installer opened in your browser. Run it after download to update Jarvis.', {
+    downloaded: false,
+    downloadUrl,
+  });
 }
 
 function getTrayIcon() {
@@ -85,8 +144,53 @@ async function checkForUpdates() {
   lastUpdateCheckAt = now;
 
   try {
-    await autoUpdater.checkForUpdates();
-    return { ok: true };
+    emitUpdateStatus('checking', 'Checking Jarvis release endpoint for a newer build...', { downloaded: false });
+    const release = await fetchLatestJarvisRelease();
+
+    if (!release || compareVersions(release.version, app.getVersion()) <= 0) {
+      emitUpdateStatus('up-to-date', 'Jarvis is already up to date.', {
+        downloaded: false,
+        downloadUrl: null,
+      });
+      return { ok: true, reason: 'up-to-date' };
+    }
+
+    emitUpdateStatus('update-available', `Update ${release.version} available.`, {
+      downloaded: false,
+      version: release.version,
+      downloadUrl: release.downloadUrl,
+    });
+
+    const notes = String(release.releaseNotes || '').trim().slice(0, 1500);
+
+    let response = 1;
+    try {
+      ({ response } = await dialog.showMessageBox(win ?? null, {
+        type: 'info',
+        title: 'Jarvis Update Available',
+        message: `Jarvis ${release.version} is ready to download.`,
+        detail: notes
+          ? `What's new:\n\n${notes}`
+          : 'No release notes available for this build.',
+        buttons: ['Download update', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      }));
+    } catch {
+      response = 1;
+    }
+
+    if (response === 0) {
+      await openUpdateDownload();
+      return { ok: true, reason: 'download-opened' };
+    }
+
+    emitUpdateStatus('update-skipped', `Update to ${release.version} postponed.`, {
+      downloaded: false,
+      version: release.version,
+      downloadUrl: release.downloadUrl,
+    });
+    return { ok: true, reason: 'skipped' };
   } catch (error) {
     emitUpdateStatus('error', `Update check failed: ${error.message}`, { downloaded: false });
     return { ok: false, reason: error.message };
@@ -98,108 +202,6 @@ function setupAutoUpdater() {
     emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
     return;
   }
-
-  // Do NOT download automatically — show a dialog first so the user can
-  // read the changelog and decide when to update.
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.allowPrerelease = false;
-
-  autoUpdater.on('checking-for-update', () => {
-    emitUpdateStatus('checking', 'Checking GitHub for a newer Jarvis build...', { downloaded: false });
-  });
-
-  autoUpdater.on('update-available', async (info) => {
-    emitUpdateStatus('update-available', `Update ${info.version} available.`, {
-      downloaded: false,
-      version: info.version,
-    });
-
-    // Strip any HTML that GitHub may have added to the release body so the
-    // text displays cleanly in the native OS dialog (plain text only).
-    // A single combined replace avoids the multi-stage sanitization patterns
-    // that CodeQL warns about.
-    let notes = '';
-    if (info.releaseNotes) {
-      notes = String(info.releaseNotes)
-        .replace(
-          /<(?:br|\/p|\/div|\/li|\/h[1-6]|\/blockquote)(?:[^>]*)?>|<[^>]+>/gi,
-          // Convert block-closing tags to newlines; drop everything else
-          (tag) => (/^<(?:br|\/p|\/div|\/li|\/h[1-6]|\/blockquote)/i.test(tag) ? '\n' : ''),
-        )
-        .replace(/\n{3,}/g, '\n\n')
-        .trim()
-        .slice(0, 1500);
-    }
-
-    const detail = notes
-      ? `What's new:\n\n${notes}`
-      : 'No release notes available for this build.';
-
-    let response;
-    try {
-      ({ response } = await dialog.showMessageBox(win ?? null, {
-        type: 'info',
-        title: 'Jarvis Update Available',
-        message: `Jarvis ${info.version} is ready to download.`,
-        detail,
-        buttons: ['Update Now', 'Later'],
-        defaultId: 0,
-        cancelId: 1,
-      }));
-    } catch {
-      // If the dialog fails (e.g. no display), default to skipping.
-      response = 1;
-    }
-
-    if (response === 0) {
-      emitUpdateStatus('downloading', `Downloading Jarvis ${info.version}…`, {
-        downloaded: false,
-        version: info.version,
-      });
-      try {
-        await autoUpdater.downloadUpdate();
-      } catch (error) {
-        emitUpdateStatus('error', `Download failed: ${error.message}`, { downloaded: false });
-      }
-    } else {
-      emitUpdateStatus('update-skipped', `Update to ${info.version} postponed.`, {
-        downloaded: false,
-        version: info.version,
-      });
-    }
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    emitUpdateStatus('downloading', `Downloading update: ${Math.round(progress.percent)}%`, {
-      downloaded: false,
-      percent: progress.percent,
-    });
-  });
-
-  autoUpdater.on('update-not-available', () => {
-    emitUpdateStatus('up-to-date', 'Jarvis is already up to date.', { downloaded: false });
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    emitUpdateStatus('ready-to-install', `Update ${info.version} downloaded. Restart Jarvis to install it.`, {
-      downloaded: true,
-      version: info.version,
-    });
-    if (AUTO_INSTALL_ON_DOWNLOAD) {
-      emitUpdateStatus('installing', `Installing update ${info.version} now...`, {
-        downloaded: true,
-        version: info.version,
-      });
-      setTimeout(() => {
-        autoUpdater.quitAndInstall(false, true);
-      }, 1500);
-    }
-  });
-
-  autoUpdater.on('error', (error) => {
-    emitUpdateStatus('error', `Auto-update failed: ${error.message}`, { downloaded: false });
-  });
 
   setTimeout(() => {
     void checkForUpdates();
@@ -276,11 +278,8 @@ ipcMain.handle('download-update', async () => {
   if (!app.isPackaged) {
     return { ok: false, reason: 'not-packaged' };
   }
-  if (updateState.downloaded) {
-    return { ok: true, reason: 'already-downloaded' };
-  }
   try {
-    await autoUpdater.downloadUpdate();
+    await openUpdateDownload();
     return { ok: true };
   } catch (error) {
     return { ok: false, reason: error.message };
@@ -288,15 +287,7 @@ ipcMain.handle('download-update', async () => {
 });
 
 ipcMain.handle('install-update', () => {
-  if (!updateState.downloaded) {
-    return { ok: false, reason: 'no-update-ready' };
-  }
-
-  setImmediate(() => {
-    autoUpdater.quitAndInstall(false, true);
-  });
-
-  return { ok: true };
+  return { ok: false, reason: 'manual-installer-required' };
 });
 
 // ── Account login via browser window ─────────────────────────────────────────

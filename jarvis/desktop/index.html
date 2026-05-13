@@ -469,6 +469,22 @@
       width: fit-content;
     }
 
+    .main-shell {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .tab-switcher-side {
+      display: grid;
+      gap: 8px;
+      padding: 6px;
+      align-self: start;
+      position: sticky;
+      top: 0;
+    }
+
     .tab-switcher .tab-button {
       background: transparent;
       color: var(--muted);
@@ -476,6 +492,13 @@
       border: 1px solid transparent;
       padding: 7px 12px;
       font-size: 12px;
+    }
+
+    .tab-switcher-side .tab-button {
+      min-width: 48px;
+      min-height: 48px;
+      padding: 10px;
+      font-size: 18px;
     }
 
     .tab-switcher .tab-button.active {
@@ -493,12 +516,22 @@
       gap: 10px;
     }
 
+    .tab-content {
+      min-width: 0;
+    }
+
     /* ── Responsive ──────────────────────────────────────────────────────── */
     @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; }
       .app-subtitle { display: none; }
       .model-grid { grid-template-columns: 1fr; }
       .voice-actions { flex-direction: column; align-items: stretch; }
+      .main-shell { grid-template-columns: 1fr; }
+      .tab-switcher-side {
+        position: static;
+        display: inline-flex;
+        justify-self: start;
+      }
     }
   </style>
 </head>
@@ -596,97 +629,101 @@
 
     <!-- Main panel -->
     <main class="panel stack">
-      <div class="tab-switcher" role="tablist" aria-label="Jarvis panel tabs">
-        <button id="command-tab-button" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="command-tab-panel">Command Log</button>
-        <button id="settings-tab-button" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="settings-tab-panel">Settings</button>
-      </div>
-
-      <div id="command-tab-panel" class="tab-panel active" role="tabpanel" aria-labelledby="command-tab-button">
-        <div class="log-header">
-          <div>
-            <h2 style="font-size:15px;font-weight:700;letter-spacing:-0.2px;">Command Log</h2>
-            <p class="muted" style="font-size:12px;margin-top:3px;">
-              Responses from your PC appear here in real time. Type a prompt or use the quick-action buttons.
-            </p>
-          </div>
+      <div class="main-shell">
+        <div class="tab-switcher tab-switcher-side" role="tablist" aria-label="Jarvis panel tabs">
+          <button id="command-tab-button" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="command-tab-panel" aria-label="Command Log" title="Command Log">📝</button>
+          <button id="settings-tab-button" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="settings-tab-panel" aria-label="Settings" title="Settings">⚙️</button>
         </div>
 
-        <div class="composer">
-          <input id="input" type="text" placeholder="Type a Jarvis prompt or command… (e.g. &quot;open YouTube&quot;, &quot;screenshot&quot;)">
-          <button id="send" type="button">Send</button>
-        </div>
+        <div class="tab-content">
+          <div id="command-tab-panel" class="tab-panel active" role="tabpanel" aria-labelledby="command-tab-button">
+            <div class="log-header">
+              <div>
+                <h2 style="font-size:15px;font-weight:700;letter-spacing:-0.2px;">Command Log</h2>
+                <p class="muted" style="font-size:12px;margin-top:3px;">
+                  Responses from your PC appear here in real time. Type a prompt or use the quick-action buttons.
+                </p>
+              </div>
+            </div>
 
-        <div id="log">
-          <div class="log-empty" id="log-empty">
-            <span class="log-empty-icon">🤖</span>
-            <span>No messages yet — send a command to get started</span>
-          </div>
-        </div>
-      </div>
+            <div class="composer">
+              <input id="input" type="text" placeholder="Type a Jarvis prompt or command… (e.g. &quot;open YouTube&quot;, &quot;screenshot&quot;)">
+              <button id="send" type="button">Send</button>
+            </div>
 
-      <div id="settings-tab-panel" class="tab-panel" role="tabpanel" aria-labelledby="settings-tab-button">
-        <div class="stack">
-          <div class="section-label">AI Models</div>
-          <div class="model-grid">
-            <label class="field">
-              <span>Chat model</span>
-              <select id="chat-model">
-                <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
-                <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
-                <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
-                <option value="meta-llama/llama-4-scout">meta-llama/llama-4-scout</option>
-                <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Speech-to-text model</span>
-              <select id="stt-model">
-                <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Text-to-speech model</span>
-              <select id="tts-model">
-                <option value="orpheus-english">orpheus-english</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Voice language</span>
-              <select id="voice-language">
-                <option value="pl-PL">Polish (pl-PL)</option>
-                <option value="en-US">English (en-US)</option>
-                <option value="de-DE">German (de-DE)</option>
-                <option value="es-ES">Spanish (es-ES)</option>
-              </select>
-            </label>
+            <div id="log">
+              <div class="log-empty" id="log-empty">
+                <span class="log-empty-icon">🤖</span>
+                <span>No messages yet — send a command to get started</span>
+              </div>
+            </div>
           </div>
-          <div class="voice-actions">
-            <label class="toggle" for="auto-tts">
-              <input id="auto-tts" type="checkbox" checked />
-              Auto text-to-speech playback
-            </label>
-          </div>
-          <div id="voice-visualizer" class="voice-visualizer" aria-hidden="true">
-            <span></span><span></span><span></span><span></span><span></span>
-          </div>
-        </div>
 
-        <div class="stack">
-          <div class="section-label">Jarvis Voice Settings</div>
-          <div class="settings-grid">
-            <label class="toggle field-full" for="wake-word-enabled">
-              <input id="wake-word-enabled" type="checkbox" checked />
-              Enable wake phrase detection
-            </label>
-            <label class="field field-full">
-              <span>Wake phrase</span>
-              <input id="wake-word-phrase" type="text" value="Hey Jarvis" placeholder="Hey Jarvis" />
-            </label>
-            <label class="toggle field-full" for="allow-background-wake">
-              <input id="allow-background-wake" type="checkbox" checked />
-              Keep wake listener active while app is hidden/minimized
-            </label>
-            <button id="save-voice-settings" type="button" class="secondary field-full">Save voice settings</button>
+          <div id="settings-tab-panel" class="tab-panel" role="tabpanel" aria-labelledby="settings-tab-button">
+            <div class="stack">
+              <div class="section-label">AI Models</div>
+              <div class="model-grid">
+                <label class="field">
+                  <span>Chat model</span>
+                  <select id="chat-model">
+                    <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
+                    <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
+                    <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
+                    <option value="meta-llama/llama-4-scout">meta-llama/llama-4-scout</option>
+                    <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Speech-to-text model</span>
+                  <select id="stt-model">
+                    <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Text-to-speech model</span>
+                  <select id="tts-model">
+                    <option value="orpheus-english">orpheus-english</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Voice language</span>
+                  <select id="voice-language">
+                    <option value="pl-PL">Polish (pl-PL)</option>
+                    <option value="en-US">English (en-US)</option>
+                    <option value="de-DE">German (de-DE)</option>
+                    <option value="es-ES">Spanish (es-ES)</option>
+                  </select>
+                </label>
+              </div>
+              <div class="voice-actions">
+                <label class="toggle" for="auto-tts">
+                  <input id="auto-tts" type="checkbox" checked />
+                  Auto text-to-speech playback
+                </label>
+              </div>
+              <div id="voice-visualizer" class="voice-visualizer" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+
+            <div class="stack">
+              <div class="section-label">Jarvis Voice Settings</div>
+              <div class="settings-grid">
+                <label class="toggle field-full" for="wake-word-enabled">
+                  <input id="wake-word-enabled" type="checkbox" checked />
+                  Enable wake phrase detection
+                </label>
+                <label class="field field-full">
+                  <span>Wake phrase</span>
+                  <input id="wake-word-phrase" type="text" value="Hey Jarvis" placeholder="Hey Jarvis" />
+                </label>
+                <label class="toggle field-full" for="allow-background-wake">
+                  <input id="allow-background-wake" type="checkbox" checked />
+                  Keep wake listener active while app is hidden/minimized
+                </label>
+                <button id="save-voice-settings" type="button" class="secondary field-full">Save voice settings</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

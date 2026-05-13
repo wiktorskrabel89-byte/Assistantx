@@ -129,7 +129,7 @@ export default function App() {
   const [sttAvailable] = useState(() => Voice !== null);
 
   // TTS state
-  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
   const [ttsAvailable] = useState(() => Tts !== null);
 
   // Quick-actions state
@@ -149,6 +149,9 @@ export default function App() {
   const toggleTts = () => {
     setTtsEnabled((prev) => {
       const next = !prev;
+      if (!next && Tts) {
+        Tts.stop();
+      }
       AsyncStorage.setItem('jarvis-tts-enabled', String(next)).catch(() => null);
       return next;
     });
@@ -214,7 +217,7 @@ export default function App() {
   useEffect(() => {
     if (!ttsEnabled || !Tts || !messages.length) return;
     const latest = messages[0];
-    if (latest.kind !== 'assistant' && latest.kind !== 'system') return;
+    if (latest.kind !== 'assistant') return;
     if (latest.id === lastSpokenIdRef.current) return;
     lastSpokenIdRef.current = latest.id;
     const textToSpeak = latest.text?.slice(0, 300) || '';
