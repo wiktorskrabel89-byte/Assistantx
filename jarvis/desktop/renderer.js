@@ -25,6 +25,7 @@ try {
 }
 
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
+const MAX_SPOKEN_TEXT_LENGTH = 220;
 
 function appendMessage(log, title, body, tone = 'system') {
 	const item = document.createElement('div');
@@ -188,8 +189,8 @@ window.addEventListener('DOMContentLoaded', () => {
 			return 'I listed the top processes. Check the panel for full details.';
 		}
 		const normalized = String(fallbackText || '').replace(/\s+/g, ' ').trim();
-		if (normalized.length > 220) {
-			return `${normalized.slice(0, 217)}...`;
+		if (normalized.length > MAX_SPOKEN_TEXT_LENGTH) {
+			return `${normalized.slice(0, MAX_SPOKEN_TEXT_LENGTH - 3)}...`;
 		}
 		return normalized;
 	}

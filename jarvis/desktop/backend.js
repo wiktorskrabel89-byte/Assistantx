@@ -410,7 +410,9 @@ async function openApp(app) {
       lastError = error;
     }
   }
-  throw new Error(lastError?.message || `Failed to open app: ${normalized}`);
+  throw new Error(
+    `${lastError?.message || `Failed to open app: ${normalized}`}. Tried: ${launchCandidates.join(', ')}`,
+  );
 }
 
 async function closeApp(app) {
