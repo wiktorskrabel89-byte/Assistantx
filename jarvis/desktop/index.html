@@ -6,17 +6,17 @@
   <title>Jarvis Desktop</title>
   <style>
     :root {
-      color-scheme: light;
-      --bg: #eff5ff;
-      --panel: rgba(255, 255, 255, 0.92);
-      --panel-border: rgba(125, 211, 252, 0.55);
-      --accent: #0369a1;
-      --accent-2: #0891b2;
-      --text: #0f172a;
-      --muted: #475569;
-      --danger: #dc2626;
-      --success: #16a34a;
-      --warning: #d97706;
+      color-scheme: dark;
+      --bg: #0f1115;
+      --panel: rgba(24, 28, 36, 0.84);
+      --panel-border: rgba(148, 163, 184, 0.2);
+      --accent: #38bdf8;
+      --accent-2: #a78bfa;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --warning: #f59e0b;
     }
 
     * { box-sizing: border-box; }
@@ -26,10 +26,10 @@
       min-height: 100vh;
       font-family: "Segoe UI", system-ui, sans-serif;
       background:
-        radial-gradient(circle at 10% 10%, rgba(14, 165, 233, 0.18), transparent 38%),
-        radial-gradient(circle at 90% 85%, rgba(251, 146, 60, 0.15), transparent 38%),
-        radial-gradient(circle at 60% 40%, rgba(139, 92, 246, 0.06), transparent 30%),
-        linear-gradient(145deg, #f0f7ff, #e4eefb 45%, #dbeafe 100%);
+        radial-gradient(circle at 10% 10%, rgba(56, 189, 248, 0.2), transparent 38%),
+        radial-gradient(circle at 90% 85%, rgba(167, 139, 250, 0.16), transparent 38%),
+        radial-gradient(circle at 55% 42%, rgba(244, 114, 182, 0.06), transparent 30%),
+        linear-gradient(140deg, #0b0d12, #10131a 48%, #131722 100%);
       color: var(--text);
       padding: 18px;
     }
@@ -89,8 +89,8 @@
       border-radius: 20px;
       padding: 18px;
       box-shadow:
-        0 2px 4px rgba(0, 0, 0, 0.04),
-        0 20px 60px -20px rgba(14, 116, 144, 0.22);
+        0 1px 2px rgba(0, 0, 0, 0.3),
+        0 20px 60px -20px rgba(56, 189, 248, 0.25);
       backdrop-filter: blur(12px);
     }
 
@@ -114,13 +114,13 @@
       gap: 8px;
       padding: 6px 14px;
       border-radius: 999px;
-      background: linear-gradient(135deg, rgba(3, 105, 161, 0.07), rgba(8, 145, 178, 0.06));
-      color: #075985;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.14), rgba(167, 139, 250, 0.14));
+      color: #dbeafe;
       font-size: 13px;
       font-weight: 700;
       width: fit-content;
-      border: 1px solid rgba(56, 189, 248, 0.4);
-      box-shadow: 0 1px 3px rgba(3, 105, 161, 0.08);
+      border: 1px solid rgba(125, 211, 252, 0.35);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.45);
     }
 
     /* ── Status dot ──────────────────────────────────────────────────────── */
@@ -158,9 +158,9 @@
       word-break: break-all;
       padding: 8px 11px;
       border-radius: 10px;
-      background: rgba(241, 245, 249, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      color: #334155;
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      color: #cbd5e1;
       line-height: 1.5;
     }
 
@@ -170,8 +170,8 @@
       font-size: 12px;
       padding: 8px 11px;
       border-radius: 10px;
-      background: rgba(241, 245, 249, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.28);
       color: var(--muted);
       line-height: 1.5;
       word-break: break-word;
@@ -213,12 +213,12 @@
       font-size: 12.5px;
       font-family: inherit;
       transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
-      box-shadow: 0 1px 3px rgba(3, 105, 161, 0.25);
+      box-shadow: 0 1px 3px rgba(8, 47, 73, 0.45);
     }
     button:hover {
       opacity: 0.9;
       transform: translateY(-1px);
-      box-shadow: 0 3px 8px rgba(3, 105, 161, 0.28);
+      box-shadow: 0 3px 8px rgba(56, 189, 248, 0.25);
     }
     button:active {
       transform: translateY(0);
@@ -233,13 +233,13 @@
 
     button.secondary {
       color: var(--text);
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      background: rgba(30, 41, 59, 0.62);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
     }
     button.secondary:hover {
-      background: #fff;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      background: rgba(51, 65, 85, 0.75);
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.3);
     }
 
     button.danger {
@@ -266,8 +266,8 @@
     input {
       width: 100%;
       border-radius: 10px;
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.58);
       color: var(--text);
       padding: 10px 13px;
       outline: none;
@@ -277,15 +277,15 @@
     }
     input::placeholder { color: #94a3b8; }
     input:focus {
-      border-color: rgba(14, 165, 233, 0.6);
-      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+      border-color: rgba(56, 189, 248, 0.65);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
     }
 
     select {
       width: 100%;
       border-radius: 10px;
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.58);
       color: var(--text);
       padding: 9px 11px;
       outline: none;
@@ -294,8 +294,8 @@
       transition: border-color 0.15s, box-shadow 0.15s;
     }
     select:focus {
-      border-color: rgba(14, 165, 233, 0.6);
-      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+      border-color: rgba(56, 189, 248, 0.65);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
     }
 
     .model-grid {
@@ -403,20 +403,20 @@
     .message {
       padding: 10px 13px;
       border-radius: 12px;
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(15, 23, 42, 0.58);
+      border: 1px solid rgba(148, 163, 184, 0.28);
       font-size: 13px;
       line-height: 1.5;
       animation: fade-in 0.18s ease;
     }
     .message.system {
       border-left: 3px solid rgba(14, 165, 233, 0.6);
-      background: rgba(240, 249, 255, 0.9);
+      background: rgba(14, 116, 144, 0.2);
     }
     .message.error {
       border-left: 3px solid rgba(239, 68, 68, 0.6);
-      background: rgba(254, 242, 242, 0.9);
-      color: #991b1b;
+      background: rgba(153, 27, 27, 0.22);
+      color: #fecaca;
     }
 
     @keyframes fade-in {
