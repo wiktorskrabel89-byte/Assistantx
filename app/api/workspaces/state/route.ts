@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/server";
 import { hasSupabaseConfig, workspaceSyncNotConfiguredResponse } from "@/lib/supabase-config";
+import { getAuthenticatedUserForSync } from "@/app/lib/sync-auth";
+import {
+  mergeJarvisIntoWorkspaceState,
+  projectWorkspaceStateToJarvisCloud,
+} from "@/app/lib/jarvis-sync";
 
 export const maxDuration = 60;
 
@@ -100,9 +105,17 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
   };
 }
 
-async function getAuthenticatedUser() {
+function isJarvisColumnMissingError(error: unknown) {
+  const code = getErrorProperty(error, "code");
+  const message = (getErrorProperty(error, "message") ?? "").toLowerCase();
+  return code === "PGRST204"
+    || code === "42703"
+    || (message.includes("jarvis_cloud_memory") && message.includes("column"));
+}
+
+async function getAuthenticatedUser(request?: Request) {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
+  const { user, error } = await getAuthenticatedUserForSync(supabase, request);
   if (error) {
     // Swallow expected auth errors (expired session, invalid JWT, missing session — typically
     // status 401/403). Re-throw unexpected operational failures so buildWorkspaceSyncError
@@ -113,17 +126,17 @@ async function getAuthenticatedUser() {
     if (typeof status === "number" && status !== 401 && status !== 403) throw error;
     return { supabase, user: null };
   }
-  if (!data.user) return { supabase, user: null };
-  return { supabase, user: data.user };
+  if (!user) return { supabase, user: null };
+  return { supabase, user };
 }
 
-export async function GET() {
+export async function GET(request?: Request) {
   if (!hasSupabaseConfig()) {
     return workspaceSyncNotConfiguredResponse();
   }
 
   try {
-    const { supabase, user } = await getAuthenticatedUser();
+    const { supabase, user } = await getAuthenticatedUser(request);
     if (!user) {
       console.error("[GET /api/workspaces/state] No user authenticated");
       return Response.json({ code: "unauthorized", error: "Sign in to load your cloud workspace." }, { status: 401 });
@@ -140,8 +153,44 @@ export async function GET() {
       throw error;
     }
 
+    let jarvisState: unknown = null;
+    let jarvisSelect: {
+      data: Record<string, unknown> | null;
+      error: unknown;
+    } | null = null;
+    try {
+      const result = await supabase
+        .from("jarvis_cloud_memory")
+        .select("preferences, history, tasks, schedules, voice_settings, sync_metadata, updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      jarvisSelect = {
+        data: result.data as Record<string, unknown> | null,
+        error: result.error,
+      };
+    } catch {
+      jarvisSelect = null;
+    }
+
+    if (jarvisSelect && !jarvisSelect.error && jarvisSelect.data) {
+      jarvisState = {
+        preferences: jarvisSelect.data.preferences ?? {},
+        history: jarvisSelect.data.history ?? [],
+        tasks: (jarvisSelect.data as Record<string, unknown>).tasks ?? [],
+        schedules: (jarvisSelect.data as Record<string, unknown>).schedules ?? [],
+        voiceSettings: (jarvisSelect.data as Record<string, unknown>).voice_settings ?? {},
+        syncMetadata: (jarvisSelect.data as Record<string, unknown>).sync_metadata ?? {},
+      };
+    } else if (jarvisSelect?.error && !isJarvisColumnMissingError(jarvisSelect.error)) {
+      console.error("[GET /api/workspaces/state] jarvis_cloud_memory read error:", jarvisSelect.error);
+    }
+
+    const mergedState = data?.state_json
+      ? mergeJarvisIntoWorkspaceState(data.state_json, jarvisState)
+      : null;
+
     return Response.json({
-      state: data?.state_json ?? null,
+      state: mergedState ?? data?.state_json ?? null,
       updatedAt: data?.updated_at ?? null,
     });
   } catch (error) {
@@ -157,7 +206,7 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const { supabase, user } = await getAuthenticatedUser();
+    const { supabase, user } = await getAuthenticatedUser(request);
     if (!user) {
       return Response.json({ code: "unauthorized", error: "Sign in to save your cloud workspace." }, { status: 401 });
     }
@@ -167,18 +216,60 @@ export async function PUT(request: Request) {
       return Response.json({ code: "invalid_workspace_payload", error: "Invalid workspace payload." }, { status: 400 });
     }
 
+    const mergedPayload = mergeJarvisIntoWorkspaceState(payload, null);
     const { error } = await supabase
       .from("workspace_states")
       .upsert(
         {
           user_id: user.id,
-          state_json: payload,
+          state_json: mergedPayload,
+          sync_metadata: {
+            source: "web",
+            updatedAt: new Date().toISOString(),
+          },
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id" }
       );
 
     if (error) throw error;
+
+    const projection = projectWorkspaceStateToJarvisCloud(mergedPayload);
+    if (!projection.syncOptions.localOnlyMode && !projection.syncOptions.pauseSync) {
+      const jarvisUpsert = await supabase
+        .from("jarvis_cloud_memory")
+        .upsert(
+          {
+            user_id: user.id,
+            preferences: projection.preferences,
+            history: projection.history,
+            tasks: projection.tasks,
+            schedules: projection.schedules,
+            voice_settings: projection.voiceSettings,
+            sync_metadata: projection.syncMetadata,
+            schema_version: 1,
+            last_source: "web",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
+
+      if (jarvisUpsert.error && isJarvisColumnMissingError(jarvisUpsert.error)) {
+        await supabase
+          .from("jarvis_cloud_memory")
+          .upsert(
+            {
+              user_id: user.id,
+              preferences: projection.preferences,
+              history: projection.history,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" },
+          );
+      } else if (jarvisUpsert.error) {
+        console.error("[PUT /api/workspaces/state] jarvis_cloud_memory upsert error:", jarvisUpsert.error);
+      }
+    }
 
     return Response.json({ ok: true });
   } catch (error) {

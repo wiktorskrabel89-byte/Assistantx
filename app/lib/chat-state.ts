@@ -314,6 +314,16 @@ export function createSettings(): WorkspaceSettings {
     activeJarvisModeId: null,
     actionModes: createDefaultActionModes(),
     activeActionModeId: null,
+    syncChatHistory: true,
+    syncMemories: true,
+    syncTasksReminders: true,
+    syncVoiceSettings: true,
+    syncAnalyticsUsage: false,
+    syncAutomations: true,
+    syncLocalFiles: false,
+    localOnlyMode: false,
+    encryptedSync: false,
+    pauseSync: false,
   };
 }
 
