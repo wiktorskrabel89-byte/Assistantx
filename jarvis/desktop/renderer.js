@@ -60,6 +60,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const installUpdateButton = document.getElementById('install-update');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
 	const openBrowserTabButton = document.getElementById('open-browser-tab');
+	const commandTabButton = document.getElementById('command-tab-button');
+	const settingsTabButton = document.getElementById('settings-tab-button');
+	const commandTabPanel = document.getElementById('command-tab-panel');
+	const settingsTabPanel = document.getElementById('settings-tab-panel');
 	const accountStatusNode = document.getElementById('account-status');
 	const accountBadge = document.getElementById('account-badge');
 	const accountLoginButton = document.getElementById('account-login');
@@ -71,6 +75,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const scheduleCommand = document.getElementById('schedule-command');
 	const scheduleCron = document.getElementById('schedule-cron');
 	const scheduleAddButton = document.getElementById('schedule-add');
+	const voiceLanguageSelect = document.getElementById('voice-language');
 	const autoTtsToggle = document.getElementById('auto-tts');
 	const voiceVisualizer = document.getElementById('voice-visualizer');
 	const wakeWordEnabledToggle = document.getElementById('wake-word-enabled');
@@ -79,6 +84,20 @@ window.addEventListener('DOMContentLoaded', () => {
 	const saveVoiceSettingsButton = document.getElementById('save-voice-settings');
 
 	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
+
+	function setMainPanelTab(tab) {
+		const settingsActive = tab === 'settings';
+		commandTabButton?.classList.toggle('active', !settingsActive);
+		settingsTabButton?.classList.toggle('active', settingsActive);
+		commandTabButton?.setAttribute('aria-selected', settingsActive ? 'false' : 'true');
+		settingsTabButton?.setAttribute('aria-selected', settingsActive ? 'true' : 'false');
+		commandTabPanel?.classList.toggle('active', !settingsActive);
+		settingsTabPanel?.classList.toggle('active', settingsActive);
+	}
+
+	commandTabButton?.addEventListener('click', () => setMainPanelTab('command'));
+	settingsTabButton?.addEventListener('click', () => setMainPanelTab('settings'));
+	setMainPanelTab('command');
 
 	const defaultVoiceSettings = {
 		wakeWordEnabled: true,

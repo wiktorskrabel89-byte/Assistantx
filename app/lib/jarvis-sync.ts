@@ -201,9 +201,6 @@ export function mergeJarvisIntoWorkspaceState(
     if (typeof voice.wakeWordPhrase === "string") nextSettings.wakeWordPhrase = voice.wakeWordPhrase;
     if (typeof voice.sttEnabled === "boolean") nextSettings.sttEnabled = voice.sttEnabled;
     if (typeof voice.ttsEnabled === "boolean") nextSettings.ttsEnabled = voice.ttsEnabled;
-    if (typeof voice.chatModel === "string") nextSettings.jarvisChatModel = voice.chatModel;
-    if (typeof voice.sttModel === "string") nextSettings.jarvisSttModel = voice.sttModel;
-    if (typeof voice.ttsModel === "string") nextSettings.jarvisTtsModel = voice.ttsModel;
     if (typeof voice.voiceLanguage === "string") nextSettings.voiceLanguage = voice.voiceLanguage;
     if (typeof voice.ttsVoiceId === "string") nextSettings.ttsVoiceId = voice.ttsVoiceId;
     if (typeof voice.autoSpeakResponses === "boolean") nextSettings.autoSpeakResponses = voice.autoSpeakResponses;
@@ -309,9 +306,6 @@ export function projectWorkspaceStateToJarvisCloud(workspaceState: unknown): Jar
       wakeWordPhrase: normalizeText(settings.wakeWordPhrase, 120),
       sttEnabled: Boolean(settings.sttEnabled),
       ttsEnabled: Boolean(settings.ttsEnabled),
-      chatModel: normalizeText(settings.jarvisChatModel, 120),
-      sttModel: normalizeText(settings.jarvisSttModel, 120),
-      ttsModel: normalizeText(settings.jarvisTtsModel, 120),
       voiceLanguage: normalizeText(settings.voiceLanguage, 24),
       ttsVoiceId: normalizeText(settings.ttsVoiceId, 60),
       autoSpeakResponses: Boolean(settings.autoSpeakResponses),

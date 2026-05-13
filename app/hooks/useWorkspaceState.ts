@@ -464,27 +464,6 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
-  const setJarvisChatModel = useCallback((jarvisChatModel: string) => {
-    updateWorkspace(activeWorkspace.id, (workspace) => ({
-      ...workspace,
-      settings: { ...workspace.settings, jarvisChatModel },
-    }));
-  }, [activeWorkspace.id, updateWorkspace]);
-
-  const setJarvisSttModel = useCallback((jarvisSttModel: string) => {
-    updateWorkspace(activeWorkspace.id, (workspace) => ({
-      ...workspace,
-      settings: { ...workspace.settings, jarvisSttModel },
-    }));
-  }, [activeWorkspace.id, updateWorkspace]);
-
-  const setJarvisTtsModel = useCallback((jarvisTtsModel: string) => {
-    updateWorkspace(activeWorkspace.id, (workspace) => ({
-      ...workspace,
-      settings: { ...workspace.settings, jarvisTtsModel },
-    }));
-  }, [activeWorkspace.id, updateWorkspace]);
-
   const setVoiceLanguage = useCallback((voiceLanguage: string) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -868,9 +847,6 @@ export function useWorkspaceState() {
     setWakeWordPhrase,
     setSttEnabled,
     setTtsEnabled,
-    setJarvisChatModel,
-    setJarvisSttModel,
-    setJarvisTtsModel,
     setVoiceLanguage,
     setTtsVoiceId,
     setAutoSpeakResponses,
