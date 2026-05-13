@@ -5,8 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Download, GitBranch, Laptop, Link2, Mail, Mic, Smartphone, Sparkles, Volume2, Wifi, WifiOff } from "lucide-react";
-import type { DeviceType, PairingStatus } from "@/lib/device-pairing";
+import { Download, GitBranch, Link2, Mail, Mic, Smartphone, Sparkles, Volume2, Wifi, WifiOff } from "lucide-react";
 
 // ── Live PC presence hook ────────────────────────────────────────────────────
 function usePcPresence(backendWsUrl?: string) {
@@ -106,21 +105,7 @@ function useLinkedAccounts() {
   return { accounts, loading, link, unlink };
 }
 
-export default function JarvisTab({
-  deviceType = "pc",
-  pairingStatus = "none",
-  pairingCode = null,
-  expiresAt = null,
-  onOpenPairingDialog,
-  onShowPhonePairingBanner,
-}: {
-  deviceType?: DeviceType;
-  pairingStatus?: PairingStatus;
-  pairingCode?: string | null;
-  expiresAt?: string | null;
-  onOpenPairingDialog?: () => void;
-  onShowPhonePairingBanner?: () => void;
-}) {
+export default function JarvisTab() {
   const [latestGithubVersion, setLatestGithubVersion] = useState<string | null>(null);
   const { pcOnline, pcPresence } = usePcPresence();
   const { accounts, loading: accountsLoading, link, unlink } = useLinkedAccounts();
@@ -200,18 +185,6 @@ export default function JarvisTab({
     { id: 'github', label: 'GitHub', icon: GitBranch, description: 'Push commits, create PRs, manage repos' },
     { id: 'google', label: 'Gmail & Drive', icon: Mail, description: 'Read/send email, access Google Drive files' },
   ];
-  const pairingAction = deviceType === "phone"
-    ? {
-        label: "Show pairing code",
-        icon: Smartphone,
-        onClick: onShowPhonePairingBanner,
-      }
-    : {
-        label: "Pair with phone",
-        icon: Laptop,
-        onClick: onOpenPairingDialog,
-      };
-  const PairingActionIcon = pairingAction.icon;
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
@@ -262,44 +235,6 @@ export default function JarvisTab({
               </Button>
               <p className="text-center text-xs font-medium text-emerald-600">✅ Direct APK download</p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200/80 bg-white/90">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Link2 className={`h-4 w-4 ${pairingStatus === "paired" ? "text-emerald-600" : "text-sky-600"}`} />
-              <CardTitle className="text-base text-slate-900">Device pairing</CardTitle>
-            </div>
-            <CardDescription className="text-slate-600">
-              {pairingStatus === "paired"
-                ? "Your Jarvis devices are linked and ready to sync."
-                : "Link your phone and desktop whenever you want voice settings and device actions to follow the same account."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1 text-xs text-slate-600">
-              <p>
-                Status:{" "}
-                <span className="font-semibold text-slate-900">
-                  {pairingStatus === "paired" ? "Linked" : pairingStatus === "pending" ? "Waiting for confirmation" : "Not linked"}
-                </span>
-              </p>
-              {deviceType === "phone" && pairingCode && pairingStatus !== "paired" && (
-                <div className="font-mono text-sm font-semibold tracking-[0.28em] text-slate-900">
-                  {pairingCode}
-                </div>
-              )}
-              {deviceType === "phone" && expiresAt && pairingStatus !== "paired" && (
-                <p>Code active until {new Date(expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</p>
-              )}
-            </div>
-            {pairingStatus !== "paired" && pairingAction.onClick ? (
-              <Button type="button" variant="secondary" className="gap-2" onClick={pairingAction.onClick}>
-                <PairingActionIcon className="h-4 w-4" />
-                {pairingAction.label}
-              </Button>
-            ) : null}
           </CardContent>
         </Card>
 
