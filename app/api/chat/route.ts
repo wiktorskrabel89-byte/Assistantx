@@ -105,28 +105,36 @@ const APPROX_CHARS_PER_TOKEN = 4;
 const QWEN_TOKEN_BUDGET = 6000;
 const TOKEN_SAFETY_MARGIN = 500;
 const MIN_OUTPUT_TOKENS = 256;
+const COMPACT_RETRY_MAX_OUTPUT_TOKENS = 512;
 const COMPACT_SYSTEM_PROMPT_CHARS = 2500;
 const COMPACT_HISTORY_MESSAGE_CHARS = 1200;
 const COMPACT_USER_MESSAGE_CHARS = 2200;
 
 function estimateTokensFromText(text: string): number {
+  // Approximation only: OpenAI-compatible tokenizers vary by model/language/code content.
   return Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
 }
 
 function estimateTokensFromMessages(messages: LlmMessage[]): number {
+  // +4 approximates per-message role/framing overhead in chat-completions payloads.
   return messages.reduce((sum, message) => sum + estimateTokensFromText(message.content) + 4, 0);
 }
 
 function compactMessages(messages: LlmMessage[]): LlmMessage[] {
   if (messages.length === 0) return [];
   const system = messages.find((message) => message.role === "system");
-  const latestUser = [...messages].reverse().find((message) => message.role === "user")
-    ?? { role: "user", content: messages[messages.length - 1]?.content ?? "" };
+  const latestUser = [...messages].reverse().find((message) => message.role === "user");
+  if (!latestUser) {
+    return system
+      ? [{ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) }]
+      : [];
+  }
   const latestHistory = messages
     .filter((message) => message !== system && message !== latestUser)
     .slice(-2);
   const compacted: LlmMessage[] = [];
   if (system) compacted.push({ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) });
+  // Keep newest turns (tail) because they are usually the most relevant for continuity.
   compacted.push(...latestHistory.map((message) => ({
     ...message,
     content: message.content.slice(-COMPACT_HISTORY_MESSAGE_CHARS),
@@ -164,8 +172,9 @@ function enforceQwenTokenBudget(body: Record<string, unknown>) {
   );
 }
 
-function isTokenLimitError(status: number, errorText: string): boolean {
-  return status === 413 || /request too large|tokens per minute|tpm|rate_limit_exceeded/i.test(errorText);
+function isRequestSizeTokenError(status: number, errorText: string): boolean {
+  if (status === 413) return true;
+  return /request too large|tokens per minute.*requested|limit \d+.*requested \d+/i.test(errorText);
 }
 
 export const POST = async (req: Request) => {
@@ -929,12 +938,12 @@ export const POST = async (req: Request) => {
           let found = false;
           const currentModel = String(requestBody.model ?? selectedModel);
 
-          if (isTokenLimitError(status, err)) {
+          if (isRequestSizeTokenError(status, err)) {
             safeEnqueue(`data: ${JSON.stringify({ status: "Request too large, retrying with reduced context..." })}\n\n`);
             const compactRequestBody: Record<string, unknown> = {
               ...requestBody,
               messages: compactMessages((requestBody.messages as LlmMessage[]) ?? []),
-              max_tokens: Math.min(Number(requestBody.max_tokens ?? 1024), 512),
+              max_tokens: Math.min(Number(requestBody.max_tokens ?? 1024), COMPACT_RETRY_MAX_OUTPUT_TOKENS),
             };
             enforceQwenTokenBudget(compactRequestBody);
             response = await sendModelRequest(compactRequestBody);
