@@ -299,6 +299,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	async function speakResponse(text) {
 		if (!voiceSettings.ttsEnabled || !autoTtsToggle?.checked) return;
+		if (voiceSettings.ttsVoiceId === 'silent') return;
 		if (typeof window === 'undefined' || !window.speechSynthesis) return;
 		const spokenText = String(text || '').trim();
 		if (!spokenText) return;
@@ -328,9 +329,32 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	function getComfortableSpokenText(parsed, fallbackText) {
 		const command = String(parsed?.command || '');
+
 		if (command === 'listProcesses') {
 			return 'I listed the top processes. Check the panel for full details.';
 		}
+
+		// For URL commands, say the hostname instead of the raw URL.
+		if (command === 'openUrl' || command === 'openChromeTab') {
+			const rawUrl = String(parsed?.url || '');
+			try {
+				const hostname = new URL(rawUrl).hostname.replace(/^www\./, '');
+				return `Opened ${hostname}`;
+			} catch {
+				return 'Opened the page.';
+			}
+		}
+
+		// For web/YouTube searches, keep the query but drop the URL.
+		if (command === 'searchWeb') {
+			const query = String(fallbackText || '').replace(/^Searching the web for:\s*/i, '').trim();
+			return query ? `Searching for ${query}` : 'Searching the web.';
+		}
+		if (command === 'searchYouTube') {
+			const query = String(fallbackText || '').replace(/^Searching YouTube for:\s*/i, '').trim();
+			return query ? `Searching YouTube for ${query}` : 'Searching YouTube.';
+		}
+
 		const normalized = String(fallbackText || '').replace(/\s+/g, ' ').trim();
 		if (normalized.length > MAX_SPOKEN_TEXT_LENGTH) {
 			return `${normalized.slice(0, MAX_SPOKEN_TEXT_LENGTH - 3)}...`;
