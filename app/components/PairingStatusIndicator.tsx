@@ -2,7 +2,7 @@
 
 import { Link2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DeviceType, PairingStatus } from "@/lib/device-pairing";
 
 export function PairingStatusIndicator({
@@ -24,6 +24,7 @@ export function PairingStatusIndicator({
       : "No phone linked — click to pair");
 
   return (
+    <TooltipProvider>
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
@@ -43,5 +44,6 @@ export function PairingStatusIndicator({
       </TooltipTrigger>
       <TooltipContent side="right">{tooltip}</TooltipContent>
     </Tooltip>
+    </TooltipProvider>
   );
 }
