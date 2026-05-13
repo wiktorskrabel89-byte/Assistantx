@@ -114,6 +114,7 @@ Jest to zewnętrzny bootstrapper Windows. Nie jest uruchamiany przez sam instala
 - `renderer.js` korzysta teraz z `auth.js`, `backend.js` i `phone-commands.js`.
 - `backend.js` ma jeden spójny moduł i wspiera automatyczne ponawianie połączenia.
 - W dev domyślny backend URL to `ws://127.0.0.1:8000/ws` i FastAPI backend w tym repo wystawia już ten endpoint.
+- Jeśli domyślny dev backend (`ws://127.0.0.1:8000/ws`) nie jest dostępny przy starcie, desktop automatycznie przechodzi w tryb local-only dla tej sesji (bez zapętlania błędów reconnect).
 - Paczkowany build domyślnie korzysta z `https://www.assistantx.pl` dla logowania, cloud sync, AI fallbacku i checków aktualizacji, chyba że nadpiszesz to zmiennymi `JARVIS_WEB_URL` / `JARVIS_API_URL`.
 - Jeśli chcesz też w paczkowanym buildzie połączyć legacy kanał WebSocket FastAPI, ustaw `JARVIS_BACKEND_URL`; bez tego desktop startuje w trybie local-only zamiast zapętlać błędy połączenia.
 - Wiadomości `register`, `desktop_prompt`, `response` i `command` są obsługiwane przez `ai agent/main.py`.

@@ -32,7 +32,9 @@ const PLATFORM = process.platform; // 'win32', 'darwin', 'linux'
 
 const emitter = new EventEmitter();
 const DEFAULT_BACKEND_URL = isPackagedDesktopRuntime() ? '' : 'ws://127.0.0.1:8000/ws';
-const BACKEND_URL = process.env.JARVIS_BACKEND_URL || DEFAULT_BACKEND_URL;
+const EXPLICIT_BACKEND_URL = String(process.env.JARVIS_BACKEND_URL || '').trim();
+const BACKEND_URL = EXPLICIT_BACKEND_URL || DEFAULT_BACKEND_URL;
+const BACKEND_IS_OPTIONAL = !EXPLICIT_BACKEND_URL;
 const REALTIME_EDGE_URL = process.env.JARVIS_REALTIME_URL || '';
 const HEARTBEAT_INTERVAL_MS = Number(process.env.JARVIS_HEARTBEAT_INTERVAL_MS || 5000);
 const USER_HOME = process.env.USERPROFILE || os.homedir();
@@ -112,6 +114,7 @@ let realtimeWs;
 let reconnectTimer;
 let heartbeatTimer;
 let realtimeReconnectTimer;
+let backendDisabledForSession = false;
 let currentToken;
 let currentSessionId = null;
 let currentResumeToken = null;
@@ -1113,6 +1116,11 @@ function connectToRealtimeEdge() {
 function connectToBackend(options = {}) {
   if (options.token) currentToken = options.token;
 
+  if (backendDisabledForSession) {
+    emitStatus('ready', 'Remote backend is unavailable, running in local-only mode for this session.');
+    return null;
+  }
+
   if (!BACKEND_URL) {
     emitStatus('ready', 'Remote backend is not configured. Local commands still work.');
     return null;
@@ -1168,6 +1176,7 @@ function connectToBackend(options = {}) {
   });
 
   ws.on('close', () => {
+    if (backendDisabledForSession) return;
     emitStatus('disconnected', 'Retrying in 3 seconds');
     clearInterval(heartbeatTimer);
     reconnectTimer = setTimeout(() => connectToBackend({ token: currentToken }), 3000);
@@ -1176,6 +1185,14 @@ function connectToBackend(options = {}) {
   ws.on('error', (error) => {
     const detail = String(error?.message || '');
     if (/ECONNREFUSED|EHOSTUNREACH|ENOTFOUND/i.test(detail)) {
+      if (BACKEND_IS_OPTIONAL && BACKEND_URL === DEFAULT_BACKEND_URL) {
+        backendDisabledForSession = true;
+        clearTimeout(reconnectTimer);
+        clearInterval(heartbeatTimer);
+        ws = null;
+        emitStatus('ready', `Cannot reach backend (${BACKEND_URL}). Switched to local-only mode for this session.`);
+        return;
+      }
       emitStatus('disconnected', `Cannot reach backend (${BACKEND_URL}). Local commands still work. Retrying in 3 seconds.`);
       return;
     }
