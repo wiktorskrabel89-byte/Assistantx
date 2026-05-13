@@ -14,6 +14,21 @@ const REPO = "wiktorskrabel89-byte/Assistantx";
 const RELEASE_TAG = "jarvis-latest";
 const RELEASE_DOWNLOAD_BASE = `https://github.com/${REPO}/releases/download/${RELEASE_TAG}`;
 
+function buildUnavailableVersionPayload(error: string) {
+  return {
+    available: false,
+    error,
+    tag: RELEASE_TAG,
+    releaseId: null,
+    version: null,
+    releaseNotes: "",
+    publishedAt: null,
+    updatedAt: null,
+    downloadUrlWindows: `${RELEASE_DOWNLOAD_BASE}/JarvisSetup-x64.exe`,
+    downloadUrlAndroid: `${RELEASE_DOWNLOAD_BASE}/Jarvis-android.apk`,
+  };
+}
+
 function getGithubToken(): string | null {
   return (
     process.env.JARVIS_GITHUB_TOKEN ??
@@ -41,8 +56,12 @@ export async function GET(): Promise<Response> {
 
     if (!res.ok) {
       return Response.json(
-        { error: "Release not found", tag: RELEASE_TAG },
-        { status: 404 }
+        buildUnavailableVersionPayload("Release not found"),
+        {
+          headers: {
+            "Cache-Control": "public, max-age=60, stale-while-revalidate=120",
+          },
+        },
       );
     }
 
@@ -57,6 +76,7 @@ export async function GET(): Promise<Response> {
 
     return Response.json(
       {
+        available: true,
         releaseId: release.id,
         version: release.name ?? release.tag_name,
         releaseNotes: release.body ?? "",
@@ -76,6 +96,13 @@ export async function GET(): Promise<Response> {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to fetch release info";
-    return Response.json({ error: message }, { status: 503 });
+    return Response.json(
+      buildUnavailableVersionPayload(message),
+      {
+        headers: {
+          "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
+        },
+      },
+    );
   }
 }
