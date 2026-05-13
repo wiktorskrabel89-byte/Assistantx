@@ -1,6 +1,7 @@
 import PublicHome from "./public-home";
 import WorkspaceHome from "./workspace-home";
 import { createClient } from "@/lib/server";
+import { cookies } from "next/headers";
 
 function hasSupabaseConfig() {
   return Boolean(
@@ -14,11 +15,17 @@ export default async function Home() {
     return <PublicHome />;
   }
 
+  const cookieStore = await cookies();
+  const hasAuthCookie = cookieStore.getAll().some(({ name }) => name.startsWith("sb-") && name.includes("-auth-token"));
+  if (!hasAuthCookie) {
+    return <PublicHome />;
+  }
+
   let isAuthenticated = false;
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase.auth.getUser();
-    isAuthenticated = !error && Boolean(data.user);
+    const { data, error } = await supabase.auth.getClaims();
+    isAuthenticated = !error && Boolean(data?.claims);
   } catch {
     isAuthenticated = false;
   }

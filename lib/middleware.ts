@@ -2,12 +2,17 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_METADATA_PATHS = new Set(['/manifest.json', '/manifest.webmanifest'])
+const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/login', '/privacy', '/terms', '/support']
 
 function hasSupabaseConfig() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL
     && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
   )
+}
+
+function isAuthOptionalPath(pathname: string): boolean {
+  return pathname === '/' || AUTH_OPTIONAL_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 }
 
 /**
@@ -65,7 +70,11 @@ export async function updateSession(request: NextRequest) {
     request: { headers: requestHeaders },
   })
 
-  if (PUBLIC_METADATA_PATHS.has(request.nextUrl.pathname) || !hasSupabaseConfig()) {
+  if (
+    PUBLIC_METADATA_PATHS.has(request.nextUrl.pathname)
+    || !hasSupabaseConfig()
+    || isAuthOptionalPath(request.nextUrl.pathname)
+  ) {
     supabaseResponse.headers.set('Content-Security-Policy', csp)
     supabaseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
     return supabaseResponse
