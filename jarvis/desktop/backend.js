@@ -32,7 +32,7 @@ const PLATFORM = process.platform; // 'win32', 'darwin', 'linux'
 
 const emitter = new EventEmitter();
 const DEFAULT_BACKEND_URL = isPackagedDesktopRuntime() ? '' : 'ws://127.0.0.1:8000/ws';
-const EXPLICIT_BACKEND_URL = String(process.env.JARVIS_BACKEND_URL || '').trim();
+const EXPLICIT_BACKEND_URL = (process.env.JARVIS_BACKEND_URL || '').trim();
 const BACKEND_URL = EXPLICIT_BACKEND_URL || DEFAULT_BACKEND_URL;
 const BACKEND_IS_OPTIONAL = !EXPLICIT_BACKEND_URL;
 const REALTIME_EDGE_URL = process.env.JARVIS_REALTIME_URL || '';
@@ -1185,7 +1185,7 @@ function connectToBackend(options = {}) {
   ws.on('error', (error) => {
     const detail = String(error?.message || '');
     if (/ECONNREFUSED|EHOSTUNREACH|ENOTFOUND/i.test(detail)) {
-      if (BACKEND_IS_OPTIONAL && BACKEND_URL === DEFAULT_BACKEND_URL) {
+      if (BACKEND_IS_OPTIONAL) {
         backendDisabledForSession = true;
         clearTimeout(reconnectTimer);
         clearInterval(heartbeatTimer);

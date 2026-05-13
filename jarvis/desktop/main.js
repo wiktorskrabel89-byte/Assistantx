@@ -64,15 +64,15 @@ function compareVersions(left, right) {
 }
 
 function isTransientFetchFailure(error) {
-  const detail = String(error?.message || '').toLowerCase();
+  const errorMessageLowerCase = String(error?.message || '').toLowerCase();
   return (
-    detail.includes('fetch failed')
-    || detail.includes('network')
-    || detail.includes('econnrefused')
-    || detail.includes('enotfound')
-    || detail.includes('ehostunreach')
-    || detail.includes('timed out')
-    || detail.includes('timeout')
+    errorMessageLowerCase.includes('fetch failed')
+    || errorMessageLowerCase.includes('network')
+    || errorMessageLowerCase.includes('econnrefused')
+    || errorMessageLowerCase.includes('enotfound')
+    || errorMessageLowerCase.includes('ehostunreach')
+    || errorMessageLowerCase.includes('timed out')
+    || errorMessageLowerCase.includes('timeout')
   );
 }
 
