@@ -26,6 +26,57 @@ try {
 
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
 const MAX_SPOKEN_TEXT_LENGTH = 220;
+const VOICE_PROFILES = {
+	default: {
+		preferredVoiceName: ['Google US English', 'Samantha', 'Microsoft Aria', 'en-US'],
+		rate: 1,
+		pitch: 1,
+	},
+	jarvis: {
+		preferredVoiceName: ['Google UK English Male', 'Daniel', 'Microsoft David', 'en-GB'],
+		rate: 0.92,
+		pitch: 0.9,
+	},
+	nova: {
+		preferredVoiceName: ['Google UK English Female', 'Serena', 'Victoria', 'en-GB'],
+		rate: 1.02,
+		pitch: 1.08,
+	},
+	echo: {
+		preferredVoiceName: ['Alex', 'Microsoft Mark', 'Google US English', 'en-US'],
+		rate: 1.04,
+		pitch: 0.98,
+	},
+	aria: {
+		preferredVoiceName: ['Aria', 'Microsoft Aria', 'Samantha', 'en-US'],
+		rate: 0.98,
+		pitch: 1.05,
+	},
+};
+
+function getVoiceProfile(voiceId) {
+	return VOICE_PROFILES[voiceId] || VOICE_PROFILES.default;
+}
+
+function resolveSpeechVoice(voices, voiceId, language) {
+	if (!Array.isArray(voices) || voices.length === 0) return null;
+	const profile = getVoiceProfile(voiceId);
+	for (const preferred of profile.preferredVoiceName) {
+		const match = voices.find((voice) => voice.name.toLowerCase().includes(preferred.toLowerCase()));
+		if (match) return match;
+	}
+
+	const exactLanguage = voices.find((voice) => voice.lang.toLowerCase() === String(language || '').toLowerCase());
+	if (exactLanguage) return exactLanguage;
+
+	const baseLanguage = String(language || '').trim().split('-')[0]?.toLowerCase();
+	if (baseLanguage) {
+		const sameLanguageFamily = voices.find((voice) => voice.lang.toLowerCase().startsWith(baseLanguage));
+		if (sameLanguageFamily) return sameLanguageFamily;
+	}
+
+	return voices[0] || null;
+}
 
 function appendMessage(log, title, body, tone = 'system') {
 	const item = document.createElement('div');
@@ -76,9 +127,15 @@ window.addEventListener('DOMContentLoaded', () => {
 	const scheduleCommand = document.getElementById('schedule-command');
 	const scheduleCron = document.getElementById('schedule-cron');
 	const scheduleAddButton = document.getElementById('schedule-add');
+	const chatModelSelect = document.getElementById('chat-model');
+	const sttModelSelect = document.getElementById('stt-model');
+	const ttsModelSelect = document.getElementById('tts-model');
+	const ttsVoiceProfileSelect = document.getElementById('tts-voice-profile');
 	const voiceLanguageSelect = document.getElementById('voice-language');
+	const sttEnabledToggle = document.getElementById('stt-enabled');
 	const autoTtsToggle = document.getElementById('auto-tts');
 	const voiceVisualizer = document.getElementById('voice-visualizer');
+	const voiceInputButton = document.getElementById('voice-input');
 	const wakeWordEnabledToggle = document.getElementById('wake-word-enabled');
 	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
 	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
@@ -101,6 +158,12 @@ window.addEventListener('DOMContentLoaded', () => {
 	setMainPanelTab('command');
 
 	const defaultVoiceSettings = {
+		chatModel: chatModelSelect?.value || 'auto-smart',
+		sttEnabled: true,
+		sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
+		ttsEnabled: true,
+		ttsModel: ttsModelSelect?.value || 'orpheus-english',
+		ttsVoiceId: ttsVoiceProfileSelect?.value || 'jarvis',
 		wakeWordEnabled: true,
 		wakeWordPhrase: DEFAULT_JARVIS_WAKE_PHRASE,
 		allowBackgroundWake: true,
@@ -126,12 +189,31 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 
+	let speechToTextActive = false;
 	let voiceSettings = readVoiceSettings();
-	if (wakeWordEnabledToggle) wakeWordEnabledToggle.checked = !!voiceSettings.wakeWordEnabled;
-	if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
-	if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
-	if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
-	if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
+
+	function applyVoiceSettings(nextSettings, { persist = true } = {}) {
+		voiceSettings = { ...defaultVoiceSettings, ...nextSettings };
+		if (chatModelSelect && voiceSettings.chatModel) chatModelSelect.value = voiceSettings.chatModel;
+		if (sttModelSelect && voiceSettings.sttModel) sttModelSelect.value = voiceSettings.sttModel;
+		if (ttsModelSelect && voiceSettings.ttsModel) ttsModelSelect.value = voiceSettings.ttsModel;
+		if (ttsVoiceProfileSelect && voiceSettings.ttsVoiceId) ttsVoiceProfileSelect.value = voiceSettings.ttsVoiceId;
+		if (sttEnabledToggle) sttEnabledToggle.checked = Boolean(voiceSettings.sttEnabled);
+		if (wakeWordEnabledToggle) wakeWordEnabledToggle.checked = !!voiceSettings.wakeWordEnabled;
+		if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
+		if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
+		if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
+		if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
+		if (voiceInputButton) {
+			voiceInputButton.disabled = !voiceSettings.sttEnabled;
+			if (!speechToTextActive) {
+				voiceInputButton.textContent = voiceSettings.sttEnabled ? '🎙 Talk' : '🎙 STT off';
+			}
+		}
+		if (persist) writeVoiceSettings(voiceSettings);
+	}
+
+	applyVoiceSettings(voiceSettings, { persist: false });
 
 	function setVoiceVisualizer(state) {
 		if (!voiceVisualizer) return;
@@ -152,24 +234,31 @@ window.addEventListener('DOMContentLoaded', () => {
 	);
 
 	let recognition = null;
-	let speechToTextActive = false;
 
 	function setSpeechToTextActive(active) {
 		speechToTextActive = active;
+		if (voiceInputButton) {
+			voiceInputButton.textContent = active ? '⏹ Stop' : (voiceSettings.sttEnabled ? '🎙 Talk' : '🎙 STT off');
+		}
 	}
 
 	function speakResponse(text) {
-		if (!autoTtsToggle?.checked) return;
+		if (!voiceSettings.ttsEnabled || !autoTtsToggle?.checked) return;
 		if (typeof window === 'undefined' || !window.speechSynthesis) return;
 		const spokenText = String(text || '').trim();
 		if (!spokenText) return;
-		// Local playback uses native browser speech synthesis.
-		// The selected TTS model is still forwarded to backend payloads for remote TTS-capable flows.
 		try {
 			window.speechSynthesis.cancel();
 			const utterance = new SpeechSynthesisUtterance(spokenText);
 			utterance.lang = getVoiceLanguage();
-			utterance.rate = 1;
+			const profile = getVoiceProfile(voiceSettings.ttsVoiceId);
+			utterance.rate = profile.rate;
+			utterance.pitch = profile.pitch;
+			const availableVoices = typeof window.speechSynthesis.getVoices === 'function'
+				? window.speechSynthesis.getVoices()
+				: [];
+			const matchedVoice = resolveSpeechVoice(availableVoices, voiceSettings.ttsVoiceId, utterance.lang);
+			if (matchedVoice) utterance.voice = matchedVoice;
 			setVoiceVisualizer('speaking');
 			utterance.onend = () => setVoiceVisualizer('idle');
 			utterance.onerror = () => {
@@ -241,8 +330,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	function startSpeechToText({ autoSubmit = false } = {}) {
 		const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-		if (!SpeechRecognitionCtor) return;
+		if (!SpeechRecognitionCtor) {
+			appendMessage(log, 'Speech-to-text', 'Speech recognition is not available in this Jarvis build.', 'error');
+			return;
+		}
 		if (speechToTextActive) return;
+		if (!voiceSettings.sttEnabled) {
+			appendMessage(log, 'Speech-to-text', 'Speech-to-text is turned off in Jarvis app settings.', 'error');
+			return;
+		}
 		recognition = new SpeechRecognitionCtor();
 		recognition.lang = getVoiceLanguage();
 		recognition.continuous = true;
@@ -277,32 +373,89 @@ window.addEventListener('DOMContentLoaded', () => {
 		recognition.start();
 	}
 
+	function stopSpeechToText() {
+		if (!recognition) return;
+		try {
+			recognition.stop();
+		} catch {
+			setSpeechToTextActive(false);
+			setVoiceVisualizer('idle');
+		}
+	}
+
+	voiceInputButton?.addEventListener('click', () => {
+		if (speechToTextActive) {
+			stopSpeechToText();
+			return;
+		}
+		startSpeechToText();
+	});
+
 	if (saveVoiceSettingsButton) {
 		saveVoiceSettingsButton.addEventListener('click', () => {
-			voiceSettings = {
+			applyVoiceSettings({
 				...voiceSettings,
+				chatModel: chatModelSelect?.value || 'auto-smart',
+				sttEnabled: Boolean(sttEnabledToggle?.checked),
+				sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
+				ttsEnabled: Boolean(autoTtsToggle?.checked),
+				ttsModel: ttsModelSelect?.value || 'orpheus-english',
+				ttsVoiceId: ttsVoiceProfileSelect?.value || 'jarvis',
 				wakeWordEnabled: Boolean(wakeWordEnabledToggle?.checked),
 				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
 				allowBackgroundWake: Boolean(allowBackgroundWakeToggle?.checked),
 				voiceLanguage: voiceLanguageSelect?.value || 'en-US',
 				autoTts: Boolean(autoTtsToggle?.checked),
-			};
-			writeVoiceSettings(voiceSettings);
+			});
 			appendMessage(log, 'Settings', 'Voice settings saved.');
+		});
+	}
+
+	if (chatModelSelect) {
+		chatModelSelect.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, chatModel: chatModelSelect.value });
+		});
+	}
+
+	if (sttModelSelect) {
+		sttModelSelect.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, sttModel: sttModelSelect.value });
+		});
+	}
+
+	if (ttsModelSelect) {
+		ttsModelSelect.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, ttsModel: ttsModelSelect.value });
+		});
+	}
+
+	if (ttsVoiceProfileSelect) {
+		ttsVoiceProfileSelect.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, ttsVoiceId: ttsVoiceProfileSelect.value });
+		});
+	}
+
+	if (sttEnabledToggle) {
+		sttEnabledToggle.addEventListener('change', () => {
+			const nextEnabled = Boolean(sttEnabledToggle.checked);
+			if (!nextEnabled && speechToTextActive) stopSpeechToText();
+			applyVoiceSettings({ ...voiceSettings, sttEnabled: nextEnabled });
 		});
 	}
 
 	if (voiceLanguageSelect) {
 		voiceLanguageSelect.addEventListener('change', () => {
-			voiceSettings.voiceLanguage = voiceLanguageSelect.value;
-			writeVoiceSettings(voiceSettings);
+			applyVoiceSettings({ ...voiceSettings, voiceLanguage: voiceLanguageSelect.value });
 		});
 	}
 
 	if (autoTtsToggle) {
 		autoTtsToggle.addEventListener('change', () => {
-			voiceSettings.autoTts = Boolean(autoTtsToggle.checked);
-			writeVoiceSettings(voiceSettings);
+			applyVoiceSettings({
+				...voiceSettings,
+				autoTts: Boolean(autoTtsToggle.checked),
+				ttsEnabled: Boolean(autoTtsToggle.checked),
+			});
 		});
 	}
 
@@ -513,7 +666,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const initialSession = getAccountSession();
 	if (initialSession?.accessToken && process.env.JARVIS_API_URL) {
 		void loadFromCloud(process.env.JARVIS_API_URL, initialSession.accessToken).then((res) => {
-			if (res.ok) appendMessage(log, 'Cloud sync', 'Memory loaded from account cloud.', 'system');
+			if (res.ok) {
+				if (res.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...res.voiceSettings });
+				appendMessage(log, 'Cloud sync', 'Memory and Jarvis voice settings loaded from your account.', 'system');
+			}
 		});
 	}
 
@@ -536,7 +692,8 @@ window.addEventListener('DOMContentLoaded', () => {
 						refreshLinkedAccounts();
 						appendMessage(log, 'Account', `Signed in as ${result.email}. Syncing memory…`);
 						if (process.env.JARVIS_API_URL) {
-							await loadFromCloud(process.env.JARVIS_API_URL, result.accessToken);
+							const syncResult = await loadFromCloud(process.env.JARVIS_API_URL, result.accessToken);
+							if (syncResult?.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...syncResult.voiceSettings });
 						}
 					}
 				} catch (err) {
@@ -556,9 +713,9 @@ window.addEventListener('DOMContentLoaded', () => {
 				return;
 			}
 			accountSyncButton.disabled = true;
-			const res = await syncToCloud(process.env.JARVIS_API_URL, session.accessToken);
+			const res = await syncToCloud(process.env.JARVIS_API_URL, session.accessToken, { voiceSettings });
 			accountSyncButton.disabled = false;
-			appendMessage(log, 'Cloud sync', res.ok ? '✅ Memory synced to cloud.' : `Sync failed: ${res.reason || res.status}`, res.ok ? 'system' : 'error');
+			appendMessage(log, 'Cloud sync', res.ok ? '✅ Memory and Jarvis voice settings synced to cloud.' : `Sync failed: ${res.reason || res.status}`, res.ok ? 'system' : 'error');
 		});
 	}
 
@@ -620,7 +777,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	setInterval(async () => {
 		const session = getAccountSession();
 		if (session?.accessToken && process.env.JARVIS_API_URL) {
-			await syncToCloud(process.env.JARVIS_API_URL, session.accessToken).catch(() => null);
+			await syncToCloud(process.env.JARVIS_API_URL, session.accessToken, { voiceSettings }).catch(() => null);
 		}
 	}, 5 * 60_000);
 

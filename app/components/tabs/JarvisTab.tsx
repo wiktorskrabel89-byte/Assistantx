@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Download, GitBranch, Laptop, Link2, Mail, Mic, Smartphone, Sparkles, TriangleAlert, Volume2, Wifi, WifiOff } from "lucide-react";
+import { Download, GitBranch, Laptop, Link2, Mail, Mic, Smartphone, Sparkles, Volume2, Wifi, WifiOff } from "lucide-react";
 import type { DeviceType, PairingStatus } from "@/lib/device-pairing";
 
 // ── Live PC presence hook ────────────────────────────────────────────────────
@@ -200,6 +200,18 @@ export default function JarvisTab({
     { id: 'github', label: 'GitHub', icon: GitBranch, description: 'Push commits, create PRs, manage repos' },
     { id: 'google', label: 'Gmail & Drive', icon: Mail, description: 'Read/send email, access Google Drive files' },
   ];
+  const pairingAction = deviceType === "phone"
+    ? {
+        label: "Show pairing code",
+        icon: Smartphone,
+        onClick: onShowPhonePairingBanner,
+      }
+    : {
+        label: "Pair with phone",
+        icon: Laptop,
+        onClick: onOpenPairingDialog,
+      };
+  const PairingActionIcon = pairingAction.icon;
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
@@ -222,12 +234,12 @@ export default function JarvisTab({
 
         <Card className="border-sky-200/70 bg-white/90 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)]">
           <CardHeader className="gap-4">
-            <Badge className="w-fit bg-sky-100 text-sky-800 hover:bg-sky-100">AssistantX Jarvis</Badge>
+            <Badge className="w-fit bg-sky-100 text-sky-800 hover:bg-sky-100">Jarvis app settings</Badge>
             <CardTitle className="text-3xl text-slate-900 sm:text-4xl">
-              Download Jarvis for desktop and mobile
+              Manage Jarvis for desktop and mobile
             </CardTitle>
             <CardDescription className="max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-              Keep your AssistantX assistant close at hand. Install Jarvis on Windows or Android and continue your workflows with updated models and voice features.
+              Download Jarvis, link your devices, and keep your desktop/mobile voice setup in sync from one place.
             </CardDescription>
             {latestGithubVersion && (
               <p className="text-xs font-medium text-sky-700">
@@ -253,46 +265,43 @@ export default function JarvisTab({
           </CardContent>
         </Card>
 
-        {pairingStatus !== "paired" && (
-          <Card className="border-amber-200/70 bg-amber-50/85">
-            <CardHeader>
-              <div className="flex items-center gap-2 text-amber-900">
-                <TriangleAlert className="h-4 w-4" />
-                <CardTitle className="text-base">
-                  Account not paired with {deviceType === "phone" ? "a PC" : "your phone"} yet
-                </CardTitle>
-              </div>
-              <CardDescription className="text-amber-900/80">
-                {deviceType === "phone"
-                  ? "To continue, install Jarvis Desktop on your PC, sign in with the same account, and enter the pairing code from your phone."
-                  : "Sign in on your phone with the same account, then enter the pairing code shown there to finish linking Jarvis."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1 text-xs text-amber-950/80">
-                {deviceType === "phone" && pairingCode && (
-                  <div className="font-mono text-sm font-semibold tracking-[0.28em] text-amber-950">
-                    {pairingCode}
-                  </div>
-                )}
-                {deviceType === "phone" && expiresAt && (
-                  <p>Pairing code active until {new Date(expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</p>
-                )}
-              </div>
-              {deviceType === "phone" ? (
-                <Button type="button" variant="secondary" className="gap-2" onClick={onShowPhonePairingBanner}>
-                  <Smartphone className="h-4 w-4" />
-                  Show pairing code
-                </Button>
-              ) : (
-                <Button type="button" variant="secondary" className="gap-2" onClick={onOpenPairingDialog}>
-                  <Laptop className="h-4 w-4" />
-                  Pair with phone
-                </Button>
+        <Card className="border-slate-200/80 bg-white/90">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Link2 className={`h-4 w-4 ${pairingStatus === "paired" ? "text-emerald-600" : "text-sky-600"}`} />
+              <CardTitle className="text-base text-slate-900">Device pairing</CardTitle>
+            </div>
+            <CardDescription className="text-slate-600">
+              {pairingStatus === "paired"
+                ? "Your Jarvis devices are linked and ready to sync."
+                : "Link your phone and desktop whenever you want voice settings and device actions to follow the same account."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1 text-xs text-slate-600">
+              <p>
+                Status:{" "}
+                <span className="font-semibold text-slate-900">
+                  {pairingStatus === "paired" ? "Linked" : pairingStatus === "pending" ? "Waiting for confirmation" : "Not linked"}
+                </span>
+              </p>
+              {deviceType === "phone" && pairingCode && pairingStatus !== "paired" && (
+                <div className="font-mono text-sm font-semibold tracking-[0.28em] text-slate-900">
+                  {pairingCode}
+                </div>
               )}
-            </CardContent>
-          </Card>
-        )}
+              {deviceType === "phone" && expiresAt && pairingStatus !== "paired" && (
+                <p>Code active until {new Date(expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</p>
+              )}
+            </div>
+            {pairingStatus !== "paired" && pairingAction.onClick ? (
+              <Button type="button" variant="secondary" className="gap-2" onClick={pairingAction.onClick}>
+                <PairingActionIcon className="h-4 w-4" />
+                {pairingAction.label}
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
 
         {/* Linked Accounts Panel */}
         <Card className="border-slate-200/80 bg-white/90">
