@@ -17,6 +17,11 @@ import {
 type SubmitState = "idle" | "submitting" | "success" | "error";
 type AuthTab = "login" | "register";
 
+function sanitizeRedirectPath(value: string | null | undefined) {
+  const next = String(value ?? "");
+  return next.startsWith("/") && !next.startsWith("//") ? next : "/";
+}
+
 export default function LoginPage() {
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const [redirectContext] = useState(() => {
@@ -25,10 +30,9 @@ export default function LoginPage() {
     }
 
     const params = new URLSearchParams(window.location.search);
-    const next = params.get("next") ?? "/";
     return {
       client: params.get("client") ?? "",
-      next: next.startsWith("/") ? next : "/",
+      next: sanitizeRedirectPath(params.get("next")),
     };
   });
   const [initialLocationError] = useState(() => {
@@ -106,7 +110,8 @@ export default function LoginPage() {
   function buildAuthCallbackUrl() {
     const redirectTo = new URL("/auth/callback", window.location.origin);
     if (redirectContext.client) redirectTo.searchParams.set("client", redirectContext.client);
-    if (redirectContext.next !== "/") redirectTo.searchParams.set("next", redirectContext.next);
+    const safeRedirectPath = sanitizeRedirectPath(redirectContext.next);
+    if (safeRedirectPath !== "/") redirectTo.searchParams.set("next", safeRedirectPath);
     return redirectTo.toString();
   }
 
@@ -159,7 +164,7 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = redirectContext.next;
+    window.location.href = sanitizeRedirectPath(redirectContext.next);
   }
 
   async function handleOAuth(provider: OAuthProvider) {
@@ -263,7 +268,7 @@ export default function LoginPage() {
 
     setSubmitState("success");
     setFeedback("Signed in successfully. Redirecting…");
-    window.location.href = redirectContext.next;
+    window.location.href = sanitizeRedirectPath(redirectContext.next);
   }
 
   async function handleRegister(event: FormEvent<HTMLFormElement>) {

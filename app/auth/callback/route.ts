@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(url);
   }
 
-  const redirectPath = next.startsWith("/") ? next : "/";
+  const redirectPath = next.startsWith("/") && !next.startsWith("//") ? next : "/";
   const desktopCallbackUrl = new URL("/jarvis/callback", publicOrigin);
   if (data.session?.access_token) {
     desktopCallbackUrl.hash = new URLSearchParams({
