@@ -4,7 +4,7 @@ const { execFile } = require('child_process');
 const EventEmitter = require('events');
 const os = require('os');
 const path = require('path');
-const { getJarvisApiUrl } = require('./runtime-config');
+const { getJarvisApiUrl, isPackagedDesktopRuntime } = require('./runtime-config');
 const {
   appendHistory,
   getFavoriteApp,
@@ -31,7 +31,8 @@ try {
 const PLATFORM = process.platform; // 'win32', 'darwin', 'linux'
 
 const emitter = new EventEmitter();
-const BACKEND_URL = process.env.JARVIS_BACKEND_URL || 'ws://127.0.0.1:8000/ws';
+const DEFAULT_BACKEND_URL = isPackagedDesktopRuntime() ? '' : 'ws://127.0.0.1:8000/ws';
+const BACKEND_URL = process.env.JARVIS_BACKEND_URL || DEFAULT_BACKEND_URL;
 const REALTIME_EDGE_URL = process.env.JARVIS_REALTIME_URL || '';
 const HEARTBEAT_INTERVAL_MS = Number(process.env.JARVIS_HEARTBEAT_INTERVAL_MS || 5000);
 const USER_HOME = process.env.USERPROFILE || os.homedir();
@@ -1111,6 +1112,11 @@ function connectToRealtimeEdge() {
 
 function connectToBackend(options = {}) {
   if (options.token) currentToken = options.token;
+
+  if (!BACKEND_URL) {
+    emitStatus('ready', 'Remote backend is not configured. Local commands still work.');
+    return null;
+  }
 
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return ws;
