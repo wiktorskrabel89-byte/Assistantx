@@ -10,6 +10,7 @@ import { Download, GitBranch, Link2, Mail, Mic, Smartphone, Sparkles, Volume2, W
 // ── Live PC presence hook ────────────────────────────────────────────────────
 function usePcPresence(backendWsUrl?: string) {
   const [pcOnline, setPcOnline] = useState(false);
+  const [pcError, setPcError] = useState<string | null>(null);
   const [pcPresence, setPcPresence] = useState<{
     status?: string;
     cpu?: number | null;
@@ -33,6 +34,7 @@ function usePcPresence(backendWsUrl?: string) {
         wsRef.current = ws;
 
         ws.onopen = () => {
+          setPcError(null);
           ws.send(JSON.stringify({ type: 'register', role: 'web' }));
         };
 
@@ -54,14 +56,29 @@ function usePcPresence(backendWsUrl?: string) {
                 activeApps: msg.activeApps ?? [],
               });
             }
-          } catch { /* ignore */ }
+          } catch {
+            // ignore malformed message payloads
+          }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           setPcOnline(false);
+          const reason = event.reason ? ` (${event.reason})` : '';
+          const detail = `WebSocket closed: code ${event.code}${reason}`;
+          setPcError(detail);
+          console.warn('[JarvisTab] PC presence websocket closed:', { code: event.code, reason: event.reason, url });
           if (mounted) timerRef.current = setTimeout(connect, 5000);
         };
-      } catch { /* ignore */ }
+
+        ws.onerror = (event) => {
+          setPcError('WebSocket error while connecting to PC presence service.');
+          console.warn('[JarvisTab] PC presence websocket error:', { url, event });
+        };
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Unknown WebSocket initialization error';
+        setPcError(`Failed to initialize WebSocket: ${detail}`);
+        console.warn('[JarvisTab] Failed to create PC presence websocket:', { url, error });
+      }
     };
 
     connect();
@@ -72,7 +89,7 @@ function usePcPresence(backendWsUrl?: string) {
     };
   }, [backendWsUrl]);
 
-  return { pcOnline, pcPresence };
+  return { pcOnline, pcPresence, pcError };
 }
 
 // ── Linked accounts ──────────────────────────────────────────────────────────
@@ -107,7 +124,7 @@ function useLinkedAccounts() {
 
 export default function JarvisTab() {
   const [latestGithubVersion, setLatestGithubVersion] = useState<string | null>(null);
-  const { pcOnline, pcPresence } = usePcPresence();
+  const { pcOnline, pcPresence, pcError } = usePcPresence();
   const { accounts, loading: accountsLoading, link, unlink } = useLinkedAccounts();
 
   useEffect(() => {
@@ -161,7 +178,7 @@ export default function JarvisTab() {
         pcPresence?.freeRamMb ? `RAM ${pcPresence.freeRamMb}/${pcPresence.totalRamMb}MB` : null,
         pcPresence?.activeApps?.length ? pcPresence.activeApps.slice(0, 2).join(', ') : null,
       ].filter(Boolean).join(' · ')
-    : 'PC offline';
+    : (pcError ? `PC offline · ${pcError}` : 'PC offline');
 
   const highlights = [
     {

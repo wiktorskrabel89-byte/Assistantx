@@ -809,10 +809,12 @@ export const POST = async (req: Request) => {
         : "https://api.groq.com/openai/v1/chat/completions";
     const key = useGoogleStudio ? googleApiKey : (useOpenRouter ? openRouterApiKey : groqApiKey);
     if (!key) {
+      const provider = useGoogleStudio ? "Google AI Studio" : (useOpenRouter ? "OpenRouter" : "Groq");
+      const requiredEnv = useGoogleStudio
+        ? "GOOGLE_AI_STUDIO_API_KEY (or GOOGLE_API_KEY)"
+        : (useOpenRouter ? "OPENROUTER_API_KEY" : "GROQ_API_KEY");
       throw new Error(
-        useGoogleStudio
-          ? "Missing Google AI Studio API key."
-          : (useOpenRouter ? "Missing OpenRouter API key." : "Missing Groq API key.")
+        `[${provider}] Missing API key for model "${targetModel}". Set ${requiredEnv}. Endpoint: ${endpoint}`
       );
     }
 

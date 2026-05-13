@@ -4,7 +4,7 @@ const { execFile } = require('child_process');
 const EventEmitter = require('events');
 const os = require('os');
 const path = require('path');
-const { getJarvisApiUrl, isPackagedDesktopRuntime } = require('./runtime-config');
+const { getJarvisApiUrl } = require('./runtime-config');
 const {
   appendHistory,
   getFavoriteApp,
@@ -31,7 +31,7 @@ try {
 const PLATFORM = process.platform; // 'win32', 'darwin', 'linux'
 
 const emitter = new EventEmitter();
-const DEFAULT_BACKEND_URL = isPackagedDesktopRuntime() ? '' : 'ws://127.0.0.1:8000/ws';
+const DEFAULT_BACKEND_URL = '';
 const EXPLICIT_BACKEND_URL = (process.env.JARVIS_BACKEND_URL || '').trim();
 const BACKEND_URL = EXPLICIT_BACKEND_URL || DEFAULT_BACKEND_URL;
 const BACKEND_IS_OPTIONAL = !EXPLICIT_BACKEND_URL;
