@@ -115,6 +115,9 @@ export type WorkspaceSettings = {
   wakeWordPhrase: string;
   sttEnabled: boolean;
   ttsEnabled: boolean;
+  jarvisChatModel: string;
+  jarvisSttModel: string;
+  jarvisTtsModel: string;
   voiceLanguage: string;
   ttsVoiceId: string;
   autoSpeakResponses: boolean;

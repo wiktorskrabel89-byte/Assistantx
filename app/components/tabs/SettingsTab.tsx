@@ -56,6 +56,9 @@ export function SettingsTab() {
     setWakeWordPhrase,
     setSttEnabled,
     setTtsEnabled,
+    setJarvisChatModel,
+    setJarvisSttModel,
+    setJarvisTtsModel,
     setVoiceLanguage,
     setTtsVoiceId,
     setAutoSpeakResponses,
@@ -76,6 +79,7 @@ export function SettingsTab() {
 
   const [serverStats, setServerStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [voiceSaveNotice, setVoiceSaveNotice] = useState<"idle" | "saved">("idle");
   const hasFetchedStatsRef = useRef(false);
 
   // Load real user data from Supabase on mount
@@ -186,6 +190,12 @@ export function SettingsTab() {
   const softSurfaceClass = dark
     ? "border-slate-800 bg-slate-900/60"
     : "border-slate-200 bg-slate-50/80";
+  const handleSaveVoiceSettings = () => {
+    setVoiceSaveNotice("saved");
+    window.setTimeout(() => {
+      setVoiceSaveNotice("idle");
+    }, 1800);
+  };
 
   return (
     <section className={`h-full min-h-0 overflow-auto p-4 sm:p-6 lg:p-8 ${sectionBackground}`}>
@@ -304,7 +314,7 @@ export function SettingsTab() {
 
           <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
-              <Mic className="h-3.5 w-3.5" /> Voice controls
+              <Mic className="h-3.5 w-3.5" /> AI models & voice controls
             </div>
             <div className="mt-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
@@ -339,6 +349,44 @@ export function SettingsTab() {
                   <p className="text-sm font-medium">Auto-speak responses</p>
                 </div>
                 <Switch checked={voiceSettings.autoSpeakResponses} onCheckedChange={setAutoSpeakResponses} aria-label="Toggle auto speak responses" />
+              </div>
+              <div className="grid gap-1">
+                <label htmlFor="jarvis-chat-model" className={`text-xs ${mutedClass}`}>Chat model</label>
+                <select
+                  id="jarvis-chat-model"
+                  name="jarvisChatModel"
+                  value={voiceSettings.jarvisChatModel ?? "auto-smart"}
+                  onChange={(event) => setJarvisChatModel(event.target.value)}
+                  className={`h-10 rounded-md border px-3 text-sm ${dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+                >
+                  <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
+                  <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
+                  <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
+                </select>
+              </div>
+              <div className="grid gap-1">
+                <label htmlFor="jarvis-stt-model" className={`text-xs ${mutedClass}`}>Speech-to-text model</label>
+                <select
+                  id="jarvis-stt-model"
+                  name="jarvisSttModel"
+                  value={voiceSettings.jarvisSttModel ?? "whisper-large-v3-turbo"}
+                  onChange={(event) => setJarvisSttModel(event.target.value)}
+                  className={`h-10 rounded-md border px-3 text-sm ${dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+                >
+                  <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
+                </select>
+              </div>
+              <div className="grid gap-1">
+                <label htmlFor="jarvis-tts-model" className={`text-xs ${mutedClass}`}>Text-to-speech model</label>
+                <select
+                  id="jarvis-tts-model"
+                  name="jarvisTtsModel"
+                  value={voiceSettings.jarvisTtsModel ?? "orpheus-english"}
+                  onChange={(event) => setJarvisTtsModel(event.target.value)}
+                  className={`h-10 rounded-md border px-3 text-sm ${dark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+                >
+                  <option value="orpheus-english">orpheus-english</option>
+                </select>
               </div>
               <div className="grid gap-1">
                 <label htmlFor="voice-language" className={`text-xs ${mutedClass}`}>Voice language</label>
@@ -378,6 +426,14 @@ export function SettingsTab() {
                     );
                   })}
                 </div>
+              </div>
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <Button type="button" variant="secondary" onClick={handleSaveVoiceSettings}>
+                  Save voice settings
+                </Button>
+                {voiceSaveNotice === "saved" ? (
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400">Voice settings saved.</span>
+                ) : null}
               </div>
             </div>
           </div>

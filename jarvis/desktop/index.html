@@ -509,17 +509,6 @@
       </div>
 
       <div class="stack">
-        <div class="section-label">Device Token</div>
-        <div id="device-token" class="value">Loading…</div>
-        <button type="button" id="logout" class="danger sm">Simple logout</button>
-      </div>
-
-      <div class="stack">
-        <div class="section-label">Backend URL</div>
-        <div id="backend-url" class="value">Loading…</div>
-      </div>
-
-      <div class="stack">
         <div class="section-label">Version</div>
         <div id="app-version" class="value">Loading…</div>
       </div>
@@ -531,43 +520,6 @@
           <button type="button" id="check-updates">Check now</button>
           <button type="button" id="download-update" class="secondary" hidden>Download update</button>
           <button type="button" id="install-update" class="secondary" hidden>Install update</button>
-        </div>
-      </div>
-
-      <hr>
-
-      <!-- URL Bar -->
-      <div class="stack">
-        <div class="section-label">Open URL / Search</div>
-        <div class="url-row">
-          <input id="url-input" type="text" placeholder="https://… or search query">
-          <button class="sm" id="url-go" title="Open URL in browser">Open</button>
-          <button class="sm secondary" id="url-search" title="Google search">Search</button>
-        </div>
-      </div>
-
-      <hr>
-
-      <!-- Clipboard -->
-      <div class="stack">
-        <div class="section-label">Clipboard</div>
-        <div style="display:grid;gap:6px;grid-template-columns:1fr 1fr;">
-          <button type="button" id="clipboard-read" class="secondary sm">📋 Read</button>
-          <button type="button" id="clipboard-write" class="secondary sm">📝 Write</button>
-        </div>
-        <input id="clipboard-write-input" type="text" placeholder="Text to copy to clipboard…" style="display:none;">
-      </div>
-
-      <hr>
-
-      <!-- Screenshot monitor selector -->
-      <div class="stack">
-        <div class="section-label">Screenshot</div>
-        <div style="display:grid;gap:6px;grid-template-columns:1fr auto;">
-          <select id="screenshot-display" title="Select monitor">
-            <option value="0">Primary monitor</option>
-          </select>
-          <button type="button" id="screenshot-capture" class="sm">📸 Capture</button>
         </div>
       </div>
 
@@ -655,7 +607,6 @@
           </label>
         </div>
         <div class="voice-actions">
-          <button id="speech-to-text" type="button" class="secondary">🎙️ Start speech-to-text</button>
           <label class="toggle" for="auto-tts">
             <input id="auto-tts" type="checkbox" checked />
             Auto text-to-speech playback
