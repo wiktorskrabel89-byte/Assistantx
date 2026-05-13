@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Mic, MicOff, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
+import { Eye, Paperclip, Plus, Send, StopCircle, X } from "lucide-react";
 import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { type RefObject } from "react";
 import dynamic from "next/dynamic";
@@ -188,14 +188,6 @@ export function ChatComposer({
     setVoiceOrbMode("listening");
   }, [onMessageChange, onQueueMessage, sttEnabled, voiceLanguage]);
 
-  const toggleMic = useCallback(() => {
-    if (micActive) {
-      stopMic();
-      return;
-    }
-    startMic(false);
-  }, [micActive, startMic, stopMic]);
-
   const toggleVoiceOrb = useCallback(() => {
     if (micActive) {
       stopMic();
@@ -370,24 +362,6 @@ export function ChatComposer({
           >
             <Paperclip className="h-4 w-4" />
           </Button>
-
-          {hasSpeechRecognition && sttEnabled && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={toggleMic}
-              className={cn(
-                "h-11 w-11 flex-shrink-0 rounded-xl transition-colors",
-                micActive
-                  ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60"
-                  : "border-border bg-background text-foreground/70 hover:bg-accent"
-              )}
-              title={micActive ? "Stop recording" : "Start voice input"}
-              aria-label={micActive ? "Stop recording" : "Start voice input"}
-            >
-              {micActive ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            </Button>
-          )}
 
           <Textarea
             ref={inputRef}
