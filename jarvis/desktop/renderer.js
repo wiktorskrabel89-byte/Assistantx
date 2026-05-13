@@ -1,4 +1,4 @@
-const { clearToken, getToken } = require('./auth');
+const { getToken } = require('./auth');
 const {
 	connectToBackend,
 	executeStructuredCommand,
@@ -6,7 +6,6 @@ const {
 	onMessage,
 	onStatus,
 	queuePromptExecution,
-	getBackendUrl,
 } = require('./backend');
 const {
 	addSchedule,
@@ -54,23 +53,17 @@ window.addEventListener('DOMContentLoaded', () => {
 	const log = document.getElementById('log');
 	const input = document.getElementById('input');
 	const send = document.getElementById('send');
-	const tokenNode = document.getElementById('device-token');
 	const statusNode = document.getElementById('connection-status');
-	const backendUrlNode = document.getElementById('backend-url');
 	const appVersionNode = document.getElementById('app-version');
 	const updateStatusNode = document.getElementById('update-status');
 	const checkUpdatesButton = document.getElementById('check-updates');
 	const installUpdateButton = document.getElementById('install-update');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
 	const openBrowserTabButton = document.getElementById('open-browser-tab');
-	const urlInput = document.getElementById('url-input');
-	const urlGo = document.getElementById('url-go');
-	const urlSearch = document.getElementById('url-search');
-	const clipboardReadButton = document.getElementById('clipboard-read');
-	const clipboardWriteButton = document.getElementById('clipboard-write');
-	const clipboardWriteInput = document.getElementById('clipboard-write-input');
-	const screenshotDisplaySelect = document.getElementById('screenshot-display');
-	const screenshotCaptureButton = document.getElementById('screenshot-capture');
+	const commandTabButton = document.getElementById('command-tab-button');
+	const settingsTabButton = document.getElementById('settings-tab-button');
+	const commandTabPanel = document.getElementById('command-tab-panel');
+	const settingsTabPanel = document.getElementById('settings-tab-panel');
 	const accountStatusNode = document.getElementById('account-status');
 	const accountBadge = document.getElementById('account-badge');
 	const accountLoginButton = document.getElementById('account-login');
@@ -82,19 +75,29 @@ window.addEventListener('DOMContentLoaded', () => {
 	const scheduleCommand = document.getElementById('schedule-command');
 	const scheduleCron = document.getElementById('schedule-cron');
 	const scheduleAddButton = document.getElementById('schedule-add');
-	const speechToTextButton = document.getElementById('speech-to-text');
+	const voiceLanguageSelect = document.getElementById('voice-language');
 	const autoTtsToggle = document.getElementById('auto-tts');
 	const voiceVisualizer = document.getElementById('voice-visualizer');
 	const wakeWordEnabledToggle = document.getElementById('wake-word-enabled');
 	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
 	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
 	const saveVoiceSettingsButton = document.getElementById('save-voice-settings');
-	const logoutButton = document.getElementById('logout');
 
 	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
 
-	tokenNode.textContent = token;
-	backendUrlNode.textContent = getBackendUrl();
+	function setMainPanelTab(tab) {
+		const settingsActive = tab === 'settings';
+		commandTabButton?.classList.toggle('active', !settingsActive);
+		settingsTabButton?.classList.toggle('active', settingsActive);
+		commandTabButton?.setAttribute('aria-selected', settingsActive ? 'false' : 'true');
+		settingsTabButton?.setAttribute('aria-selected', settingsActive ? 'true' : 'false');
+		commandTabPanel?.classList.toggle('active', !settingsActive);
+		settingsTabPanel?.classList.toggle('active', settingsActive);
+	}
+
+	commandTabButton?.addEventListener('click', () => setMainPanelTab('command'));
+	settingsTabButton?.addEventListener('click', () => setMainPanelTab('settings'));
+	setMainPanelTab('command');
 
 	const defaultVoiceSettings = {
 		wakeWordEnabled: true,
@@ -152,11 +155,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	function setSpeechToTextActive(active) {
 		speechToTextActive = active;
-		if (!speechToTextButton) return;
-		const label = active ? 'Stop speech-to-text' : 'Start speech-to-text';
-		speechToTextButton.textContent = active ? '⏹️ Stop speech-to-text' : '🎙️ Start speech-to-text';
-		speechToTextButton.setAttribute('aria-label', label);
-		speechToTextButton.setAttribute('title', label);
 	}
 
 	function speakResponse(text) {
@@ -266,21 +264,6 @@ window.addEventListener('DOMContentLoaded', () => {
 		recognition.start();
 	}
 
-	if (speechToTextButton) {
-		if (!supportsSpeechRecognition()) {
-			speechToTextButton.disabled = true;
-			speechToTextButton.title = 'Speech-to-text is not supported in this runtime';
-		} else {
-			speechToTextButton.addEventListener('click', () => {
-				if (speechToTextActive) {
-					recognition?.stop();
-					return;
-				}
-				startSpeechToText({ autoSubmit: false });
-			});
-		}
-	}
-
 	if (saveVoiceSettingsButton) {
 		saveVoiceSettingsButton.addEventListener('click', () => {
 			voiceSettings = {
@@ -307,14 +290,6 @@ window.addEventListener('DOMContentLoaded', () => {
 		autoTtsToggle.addEventListener('change', () => {
 			voiceSettings.autoTts = Boolean(autoTtsToggle.checked);
 			writeVoiceSettings(voiceSettings);
-		});
-	}
-
-	if (logoutButton) {
-		logoutButton.addEventListener('click', () => {
-			clearToken();
-			appendMessage(log, 'Account', 'Logged out. New device token will be generated.');
-			setTimeout(() => window.location.reload(), 300);
 		});
 	}
 
@@ -354,34 +329,6 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 	setupWakeWordListener();
-
-	// ── URL bar ──────────────────────────────────────────────────────────────
-	function doOpenUrl(rawUrl) {
-		let url = rawUrl.trim();
-		if (!url) return;
-		if (!url.startsWith('http://') && !url.startsWith('https://')) {
-			url = 'https://' + url;
-		}
-		void executeStructuredCommand({ command: 'openUrl', url }, { source: 'local', origin: 'desktop' });
-		appendMessage(log, 'URL opened', url);
-		urlInput.value = '';
-	}
-
-	function doSearch() {
-		const query = urlInput.value.trim();
-		if (!query) return;
-		void executeStructuredCommand({ command: 'searchWeb', query }, { source: 'local', origin: 'desktop' });
-		appendMessage(log, 'Web search', query);
-		urlInput.value = '';
-	}
-
-	if (urlGo) urlGo.addEventListener('click', () => doOpenUrl(urlInput.value));
-	if (urlSearch) urlSearch.addEventListener('click', doSearch);
-	if (urlInput) {
-		urlInput.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter') doOpenUrl(urlInput.value);
-		});
-	}
 
 	if (ipcRenderer && appVersionNode) {
 		ipcRenderer.invoke('get-app-meta').then((meta) => {
@@ -517,56 +464,6 @@ window.addEventListener('DOMContentLoaded', () => {
 	(stateSnapshot.history || []).slice(0, 6).reverse().forEach((entry) => {
 		appendMessage(log, entry.title || 'Recent activity', entry.summary || entry.text || 'Completed', entry.level === 'error' ? 'error' : 'system');
 	});
-
-	// ── Clipboard handlers ───────────────────────────────────────────────────
-	if (clipboardReadButton) {
-		clipboardReadButton.addEventListener('click', () => {
-			void executeStructuredCommand({ command: 'readClipboard' }, { source: 'local', origin: 'desktop' });
-			appendMessage(log, 'Clipboard', 'Reading clipboard…');
-		});
-	}
-	if (clipboardWriteButton && clipboardWriteInput) {
-		clipboardWriteButton.addEventListener('click', () => {
-			const showing = clipboardWriteInput.style.display !== 'none';
-			clipboardWriteInput.style.display = showing ? 'none' : '';
-			if (!showing) clipboardWriteInput.focus();
-		});
-		clipboardWriteInput.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter') {
-				const text = clipboardWriteInput.value.trim();
-				if (!text) return;
-				void executeStructuredCommand({ command: 'writeClipboard', text }, { source: 'local', origin: 'desktop' });
-				appendMessage(log, 'Clipboard', `Copied to clipboard: ${text}`);
-				clipboardWriteInput.value = '';
-				clipboardWriteInput.style.display = 'none';
-			}
-		});
-	}
-
-	// ── Multi-monitor screenshot ─────────────────────────────────────────────
-	async function populateDisplays() {
-		if (!screenshotDisplaySelect || !ipcRenderer) return;
-		try {
-			const displays = await ipcRenderer.invoke('get-displays').catch(() => null);
-			if (!displays || !displays.length) return;
-			screenshotDisplaySelect.innerHTML = '';
-			displays.forEach((d, i) => {
-				const opt = document.createElement('option');
-				opt.value = String(i);
-				opt.textContent = d.label || (d.isPrimary ? `Primary (${d.bounds.width}×${d.bounds.height})` : `Display ${i + 1} (${d.bounds.width}×${d.bounds.height})`);
-				screenshotDisplaySelect.appendChild(opt);
-			});
-		} catch { /* ignore */ }
-	}
-	void populateDisplays();
-
-	if (screenshotCaptureButton) {
-		screenshotCaptureButton.addEventListener('click', () => {
-			const displayIndex = Number(screenshotDisplaySelect?.value || 0);
-			void executeStructuredCommand({ command: 'screenshot', displayIndex }, { source: 'local', origin: 'desktop' });
-			appendMessage(log, 'Screenshot', `Capturing monitor ${displayIndex}…`);
-		});
-	}
 
 	// ── Account / Cloud sync ─────────────────────────────────────────────────
 	function refreshAccountUI() {
