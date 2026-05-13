@@ -6,6 +6,7 @@ import {
   formatKnowledgeContext,
   toPgVectorLiteral,
 } from "@/app/lib/knowledge";
+import { extractBearerToken } from "@/src/core/auth/actor-resolver";
 
 export type CachedAnswerCandidate = {
   answer: string;
@@ -23,9 +24,8 @@ export function getSupabase() {
 
 export async function getAuthUserId(req: Request): Promise<string | null> {
   try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) return null;
-    const token = authHeader.replace("Bearer ", "");
+    const token = extractBearerToken(req.headers.get("authorization"));
+    if (!token) return null;
     const supabase = await getSupabase();
     const { data } = await supabase.auth.getUser(token);
     return data.user?.id ?? null;

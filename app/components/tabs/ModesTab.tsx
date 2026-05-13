@@ -241,12 +241,12 @@ export function ModesTab({ onQueueMessage }: ModesTabProps) {
     setIsCreating(false); setSaveError(""); setSelectedId(mode.id);
     setDraftName(mode.name); setDraftIcon(mode.icon ?? "🤖"); setDraftDesc(mode.description);
     setDraftSteps(mode.steps.map((s) => ({ ...s })));
-  }, []);
+  }, [setIsCreating, setSaveError, setSelectedId, setDraftName, setDraftIcon, setDraftDesc, setDraftSteps]);
 
   const startCreating = useCallback(() => {
     setSelectedId(null); setIsCreating(true); setSaveError("");
     setDraftName(""); setDraftIcon("🤖"); setDraftDesc(""); setDraftSteps([]);
-  }, []);
+  }, [setSelectedId, setIsCreating, setSaveError, setDraftName, setDraftIcon, setDraftDesc, setDraftSteps]);
 
   const cancelEditing = useCallback(() => { setSelectedId(null); setIsCreating(false); setSaveError(""); setDraftSteps([]); }, []);
   const addStep = useCallback((type: ActionStepType) => { setDraftSteps((prev) => [...prev, makeEmptyStep(type)]); }, []);

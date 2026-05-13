@@ -171,7 +171,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: 'Missing code' }, { status: 400 });
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE(_req: NextRequest) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
@@ -187,8 +187,6 @@ export async function DELETE(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 

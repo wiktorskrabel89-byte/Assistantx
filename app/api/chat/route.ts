@@ -85,6 +85,19 @@ export const POST = async (req: Request) => {
   const CHAT_MODEL = AUTO_PREFERRED_CHAT_MODEL;
 
   const requestSignal = req.signal;
+
+  // Wrap JSON parsing so malformed bodies return a clean 400 instead of crashing.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "Invalid or missing JSON request body." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   const {
     message,
     mode: rawMode,
@@ -109,12 +122,21 @@ export const POST = async (req: Request) => {
     personalityMode: rawPersonalityMode = "default",
     enabledTools,
     googleContext,
-  } = await req.json();
+  } = body;
 
   // ── Validate conversationId format before any DB operation ──────────────────
   if (typeof conversationId === "string" && !UUID_REGEX.test(conversationId)) {
     return new Response(
       JSON.stringify({ error: "Invalid conversationId format." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // ── Reject oversized messages early to prevent token abuse ──────────────────
+  const MAX_MESSAGE_LENGTH = 100_000;
+  if (typeof message === "string" && message.length > MAX_MESSAGE_LENGTH) {
+    return new Response(
+      JSON.stringify({ error: "Message exceeds the maximum allowed length." }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
