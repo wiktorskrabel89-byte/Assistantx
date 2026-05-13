@@ -15,6 +15,7 @@ const {
 } = require('./local-state');
 const { startScheduler } = require('./scheduler');
 const { getAccountSession, setAccountSession, clearAccountSession, getLinkedAccounts } = require('./accounts');
+const { getJarvisApiUrl, getJarvisWebUrl } = require('./runtime-config');
 
 // ipcRenderer for URL opening via main process
 let ipcRenderer;
@@ -140,6 +141,9 @@ window.addEventListener('DOMContentLoaded', () => {
 	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
 	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
 	const saveVoiceSettingsButton = document.getElementById('save-voice-settings');
+	const apiBaseUrl = getJarvisApiUrl();
+	let cachedSpeechVoices = [];
+	let speechVoicePromise = null;
 
 	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
 
@@ -222,6 +226,51 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (state === 'speaking') voiceVisualizer.classList.add('speaking');
 	}
 
+	function readSpeechVoices() {
+		if (typeof window === 'undefined' || !window.speechSynthesis || typeof window.speechSynthesis.getVoices !== 'function') {
+			return [];
+		}
+		const voices = window.speechSynthesis.getVoices();
+		if (Array.isArray(voices) && voices.length > 0) {
+			cachedSpeechVoices = voices;
+			return voices;
+		}
+		return cachedSpeechVoices;
+	}
+
+	function waitForSpeechVoices(timeoutMs = 1500) {
+		const voices = readSpeechVoices();
+		if (voices.length > 0 || typeof window === 'undefined' || !window.speechSynthesis) {
+			return Promise.resolve(voices);
+		}
+		if (speechVoicePromise) return speechVoicePromise;
+
+		speechVoicePromise = new Promise((resolve) => {
+			let timeoutId = null;
+			const handleVoicesChanged = () => finish();
+			const finish = () => {
+				if (timeoutId) clearTimeout(timeoutId);
+				if (typeof window.speechSynthesis?.removeEventListener === 'function') {
+					window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged);
+				}
+				speechVoicePromise = null;
+				resolve(readSpeechVoices());
+			};
+
+			if (typeof window.speechSynthesis.addEventListener === 'function') {
+				window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged, { once: true });
+			}
+			timeoutId = setTimeout(finish, timeoutMs);
+		});
+
+		return speechVoicePromise;
+	}
+
+	function isBenignSpeechError(errorEvent) {
+		const code = String(errorEvent?.error || '').toLowerCase();
+		return code === 'interrupted' || code === 'canceled' || code === 'cancelled';
+	}
+
 	const getVoiceLanguage = () => (
 		voiceLanguageSelect?.value
 		|| (typeof navigator !== 'undefined' ? navigator.language : null)
@@ -234,6 +283,12 @@ window.addEventListener('DOMContentLoaded', () => {
 	);
 
 	let recognition = null;
+	readSpeechVoices();
+	if (typeof window !== 'undefined' && window.speechSynthesis && typeof window.speechSynthesis.addEventListener === 'function') {
+		window.speechSynthesis.addEventListener('voiceschanged', () => {
+			readSpeechVoices();
+		});
+	}
 
 	function setSpeechToTextActive(active) {
 		speechToTextActive = active;
@@ -242,7 +297,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 
-	function speakResponse(text) {
+	async function speakResponse(text) {
 		if (!voiceSettings.ttsEnabled || !autoTtsToggle?.checked) return;
 		if (typeof window === 'undefined' || !window.speechSynthesis) return;
 		const spokenText = String(text || '').trim();
@@ -254,15 +309,14 @@ window.addEventListener('DOMContentLoaded', () => {
 			const profile = getVoiceProfile(voiceSettings.ttsVoiceId);
 			utterance.rate = profile.rate;
 			utterance.pitch = profile.pitch;
-			const availableVoices = typeof window.speechSynthesis.getVoices === 'function'
-				? window.speechSynthesis.getVoices()
-				: [];
+			const availableVoices = await waitForSpeechVoices();
 			const matchedVoice = resolveSpeechVoice(availableVoices, voiceSettings.ttsVoiceId, utterance.lang);
 			if (matchedVoice) utterance.voice = matchedVoice;
 			setVoiceVisualizer('speaking');
 			utterance.onend = () => setVoiceVisualizer('idle');
-			utterance.onerror = () => {
+			utterance.onerror = (errorEvent) => {
 				setVoiceVisualizer('idle');
+				if (isBenignSpeechError(errorEvent)) return;
 				appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
 			};
 			window.speechSynthesis.speak(utterance);
@@ -664,8 +718,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	// Cloud sync on startup if signed in
 	const initialSession = getAccountSession();
-	if (initialSession?.accessToken && process.env.JARVIS_API_URL) {
-		void loadFromCloud(process.env.JARVIS_API_URL, initialSession.accessToken).then((res) => {
+	if (initialSession?.accessToken && apiBaseUrl) {
+		void loadFromCloud(apiBaseUrl, initialSession.accessToken).then((res) => {
 			if (res.ok) {
 				if (res.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...res.voiceSettings });
 				appendMessage(log, 'Cloud sync', 'Memory and Jarvis voice settings loaded from your account.', 'system');
@@ -691,8 +745,8 @@ window.addEventListener('DOMContentLoaded', () => {
 						refreshAccountUI();
 						refreshLinkedAccounts();
 						appendMessage(log, 'Account', `Signed in as ${result.email}. Syncing memory…`);
-						if (process.env.JARVIS_API_URL) {
-							const syncResult = await loadFromCloud(process.env.JARVIS_API_URL, result.accessToken);
+						if (apiBaseUrl) {
+							const syncResult = await loadFromCloud(apiBaseUrl, result.accessToken);
 							if (syncResult?.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...syncResult.voiceSettings });
 						}
 					}
@@ -708,12 +762,12 @@ window.addEventListener('DOMContentLoaded', () => {
 	if (accountSyncButton) {
 		accountSyncButton.addEventListener('click', async () => {
 			const session = getAccountSession();
-			if (!session?.accessToken || !process.env.JARVIS_API_URL) {
+			if (!session?.accessToken || !apiBaseUrl) {
 				appendMessage(log, 'Cloud sync', 'Sign in first to sync.', 'error');
 				return;
 			}
 			accountSyncButton.disabled = true;
-			const res = await syncToCloud(process.env.JARVIS_API_URL, session.accessToken, { voiceSettings });
+			const res = await syncToCloud(apiBaseUrl, session.accessToken, { voiceSettings });
 			accountSyncButton.disabled = false;
 			appendMessage(log, 'Cloud sync', res.ok ? '✅ Memory and Jarvis voice settings synced to cloud.' : `Sync failed: ${res.reason || res.status}`, res.ok ? 'system' : 'error');
 		});
@@ -726,7 +780,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				appendMessage(log, 'Linked accounts', 'Sign into your AssistantX account first.', 'error');
 				return;
 			}
-			const webUrl = `${process.env.JARVIS_WEB_URL || 'http://localhost:3000'}/jarvis/linked-accounts`;
+			const webUrl = `${getJarvisWebUrl()}/jarvis/linked-accounts`;
 			void ipcRenderer.invoke('open-url', webUrl);
 		});
 	}
@@ -776,8 +830,8 @@ window.addEventListener('DOMContentLoaded', () => {
 	// Periodic cloud sync (every 5 minutes) if signed in
 	setInterval(async () => {
 		const session = getAccountSession();
-		if (session?.accessToken && process.env.JARVIS_API_URL) {
-			await syncToCloud(process.env.JARVIS_API_URL, session.accessToken, { voiceSettings }).catch(() => null);
+		if (session?.accessToken && apiBaseUrl) {
+			await syncToCloud(apiBaseUrl, session.accessToken, { voiceSettings }).catch(() => null);
 		}
 	}, 5 * 60_000);
 

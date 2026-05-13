@@ -147,4 +147,20 @@ describe("GET /auth/callback", () => {
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("error_code=otp_expired");
   });
+
+  it("redirects jarvis-desktop sign-ins to the desktop callback with session details", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeMockSupabase({
+        user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
+        session: { access_token: "session-token-123", provider_token: null, expires_in: 3600 },
+      }),
+    );
+    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop" }));
+    expect(res.status).toBe(307);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/jarvis/callback");
+    expect(location).toContain("access_token=session-token-123");
+    expect(location).toContain("email=jarvis%40example.com");
+    expect(location).toContain("user_id=user-123");
+  });
 });
