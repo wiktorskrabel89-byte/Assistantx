@@ -19,6 +19,18 @@ type AuthTab = "login" | "register";
 
 export default function LoginPage() {
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
+  const [redirectContext] = useState(() => {
+    if (typeof window === "undefined") {
+      return { client: "", next: "/" };
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next") ?? "/";
+    return {
+      client: params.get("client") ?? "",
+      next: next.startsWith("/") ? next : "/",
+    };
+  });
   const [initialLocationError] = useState(() => {
     if (typeof window === "undefined") return "";
     return readOAuthErrorFromLocation(getPendingOAuthProvider());
@@ -91,6 +103,31 @@ export default function LoginPage() {
     setAcceptedPolicy(false);
   }
 
+  function buildAuthCallbackUrl() {
+    const redirectTo = new URL("/auth/callback", window.location.origin);
+    if (redirectContext.client) redirectTo.searchParams.set("client", redirectContext.client);
+    if (redirectContext.next !== "/") redirectTo.searchParams.set("next", redirectContext.next);
+    return redirectTo.toString();
+  }
+
+  function handoffJarvisDesktopSession(session: {
+    access_token?: string | null;
+    user?: { email?: string | null; id?: string | null } | null;
+  }) {
+    const accessToken = session.access_token;
+    if (!accessToken) return false;
+
+    const callbackUrl = new URL("/jarvis/callback", window.location.origin);
+    callbackUrl.hash = new URLSearchParams({
+      access_token: accessToken,
+      email: session.user?.email ?? "",
+      user_id: session.user?.id ?? "",
+      signed_in_at: new Date().toISOString(),
+    }).toString();
+    window.location.href = callbackUrl.toString();
+    return true;
+  }
+
   async function handleGuest() {
     setGuestLoading(true);
     setSubmitState("idle");
@@ -122,7 +159,7 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = "/";
+    window.location.href = redirectContext.next;
   }
 
   async function handleOAuth(provider: OAuthProvider) {
@@ -142,7 +179,7 @@ export default function LoginPage() {
       return;
     }
 
-    const redirectTo = `${window.location.origin}/auth/callback`;
+    const redirectTo = buildAuthCallbackUrl();
     rememberPendingOAuthProvider(provider);
 
     try {
@@ -193,7 +230,7 @@ export default function LoginPage() {
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
       });
@@ -201,6 +238,21 @@ export default function LoginPage() {
       if (error) {
         setSubmitState("error");
         setFeedback(error.message);
+        return;
+      }
+
+      if (
+        redirectContext.client === "jarvis-desktop"
+        && handoffJarvisDesktopSession({
+          access_token: data.session?.access_token ?? null,
+          user: data.user
+            ? {
+              email: data.user.email ?? null,
+              id: data.user.id ?? null,
+            }
+            : null,
+        })
+      ) {
         return;
       }
     } catch (error) {
@@ -211,7 +263,7 @@ export default function LoginPage() {
 
     setSubmitState("success");
     setFeedback("Signed in successfully. Redirecting…");
-    window.location.href = "/";
+    window.location.href = redirectContext.next;
   }
 
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
@@ -250,7 +302,7 @@ export default function LoginPage() {
       return;
     }
 
-    const redirectTo = `${window.location.origin}/auth/callback`;
+    const redirectTo = buildAuthCallbackUrl();
     try {
       const { error } = await supabase.auth.signUp({
         email: normalizedEmail,

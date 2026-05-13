@@ -4,6 +4,7 @@ const { execFile } = require('child_process');
 const EventEmitter = require('events');
 const os = require('os');
 const path = require('path');
+const { getJarvisApiUrl } = require('./runtime-config');
 const {
   appendHistory,
   getFavoriteApp,
@@ -356,10 +357,10 @@ function getHttpBaseUrl(url) {
 }
 
 function getJarvisAiEndpointCandidates() {
+  const apiBaseUrl = getJarvisApiUrl();
   const candidates = [
     process.env.JARVIS_AI_URL,
-    process.env.JARVIS_API_URL ? `${String(process.env.JARVIS_API_URL).replace(/\/$/, '')}/api/chat` : null,
-    process.env.JARVIS_WEB_URL ? `${String(process.env.JARVIS_WEB_URL).replace(/\/$/, '')}/api/chat` : null,
+    apiBaseUrl ? `${apiBaseUrl}/api/chat` : null,
     `${getHttpBaseUrl(BACKEND_URL)}/chat`,
   ].filter(Boolean);
 

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { app, BrowserWindow, dialog, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
+const { getJarvisWebUrl } = require('./runtime-config');
 
 let win;
 let tray;
@@ -9,6 +10,9 @@ let updateInterval = null;
 let lastUpdateCheckAt = 0;
 const UPDATE_CHECK_INTERVAL_MS = Number(process.env.JARVIS_UPDATE_CHECK_INTERVAL_MS || 15 * 60 * 1000);
 const UPDATE_CHECK_DEBOUNCE_MS = 10_000;
+const RELEASE_REPO = 'wiktorskrabel89-byte/Assistantx';
+const RELEASE_TAG = 'jarvis-latest';
+const GITHUB_RELEASE_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/tags/${RELEASE_TAG}`;
 let updateState = {
   status: 'idle',
   detail: 'Waiting to check for updates.',
@@ -33,7 +37,7 @@ function emitUpdateStatus(status, detail, extra = {}) {
 }
 
 function getJarvisWebBaseUrl() {
-  return String(process.env.JARVIS_WEB_URL || process.env.JARVIS_API_URL || 'http://localhost:3000').replace(/\/$/, '');
+  return getJarvisWebUrl();
 }
 
 function getJarvisDownloadUrl() {
@@ -59,27 +63,55 @@ function compareVersions(left, right) {
   return 0;
 }
 
-async function fetchLatestJarvisRelease() {
-  const response = await fetch(`${getJarvisWebBaseUrl()}/api/jarvis/version`, {
-    headers: { Accept: 'application/json' },
+async function fetchLatestJarvisReleaseFromServer() {
+  try {
+    const response = await fetch(`${getJarvisWebBaseUrl()}/api/jarvis/version`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8_000),
+      cache: 'no-store',
+    });
+
+    if (!response.ok) return null;
+
+    const payload = await response.json();
+    if (!payload?.available || !payload?.version) return null;
+
+    return {
+      version: payload.version,
+      releaseNotes: String(payload.releaseNotes || ''),
+      downloadUrl: payload.downloadUrlWindows || getJarvisDownloadUrl(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchLatestJarvisReleaseFromGitHub() {
+  const response = await fetch(GITHUB_RELEASE_API, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
     signal: AbortSignal.timeout(8_000),
     cache: 'no-store',
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} from Jarvis update endpoint`);
+    throw new Error(`HTTP ${response.status} from GitHub release endpoint`);
   }
 
-  const payload = await response.json();
-  if (!payload?.available || !payload?.version) {
-    return null;
-  }
-
+  const release = await response.json();
   return {
-    version: payload.version,
-    releaseNotes: String(payload.releaseNotes || ''),
-    downloadUrl: payload.downloadUrlWindows || getJarvisDownloadUrl(),
+    version: release.name || release.tag_name || RELEASE_TAG,
+    releaseNotes: String(release.body || ''),
+    downloadUrl: getJarvisDownloadUrl(),
   };
+}
+
+async function fetchLatestJarvisRelease() {
+  const serverRelease = await fetchLatestJarvisReleaseFromServer();
+  if (serverRelease) return serverRelease;
+  return fetchLatestJarvisReleaseFromGitHub();
 }
 
 async function openUpdateDownload() {
@@ -295,7 +327,7 @@ ipcMain.handle('install-update', () => {
 // OAuth callback URL to contain a session token, then closes the window and
 // returns the session to the renderer.
 ipcMain.handle('open-account-login', async () => {
-  const webUrl = process.env.JARVIS_WEB_URL || 'http://localhost:3000';
+  const webUrl = getJarvisWebBaseUrl();
   const loginUrl = `${webUrl}/auth/login?client=jarvis-desktop`;
 
   return new Promise((resolve, reject) => {

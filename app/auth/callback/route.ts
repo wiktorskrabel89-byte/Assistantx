@@ -19,6 +19,7 @@ export async function GET(request: Request) {
   const callbackUrl = new URL("/auth/callback", publicOrigin).toString();
   const supabaseProviderCallbackUrl = new URL("/auth/v1/callback", process.env.NEXT_PUBLIC_SUPABASE_URL).toString();
   const code = requestUrl.searchParams.get("code");
+  const client = requestUrl.searchParams.get("client");
   const next = requestUrl.searchParams.get("next") ?? "/";
 
   if (!code) {
@@ -50,7 +51,20 @@ export async function GET(request: Request) {
   }
 
   const redirectPath = next.startsWith("/") ? next : "/";
-  const response = NextResponse.redirect(new URL(redirectPath, publicOrigin));
+  const desktopCallbackUrl = new URL("/jarvis/callback", publicOrigin);
+  if (data.session?.access_token) {
+    desktopCallbackUrl.hash = new URLSearchParams({
+      access_token: data.session.access_token,
+      email: data.user?.email ?? "",
+      user_id: data.user?.id ?? "",
+      signed_in_at: new Date().toISOString(),
+    }).toString();
+  }
+  const response = NextResponse.redirect(
+    client === "jarvis-desktop" && data.session?.access_token
+      ? desktopCallbackUrl
+      : new URL(redirectPath, publicOrigin)
+  );
   const providerValue = data.user?.app_metadata?.provider;
   const provider = isOAuthProvider(typeof providerValue === "string" ? providerValue : null) ? providerValue : null;
 
