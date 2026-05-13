@@ -2,12 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getToken } from './auth';
+import { loadServerUrl } from './wol';
 
-const BACKEND_URL = 'ws://10.0.2.2:8000/ws';
+const DEFAULT_BACKEND_URL = 'ws://10.0.2.2:8000/ws';
 const MESSAGE_STORAGE_KEY = 'jarvis-mobile-history-v2';
 const OFFLINE_QUEUE_KEY = 'jarvis-offline-queue-v1';
 const MAX_MESSAGES = 80;
-const OFFLINE_QUEUE_TTL_MS = 5 * 60_000; // 5 minutes
+const OFFLINE_QUEUE_TTL_MS = 5 * 60_000;
 
 function createMessage(partial = {}) {
   return {
@@ -20,6 +21,34 @@ function createMessage(partial = {}) {
     taskId: partial.taskId || null,
     status: partial.status || null,
   };
+}
+
+function toBackendUrl(serverUrl) {
+  if (!serverUrl) return DEFAULT_BACKEND_URL;
+
+  try {
+    const parsed = new URL(serverUrl);
+
+    if (parsed.protocol === 'ws:' || parsed.protocol === 'wss:') {
+      if (!/\/ws\/?$/i.test(parsed.pathname)) {
+        parsed.pathname = '/ws';
+      }
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.toString();
+    }
+
+    parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+    if (!parsed.port || parsed.port === '3000') {
+      parsed.port = '8000';
+    }
+    parsed.pathname = '/ws';
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return DEFAULT_BACKEND_URL;
+  }
 }
 
 function parseIncomingMessage(raw) {
@@ -44,10 +73,10 @@ function parseIncomingMessage(raw) {
     });
   }
 
-  if (payload.type === 'command_result') {
+  if (payload.type === 'command_result' || payload.type === 'response') {
     return createMessage({
       kind: payload.level === 'error' ? 'error' : 'assistant',
-      title: payload.title || 'PC result',
+      title: payload.title || 'Jarvis AI',
       text: payload.summary || payload.text || 'Action completed.',
       imageDataUrl: payload.imageDataUrl || null,
       taskId: payload.taskId || null,
@@ -104,7 +133,6 @@ function trimMessages(messages) {
   return messages.slice(0, MAX_MESSAGES);
 }
 
-// ── Offline command queue helpers ─────────────────────────────────────────────
 async function loadOfflineQueue() {
   try {
     const raw = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
@@ -120,7 +148,9 @@ async function loadOfflineQueue() {
 async function saveOfflineQueue(queue) {
   try {
     await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-  } catch { /* noop */ }
+  } catch {
+    // noop
+  }
 }
 
 async function enqueueOffline(entry) {
@@ -132,7 +162,7 @@ async function enqueueOffline(entry) {
 export function useBackendConnection() {
   const socketRef = useRef(null);
   const reconnectTimerRef = useRef(null);
-  const tokenRef = useRef('');
+  const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
   const [status, setStatus] = useState('idle');
   const [token, setToken] = useState('');
   const [messages, setMessages] = useState([]);
@@ -165,16 +195,16 @@ export function useBackendConnection() {
     setMessages((current) => trimMessages([createMessage(message), ...current]));
   }, []);
 
-  // Drain the offline queue after reconnect
-  const drainOfflineQueue = useCallback(async (ws, tkn) => {
+  const drainOfflineQueue = useCallback(async (ws, currentToken) => {
     const queue = await loadOfflineQueue();
     if (!queue.length) return;
-    await saveOfflineQueue([]); // clear first to avoid re-sending on failure
+    await saveOfflineQueue([]);
+
     const cutoff = Date.now() - OFFLINE_QUEUE_TTL_MS;
     for (const item of queue) {
-      if (new Date(item.queuedAt).getTime() < cutoff) continue; // stale, skip
+      if (new Date(item.queuedAt).getTime() < cutoff) continue;
       if (ws.readyState !== WebSocket.OPEN) break;
-      ws.send(JSON.stringify({ ...item.payload, token: tkn }));
+      ws.send(JSON.stringify({ ...item.payload, token: currentToken }));
       pushMessage({ kind: 'system', title: 'Offline queue', text: `Replayed: ${item.label || item.payload?.type || 'command'}` });
     }
   }, [pushMessage]);
@@ -183,20 +213,23 @@ export function useBackendConnection() {
     let isMounted = true;
 
     const connect = async () => {
-      const deviceToken = await getToken();
+      const [deviceToken, savedServerUrl] = await Promise.all([
+        getToken(),
+        loadServerUrl().catch(() => ''),
+      ]);
       if (!isMounted) return;
 
-      tokenRef.current = deviceToken;
+      const nextBackendUrl = toBackendUrl(savedServerUrl);
+      setBackendUrl(nextBackendUrl);
       setToken(deviceToken);
       setStatus('connecting');
 
-      const ws = new WebSocket(BACKEND_URL);
+      const ws = new WebSocket(nextBackendUrl);
       socketRef.current = ws;
 
       ws.onopen = () => {
         setStatus('connected');
         ws.send(JSON.stringify({ type: 'register', role: 'android', token: deviceToken }));
-        // Replay any queued commands from when the PC was offline
         void drainOfflineQueue(ws, deviceToken);
       };
 
@@ -231,7 +264,7 @@ export function useBackendConnection() {
       };
 
       ws.onclose = () => {
-        setStatus('disconnected');
+        setStatus(`disconnected (Cannot reach backend (${nextBackendUrl}). Retrying in 3 seconds.)`);
         setPcOnline(false);
         reconnectTimerRef.current = setTimeout(() => {
           connect().catch((error) => {
@@ -240,9 +273,8 @@ export function useBackendConnection() {
         }, 3000);
       };
 
-      ws.onerror = (error) => {
-        const message = error?.message || 'websocket error';
-        setStatus(`error:${message}`);
+      ws.onerror = () => {
+        setStatus(`disconnected (Cannot reach backend (${nextBackendUrl}). Retrying in 3 seconds.)`);
       };
     };
 
@@ -255,11 +287,10 @@ export function useBackendConnection() {
       clearTimeout(reconnectTimerRef.current);
       socketRef.current?.close();
     };
-  }, [pushMessage, drainOfflineQueue]);
+  }, [drainOfflineQueue, pushMessage]);
 
   const sendPrompt = useCallback((text) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      // Queue for when PC reconnects
       void enqueueOffline({ payload: { type: 'desktop_prompt', text }, label: text });
       pushMessage({ kind: 'user', title: 'You (queued)', text });
       return false;
@@ -274,7 +305,6 @@ export function useBackendConnection() {
     const label = extra.label || (app ? `${command}: ${app}` : command);
 
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      // Only queue non-ephemeral commands (skip screenshot, sleep, etc.)
       const ephemeral = new Set(['screenshot', 'sleep', 'shutdown', 'restart', 'sysinfo']);
       if (!ephemeral.has(command)) {
         void enqueueOffline({ payload: { type: 'command', command, app, ...extra }, label });
@@ -290,6 +320,7 @@ export function useBackendConnection() {
 
   const sendApproval = useCallback((approvalId, approved) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return false;
+
     socketRef.current.send(JSON.stringify({
       type: 'approval_response',
       approvalId,
@@ -305,155 +336,12 @@ export function useBackendConnection() {
   }, []);
 
   return {
-    backendUrl: BACKEND_URL,
+    backendUrl,
     clearHistory,
     messages,
     pcOnline,
     pcPresence,
     sendApproval,
-    sendCommand,
-    sendPrompt,
-    status,
-    token,
-  };
-}
-
-export function useBackendConnection() {
-  const socketRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
-  const [status, setStatus] = useState('idle');
-  const [token, setToken] = useState('');
-  const [messages, setMessages] = useState([]);
-  const [pcOnline, setPcOnline] = useState(false);
-
-  useEffect(() => {
-    AsyncStorage.getItem(MESSAGE_STORAGE_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setMessages(trimMessages(parsed));
-        }
-      })
-      .catch(() => null);
-  }, []);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      void AsyncStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(trimMessages(messages))).catch(() => null);
-    }, 250);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [messages]);
-
-  const pushMessage = useCallback((message) => {
-    setMessages((current) => trimMessages([createMessage(message), ...current]));
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const connect = async () => {
-      const deviceToken = await getToken();
-      if (!isMounted) return;
-
-      setToken(deviceToken);
-      setStatus('connecting');
-
-      const ws = new WebSocket(BACKEND_URL);
-      socketRef.current = ws;
-
-      ws.onopen = () => {
-        setStatus('connected');
-        ws.send(JSON.stringify({ type: 'register', role: 'android', token: deviceToken }));
-      };
-
-      ws.onmessage = (event) => {
-        const message = parseIncomingMessage(event.data);
-        pushMessage(message);
-
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === 'presence_snapshot') {
-            setPcOnline((payload.role_counts?.desktop || 0) > 0);
-          }
-          if (payload.type === 'peer_registered' && payload.role === 'desktop') {
-            setPcOnline(true);
-          }
-          if (payload.type === 'peer_disconnected') {
-            setPcOnline((payload.role_counts?.desktop || 0) > 0);
-          }
-          if (payload.type === 'device_status' && payload.role === 'desktop') {
-            setPcOnline(payload.status === 'online');
-          }
-        } catch {
-          // non-json payload already handled as a plain message
-        }
-      };
-
-      ws.onclose = () => {
-        setStatus('disconnected');
-        setPcOnline(false);
-        reconnectTimerRef.current = setTimeout(() => {
-          connect().catch((error) => {
-            setStatus(`error:${error.message}`);
-          });
-        }, 3000);
-      };
-
-      ws.onerror = (error) => {
-        const message = error?.message || 'websocket error';
-        setStatus(`error:${message}`);
-      };
-    };
-
-    connect().catch((error) => {
-      setStatus(`error:${error.message}`);
-    });
-
-    return () => {
-      isMounted = false;
-      clearTimeout(reconnectTimerRef.current);
-      socketRef.current?.close();
-    };
-  }, [pushMessage]);
-
-  const sendPrompt = useCallback((text) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      return false;
-    }
-
-    pushMessage({ kind: 'user', title: 'You', text });
-    socketRef.current.send(JSON.stringify({ type: 'desktop_prompt', text, token }));
-    return true;
-  }, [pushMessage, token]);
-
-  const sendCommand = useCallback((command, app, extra = {}) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      return false;
-    }
-
-    pushMessage({
-      kind: 'user',
-      title: 'Quick action',
-      text: extra.label || (app ? `${command}: ${app}` : command),
-    });
-    socketRef.current.send(JSON.stringify({ type: 'command', command, app, token, ...extra }));
-    return true;
-  }, [pushMessage, token]);
-
-  const clearHistory = useCallback(() => {
-    setMessages([]);
-    void AsyncStorage.removeItem(MESSAGE_STORAGE_KEY).catch(() => null);
-  }, []);
-
-  return {
-    backendUrl: BACKEND_URL,
-    clearHistory,
-    messages,
-    pcOnline,
     sendCommand,
     sendPrompt,
     status,
