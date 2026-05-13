@@ -161,13 +161,7 @@ async function checkForUpdates() {
       downloadUrl: release.downloadUrl,
     });
 
-    const notes = release.releaseNotes
-      .replace(/<(?:br|\/p|\/div|\/li|\/h[1-6]|\/blockquote)(?:[^>]*)?>|<[^>]+>/gi, (tag) => (
-        /^<(?:br|\/p|\/div|\/li|\/h[1-6]|\/blockquote)/i.test(tag) ? '\n' : ''
-      ))
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-      .slice(0, 1500);
+    const notes = String(release.releaseNotes || '').trim().slice(0, 1500);
 
     let response = 1;
     try {
