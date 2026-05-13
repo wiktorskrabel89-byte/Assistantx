@@ -1,8 +1,6 @@
 "use client";
 
 import { BarChart2, Braces, Download, Menu, MessageSquareText, Plus, PlugZap, Sparkles, Wrench, X, type LucideIcon } from "lucide-react";
-import type { PersonalityMode } from "@/lib/ai-config";
-import { PERSONALITY_MODES } from "@/lib/ai-config";
 import type { ActionMode } from "@/app/lib/chat-types";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,8 +22,6 @@ type ChatHeaderProps = {
   onOpenWorkspaceTools: () => void;
   onOpenUsage: () => void;
   onExportMarkdown: () => void;
-  personalityMode: PersonalityMode;
-  onPersonalityModeChange: (mode: PersonalityMode) => void;
   activeJarvisMode?: ActionMode | null;
   onDeactivateActionMode?: () => void;
 };
@@ -46,8 +42,6 @@ export function ChatHeader({
   onOpenWorkspaceTools,
   onOpenUsage,
   onExportMarkdown,
-  personalityMode,
-  onPersonalityModeChange,
   activeJarvisMode,
   onDeactivateActionMode,
 }: ChatHeaderProps) {
@@ -196,24 +190,6 @@ export function ChatHeader({
               <TooltipContent>New chat</TooltipContent>
             </Tooltip>
 
-            <div className="hidden items-center gap-2 md:flex">
-              <label htmlFor="chat-header-personality-mode" className="text-xs text-muted-foreground">
-                Personality mode
-              </label>
-              <select
-                id="chat-header-personality-mode"
-                name="chatHeaderPersonalityMode"
-                value={personalityMode}
-                onChange={(event) => onPersonalityModeChange(event.target.value as PersonalityMode)}
-                className="h-10 rounded-lg border border-border bg-background px-2 text-xs text-foreground"
-              >
-                {PERSONALITY_MODES.map((mode) => (
-                  <option key={mode.id} value={mode.id}>
-                    {mode.emoji} {mode.label}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
         </div>
       </TooltipProvider>

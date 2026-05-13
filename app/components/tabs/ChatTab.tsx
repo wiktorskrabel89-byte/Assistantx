@@ -116,7 +116,6 @@ export function ChatTab() {
     setMemoryNotes,
     setSystemPrompt,
     setEnabledTools,
-    setPersonalityMode,
     assistantName,
     assistantDescription,
     activeAgentId,
@@ -801,8 +800,6 @@ export function ChatTab() {
             onOpenWorkspaceTools={() => setWorkspaceToolsOpen((prev) => !prev)}
             onOpenUsage={() => setUsageDashboardOpen((prev) => !prev)}
             onExportMarkdown={exportMarkdown}
-            personalityMode={activeWorkspace.settings.personalityMode ?? "default"}
-            onPersonalityModeChange={setPersonalityMode}
             activeJarvisMode={activeJarvisMode}
             onDeactivateActionMode={() => setActiveActionMode(null)}
           />
