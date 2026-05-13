@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_METADATA_PATHS = new Set(['/manifest.json', '/manifest.webmanifest'])
-const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/login', '/privacy', '/terms', '/support']
+const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support']
 
 function hasSupabaseConfig() {
   return Boolean(

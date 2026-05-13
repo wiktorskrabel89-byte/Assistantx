@@ -3,6 +3,8 @@ import WorkspaceHome from "./workspace-home";
 import { createClient } from "@/lib/server";
 import { cookies } from "next/headers";
 
+const SUPABASE_AUTH_COOKIE_FRAGMENT = "-auth-token";
+
 function hasSupabaseConfig() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -18,7 +20,7 @@ export default async function Home() {
   let hasAuthCookie = false;
   try {
     const cookieStore = await cookies();
-    hasAuthCookie = cookieStore.getAll().some(({ name }) => name.startsWith("sb-") && name.includes("-auth-token"));
+    hasAuthCookie = cookieStore.getAll().some(({ name }) => name.startsWith("sb-") && name.includes(SUPABASE_AUTH_COOKIE_FRAGMENT));
   } catch {
     hasAuthCookie = false;
   }
@@ -30,8 +32,8 @@ export default async function Home() {
   let isAuthenticated = false;
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase.auth.getClaims();
-    isAuthenticated = !error && Boolean(data?.claims);
+    const { data, error } = await supabase.auth.getUser();
+    isAuthenticated = !error && Boolean(data.user);
   } catch {
     isAuthenticated = false;
   }
