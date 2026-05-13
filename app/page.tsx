@@ -3,13 +3,17 @@ import WorkspaceHome from "./workspace-home";
 import { createClient } from "@/lib/server";
 import { cookies } from "next/headers";
 
-const SUPABASE_AUTH_COOKIE_FRAGMENT = "-auth-token";
+const SUPABASE_AUTH_COOKIE_NAME_FRAGMENT = "-auth-token";
 
 function hasSupabaseConfig() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL
     && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
+}
+
+function isSupabaseAuthCookie(cookieName: string) {
+  return cookieName.startsWith("sb-") && cookieName.includes(SUPABASE_AUTH_COOKIE_NAME_FRAGMENT);
 }
 
 export default async function Home() {
@@ -20,7 +24,7 @@ export default async function Home() {
   let hasAuthCookie = false;
   try {
     const cookieStore = await cookies();
-    hasAuthCookie = cookieStore.getAll().some(({ name }) => name.startsWith("sb-") && name.includes(SUPABASE_AUTH_COOKIE_FRAGMENT));
+    hasAuthCookie = cookieStore.getAll().some(({ name }) => isSupabaseAuthCookie(name));
   } catch {
     hasAuthCookie = false;
   }
