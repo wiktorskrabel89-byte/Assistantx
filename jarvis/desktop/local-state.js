@@ -231,7 +231,7 @@ function getSchedules() {
 
 // ── Cloud memory sync (#14) ───────────────────────────────────────────────────
 // Sync preferences + recent history to a workspace API endpoint.
-async function syncToCloud(apiUrl, token) {
+async function syncToCloud(apiUrl, token, options = {}) {
   if (!apiUrl || !token) return { ok: false, reason: 'missing-config' };
   try {
     const state = readState();
@@ -241,6 +241,7 @@ async function syncToCloud(apiUrl, token) {
       history: state.history.slice(0, 50),
       tasks: state.tasks.slice(0, MAX_TASKS),
       schedules: state.schedules.slice(0, MAX_TASKS),
+      voiceSettings: options.voiceSettings || {},
       syncOptions,
       syncMetadata: {
         schemaVersion: 1,
@@ -299,7 +300,7 @@ async function loadFromCloud(apiUrl, token) {
         schedules: mergeByIdNewest(current.schedules, remoteSchedules).slice(0, MAX_TASKS),
       }));
     }
-    return { ok: true };
+    return { ok: true, voiceSettings: remote?.voiceSettings || null };
   } catch (err) {
     return { ok: false, reason: err.message };
   }

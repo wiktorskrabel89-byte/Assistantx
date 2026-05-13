@@ -259,7 +259,7 @@
     .composer {
       display: grid;
       gap: 8px;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: 1fr auto auto;
       margin-top: 12px;
     }
 
@@ -647,7 +647,8 @@
             </div>
 
             <div class="composer">
-              <input id="input" type="text" placeholder="Type a Jarvis prompt or command… (e.g. &quot;open YouTube&quot;, &quot;screenshot&quot;)">
+              <input id="input" type="text" placeholder="Type a Jarvis prompt or command… (e.g. &quot;open YouTube&quot;, &quot;screenshot&quot;)" />
+              <button id="voice-input" type="button" class="secondary" title="Talk to Jarvis">🎙 Talk</button>
               <button id="send" type="button">Send</button>
             </div>
 
@@ -686,6 +687,16 @@
                   </select>
                 </label>
                 <label class="field">
+                  <span>Jarvis voice profile</span>
+                  <select id="tts-voice-profile">
+                    <option value="jarvis">JARVIS</option>
+                    <option value="default">Default</option>
+                    <option value="nova">Nova</option>
+                    <option value="echo">Echo</option>
+                    <option value="aria">Aria</option>
+                  </select>
+                </label>
+                <label class="field">
                   <span>Voice language</span>
                   <select id="voice-language">
                     <option value="pl-PL">Polish (pl-PL)</option>
@@ -696,6 +707,10 @@
                 </label>
               </div>
               <div class="voice-actions">
+                <label class="toggle" for="stt-enabled">
+                  <input id="stt-enabled" type="checkbox" checked />
+                  Speech-to-text enabled
+                </label>
                 <label class="toggle" for="auto-tts">
                   <input id="auto-tts" type="checkbox" checked />
                   Auto text-to-speech playback

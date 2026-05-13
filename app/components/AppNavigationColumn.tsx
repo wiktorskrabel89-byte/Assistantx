@@ -74,7 +74,7 @@ type AddOnItem = {
 
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
-  { id: "jarvis",           label: "Jarvis",          description: "Desktop + mobile hub",             icon: Laptop },
+  { id: "jarvis",           label: "Jarvis App Settings", description: "Desktop + mobile setup",      icon: Laptop },
   { id: "clinical",         label: "Clinical",        description: "Clinical tools",                   icon: Stethoscope },
   { id: "learning",         label: "Learning",        description: "Learning materials",               icon: BookOpen },
   { id: "prompt-library",   label: "Prompt Library",  description: "Prompt library",                   icon: LibraryBig },
