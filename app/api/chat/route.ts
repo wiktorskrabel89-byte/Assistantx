@@ -71,6 +71,33 @@ import {
 import { isModerationBlocked } from "@/app/api/chat/moderation";
 import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rateLimit";
 
+/** Typed shape of the incoming POST body for the chat endpoint. */
+type ChatRequestBody = {
+  message?: string;
+  mode?: string;
+  modelId?: string;
+  allowedModels?: string[];
+  assistantName?: string;
+  assistantPurpose?: string;
+  assistantInstructions?: string;
+  history?: unknown;
+  memoryNotes?: string;
+  conversationId?: string;
+  style?: string;
+  languageLock?: string;
+  preferredProgrammingLanguage?: string;
+  interactionProfile?: string;
+  addInternetContext?: boolean;
+  costMode?: string;
+  userPlan?: string;
+  thinkingEffort?: number;
+  modelProfile?: string;
+  systemPrompt?: string;
+  personalityMode?: string;
+  enabledTools?: string[];
+  googleContext?: string;
+};
+
 /** Matches canonical UUID string formatting (8-4-4-4-12 hex), without validating version bits. */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -85,6 +112,18 @@ export const POST = async (req: Request) => {
   const CHAT_MODEL = AUTO_PREFERRED_CHAT_MODEL;
 
   const requestSignal = req.signal;
+
+  // Wrap JSON parsing so malformed bodies return a clean 400 instead of crashing.
+  let body: ChatRequestBody;
+  try {
+    body = await req.json() as ChatRequestBody;
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "Invalid or missing JSON request body." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   const {
     message,
     mode: rawMode,
@@ -109,12 +148,21 @@ export const POST = async (req: Request) => {
     personalityMode: rawPersonalityMode = "default",
     enabledTools,
     googleContext,
-  } = await req.json();
+  } = body;
 
   // ── Validate conversationId format before any DB operation ──────────────────
   if (typeof conversationId === "string" && !UUID_REGEX.test(conversationId)) {
     return new Response(
       JSON.stringify({ error: "Invalid conversationId format." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // ── Reject oversized messages early to prevent token abuse ──────────────────
+  const MAX_MESSAGE_LENGTH = 100_000;
+  if (typeof message === "string" && message.length > MAX_MESSAGE_LENGTH) {
+    return new Response(
+      JSON.stringify({ error: "Message exceeds the maximum allowed length." }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -153,16 +201,20 @@ export const POST = async (req: Request) => {
   }
   const encoder = new TextEncoder();
   const VALID_COST_MODES: CostMode[] = ["thrifty", "balanced", "performance"];
-  const costMode: CostMode = VALID_COST_MODES.includes(rawCostMode) ? rawCostMode : "balanced";
+  const costMode: CostMode = (VALID_COST_MODES as ReadonlyArray<string>).includes(rawCostMode ?? "")
+    ? rawCostMode as CostMode
+    : "balanced";
   const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
-  const clientPlan: UserPlan = VALID_USER_PLANS.includes(rawUserPlan) ? rawUserPlan : "free";
+  const clientPlan: UserPlan = (VALID_USER_PLANS as ReadonlyArray<string>).includes(rawUserPlan ?? "")
+    ? rawUserPlan as UserPlan
+    : "free";
 
   // Verify the user's plan server-side from Supabase instead of trusting the client
   const authUserId = await getAuthUserId(req);
   const userPlan = await getServerSideUserPlan(authUserId, clientPlan);
 
-  const inferredCodeRequest = rawMode === "code" || isCodeRequest(message);
-  const inferredImageRequest = rawMode === "image" || isImageRequest(message);
+  const inferredCodeRequest = rawMode === "code" || isCodeRequest(message ?? "");
+  const inferredImageRequest = rawMode === "image" || isImageRequest(message ?? "");
   // Vision input: user uploaded an image file for analysis (not image generation)
   const inferredVisionRequest = rawMode === "upload" && typeof message === "string" && /\.(png|jpe?g|gif|webp|bmp|svg)/i.test(message);
   const inferredHeavyReasoning = !inferredCodeRequest && isHeavyReasoningRequest(typeof message === "string" ? message : "");
@@ -262,7 +314,7 @@ export const POST = async (req: Request) => {
 
   // Apply cost control: filter the allowed models list to respect the user's cost mode
   const costFilteredModels = usingAutoRouter(planFilteredAllowedModels, planEnforcedModelId, inferredImageRequest)
-    ? filterModelsByCostMode(planFilteredAllowedModels, costMode)
+    ? filterModelsByCostMode(planFilteredAllowedModels ?? [], costMode)
     : planFilteredAllowedModels;
 
   const isAutoRouted = usingAutoRouter(costFilteredModels, planEnforcedModelId, inferredImageRequest);
@@ -433,7 +485,7 @@ export const POST = async (req: Request) => {
         : `${smartRouteLabel}${costDowngradeNote}${planDowngradeNote}`;
 
   if (!modelId && rawMode === "auto" && inferredImageRequest) {
-    const normalizedPrompt = message.replace(/^\s*\/image\s*/i, "").trim() || "A cinematic digital artwork";
+    const normalizedPrompt = (message ?? "").replace(/^\s*\/image\s*/i, "").trim() || "A cinematic digital artwork";
     const encoded = encodeURIComponent(normalizedPrompt);
     const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&enhance=true`;
 

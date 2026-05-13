@@ -6,6 +6,12 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
+    // Allow intentionally-unused variables when prefixed with `_`.
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+    },
+  },
+  {
     files: ["jarvis/desktop/**/*.js", "public/**/*.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",

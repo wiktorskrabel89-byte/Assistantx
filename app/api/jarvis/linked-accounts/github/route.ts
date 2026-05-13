@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: 'Missing code' }, { status: 400 });
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE(_req: NextRequest) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {

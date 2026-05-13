@@ -32,17 +32,6 @@ function parseCitations(text: string): { cleanText: string; citations: Citation[
   return { cleanText, citations };
 }
 
-const MarkdownMessageRenderer = process.env.NODE_ENV === "test"
-  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require("./MarkdownMessageRenderer").MarkdownMessageRenderer
-  : dynamic(
-      () => import("./MarkdownMessageRenderer").then((module) => module.MarkdownMessageRenderer),
-      {
-        ssr: false,
-        loading: () => <span className="whitespace-pre-wrap break-words leading-relaxed text-foreground">Loading formatted response…</span>,
-      }
-    );
-
 type AIMessageProps = {
   entry: ChatEntry;
   copied: string | null;

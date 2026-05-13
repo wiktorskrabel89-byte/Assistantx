@@ -79,9 +79,9 @@ describe("AppNavigationColumn — click interactions", () => {
     it("opens the apps dropdown when the Apps button is clicked", () => {
       renderNav();
       // apps drawer not visible yet
-      expect(screen.queryByPlaceholderText("Szukaj aplikacji...")).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText("Search applications...")).not.toBeInTheDocument();
       fireEvent.click(screen.getAllByTitle("Applications")[0] ?? screen.getByRole("button", { name: /Applications/i }));
-      expect(screen.getAllByPlaceholderText("Szukaj aplikacji...").length).toBeGreaterThan(0);
+      expect(screen.getAllByPlaceholderText("Search applications...").length).toBeGreaterThan(0);
     });
   });
 
