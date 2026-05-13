@@ -27,6 +27,7 @@ To start collecting performance metrics in Next.js:
    npm i @vercel/speed-insights
    ```
 2. Add the Next.js component by importing `SpeedInsights` from `@vercel/speed-insights/next` and rendering `<SpeedInsights />` in the root layout (`app/layout.tsx`).
+   - This repository already includes that integration in `app/layout.tsx`.
 
 
 ## Integrations Setup
