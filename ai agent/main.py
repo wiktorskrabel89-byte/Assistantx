@@ -124,7 +124,12 @@ def _get_agent():
         if not llm:
             return None
         try:
-            tools = [t for t in [retriever_tool, note_tool, DuckDuckGoSearchRun()] if t is not None]
+            try:
+            search_tool = DuckDuckGoSearchRun()
+        except Exception:
+            search_tool = None
+            logger.warning("DuckDuckGoSearchRun init failed; web search will be unavailable in the agent.")
+        tools = [t for t in [retriever_tool, note_tool, search_tool] if t is not None]
             _services["agent"] = create_agent(llm, tools)
         except Exception as exc:
             logger.warning("Agent init failed: %s", exc)
