@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Laptop,
   Bell,
   BookOpen,
   BrainCircuit,
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 
 export type AppNavigationTab =
   | "chat"
+  | "jarvis"
   | "clinical"
   | "sandbox"
   | "learning"
@@ -72,6 +74,7 @@ type AddOnItem = {
 
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
+  { id: "jarvis",           label: "Jarvis",          description: "Desktop + mobile hub",             icon: Laptop },
   { id: "clinical",         label: "Clinical",        description: "Clinical tools",                   icon: Stethoscope },
   { id: "learning",         label: "Learning",        description: "Learning materials",               icon: BookOpen },
   { id: "prompt-library",   label: "Prompt Library",  description: "Prompt library",                   icon: LibraryBig },
