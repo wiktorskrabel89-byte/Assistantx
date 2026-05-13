@@ -118,29 +118,29 @@ let queueProcessing = false;
 const taskQueue = [];
 
 const APP_OPEN_MAP = {
-  chrome: 'start chrome',
-  firefox: 'start firefox',
-  edge: 'start msedge',
-  notepad: 'start notepad',
-  roblox: 'start roblox:',
-  spotify: 'start spotify:',
-  discord: 'start discord:',
-  steam: 'start steam:',
-  explorer: 'start explorer',
-  calc: 'start calc',
-  calculator: 'start calc',
-  cmd: 'start cmd',
-  powershell: 'start powershell',
-  taskmgr: 'start taskmgr',
-  paint: 'start mspaint',
-  vlc: 'start vlc',
-  word: 'start winword',
-  excel: 'start excel',
-  powerpoint: 'start powerpnt',
-  teams: 'start msteams:',
-  zoom: 'start zoommtg:',
-  vscode: 'start code',
-  notepadpp: 'start notepad++',
+  chrome: 'chrome',
+  firefox: 'firefox',
+  edge: 'msedge',
+  notepad: 'notepad',
+  roblox: ['roblox-player:', 'roblox:'],
+  spotify: ['spotify', 'spotify:'],
+  discord: ['discord', 'discord:'],
+  steam: ['steam', 'steam://open/main'],
+  explorer: 'explorer',
+  calc: 'calc',
+  calculator: 'calc',
+  cmd: 'cmd',
+  powershell: 'powershell',
+  taskmgr: 'taskmgr',
+  paint: 'mspaint',
+  vlc: 'vlc',
+  word: 'winword',
+  excel: 'excel',
+  powerpoint: 'powerpnt',
+  teams: ['ms-teams:', 'msteams:'],
+  zoom: ['zoommtg:', 'zoom'],
+  vscode: 'code',
+  notepadpp: 'notepad++',
 };
 
 // macOS app name mappings (used with `open -a <name>`)
@@ -397,11 +397,22 @@ async function openApp(app) {
     rememberApp(normalized);
     return { summary: `Opened ${appName}.`, app: normalized };
   }
-  const target = APP_OPEN_MAP[normalized];
-  if (!target) throw new Error(`Unknown app: ${app}. Supported: ${Object.keys(APP_OPEN_MAP).join(', ')}`);
-  await execFilePromise('cmd.exe', ['/c', 'start', '', target]);
-  rememberApp(normalized);
-  return { summary: `Opened ${normalized}.`, app: normalized };
+  const targets = APP_OPEN_MAP[normalized];
+  if (!targets) throw new Error(`Unknown app: ${app}. Supported: ${Object.keys(APP_OPEN_MAP).join(', ')}`);
+  const launchCandidates = Array.isArray(targets) ? targets : [targets];
+  let lastError = null;
+  for (const candidate of launchCandidates) {
+    try {
+      await execFilePromise('cmd.exe', ['/c', 'start', '', candidate]);
+      rememberApp(normalized);
+      return { summary: `Opened ${normalized}.`, app: normalized };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(
+    `${lastError?.message || `Failed to open app: ${normalized}`}. Tried: ${launchCandidates.join(', ')}`,
+  );
 }
 
 async function closeApp(app) {
@@ -1049,7 +1060,12 @@ function connectToBackend(options = {}) {
   });
 
   ws.on('error', (error) => {
-    emitStatus('error', error.message);
+    const detail = String(error?.message || '');
+    if (/ECONNREFUSED|EHOSTUNREACH|ENOTFOUND/i.test(detail)) {
+      emitStatus('disconnected', `Cannot reach backend (${BACKEND_URL}). Local commands still work. Retrying in 3 seconds.`);
+      return;
+    }
+    emitStatus('error', detail || 'WebSocket error');
   });
 
   return ws;

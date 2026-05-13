@@ -25,6 +25,7 @@ try {
 }
 
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
+const MAX_SPOKEN_TEXT_LENGTH = 220;
 
 function appendMessage(log, title, body, tone = 'system') {
 	const item = document.createElement('div');
@@ -180,6 +181,18 @@ window.addEventListener('DOMContentLoaded', () => {
 			setVoiceVisualizer('idle');
 			appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
 		}
+	}
+
+	function getComfortableSpokenText(parsed, fallbackText) {
+		const command = String(parsed?.command || '');
+		if (command === 'listProcesses') {
+			return 'I listed the top processes. Check the panel for full details.';
+		}
+		const normalized = String(fallbackText || '').replace(/\s+/g, ' ').trim();
+		if (normalized.length > MAX_SPOKEN_TEXT_LENGTH) {
+			return `${normalized.slice(0, MAX_SPOKEN_TEXT_LENGTH - 3)}...`;
+		}
+		return normalized;
 	}
 
 	// ── Status ──────────────────────────────────────────────────────────────
@@ -452,7 +465,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			const title = parsed.type === 'command_result' ? (parsed.title || '✅ Jarvis') : `Backend (${parsed.type || '?'})`;
 			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system');
 			if (parsed.type === 'command_result' && parsed.level !== 'error') {
-				speakResponse(body);
+				speakResponse(getComfortableSpokenText(parsed, body));
 			}
 		} catch {
 			// rawMessage is not JSON — display as plain text
