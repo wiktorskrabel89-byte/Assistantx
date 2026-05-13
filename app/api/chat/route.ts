@@ -105,6 +105,9 @@ const APPROX_CHARS_PER_TOKEN = 4;
 const QWEN_TOKEN_BUDGET = 6000;
 const TOKEN_SAFETY_MARGIN = 500;
 const MIN_OUTPUT_TOKENS = 256;
+const COMPACT_SYSTEM_PROMPT_CHARS = 2500;
+const COMPACT_HISTORY_MESSAGE_CHARS = 1200;
+const COMPACT_USER_MESSAGE_CHARS = 2200;
 
 function estimateTokensFromText(text: string): number {
   return Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
@@ -117,15 +120,18 @@ function estimateTokensFromMessages(messages: LlmMessage[]): number {
 function compactMessages(messages: LlmMessage[]): LlmMessage[] {
   if (messages.length === 0) return [];
   const system = messages.find((message) => message.role === "system");
-  const latestUser = [...messages].reverse().find((message) => message.role === "user") ?? messages[messages.length - 1];
+  const latestUser = [...messages].reverse().find((message) => message.role === "user")
+    ?? { role: "user", content: messages[messages.length - 1]?.content ?? "" };
   const latestHistory = messages
     .filter((message) => message !== system && message !== latestUser)
-    .slice(-2)
-    .map((message) => ({ ...message, content: message.content.slice(-1200) }));
+    .slice(-2);
   const compacted: LlmMessage[] = [];
-  if (system) compacted.push({ role: "system", content: system.content.slice(0, 2500) });
-  compacted.push(...latestHistory);
-  compacted.push({ role: latestUser.role, content: latestUser.content.slice(-2200) });
+  if (system) compacted.push({ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) });
+  compacted.push(...latestHistory.map((message) => ({
+    ...message,
+    content: message.content.slice(-COMPACT_HISTORY_MESSAGE_CHARS),
+  })));
+  compacted.push({ role: latestUser.role, content: latestUser.content.slice(-COMPACT_USER_MESSAGE_CHARS) });
   return compacted;
 }
 
@@ -158,7 +164,7 @@ function enforceQwenTokenBudget(body: Record<string, unknown>) {
   );
 }
 
-function isRequestTooLargeError(status: number, errorText: string): boolean {
+function isTokenLimitError(status: number, errorText: string): boolean {
   return status === 413 || /request too large|tokens per minute|tpm|rate_limit_exceeded/i.test(errorText);
 }
 
@@ -923,7 +929,7 @@ export const POST = async (req: Request) => {
           let found = false;
           const currentModel = String(requestBody.model ?? selectedModel);
 
-          if (isRequestTooLargeError(status, err)) {
+          if (isTokenLimitError(status, err)) {
             safeEnqueue(`data: ${JSON.stringify({ status: "Request too large, retrying with reduced context..." })}\n\n`);
             const compactRequestBody: Record<string, unknown> = {
               ...requestBody,
