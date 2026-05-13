@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BarChart2, Bot, Cloud, Globe, LogOut, MessageSquareText, Mic, MoonStar, Sliders, Sparkles, Sun, Theater, Volume2, Zap } from "lucide-react";
+import { BarChart2, Bot, Cloud, Globe, LogOut, MessageSquareText, Mic, MoonStar, Sparkles, Sun, Theater, Volume2, Zap } from "lucide-react";
 import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
@@ -60,7 +60,6 @@ export function SettingsTab() {
     setTtsVoiceId,
     setAutoSpeakResponses,
     setPersonalityMode,
-    setActiveJarvisMode,
   } = useWorkspace();
 
   const tr = getTranslations(state.uiLanguage ?? "en");
@@ -413,48 +412,6 @@ export function SettingsTab() {
             </div>
           </div>
 
-          {/* Jarvis Modes — personality presets */}
-          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
-              <Sliders className="h-3.5 w-3.5" /> Jarvis Modes
-            </div>
-            <p className={`mt-2 text-xs ${mutedClass}`}>
-              Activate a personality preset that shapes how Jarvis responds. The active mode&apos;s instructions are automatically injected into every chat.
-            </p>
-            <p className={`mt-1 text-xs ${mutedClass}`}>
-              To configure what apps open when a mode is activated, visit the <strong>Modes</strong> tab.
-            </p>
-            {voiceSettings.activeJarvisModeId && (
-              <p className="mt-1.5 text-xs text-sky-600 dark:text-sky-400">
-                Active: {voiceSettings.jarvisModes?.find((m) => m.id === voiceSettings.activeJarvisModeId)?.icon}{" "}
-                <strong>{voiceSettings.jarvisModes?.find((m) => m.id === voiceSettings.activeJarvisModeId)?.name}</strong>
-              </p>
-            )}
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {(voiceSettings.jarvisModes ?? []).map((mode) => {
-                const selected = voiceSettings.activeJarvisModeId === mode.id;
-                return (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => setActiveJarvisMode(selected ? null : mode.id)}
-                    aria-pressed={selected}
-                    className={`rounded-xl border px-3 py-2 text-left transition-colors ${
-                      selected
-                        ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
-                        : `${dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`
-                    }`}
-                  >
-                    <div className="text-sm font-semibold">{mode.icon ?? "🤖"} {mode.name}</div>
-                    <div className={`mt-0.5 text-xs ${mutedClass}`}>{mode.description}</div>
-                    {selected && (
-                      <div className="mt-1 text-[10px] font-medium text-sky-600 dark:text-sky-400">● Active — tap to deactivate</div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
 
         {/* Profile card */}
