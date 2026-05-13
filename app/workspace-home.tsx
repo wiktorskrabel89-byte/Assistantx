@@ -83,14 +83,6 @@ const AILearningTab = dynamic(
   () => import("./components/tabs/AILearningTab").then((m) => m.AILearningTab),
   { ssr: false, loading: () => <TabSkeleton /> },
 );
-const JarvisTab = dynamic(
-  () => import("./components/tabs/JarvisTab"),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const ModesTab = dynamic(
-  () => import("./components/tabs/ModesTab").then((m) => m.ModesTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
 
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
   "sandbox", "codebase", "projects",
@@ -101,17 +93,11 @@ function TabContent({
   notificationsHook,
   sandboxInitCode,
   onOpenInSandbox,
-  pairing,
-  onOpenPairingDialog,
-  onShowPhonePairingBanner,
 }: {
   activeTab: AppNavigationTab;
   notificationsHook: ReturnType<typeof useNotifications>;
   sandboxInitCode?: { html: string; css: string; js: string } | null;
   onOpenInSandbox?: (html: string, css: string, js: string) => void;
-  pairing: ReturnType<typeof useDevicePairing>;
-  onOpenPairingDialog: () => void;
-  onShowPhonePairingBanner: () => void;
 }) {
   const { state } = useWorkspace();
 
@@ -140,19 +126,6 @@ function TabContent({
       return <NotificationsTab dark={state.dark} notificationsHook={notificationsHook} />;
     case "ai-learning":
       return <AILearningTab dark={state.dark} />;
-    case "jarvis":
-      return (
-        <JarvisTab
-          deviceType={pairing.deviceType}
-          pairingStatus={pairing.pairingStatus}
-          pairingCode={pairing.pairingCode}
-          expiresAt={pairing.expiresAt}
-          onOpenPairingDialog={onOpenPairingDialog}
-          onShowPhonePairingBanner={onShowPhonePairingBanner}
-        />
-      );
-    case "modes":
-      return <ModesTab />;
     default:
       return null;
   }
@@ -368,9 +341,6 @@ function HomeContent() {
             notificationsHook={notificationsHook}
             sandboxInitCode={sandboxInitCode}
             onOpenInSandbox={handleOpenInSandbox}
-            pairing={pairing}
-            onOpenPairingDialog={() => setPcPairingDialogOpen(true)}
-            onShowPhonePairingBanner={() => setPhoneBannerVisible(true)}
           />
         ) : (
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card transition-all duration-200">
@@ -380,9 +350,6 @@ function HomeContent() {
               notificationsHook={notificationsHook}
               sandboxInitCode={sandboxInitCode}
               onOpenInSandbox={handleOpenInSandbox}
-              pairing={pairing}
-              onOpenPairingDialog={() => setPcPairingDialogOpen(true)}
-              onShowPhonePairingBanner={() => setPhoneBannerVisible(true)}
             />
           </main>
         )}

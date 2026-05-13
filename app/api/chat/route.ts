@@ -100,6 +100,82 @@ type ChatRequestBody = {
 
 /** Matches canonical UUID string formatting (8-4-4-4-12 hex), without validating version bits. */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+type LlmMessage = { role: string; content: string };
+const APPROX_CHARS_PER_TOKEN = 4;
+const QWEN_TOKEN_BUDGET = 6000;
+const TOKEN_SAFETY_MARGIN = 500;
+const MIN_OUTPUT_TOKENS = 256;
+const COMPACT_RETRY_MAX_OUTPUT_TOKENS = 512;
+const COMPACT_SYSTEM_PROMPT_CHARS = 2500;
+const COMPACT_HISTORY_MESSAGE_CHARS = 1200;
+const COMPACT_USER_MESSAGE_CHARS = 2200;
+
+function estimateTokensFromText(text: string): number {
+  // Approximation only: OpenAI-compatible tokenizers vary by model/language/code content.
+  return Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
+}
+
+function estimateTokensFromMessages(messages: LlmMessage[]): number {
+  // +4 approximates per-message role/framing overhead in chat-completions payloads.
+  return messages.reduce((sum, message) => sum + estimateTokensFromText(message.content) + 4, 0);
+}
+
+function compactMessages(messages: LlmMessage[]): LlmMessage[] {
+  if (messages.length === 0) return [];
+  const system = messages.find((message) => message.role === "system");
+  const latestUser = [...messages].reverse().find((message) => message.role === "user");
+  if (!latestUser) {
+    return system
+      ? [{ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) }]
+      : [];
+  }
+  const latestHistory = messages
+    .filter((message) => message !== system && message !== latestUser)
+    .slice(-2);
+  const compacted: LlmMessage[] = [];
+  if (system) compacted.push({ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) });
+  // Keep newest turns (tail) because they are usually the most relevant for continuity.
+  compacted.push(...latestHistory.map((message) => ({
+    ...message,
+    content: message.content.slice(-COMPACT_HISTORY_MESSAGE_CHARS),
+  })));
+  compacted.push({ role: latestUser.role, content: latestUser.content.slice(-COMPACT_USER_MESSAGE_CHARS) });
+  return compacted;
+}
+
+function enforceQwenTokenBudget(body: Record<string, unknown>) {
+  const model = String(body.model ?? "");
+  if (!model.startsWith("qwen/qwen3")) return;
+
+  const messages = Array.isArray(body.messages)
+    ? (body.messages as LlmMessage[]).filter((message) => typeof message?.content === "string")
+    : [];
+
+  const currentMaxTokens = typeof body.max_tokens === "number"
+    ? body.max_tokens
+    : Number(body.max_tokens ?? 1024);
+
+  const computeAllowedOutput = (items: LlmMessage[]) =>
+    QWEN_TOKEN_BUDGET - TOKEN_SAFETY_MARGIN - estimateTokensFromMessages(items);
+
+  let nextMessages = messages;
+  let allowedOutputTokens = computeAllowedOutput(nextMessages);
+  if (allowedOutputTokens < MIN_OUTPUT_TOKENS) {
+    nextMessages = compactMessages(messages);
+    allowedOutputTokens = computeAllowedOutput(nextMessages);
+  }
+
+  body.messages = nextMessages;
+  body.max_tokens = Math.max(
+    MIN_OUTPUT_TOKENS,
+    Math.min(currentMaxTokens, allowedOutputTokens),
+  );
+}
+
+function isRequestSizeTokenError(status: number, errorText: string): boolean {
+  if (status === 413) return true;
+  return /request too large|tokens per minute.*requested|limit \d+.*requested \d+/i.test(errorText);
+}
 
 export const POST = async (req: Request) => {
   // Rate limit: 30 chat requests per minute per user/IP
@@ -665,6 +741,7 @@ export const POST = async (req: Request) => {
       }
     }
   }
+  enforceQwenTokenBudget(requestBody);
 
   if (cachedAnswerCandidate && cachedAnswerCandidate.similarity >= CACHED_ANSWER_SIMILARITY_THRESHOLD) {
     const cacheHitRouteReason = `Answer cache hit (${(cachedAnswerCandidate.similarity * 100).toFixed(1)}% similarity)`;
@@ -855,11 +932,32 @@ export const POST = async (req: Request) => {
         // Try fallback models on 404 (no endpoint found)
         if (!response.ok) {
           let err = await response.text();
-            const triedModels = [requestBody.model || selectedModel];
+          const triedModels = [requestBody.model || selectedModel];
           let status = response.status;
           let fallbackReason = routeReason;
           let found = false;
           const currentModel = String(requestBody.model ?? selectedModel);
+
+          if (isRequestSizeTokenError(status, err)) {
+            safeEnqueue(`data: ${JSON.stringify({ status: "Request too large, retrying with reduced context..." })}\n\n`);
+            const compactRequestBody: Record<string, unknown> = {
+              ...requestBody,
+              messages: compactMessages((requestBody.messages as LlmMessage[]) ?? []),
+              max_tokens: Math.min(Number(requestBody.max_tokens ?? 1024), COMPACT_RETRY_MAX_OUTPUT_TOKENS),
+            };
+            enforceQwenTokenBudget(compactRequestBody);
+            response = await sendModelRequest(compactRequestBody);
+            triedModels.push(`${currentModel} (compact)`);
+            if (response.ok) {
+              requestBody.messages = compactRequestBody.messages;
+              requestBody.max_tokens = compactRequestBody.max_tokens;
+              effectiveRouteReason = `${routeReason}. Reduced request context to stay within provider token limits.`;
+              found = true;
+            } else {
+              err = await response.text();
+              status = response.status;
+            }
+          }
 
           const shouldFallbackToGemini =
             !isGeminiModel(currentModel)
