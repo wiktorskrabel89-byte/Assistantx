@@ -18,6 +18,17 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Speed Insights Get Started
+
+To start collecting performance metrics in Next.js:
+
+1. Install the package:
+   ```bash
+   npm i @vercel/speed-insights
+   ```
+2. Add the Next.js component by importing `SpeedInsights` from `@vercel/speed-insights/next` and rendering `<SpeedInsights />` in the root layout (`app/layout.tsx`).
+   - This repository already includes that integration in `app/layout.tsx`.
+
 
 ## Integrations Setup
 

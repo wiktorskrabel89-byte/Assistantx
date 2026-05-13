@@ -3,6 +3,7 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { headers } from "next/headers";
 import { Toaster } from "sonner";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AppBootTasks } from "./components/AppBootTasks";
 import { QueryProvider } from "./components/QueryProvider";
 import "./globals.css";
@@ -67,6 +68,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>
         <AppBootTasks />
+        <SpeedInsights />
         <Toaster richColors closeButton position="bottom-right" />
       </body>
     </html>
