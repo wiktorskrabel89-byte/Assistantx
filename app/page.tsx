@@ -15,8 +15,14 @@ export default async function Home() {
     return <PublicHome />;
   }
 
-  const cookieStore = await cookies();
-  const hasAuthCookie = cookieStore.getAll().some(({ name }) => name.startsWith("sb-") && name.includes("-auth-token"));
+  let hasAuthCookie = false;
+  try {
+    const cookieStore = await cookies();
+    hasAuthCookie = cookieStore.getAll().some(({ name }) => name.startsWith("sb-") && name.includes("-auth-token"));
+  } catch {
+    hasAuthCookie = false;
+  }
+
   if (!hasAuthCookie) {
     return <PublicHome />;
   }
