@@ -182,6 +182,18 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 
+	function getComfortableSpokenText(parsed, fallbackText) {
+		const command = String(parsed?.command || '');
+		if (command === 'listProcesses') {
+			return 'I listed the top processes. Check the panel for full details.';
+		}
+		const normalized = String(fallbackText || '').replace(/\s+/g, ' ').trim();
+		if (normalized.length > 220) {
+			return `${normalized.slice(0, 217)}...`;
+		}
+		return normalized;
+	}
+
 	// ── Status ──────────────────────────────────────────────────────────────
 	function updateStatus(status, detail) {
 		statusNode.textContent = detail ? `${status}: ${detail}` : status;
@@ -452,7 +464,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			const title = parsed.type === 'command_result' ? (parsed.title || '✅ Jarvis') : `Backend (${parsed.type || '?'})`;
 			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system');
 			if (parsed.type === 'command_result' && parsed.level !== 'error') {
-				speakResponse(body);
+				speakResponse(getComfortableSpokenText(parsed, body));
 			}
 		} catch {
 			// rawMessage is not JSON — display as plain text
