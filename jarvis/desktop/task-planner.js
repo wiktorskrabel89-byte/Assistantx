@@ -3,8 +3,17 @@ function normalizeText(text) {
 }
 
 function createStep(command, payload = {}, label) {
+  const COMMAND_INTENT_MAP = {
+    openApp: 'open_app',
+    closeApp: 'close_app',
+    searchWeb: 'search_web',
+    searchYouTube: 'search_youtube',
+    setAppAlias: 'set_app_alias',
+    refreshAppCatalog: 'refresh_app_catalog',
+  };
   return {
     command,
+    intent: COMMAND_INTENT_MAP[command] || command,
     ...payload,
     label: label || command,
   };
@@ -86,6 +95,20 @@ function planSegment(segment, options = {}) {
   if (/(?:restart|uruchom ponownie|zrestartuj)/i.test(favoriteAwareText)) return createStep('restart', {}, 'Restart PC');
   if (/(?:cancel shutdown|anuluj wy[łl][aą]czenie)/i.test(favoriteAwareText)) return createStep('cancelShutdown', {}, 'Cancel shutdown');
 
+  match = favoriteAwareText.match(/(?:set|remember|map|alias)\s+(.+?)\s+(?:as|to)\s+(.+)/i)
+    || favoriteAwareText.match(/(?:ustaw alias|zapami[eę]taj alias)\s+(.+?)\s+(?:jako|na)\s+(.+)/i);
+  if (match) {
+    return createStep('setAppAlias', {
+      alias: match[1].trim(),
+      app: match[2].trim(),
+    }, `Set alias ${match[1].trim()} → ${match[2].trim()}`);
+  }
+
+  if (/(?:scan|refresh|rescan|rebuild|update)\s+(?:apps|applications|start menu|catalog|app list)/i.test(favoriteAwareText)
+    || /(?:przeskanuj|od[śs]wie[zż]|zaktualizuj)\s+(?:aplikacje|menu start|katalog aplikacji)/i.test(favoriteAwareText)) {
+    return createStep('refreshAppCatalog', {}, 'Refresh app catalog');
+  }
+
   return null;
 }
 
@@ -109,6 +132,7 @@ function planPrompt(text, options = {}) {
 }
 
 module.exports = {
+  createStep,
   planPrompt,
   planSegment,
   splitPromptIntoSteps,

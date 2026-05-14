@@ -7,14 +7,27 @@ const path = require('path');
 const { getJarvisApiUrl } = require('./runtime-config');
 const {
   appendHistory,
+  getAppAliases,
+  getDiscoveredApps,
   getFavoriteApp,
+  recordResolverDecision,
   readState,
   rememberApp,
   rememberFile,
   rememberPrompt,
+  saveDiscoveredApps,
   saveTask,
+  setAppAlias,
 } = require('./local-state');
 const { planPrompt } = require('./task-planner');
+const { resolveAppTarget } = require('./app-resolver');
+const { scanWindowsApps } = require('./app-scanner');
+const {
+  APP_OPEN_MAP,
+  APP_OPEN_MAP_DARWIN,
+  APP_CLOSE_MAP,
+  APP_CLOSE_MAP_DARWIN,
+} = require('./app-launch-config');
 
 let ipcRenderer;
 let clipboard;
@@ -122,83 +135,6 @@ let taskCounter = 0;
 let queueProcessing = false;
 const taskQueue = [];
 
-const APP_OPEN_MAP = {
-  chrome: 'chrome',
-  firefox: 'firefox',
-  edge: 'msedge',
-  notepad: 'notepad',
-  roblox: ['roblox-player:', 'roblox:'],
-  spotify: ['spotify', 'spotify:'],
-  discord: ['discord', 'discord:'],
-  steam: ['steam', 'steam://open/main'],
-  explorer: 'explorer',
-  calc: 'calc',
-  calculator: 'calc',
-  cmd: 'cmd',
-  powershell: 'powershell',
-  taskmgr: 'taskmgr',
-  paint: 'mspaint',
-  vlc: 'vlc',
-  word: 'winword',
-  excel: 'excel',
-  powerpoint: 'powerpnt',
-  teams: ['ms-teams:', 'msteams:'],
-  zoom: ['zoommtg:', 'zoom'],
-  vscode: 'code',
-  notepadpp: 'notepad++',
-};
-
-// macOS app name mappings (used with `open -a <name>`)
-const APP_OPEN_MAP_DARWIN = {
-  chrome: 'Google Chrome',
-  firefox: 'Firefox',
-  safari: 'Safari',
-  edge: 'Microsoft Edge',
-  notepad: 'TextEdit',
-  roblox: 'Roblox',
-  spotify: 'Spotify',
-  discord: 'Discord',
-  steam: 'Steam',
-  explorer: 'Finder',
-  calc: 'Calculator',
-  calculator: 'Calculator',
-  taskmgr: 'Activity Monitor',
-  vlc: 'VLC',
-  word: 'Microsoft Word',
-  excel: 'Microsoft Excel',
-  powerpoint: 'Microsoft PowerPoint',
-  teams: 'Microsoft Teams',
-  zoom: 'zoom.us',
-  vscode: 'Visual Studio Code',
-};
-
-const APP_CLOSE_MAP = {
-  chrome: 'chrome.exe',
-  firefox: 'firefox.exe',
-  edge: 'msedge.exe',
-  notepad: 'notepad.exe',
-  discord: 'Discord.exe',
-  spotify: 'Spotify.exe',
-  teams: 'Teams.exe',
-  zoom: 'Zoom.exe',
-  vscode: 'Code.exe',
-  vlc: 'vlc.exe',
-};
-
-// macOS close via AppleScript `quit`
-const APP_CLOSE_MAP_DARWIN = {
-  chrome: 'Google Chrome',
-  firefox: 'Firefox',
-  safari: 'Safari',
-  edge: 'Microsoft Edge',
-  discord: 'Discord',
-  spotify: 'Spotify',
-  teams: 'Microsoft Teams',
-  zoom: 'zoom.us',
-  vscode: 'Visual Studio Code',
-  vlc: 'VLC',
-};
-
 function toIsoNow() {
   return new Date().toISOString();
 }
@@ -217,6 +153,32 @@ function sendMessageToBackend(payload) {
     return true;
   }
   return false;
+}
+
+async function refreshDiscoveredApps(reason = 'manual') {
+  if (PLATFORM !== 'win32') {
+    return {
+      summary: 'App scanning is currently enabled only on Windows.',
+      appCount: 0,
+      reason: 'unsupported-platform',
+    };
+  }
+  try {
+    const discoveredApps = await scanWindowsApps(execFilePromise);
+    saveDiscoveredApps(discoveredApps, { source: reason });
+    return {
+      summary: `App catalog refreshed (${discoveredApps.length} discovered apps).`,
+      appCount: discoveredApps.length,
+      reason,
+    };
+  } catch (error) {
+    return {
+      summary: `App scan failed: ${error.message}`,
+      appCount: 0,
+      reason: 'scan-failed',
+      level: 'warning',
+    };
+  }
 }
 
 async function buildPresencePayload() {
@@ -497,7 +459,7 @@ async function searchYouTube(query) {
   return { summary: `Searching YouTube for: ${normalizedQuery}` };
 }
 
-async function openApp(app) {
+async function openApp(app, options = {}) {
   const rawApp = String(app || '').trim();
   const normalized = rawApp.toLowerCase();
   if (!rawApp) throw new Error('Missing app name.');
@@ -509,35 +471,94 @@ async function openApp(app) {
     return { summary: `Opened ${appName}.`, app: normalized };
   }
 
-  const targets = APP_OPEN_MAP[normalized];
-  const launchCandidates = targets
-    ? (Array.isArray(targets) ? targets : [targets])
+  const state = readState();
+  const localAliases = getAppAliases();
+  const discoveredApps = getDiscoveredApps();
+  const resolution = resolveAppTarget(rawApp, {
+    aliases: localAliases,
+    discoveredApps,
+    knownOpenMap: APP_OPEN_MAP,
+    recentApps: state?.preferences?.recentApps || [],
+    strictRemote: options.source === 'remote',
+  });
+  if (resolution.status === 'ambiguous') {
+    throw new Error(`${resolution.feedback || 'App name is ambiguous.'} Suggestions: ${(resolution.suggestions || []).join(', ') || 'none'}`);
+  }
+  if (resolution.status === 'unknown') {
+    throw new Error(`Unknown app: ${rawApp}.${resolution.suggestions?.length ? ` Did you mean: ${resolution.suggestions.join(', ')}?` : ''}`);
+  }
+
+  const launchCandidates = (resolution.candidates || []).length > 0
+    ? resolution.candidates
     : [...new Set([
-      rawApp,
-      rawApp.replace(/^['"]|['"]$/g, ''),
-      rawApp.toLowerCase().endsWith('.exe') ? null : `${rawApp}.exe`,
+      { value: rawApp, launchMode: 'filePath', via: 'fallback' },
+      { value: rawApp.replace(/^['"]|['"]$/g, ''), launchMode: 'filePath', via: 'fallback' },
+      rawApp.toLowerCase().endsWith('.exe') ? null : { value: `${rawApp}.exe`, launchMode: 'filePath', via: 'fallback' },
     ].filter(Boolean))];
   let lastError = null;
 
   for (const candidate of launchCandidates) {
     try {
-      if (targets) {
-        await execFilePromise('cmd.exe', ['/c', 'start', '', candidate]);
+      if (candidate.launchMode === 'start') {
+        await execFilePromise('cmd.exe', ['/c', 'start', '', candidate.value]);
       } else {
         await execFilePromise('powershell.exe', [
           '-NoProfile',
           '-Command',
-          `Start-Process -FilePath ${JSON.stringify(candidate)}`,
+          `Start-Process -FilePath ${JSON.stringify(candidate.value)}`,
         ]);
       }
-      rememberApp(normalized);
-      return { summary: `Opened ${rawApp}.`, app: normalized };
+      rememberApp(resolution.resolvedKey || normalized);
+      recordResolverDecision({
+        input: rawApp,
+        strategy: resolution.strategy,
+        confidence: resolution.confidence,
+        resolvedKey: resolution.resolvedKey || normalized,
+        matchedInput: resolution.matchedInput || rawApp,
+        source: options.source || 'local',
+        launchCandidate: candidate.value,
+      });
+      return {
+        summary: `${resolution.feedback ? `${resolution.feedback} ` : ''}Opened ${resolution.resolvedKey || rawApp}.`,
+        app: resolution.resolvedKey || normalized,
+        resolver: {
+          strategy: resolution.strategy,
+          confidence: resolution.confidence,
+          matchedInput: resolution.matchedInput || rawApp,
+        },
+      };
     } catch (error) {
       lastError = error;
     }
   }
 
-  throw new Error(`${lastError?.message || `Failed to open app: ${rawApp}`}. Tried: ${launchCandidates.join(', ')}`);
+  throw new Error(`${lastError?.message || `Failed to open app: ${rawApp}`}. Tried: ${launchCandidates.map((item) => item.value).join(', ')}`);
+}
+
+async function teachAppAlias(alias, app) {
+  const normalizedAlias = String(alias || '').trim().toLowerCase();
+  const target = String(app || '').trim();
+  if (!normalizedAlias) throw new Error('Missing alias name.');
+  if (!target) throw new Error('Missing alias target app.');
+
+  const resolution = resolveAppTarget(target, {
+    aliases: getAppAliases(),
+    discoveredApps: getDiscoveredApps(),
+    knownOpenMap: APP_OPEN_MAP,
+  });
+  if (resolution.status !== 'resolved') {
+    throw new Error(`Cannot set alias: unknown target app "${target}".`);
+  }
+
+  setAppAlias(normalizedAlias, resolution.resolvedKey || target.toLowerCase());
+  recordResolverDecision({
+    input: normalizedAlias,
+    strategy: 'alias_teach',
+    confidence: 1,
+    resolvedKey: resolution.resolvedKey || target.toLowerCase(),
+    source: 'local',
+  });
+  return { summary: `Saved alias "${normalizedAlias}" → "${resolution.resolvedKey || target.toLowerCase()}".` };
 }
 
 async function closeApp(app) {
@@ -821,10 +842,16 @@ async function executeStructuredCommand(msg, context = {}) {
     let result;
     switch (command) {
       case 'openApp':
-        result = await openApp(appName || msg.appName || '');
+        result = await openApp(appName || msg.appName || '', { source: context.source || 'local' });
         break;
       case 'closeApp':
         result = await closeApp(appName || '');
+        break;
+      case 'setAppAlias':
+        result = await teachAppAlias(msg.alias, msg.app || appName || '');
+        break;
+      case 'refreshAppCatalog':
+        result = await refreshDiscoveredApps('manual-command');
         break;
       case 'openUrl':
         result = await openUrl(url || appName || '');
@@ -1240,6 +1267,12 @@ function loadPlugins() {
 }
 
 const PLUGIN_COMMANDS = loadPlugins();
+
+if (PLATFORM === 'win32') {
+  setTimeout(() => {
+    void refreshDiscoveredApps('startup');
+  }, 500);
+}
 
 module.exports = {
   connectToBackend,

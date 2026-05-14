@@ -8,6 +8,7 @@ const MAX_HISTORY = 120;
 const MAX_TASKS = 40;
 
 const DEFAULT_STATE = {
+  schemaVersion: 2,
   history: [],
   tasks: [],
   schedules: [],
@@ -16,6 +17,14 @@ const DEFAULT_STATE = {
     recentApps: [],
     recentFiles: [],
     recentPrompts: [],
+    appAliases: {},
+    discoveredApps: [],
+    appCatalogMeta: {
+      lastScanAt: null,
+      appCount: 0,
+      source: null,
+    },
+    resolverHistory: [],
     syncOptions: {
       syncChatHistory: true,
       syncMemories: true,
@@ -51,6 +60,17 @@ function normalizeState(raw) {
       recentApps: Array.isArray(raw?.preferences?.recentApps) ? raw.preferences.recentApps : [],
       recentFiles: Array.isArray(raw?.preferences?.recentFiles) ? raw.preferences.recentFiles : [],
       recentPrompts: Array.isArray(raw?.preferences?.recentPrompts) ? raw.preferences.recentPrompts : [],
+      appAliases: raw?.preferences?.appAliases && typeof raw.preferences.appAliases === 'object'
+        ? raw.preferences.appAliases
+        : {},
+      discoveredApps: Array.isArray(raw?.preferences?.discoveredApps) ? raw.preferences.discoveredApps : [],
+      appCatalogMeta: raw?.preferences?.appCatalogMeta && typeof raw.preferences.appCatalogMeta === 'object'
+        ? {
+          ...DEFAULT_STATE.preferences.appCatalogMeta,
+          ...raw.preferences.appCatalogMeta,
+        }
+        : { ...DEFAULT_STATE.preferences.appCatalogMeta },
+      resolverHistory: Array.isArray(raw?.preferences?.resolverHistory) ? raw.preferences.resolverHistory : [],
     },
   };
 }
@@ -126,6 +146,85 @@ function rememberApp(app) {
         [key]: (current.preferences.appLaunchCount[key] || 0) + 1,
       },
       recentApps: prependUnique(current.preferences.recentApps, key, 12),
+    },
+  }));
+}
+
+function getAppAliases() {
+  return { ...(readState().preferences.appAliases || {}) };
+}
+
+function setAppAlias(alias, app) {
+  const normalizedAlias = String(alias || '').trim().toLowerCase();
+  const normalizedApp = String(app || '').trim().toLowerCase();
+  if (!normalizedAlias || !normalizedApp) return readState();
+  return updateState((current) => ({
+    ...current,
+    preferences: {
+      ...current.preferences,
+      appAliases: {
+        ...current.preferences.appAliases,
+        [normalizedAlias]: normalizedApp,
+      },
+    },
+  }));
+}
+
+function removeAppAlias(alias) {
+  const normalizedAlias = String(alias || '').trim().toLowerCase();
+  if (!normalizedAlias) return readState();
+  return updateState((current) => {
+    const nextAliases = { ...(current.preferences.appAliases || {}) };
+    delete nextAliases[normalizedAlias];
+    return {
+      ...current,
+      preferences: {
+        ...current.preferences,
+        appAliases: nextAliases,
+      },
+    };
+  });
+}
+
+function getDiscoveredApps() {
+  const state = readState();
+  return Array.isArray(state.preferences.discoveredApps)
+    ? state.preferences.discoveredApps
+    : [];
+}
+
+function saveDiscoveredApps(apps, meta = {}) {
+  const normalizedApps = Array.isArray(apps) ? apps.slice(0, 1000) : [];
+  return updateState((current) => ({
+    ...current,
+    preferences: {
+      ...current.preferences,
+      discoveredApps: normalizedApps,
+      appCatalogMeta: {
+        ...DEFAULT_STATE.preferences.appCatalogMeta,
+        ...(current.preferences.appCatalogMeta || {}),
+        ...meta,
+        appCount: normalizedApps.length,
+        lastScanAt: new Date().toISOString(),
+      },
+    },
+  }));
+}
+
+function recordResolverDecision(entry) {
+  if (!entry || typeof entry !== 'object') return readState();
+  return updateState((current) => ({
+    ...current,
+    preferences: {
+      ...current.preferences,
+      resolverHistory: [
+        {
+          id: entry.id || `resolver-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          createdAt: entry.createdAt || new Date().toISOString(),
+          ...entry,
+        },
+        ...(current.preferences.resolverHistory || []),
+      ].slice(0, 120),
     },
   }));
 }
@@ -309,16 +408,22 @@ async function loadFromCloud(apiUrl, token) {
 module.exports = {
   addSchedule,
   appendHistory,
+  getAppAliases,
+  getDiscoveredApps,
   getFavoriteApp,
   getSchedules,
   loadFromCloud,
   parseNextRun,
+  recordResolverDecision,
   readState,
+  removeAppAlias,
   rememberApp,
   rememberFile,
   rememberPrompt,
   removeSchedule,
+  saveDiscoveredApps,
   saveTask,
+  setAppAlias,
   statePath: STATE_PATH,
   syncToCloud,
   updateScheduleRun,
