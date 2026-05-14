@@ -170,6 +170,8 @@ class SidecarBridge extends EventEmitter {
         this.emit('intent_parsed', {
           requestId: rest.requestId || '',
           intent: rest.intent || 'unknown',
+          action: rest.action || rest.intent || 'unknown',
+          intentKind: rest.intentKind || 'system',
           entities: rest.entities || {},
           confidence: Number(rest.confidence) || 0,
         });

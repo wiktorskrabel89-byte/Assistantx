@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AssistantX Launcher</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: rgba(9, 12, 20, 0.94);
+      --panel: rgba(15, 23, 42, 0.94);
+      --border: rgba(148, 163, 184, 0.22);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --danger: #fb7185;
+      --success: #34d399;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, rgba(56, 189, 248, 0.16), transparent 36%), rgba(2, 6, 23, 0.78);
+      color: var(--text);
+      font-family: Inter, system-ui, sans-serif;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+    .shell {
+      width: 100%;
+      max-width: 620px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.96));
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.5);
+      overflow: hidden;
+      backdrop-filter: blur(24px);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px 10px;
+    }
+    .title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .title strong { font-size: 14px; }
+    .title span { color: var(--muted); font-size: 12px; }
+    .badge {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .input-row {
+      padding: 0 18px 14px;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+    }
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.72);
+      color: var(--text);
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 16px;
+      outline: none;
+    }
+    input:focus { border-color: rgba(56, 189, 248, 0.56); }
+    button {
+      border: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.72);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 0 14px;
+      cursor: pointer;
+    }
+    button.primary { background: rgba(56, 189, 248, 0.16); border-color: rgba(56, 189, 248, 0.44); }
+    .list {
+      max-height: 310px;
+      overflow: auto;
+      padding: 0 10px 12px;
+    }
+    .item {
+      width: 100%;
+      text-align: left;
+      padding: 14px 12px;
+      border-radius: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .item.active { border-color: rgba(56, 189, 248, 0.54); background: rgba(30, 41, 59, 0.86); }
+    .item-name { display: block; font-weight: 600; }
+    .item-meta { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .item-risk { font-size: 11px; color: var(--danger); text-transform: uppercase; }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      padding: 0 18px 16px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .confirmation {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.88);
+      display: none;
+      place-items: center;
+      padding: 24px;
+    }
+    .confirmation.visible { display: grid; }
+    .confirmation-card {
+      width: 100%;
+      border-radius: 20px;
+      border: 1px solid rgba(251, 113, 133, 0.32);
+      background: rgba(15, 23, 42, 0.98);
+      padding: 20px;
+      box-shadow: 0 24px 80px rgba(2, 6, 23, 0.6);
+    }
+    .confirmation-card h2 { margin: 0 0 10px; font-size: 18px; }
+    .confirmation-card p { margin: 0 0 16px; color: var(--muted); line-height: 1.5; }
+    .confirmation-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="header">
+      <div class="title">
+        <strong>AssistantX Launcher</strong>
+        <span>Everything Search first · SQLite fallback</span>
+      </div>
+      <div class="badge" id="provider-status">Checking search backend…</div>
+    </div>
+    <div class="input-row">
+      <input id="query" type="text" placeholder="Open Spotify, VS Code, work setup…" autocomplete="off" />
+      <button type="button" id="refresh">Refresh</button>
+      <button type="button" class="primary" id="install-everything">Install Everything</button>
+    </div>
+    <div class="list" id="results"></div>
+    <div class="footer">
+      <span id="footer-status">Type to search, Enter to launch, Esc to hide.</span>
+      <span id="voice-status">Voice sidecar: unknown</span>
+    </div>
+  </div>
+  <div class="confirmation" id="confirmation">
+    <div class="confirmation-card">
+      <h2 id="confirmation-title">Confirm launch</h2>
+      <p id="confirmation-message"></p>
+      <div class="confirmation-actions">
+        <button type="button" id="confirmation-cancel">Cancel</button>
+        <button type="button" class="primary" id="confirmation-approve">Open</button>
+      </div>
+    </div>
+  </div>
+  <script src="launcher-overlay.js"></script>
+</body>
+</html>

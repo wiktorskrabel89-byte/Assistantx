@@ -228,6 +228,8 @@ async def _handle_parse_intent(ws: WebSocketServerProtocol, state: ConnectionSta
             "type": "intent_parsed",
             "requestId": request_id,
             "intent": result.get("intent", "unknown"),
+            "action": result.get("action", result.get("intent", "unknown")),
+            "intentKind": result.get("intent_kind", "system"),
             "entities": result.get("entities", {}),
             "confidence": result.get("confidence", 0.0),
         })
