@@ -10,6 +10,11 @@ let db = null;
 // Tracks how many transaction wrappers are currently active.  Flushing to
 // disk via db.export() must not happen while a transaction is open because
 // sql.js's export() implicitly ends the active transaction.
+//
+// Electron's main process (like all Node.js code) is single-threaded, so
+// this module-level counter is safe: only one call path is executing at a
+// time, making concurrent transactions impossible without explicit async
+// interleaving, which the callers do not perform.
 let _inTransaction = 0;
 
 // ── Disk persistence ─────────────────────────────────────────────────────────
