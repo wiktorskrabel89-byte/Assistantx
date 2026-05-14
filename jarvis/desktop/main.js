@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
+const { decodeJwtPayload } = require('./accounts');
 const { spawn } = require('child_process');
 const launcherService = require('./launcher/launch-service');
 
@@ -95,13 +95,6 @@ let win;
 let overlayWin;
 let tray;
 const pendingLauncherConfirmations = new Map();
-let updateInterval = null;
-let lastUpdateCheckAt = 0;
-const UPDATE_CHECK_INTERVAL_MS = Number(process.env.JARVIS_UPDATE_CHECK_INTERVAL_MS || 15 * 60 * 1000);
-const UPDATE_CHECK_DEBOUNCE_MS = 10_000;
-const RELEASE_REPO = 'wiktorskrabel89-byte/Assistantx';
-const RELEASE_TAG = 'jarvis-latest';
-const GITHUB_RELEASE_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/tags/${RELEASE_TAG}`;
 let updateState = {
   status: 'idle',
   detail: 'Waiting to check for updates.',
@@ -126,126 +119,133 @@ function emitUpdateStatus(status, detail, extra = {}) {
     ...extra,
   };
   sendToRenderer('auto-update-status', updateState);
+  if (tray && !tray.isDestroyed()) {
+    if (status === 'update-available' && extra?.version) {
+      tray.setToolTip(`Jarvis Desktop — Update ${extra.version} available ⬆️`);
+    } else if (status !== 'update-available') {
+      tray.setToolTip('Jarvis Desktop');
+    }
+  }
 }
 
 function getJarvisWebBaseUrl() {
   return getJarvisWebUrl();
 }
 
-function getJarvisDownloadUrl() {
-  const arch = os.arch() === 'arm64' ? 'arm64' : 'x64';
-  return `${getJarvisWebBaseUrl()}/api/jarvis/download?platform=windows&arch=${arch}`;
-}
+// ── electron-updater integration ─────────────────────────────────────────────
+// autoUpdater reads the publish config from package.json (GitHub provider,
+// wiktorskrabel89-byte/Assistantx) and handles detection, download, and install.
+let _autoUpdater = null;
 
-function compareVersions(left, right) {
-  const parse = (value) => String(value || '')
-    .replace(/^v/i, '')
-    .split('.')
-    .map((segment) => Number.parseInt(segment, 10) || 0);
-
-  const leftParts = parse(left);
-  const rightParts = parse(right);
-  const length = Math.max(leftParts.length, rightParts.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const diff = (leftParts[index] || 0) - (rightParts[index] || 0);
-    if (diff !== 0) return diff;
-  }
-
-  return 0;
-}
-
-function isTransientFetchFailure(error) {
-  const errorMessageLowerCase = String(error?.message || '').toLowerCase();
-  return (
-    errorMessageLowerCase.includes('fetch failed')
-    || errorMessageLowerCase.includes('network')
-    || errorMessageLowerCase.includes('econnrefused')
-    || errorMessageLowerCase.includes('enotfound')
-    || errorMessageLowerCase.includes('ehostunreach')
-    || errorMessageLowerCase.includes('timed out')
-    || errorMessageLowerCase.includes('timeout')
-  );
-}
-
-function isReleaseUnavailableError(error) {
-  const errorMessageLowerCase = String(error?.message || '').toLowerCase();
-  return (
-    errorMessageLowerCase.includes('http 404 from github release endpoint')
-    || errorMessageLowerCase.includes('release not found')
-    || errorMessageLowerCase.includes('jarvis-latest')
-  );
-}
-
-async function fetchLatestJarvisReleaseFromServer() {
+function getAutoUpdater() {
+  if (_autoUpdater) return _autoUpdater;
   try {
-    const response = await fetch(`${getJarvisWebBaseUrl()}/api/jarvis/version`, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(8_000),
-      cache: 'no-store',
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = false; // ask first, download on demand
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('checking-for-update', () => {
+      emitUpdateStatus('checking', 'Checking for updates…', { downloaded: false });
     });
 
-    if (!response.ok) return null;
+    autoUpdater.on('update-available', (info) => {
+      emitUpdateStatus('update-available', `Update ${info.version} available.`, {
+        downloaded: false,
+        version: info.version,
+        releaseNotes: String(info.releaseNotes || info.releaseName || ''),
+      });
+      const notes = String(info.releaseNotes || '').trim().slice(0, 1500);
+      dialog.showMessageBox(win ?? null, {
+        type: 'info',
+        title: 'Jarvis Update Available',
+        message: `Jarvis ${info.version} is ready to download.`,
+        detail: notes ? `What's new:\n\n${notes}` : 'No release notes available for this build.',
+        buttons: ['Download update', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      }).then(({ response }) => {
+        if (response === 0) {
+          emitUpdateStatus('downloading', 'Downloading update…', { downloaded: false });
+          autoUpdater.downloadUpdate().catch((err) => {
+            console.warn('[updater] Download failed:', err.message);
+            emitUpdateStatus('error', `Download failed: ${err.message}`, { downloaded: false });
+          });
+        } else {
+          emitUpdateStatus('update-skipped', `Update to ${info.version} postponed.`, {
+            downloaded: false,
+            version: info.version,
+          });
+        }
+      }).catch(() => {
+        emitUpdateStatus('update-skipped', `Update to ${info.version} postponed.`, { downloaded: false });
+      });
+    });
 
-    const payload = await response.json();
-    if (payload?.available === false) {
-      return {
-        unavailable: true,
-        reason: payload?.error || 'release-unavailable',
-      };
-    }
-    if (!payload?.available || !payload?.version) return null;
+    autoUpdater.on('update-not-available', () => {
+      emitUpdateStatus('up-to-date', 'Jarvis is already up to date.', { downloaded: false });
+    });
 
-    return {
-      version: payload.version,
-      releaseNotes: String(payload.releaseNotes || ''),
-      downloadUrl: payload.downloadUrlWindows || getJarvisDownloadUrl(),
-    };
-  } catch {
+    autoUpdater.on('download-progress', (progress) => {
+      const pct = Math.round(progress.percent || 0);
+      emitUpdateStatus('downloading', `Downloading update… ${pct}%`, { downloaded: false });
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      emitUpdateStatus('ready-to-install', `Update ${info.version} downloaded — will install on next restart.`, {
+        downloaded: true,
+        version: info.version,
+      });
+    });
+
+    autoUpdater.on('error', (err) => {
+      const msg = err?.message || String(err);
+      console.warn('[updater] autoUpdater error:', msg);
+      // Treat network/endpoint failures as transient rather than hard errors.
+      const isTransient = /network|fetch|econnrefused|enotfound|ehostunreach|timeout/i.test(msg);
+      emitUpdateStatus(
+        isTransient ? 'unavailable' : 'error',
+        isTransient ? 'Update check is temporarily unavailable (network).' : `Update error: ${msg}`,
+        { downloaded: false },
+      );
+    });
+
+    _autoUpdater = autoUpdater;
+    return autoUpdater;
+  } catch (err) {
+    console.warn('[updater] electron-updater not available:', err.message);
     return null;
   }
 }
 
-async function fetchLatestJarvisReleaseFromGitHub() {
-  const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  const response = await fetch(GITHUB_RELEASE_API, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(ghToken ? { Authorization: `Bearer ${ghToken}` } : {}),
-    },
-    signal: AbortSignal.timeout(8_000),
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} from GitHub release endpoint`);
+function checkForUpdates() {
+  if (!app.isPackaged) {
+    emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
+    return Promise.resolve({ ok: false, reason: 'not-packaged' });
   }
-
-  const release = await response.json();
-  return {
-    version: release.name || release.tag_name || RELEASE_TAG,
-    releaseNotes: String(release.body || ''),
-    downloadUrl: getJarvisDownloadUrl(),
-  };
+  const updater = getAutoUpdater();
+  if (!updater) {
+    return Promise.resolve({ ok: false, reason: 'updater-unavailable' });
+  }
+  try {
+    updater.checkForUpdates().catch((err) => {
+      console.warn('[updater] checkForUpdates failed:', err.message);
+    });
+    return Promise.resolve({ ok: true });
+  } catch (err) {
+    console.warn('[updater] checkForUpdates threw:', err.message);
+    return Promise.resolve({ ok: false, reason: err.message });
+  }
 }
 
-async function fetchLatestJarvisRelease() {
-  const serverRelease = await fetchLatestJarvisReleaseFromServer();
-  if (serverRelease?.unavailable) {
-    throw new Error(String(serverRelease.reason || 'release-unavailable'));
+function setupAutoUpdater() {
+  if (!app.isPackaged) {
+    emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
+    return;
   }
-  if (serverRelease) return serverRelease;
-  return fetchLatestJarvisReleaseFromGitHub();
-}
-
-async function openUpdateDownload() {
-  const downloadUrl = updateState.downloadUrl || getJarvisDownloadUrl();
-  await shell.openExternal(downloadUrl);
-  emitUpdateStatus('download-opened', 'Installer opened in your browser. Run it after download to update Jarvis.', {
-    downloaded: false,
-    downloadUrl,
-  });
+  getAutoUpdater(); // wire up event listeners
+  setTimeout(() => {
+    void checkForUpdates();
+  }, 4000);
 }
 
 function getTrayIcon() {
@@ -265,8 +265,9 @@ function createWindow() {
     minHeight: 560,
     title: 'Jarvis Desktop',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -301,8 +302,9 @@ function createLauncherOverlayWindow() {
     alwaysOnTop: true,
     title: 'AssistantX Launcher',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'launcher-preload.js'),
     },
   });
 
@@ -662,16 +664,28 @@ ipcMain.handle('download-update', async () => {
   if (!app.isPackaged) {
     return { ok: false, reason: 'not-packaged' };
   }
+  const updater = getAutoUpdater();
+  if (!updater) {
+    return { ok: false, reason: 'updater-unavailable' };
+  }
   try {
-    await openUpdateDownload();
+    emitUpdateStatus('downloading', 'Downloading update…', { downloaded: false });
+    await updater.downloadUpdate();
     return { ok: true };
   } catch (error) {
+    console.warn('[updater] Download failed:', error.message);
+    emitUpdateStatus('error', `Download failed: ${error.message}`, { downloaded: false });
     return { ok: false, reason: error.message };
   }
 });
 
 ipcMain.handle('install-update', () => {
-  return { ok: false, reason: 'manual-installer-required' };
+  const updater = getAutoUpdater();
+  if (!updater || !updateState.downloaded) {
+    return { ok: false, reason: 'no-update-downloaded' };
+  }
+  updater.quitAndInstall();
+  return { ok: true };
 });
 
 // ── Account login via browser window ─────────────────────────────────────────
@@ -739,12 +753,16 @@ function parseCallbackUrl(url, loginWin, resolve) {
 
     const params = new URLSearchParams(parsed.hash.slice(1));
     const accessToken = params.get('access_token') || parsed.searchParams.get('access_token');
-    const email = params.get('email') || parsed.searchParams.get('email') || '';
-    const userId = params.get('sub') || params.get('user_id') || parsed.searchParams.get('user_id') || '';
 
     if (accessToken) {
+      const jwtPayload = decodeJwtPayload(accessToken);
+      const email = params.get('email') || parsed.searchParams.get('email')
+        || jwtPayload?.email || '';
+      const userId = params.get('sub') || params.get('user_id') || parsed.searchParams.get('user_id')
+        || jwtPayload?.sub || '';
+      const refreshToken = params.get('refresh_token') || parsed.searchParams.get('refresh_token') || '';
       loginWin.close();
-      resolve({ accessToken, email, userId, signedInAt: new Date().toISOString() });
+      resolve({ accessToken, refreshToken, email, userId, signedInAt: new Date().toISOString() });
     }
   } catch {
     if (process.env.NODE_ENV !== 'production') {
@@ -775,10 +793,6 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (updateInterval) {
-    clearInterval(updateInterval);
-    updateInterval = null;
-  }
   if (process.platform !== 'darwin') {
     stopSidecar();
     app.quit();

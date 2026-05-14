@@ -127,6 +127,23 @@ let taskCounter = 0;
 let queueProcessing = false;
 const taskQueue = [];
 
+// ── Conversation history ──────────────────────────────────────────────────────
+// In-memory ring buffer of the last MAX_CONVERSATION_TURNS messages.
+// Shared across all callers of runAiPrompt so the AI retains context.
+const MAX_CONVERSATION_TURNS = 10; // 5 user + 5 assistant messages
+const conversationHistory = [];
+
+function recordConversationTurn(role, content) {
+  conversationHistory.push({ role, content: String(content || '').trim() });
+  if (conversationHistory.length > MAX_CONVERSATION_TURNS) {
+    conversationHistory.shift();
+  }
+}
+
+function getConversationHistory() {
+  return [...conversationHistory];
+}
+
 function toIsoNow() {
   return new Date().toISOString();
 }
@@ -390,18 +407,36 @@ async function runAiPrompt(prompt, meta = {}) {
   const session = getAccountSession();
   const accessToken = session?.accessToken;
 
+  if (!accessToken) {
+    emitRawMessage({ type: 'ai_thinking', inFlight: false });
+    return publishResult({
+      title: 'Not logged in',
+      text: 'Please log in to use the AI assistant.',
+      summary: 'Please log in to use the AI assistant.',
+      level: 'error',
+      source: meta.source || 'local',
+      origin: meta.origin || 'desktop',
+      taskId: meta.taskId || null,
+    });
+  }
+
+  // Record the user turn first, then snapshot — the current prompt is included.
+  recordConversationTurn('user', prompt);
+  const history = getConversationHistory();
+
+  // Signal to the UI that a response is in flight.
+  emitRawMessage({ type: 'ai_thinking', inFlight: true });
+
   for (const endpoint of getJarvisAiEndpointCandidates()) {
     try {
+      const chatPayload = { message: prompt, mode: 'auto', history };
       let response;
       if (ipcRenderer && /^https?:\/\//i.test(endpoint)) {
         let proxyResult;
         try {
           proxyResult = await ipcRenderer.invoke('jarvis-ai-request', {
             endpoint,
-            payload: {
-              message: prompt,
-              mode: 'auto',
-            },
+            payload: chatPayload,
             token: accessToken,
             timeoutMs: 45_000,
           });
@@ -419,10 +454,7 @@ async function runAiPrompt(prompt, meta = {}) {
         response = await fetch(endpoint, {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            message: prompt,
-            mode: 'auto',
-          }),
+          body: JSON.stringify(chatPayload),
           signal: AbortSignal.timeout(45_000),
         });
       }
@@ -436,6 +468,10 @@ async function runAiPrompt(prompt, meta = {}) {
         throw new Error(`AI endpoint returned an empty response at ${endpoint}`);
       }
 
+      // Record the assistant's reply so subsequent turns have full context.
+      recordConversationTurn('assistant', answer);
+      emitRawMessage({ type: 'ai_thinking', inFlight: false });
+
       return publishResult({
         title: 'Jarvis AI',
         text: answer,
@@ -448,6 +484,8 @@ async function runAiPrompt(prompt, meta = {}) {
       lastError = error;
     }
   }
+
+  emitRawMessage({ type: 'ai_thinking', inFlight: false });
 
   return publishResult({
     title: 'AI unavailable',
@@ -1316,8 +1354,8 @@ function loadPlugins() {
         console.error(`[plugins] Failed to load ${file}:`, err.message);
       }
     }
-  } catch {
-    // plugin dir not accessible; continue without plugins
+  } catch (err) {
+    console.warn('[plugins] Plugin directory not accessible:', err?.message || err);
   }
   return pluginCommands;
 }

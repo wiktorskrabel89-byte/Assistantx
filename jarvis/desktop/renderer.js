@@ -1,39 +1,37 @@
-const { getToken } = require('./auth');
+// All Node-module APIs are provided by preload.js via window.jarvisApi.
+// IPC with the main process is via window.jarvisIpc.
+// Neither require() nor ipcRenderer are available in this renderer context
+// (nodeIntegration: false / contextIsolation: true).
 const {
+	getToken,
 	connectToBackend,
 	executeStructuredCommand,
 	getLocalStateSnapshot,
 	onMessage,
 	onStatus,
 	queuePromptExecution,
-} = require('./backend');
-const {
 	addSchedule,
 	getSchedules,
 	syncToCloud,
 	loadFromCloud,
-} = require('./local-state');
-const { startScheduler } = require('./scheduler');
-const { getAccountSession, setAccountSession, clearAccountSession, getLinkedAccounts } = require('./accounts');
-const { getJarvisApiUrl, getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
+	startScheduler,
+	getAccountSession,
+	setAccountSession,
+	clearAccountSession,
+	getLinkedAccounts,
+	refreshSessionIfNeeded,
+	getJarvisApiUrl,
+	getJarvisWebUrl,
+	setJarvisWebUrl,
+} = window.jarvisApi;
 
-// ipcRenderer for URL opening via main process
-let ipcRenderer;
-try {
-	ipcRenderer = require('electron').ipcRenderer;
-} catch {
-	ipcRenderer = null;
-}
+const ipcRenderer = window.jarvisIpc || null;
 
 // ── Python AI-Agent sidecar bridge ──────────────────────────────────────────
-let sidecar = null;
+// The SidecarBridge instance is created in preload.js (which runs with Node
+// access) and exposed via window.jarvisApi.sidecar.
+const sidecar = window.jarvisApi.sidecar || null;
 let sidecarConnected = false;
-try {
-	const { SidecarBridge } = require('./sidecar-bridge');
-	sidecar = new SidecarBridge();
-} catch {
-	// sidecar-bridge not available — browser voice APIs will be used
-}
 
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
 const MAX_SPOKEN_TEXT_LENGTH = 220;
@@ -101,6 +99,7 @@ function appendMessage(log, title, body, tone = 'system') {
 
 	item.append(heading, text);
 	log.prepend(item);
+	return item;
 }
 
 function setStatusDot(status) {
@@ -791,9 +790,9 @@ window.addEventListener('DOMContentLoaded', () => {
 			sttEnabled: Boolean(voiceSettings.sttEnabled),
 			ttsEnabled: Boolean(voiceSettings.ttsEnabled && voiceSettings.autoTts),
 		});
-		if (voiceSettings.wakeWordEnabled && !sidecar._capturing) {
+		if (voiceSettings.wakeWordEnabled && !sidecar.isCapturing()) {
 			sidecar.startAudioCapture().catch(() => null);
-		} else if (!voiceSettings.wakeWordEnabled && sidecar._capturing) {
+		} else if (!voiceSettings.wakeWordEnabled && sidecar.isCapturing()) {
 			sidecar.stopAudioCapture();
 		}
 	}
@@ -834,9 +833,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		void speakResponse(text);
 	}
 
-	// Expose IPC sidecar-status listener for the main process
 	if (ipcRenderer) {
-		ipcRenderer.on('sidecar-status', (_event, payload) => {
+		ipcRenderer.on('sidecar-status', (payload) => {
 			appendMessage(log, 'AI Sidecar', `Sidecar status: ${payload?.status || 'unknown'}`, 'system');
 		});
 	}
@@ -850,13 +848,13 @@ window.addEventListener('DOMContentLoaded', () => {
 			appVersionNode.textContent = 'Unknown';
 		});
 
-		ipcRenderer.on('app-meta', (_event, meta) => {
+		ipcRenderer.on('app-meta', (meta) => {
 			appVersionNode.textContent = meta.packaged
 				? `v${meta.version}`
 				: `v${meta.version} (dev mode, updater off)`;
 		});
 
-		ipcRenderer.on('auto-update-status', (_event, payload) => {
+		ipcRenderer.on('auto-update-status', (payload) => {
 			updateAutoUpdateStatus(payload);
 
 			if (['checking', 'up-to-date', 'ready-to-install', 'error', 'unavailable'].includes(payload?.status)) {
@@ -933,9 +931,25 @@ window.addEventListener('DOMContentLoaded', () => {
 		appendMessage(log, 'Connection', msg, tone);
 	});
 
+	let thinkingLogEntry = null;
+
 	onMessage((rawMessage) => {
 		try {
 			const parsed = JSON.parse(rawMessage);
+			if (parsed.type === 'ai_thinking') {
+				if (parsed.inFlight) {
+					thinkingLogEntry = appendMessage(log, '🤔 Jarvis AI', 'Thinking…', 'system');
+				} else if (thinkingLogEntry) {
+					thinkingLogEntry.remove();
+					thinkingLogEntry = null;
+				}
+				return;
+			}
+			// Remove any pending thinking indicator when the real response arrives.
+			if (thinkingLogEntry) {
+				thinkingLogEntry.remove();
+				thinkingLogEntry = null;
+			}
 			if (parsed.type === 'presence_snapshot') {
 				appendMessage(log, 'Presence', `Connected clients: ${parsed?.active_connections ?? 0}`, 'system');
 				return;
@@ -979,9 +993,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	// ── Account / Cloud sync ─────────────────────────────────────────────────
 	function refreshAccountUI() {
 		const session = getAccountSession();
-		if (session?.email) {
-			if (accountStatusNode) accountStatusNode.textContent = `Signed in as ${session.email}`;
-			if (accountBadge) accountBadge.textContent = `AssistantX · ${session.email}`;
+		if (session?.accessToken) {
+			const displayName = session.email || 'your account';
+			if (accountStatusNode) accountStatusNode.textContent = `Signed in as ${displayName}`;
+			if (accountBadge) accountBadge.textContent = `AssistantX · ${displayName}`;
 			if (accountLoginButton) accountLoginButton.textContent = '🔓 Sign out';
 			if (accountSyncButton) accountSyncButton.disabled = false;
 		} else {
@@ -1062,7 +1077,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	if (accountLoginButton) {
 		accountLoginButton.addEventListener('click', async () => {
 			const session = getAccountSession();
-			if (session?.email) {
+			if (session?.accessToken) {
 				clearAccountSession();
 				refreshAccountUI();
 				refreshLinkedAccounts();
@@ -1072,7 +1087,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (ipcRenderer) {
 				try {
 					const result = await ipcRenderer.invoke('open-account-login');
-					if (result?.email) {
+					if (result?.accessToken) {
 						setAccountSession(result);
 						refreshAccountUI();
 						refreshLinkedAccounts();
@@ -1182,4 +1197,15 @@ window.addEventListener('DOMContentLoaded', () => {
 	connectToBackend({ token });
 	updateStatus('ready');
 	appendMessage(log, 'Jarvis Desktop', 'Shell initialized. Connecting to backend…');
+
+	// Silently refresh the session if the stored access token has expired.
+	// If the refresh fails the session is cleared and the UI reflects "Not signed in".
+	void refreshSessionIfNeeded().then((newSession) => {
+		if (newSession === null) {
+			refreshAccountUI();
+			refreshLinkedAccounts();
+		}
+	}).catch((err) => {
+		console.warn('[renderer] Session refresh on startup failed:', err?.message || err);
+	});
 });

@@ -54,8 +54,9 @@ function setJarvisWebUrl(url) {
     }
     fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(current, null, 2), 'utf-8');
-  } catch {
-    // Ignore write errors — in-memory override is still active for this session.
+  } catch (err) {
+    console.warn('[runtime-config] Failed to persist web URL to config file:', err?.message || err);
+    // In-memory override is still active for this session.
   }
 }
 
