@@ -25,6 +25,16 @@ try {
 	ipcRenderer = null;
 }
 
+// ── Python AI-Agent sidecar bridge ──────────────────────────────────────────
+let sidecar = null;
+let sidecarConnected = false;
+try {
+	const { SidecarBridge } = require('./sidecar-bridge');
+	sidecar = new SidecarBridge();
+} catch {
+	// sidecar-bridge not available — browser voice APIs will be used
+}
+
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
 const MAX_SPOKEN_TEXT_LENGTH = 220;
 const VOICE_PROFILES = {
@@ -573,6 +583,160 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 	setupWakeWordListener();
+
+	// ── Python sidecar voice pipeline ─────────────────────────────────────────
+	// Connects to the local AI-Agent WebSocket sidecar (ws://127.0.0.1:8765).
+	// When connected, the sidecar handles wake word, STT, TTS, and NLP.
+	// The browser Speech APIs above remain as automatic fallback.
+	function setupSidecar() {
+		if (!sidecar) return;
+
+		sidecar.on('connected', () => {
+			sidecarConnected = true;
+			appendMessage(log, 'AI Sidecar', '🤖 Python voice sidecar connected (offline mode active).', 'system');
+			sidecar.configure({
+				wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
+				language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
+				wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
+				sttEnabled: Boolean(voiceSettings.sttEnabled),
+				ttsEnabled: Boolean(voiceSettings.ttsEnabled && voiceSettings.autoTts),
+				sampleRate: 16000,
+			});
+			// Start microphone capture immediately if wake word is enabled
+			if (voiceSettings.wakeWordEnabled) {
+				sidecar.startAudioCapture().catch(() => null);
+			}
+		});
+
+		sidecar.on('disconnected', () => {
+			sidecarConnected = false;
+			appendMessage(log, 'AI Sidecar', 'Python voice sidecar disconnected — using browser fallback.', 'system');
+		});
+
+		sidecar.on('error', () => {
+			// Non-fatal; browser pipeline takes over
+		});
+
+		sidecar.on('status', (payload) => {
+			if (payload?.phase && payload.phase !== 'connected' && payload.phase !== 'configured') {
+				appendMessage(log, 'AI Sidecar', payload.message || payload.phase, 'system');
+			}
+		});
+
+		sidecar.on('wake_word', () => {
+			if (!voiceSettings.allowBackgroundWake && !document.hasFocus()) return;
+			appendMessage(log, 'AI Sidecar', `Wake word detected — listening…`);
+			setVoiceVisualizer('listening');
+			sidecar.setListeningForCommand(true);
+		});
+
+		sidecar.on('stt_result', ({ text, isFinal }) => {
+			if (!text) return;
+			input.value = text;
+			if (isFinal) {
+				setVoiceVisualizer('idle');
+				sidecar.setListeningForCommand(false);
+				submitPrompt();
+			} else {
+				setVoiceVisualizer('listening');
+			}
+		});
+
+		sidecar.on('tts_audio', ({ data, format }) => {
+			if (!data || !voiceSettings.autoTts) return;
+			try {
+				const AudioContext = window.AudioContext || window.webkitAudioContext;
+				if (!AudioContext) return;
+				const actx = new AudioContext();
+				const mimeMap = { wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg' };
+				const mime = mimeMap[format] || 'audio/wav';
+				const binary = atob(data);
+				const bytes = new Uint8Array(binary.length);
+				for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+				actx.decodeAudioData(bytes.buffer, (decoded) => {
+					const source = actx.createBufferSource();
+					source.buffer = decoded;
+					source.connect(actx.destination);
+					setVoiceVisualizer('speaking');
+					source.onended = () => {
+						setVoiceVisualizer('idle');
+						actx.close().catch(() => null);
+					};
+					source.start(0);
+				}, () => {
+					actx.close().catch(() => null);
+				});
+			} catch {
+				// fall through to browser TTS
+			}
+		});
+
+		sidecar.on('intent_parsed', ({ intent, entities, confidence }) => {
+			// Route structured intents from NLP back through the desktop executor
+			if (confidence < 0.6 || !intent || intent === 'unknown') return;
+			const INTENT_TO_COMMAND = {
+				open_app: 'openApp',
+				close_app: 'closeApp',
+				search_web: 'searchWeb',
+				search_youtube: 'searchYouTube',
+				volume_up: 'volumeUp',
+				volume_down: 'volumeDown',
+				mute: 'mute',
+				screenshot: 'screenshot',
+				shutdown: 'shutdown',
+				restart: 'restart',
+				sleep: 'sleep',
+				lock_screen: 'lockScreen',
+				start_mode: 'startMode',
+			};
+			const command = INTENT_TO_COMMAND[intent];
+			if (!command) return;
+			void executeStructuredCommand(
+				{ command, ...entities },
+				{ source: 'local', origin: 'sidecar' },
+			);
+		});
+
+		sidecar.connect();
+	}
+	setupSidecar();
+
+	// Sync sidecar settings when voice settings change
+	const _origApplyVoiceSettings = applyVoiceSettings;
+	function applyVoiceSettingsWithSidecar(nextSettings, options) {
+		_origApplyVoiceSettings(nextSettings, options);
+		if (sidecarConnected && sidecar) {
+			sidecar.configure({
+				wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
+				language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
+				wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
+				sttEnabled: Boolean(voiceSettings.sttEnabled),
+				ttsEnabled: Boolean(voiceSettings.ttsEnabled && voiceSettings.autoTts),
+			});
+			if (voiceSettings.wakeWordEnabled && !sidecar._capturing) {
+				sidecar.startAudioCapture().catch(() => null);
+			} else if (!voiceSettings.wakeWordEnabled && sidecar._capturing) {
+				sidecar.stopAudioCapture();
+			}
+		}
+	}
+
+	// Expose sidecar-aware speak that prefers Piper when connected, falls back to browser TTS
+	async function speakWithSidecar(text) {
+		if (sidecarConnected && sidecar && voiceSettings.autoTts) {
+			const requestId = `tts-${Date.now()}`;
+			sidecar.requestTts(text, requestId);
+			return;
+		}
+		await speakResponse(text);
+	}
+
+	// Expose IPC sidecar-status listener for the main process
+	if (ipcRenderer) {
+		ipcRenderer.on('sidecar-status', (_event, payload) => {
+			appendMessage(log, 'AI Sidecar', `Sidecar status: ${payload?.status || 'unknown'}`, 'system');
+		});
+	}
 
 	if (ipcRenderer && appVersionNode) {
 		ipcRenderer.invoke('get-app-meta').then((meta) => {

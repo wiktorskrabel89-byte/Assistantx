@@ -961,6 +961,30 @@ async function executeStructuredCommand(msg, context = {}) {
         }
         result = { summary: 'Shutdown/restart cancelled.' };
         break;
+      case 'startMode': {
+        const mode = String(msg.mode || '').toLowerCase();
+        const MODE_APP_MAP = {
+          gaming: ['steam', 'discord'],
+          study: ['vscode', 'chrome'],
+          stream: ['obs', 'discord'],
+        };
+        const appsToOpen = MODE_APP_MAP[mode] || [];
+        const modeResults = [];
+        for (const modeApp of appsToOpen) {
+          try {
+            const modeResult = await openApp(modeApp, { source: context.source || 'local' });
+            modeResults.push(modeResult.summary || modeApp);
+          } catch (modeErr) {
+            modeResults.push(`${modeApp}: ${modeErr.message}`);
+          }
+        }
+        result = {
+          summary: mode
+            ? `${mode.charAt(0).toUpperCase() + mode.slice(1)} mode started. ${modeResults.join('; ')}`
+            : 'Unknown mode.',
+        };
+        break;
+      }
       default: {
         // ── Plugin commands ──────────────────────────────────────────────
         const plugin = PLUGIN_COMMANDS[command];
