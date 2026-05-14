@@ -1,8 +1,10 @@
 import warnings
 warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality")
 
-from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
+import logging
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -10,21 +12,10 @@ import os
 import json
 import base64
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_anthropic import ChatAnthropic
-from langchain_community.vectorstores import SupabaseVectorStore
-from langchain_community.tools import DuckDuckGoSearchRun
-from langchain.agents import create_agent
-from langchain_core.tools import create_retriever_tool
-from langchain_core.messages import HumanMessage, SystemMessage
-from openai import AsyncOpenAI
-from github.github import fetch_github_issues
-from note import note_tool
-
-from supabase import create_client
-
 # Load .env from the current working directory (or nearest parent that contains one)
 load_dotenv()
+
+logger = logging.getLogger("jarvis-backend")
 
 app = FastAPI()
 
@@ -37,6 +28,120 @@ app.add_middleware(
     allow_methods=["POST", "GET", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
+
+# ── Lazy service registry ──────────────────────────────────────────────────────
+# Services that require optional env vars are initialised once on first use.
+# Missing config is reported at runtime (HTTP 503) instead of crashing at startup.
+
+_services: dict = {}
+
+
+def _get_supabase_client():
+    if "supabase" not in _services:
+        from supabase import create_client as _create_supabase
+        url = os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
+        key = os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "")
+        if not url or not key:
+            return None
+        try:
+            _services["supabase"] = _create_supabase(url, key)
+        except Exception as exc:
+            logger.warning("Supabase client init failed: %s", exc)
+            return None
+    return _services["supabase"]
+
+
+def _get_llm_chat():
+    if "llm_chat" not in _services:
+        from langchain_openai import ChatOpenAI
+        if not os.getenv("OPENAI_API_KEY"):
+            return None
+        try:
+            _services["llm_chat"] = ChatOpenAI(model="gpt-4.5-preview", temperature=0)
+        except Exception as exc:
+            logger.warning("ChatOpenAI init failed: %s", exc)
+            return None
+    return _services["llm_chat"]
+
+
+def _get_llm_code():
+    if "llm_code" not in _services:
+        from langchain_anthropic import ChatAnthropic
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            return None
+        try:
+            _services["llm_code"] = ChatAnthropic(model="claude-sonnet-4-6", temperature=0)
+        except Exception as exc:
+            logger.warning("ChatAnthropic init failed: %s", exc)
+            return None
+    return _services["llm_code"]
+
+
+def _get_openai_client():
+    if "openai" not in _services:
+        from openai import AsyncOpenAI
+        if not os.getenv("OPENAI_API_KEY"):
+            return None
+        try:
+            _services["openai"] = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        except Exception as exc:
+            logger.warning("AsyncOpenAI init failed: %s", exc)
+            return None
+    return _services["openai"]
+
+
+def _get_retriever():
+    if "retriever" not in _services:
+        from langchain_openai import OpenAIEmbeddings
+        from langchain_community.vectorstores import SupabaseVectorStore
+        from langchain_core.tools import create_retriever_tool
+        supabase = _get_supabase_client()
+        if not supabase or not os.getenv("OPENAI_API_KEY"):
+            return None, None
+        try:
+            embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+            vstore = SupabaseVectorStore(
+                client=supabase,
+                embedding=embeddings,
+                table_name="github",
+            )
+            retriever = vstore.as_retriever(search_kwargs={"k": 2})
+            tool = create_retriever_tool(retriever, "github_search", "Search for github issues")
+            _services["retriever"] = (retriever, tool)
+        except Exception as exc:
+            logger.warning("Retriever init failed: %s", exc)
+            return None, None
+    return _services["retriever"]
+
+
+def _get_agent():
+    if "agent" not in _services:
+        from langchain_community.tools import DuckDuckGoSearchRun
+        from langchain.agents import create_agent
+        from note import note_tool
+        llm = _get_llm_chat()
+        _, retriever_tool = _get_retriever()
+        if not llm:
+            return None
+        try:
+            try:
+            search_tool = DuckDuckGoSearchRun()
+        except Exception:
+            search_tool = None
+            logger.warning("DuckDuckGoSearchRun init failed; web search will be unavailable in the agent.")
+        tools = [t for t in [retriever_tool, note_tool, search_tool] if t is not None]
+            _services["agent"] = create_agent(llm, tools)
+        except Exception as exc:
+            logger.warning("Agent init failed: %s", exc)
+            return None
+    return _services["agent"]
+
+
+def _unavailable(feature: str):
+    return JSONResponse(
+        status_code=503,
+        content={"error": f"{feature} is not available. Check that the required environment variables (API keys) are set and restart the backend."},
+    )
 
 
 class JarvisSocketManager:
@@ -113,43 +218,6 @@ class UploadRequest(BaseModel):
     file_base64: str
     mime_type: str
     message: str = ""
-
-# setup
-SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-if not SUPABASE_URL:
-    raise ValueError("NEXT_PUBLIC_SUPABASE_URL env var missing")
-
-SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
-if not SUPABASE_KEY:
-    raise ValueError("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY env var missing")
-
-supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
-vstore = SupabaseVectorStore(
-    client=supabase_client,
-    embedding=embeddings,
-    table_name="github",
-)
-
-retriever = vstore.as_retriever(search_kwargs={"k": 2})
-retriever_tool = create_retriever_tool(
-    retriever,
-    "github_search",
-    "Search for github issues",
-)
-
-# gpt-4.5-preview: best OpenAI model for chat (fast, multimodal, highly capable)
-llm_chat = ChatOpenAI(model="gpt-4.5-preview", temperature=0)
-search_tool = DuckDuckGoSearchRun()
-tools = [retriever_tool, note_tool, search_tool]
-agent = create_agent(llm_chat, tools)
-
-# claude-sonnet-4-6: best Claude model for coding (top benchmark scores, fast)
-llm_code = ChatAnthropic(model="claude-sonnet-4-6", temperature=0)
-
-# OpenAI async client for image generation
-openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 CODE_KEYWORDS = [
     "kod", "code", "funkcja", "function", "skrypt", "script",
@@ -314,8 +382,15 @@ async def jarvis_websocket(websocket: WebSocket):
 
 @app.get("/jarvis/status")
 async def jarvis_status():
+    config_ok = bool(
+        os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+        and os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+        and os.getenv("OPENAI_API_KEY")
+        and os.getenv("ANTHROPIC_API_KEY")
+    )
     return {
         "ok": True,
+        "config_ok": config_ok,
         "websocket_path": "/ws",
         **socket_manager.summary(),
     }
@@ -324,35 +399,38 @@ async def jarvis_status():
 # --- Streaming, System Prompt, History Limit, RAG ---
 @app.post("/chat")
 async def chat(msg: Message):
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    llm_chat = _get_llm_chat()
+    llm_code = _get_llm_code()
+    retriever, _ = _get_retriever()
+
     mode = msg.mode
     if mode == "auto":
         mode = "code" if is_code_request(msg.message) else "chat"
 
+    if mode == "code" and not llm_code:
+        return _unavailable("Code AI (ANTHROPIC_API_KEY missing)")
+    if mode != "code" and not llm_chat:
+        return _unavailable("Chat AI (OPENAI_API_KEY missing)")
 
-    # --- Limit history to 20 (Supabase) ---
-    # Example: fetch last 20 messages from Supabase (pseudo, adapt to your schema)
-    # history = supabase_client.table("chat_history").select("*").order("created_at", desc=True).limit(20).execute().data[::-1]
-    history = []  # Replace with actual Supabase fetch if needed
+    history = []
 
-    # --- RAG: retrieve context from SupabaseVectorStore ---
-    # Use retriever to get relevant context for the user message
     rag_context = ""
-    try:
-        docs = retriever.get_relevant_documents(msg.message)
-        if docs:
-            rag_context = "\n\n".join([d.page_content for d in docs if hasattr(d, "page_content")])
-    except Exception as e:
-        rag_context = ""  # fallback if retrieval fails
+    if retriever:
+        try:
+            docs = retriever.get_relevant_documents(msg.message)
+            if docs:
+                rag_context = "\n\n".join([d.page_content for d in docs if hasattr(d, "page_content")])
+        except Exception:
+            rag_context = ""
 
-    # --- System prompt ---
     system_prompt = SystemMessage(content="You are a powerful AI assistant that writes clear and complete answers.")
 
     if mode == "code":
         messages = [system_prompt, SystemMessage(content="You are an expert programmer. Detect the language of the user's message and always respond in that same language. When generating code, always use proper formatting with markdown code blocks. Be concise and practical.")]
-        # Add RAG context if available
         if rag_context:
             messages.append(SystemMessage(content=f"Relevant context:\n{rag_context}"))
-        # Add history if available
         messages += history
         messages.append(HumanMessage(content=msg.message))
 
@@ -367,10 +445,8 @@ async def chat(msg: Message):
 
     else:
         chat_messages = [system_prompt, SystemMessage(content="Detect the language of the user's message and always respond in that same language. Be helpful, friendly and conversational.")]
-        # Add RAG context if available
         if rag_context:
             chat_messages.append(SystemMessage(content=f"Relevant context:\n{rag_context}"))
-        # Add history if available
         chat_messages += history
         chat_messages.append(HumanMessage(content=msg.message))
 
@@ -385,6 +461,9 @@ async def chat(msg: Message):
 
 @app.post("/image")
 async def generate_image(req: ImageRequest):
+    openai_client = _get_openai_client()
+    if not openai_client:
+        return _unavailable("Image generation (OPENAI_API_KEY missing)")
     response = await openai_client.images.generate(
         model="dall-e-3",
         prompt=req.prompt,
@@ -397,6 +476,12 @@ async def generate_image(req: ImageRequest):
 
 @app.post("/upload")
 async def upload_file(req: UploadRequest):
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    llm_chat = _get_llm_chat()
+    if not llm_chat:
+        return _unavailable("Vision upload (OPENAI_API_KEY missing)")
+
     image_data = base64.b64decode(req.file_base64)
     base64_str = base64.b64encode(image_data).decode("utf-8")
 

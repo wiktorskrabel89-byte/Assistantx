@@ -592,7 +592,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		ipcRenderer.on('auto-update-status', (_event, payload) => {
 			updateAutoUpdateStatus(payload);
 
-			if (['checking', 'up-to-date', 'ready-to-install', 'error'].includes(payload?.status)) {
+			if (['checking', 'up-to-date', 'ready-to-install', 'error', 'unavailable'].includes(payload?.status)) {
 				appendMessage(log, 'Updater', payload.detail || payload.status, payload?.status === 'error' ? 'error' : 'system');
 			}
 		});

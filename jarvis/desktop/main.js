@@ -63,6 +63,19 @@ function compareVersions(left, right) {
   return 0;
 }
 
+function isTransientFetchFailure(error) {
+  const errorMessageLowerCase = String(error?.message || '').toLowerCase();
+  return (
+    errorMessageLowerCase.includes('fetch failed')
+    || errorMessageLowerCase.includes('network')
+    || errorMessageLowerCase.includes('econnrefused')
+    || errorMessageLowerCase.includes('enotfound')
+    || errorMessageLowerCase.includes('ehostunreach')
+    || errorMessageLowerCase.includes('timed out')
+    || errorMessageLowerCase.includes('timeout')
+  );
+}
+
 async function fetchLatestJarvisReleaseFromServer() {
   try {
     const response = await fetch(`${getJarvisWebBaseUrl()}/api/jarvis/version`, {
@@ -224,6 +237,10 @@ async function checkForUpdates() {
     });
     return { ok: true, reason: 'skipped' };
   } catch (error) {
+    if (isTransientFetchFailure(error)) {
+      emitUpdateStatus('unavailable', 'Update check is temporarily unavailable (network or release endpoint).', { downloaded: false });
+      return { ok: false, reason: 'update-check-unavailable' };
+    }
     emitUpdateStatus('error', `Update check failed: ${error.message}`, { downloaded: false });
     return { ok: false, reason: error.message };
   }
