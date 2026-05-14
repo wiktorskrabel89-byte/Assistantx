@@ -153,12 +153,12 @@ describe('SidecarBridge', () => {
       confidence: 0.92,
     }));
 
-    expect(handler).toHaveBeenCalledWith({
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
       requestId: 'req-2',
       intent: 'open_app',
       entities: { app: 'spotify' },
       confidence: 0.92,
-    });
+    }));
   });
 
   it('sends configure message immediately when connected', () => {

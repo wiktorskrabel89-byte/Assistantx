@@ -1,12 +1,8 @@
 const path = require('path');
 const { execFile } = require('child_process');
-const { shell } = (() => {
-  try {
-    return require('electron');
-  } catch {
-    return { shell: null };
-  }
-})();
+const shell = process.versions?.electron
+  ? require('electron').shell
+  : null;
 const { APP_OPEN_MAP, APP_OPEN_MAP_DARWIN } = require('../app-launch-config');
 const { normalizeKey, normalizeName } = require('../app-scanner');
 const { getMeta, setMeta } = require('./db');
