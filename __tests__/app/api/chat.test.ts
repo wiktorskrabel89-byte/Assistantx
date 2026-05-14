@@ -179,7 +179,7 @@ describe("POST /api/chat — 5xx free-model retry cascade", () => {
     const retryBody = JSON.parse(
       mockFetch.mock.calls[1][1]?.body as string
     ) as { model: string };
-    expect(retryBody.model).toBe("google/gemini-2.5-flash");
+    expect(retryBody.model).toBe("gemini-2.5-flash");
   });
 
   it("uses Gemini fallback in the retry chain when a Groq model returns 5xx", async () => {
@@ -205,7 +205,7 @@ describe("POST /api/chat — 5xx free-model retry cascade", () => {
       const body = JSON.parse((init as RequestInit).body as string) as { model: string };
       triedModels.push(body.model);
     }
-    expect(triedModels).toContain("google/gemini-2.5-flash");
+    expect(triedModels).toContain("gemini-2.5-flash");
   });
 });
 
@@ -548,7 +548,7 @@ describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
       messages: Array<{ role: string; content: string }>;
     };
     const systemMessage = calledBody.messages.find((m) => m.role === "system");
-    expect(calledBody.model).toBe("google/gemini-2.5-flash");
+    expect(calledBody.model).toBe("gemini-2.5-flash");
     expect(calledBody.temperature).toBe(0.6);
     expect(systemMessage?.content).toContain("Analyze long documents and large context efficiently.");
   });
