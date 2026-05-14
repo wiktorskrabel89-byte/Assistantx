@@ -84,7 +84,8 @@ function readState() {
     }
     const raw = JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8'));
     return normalizeState(raw);
-  } catch {
+  } catch (err) {
+    console.warn('[local-state] Failed to read state file, using defaults:', err?.message || err);
     return normalizeState(DEFAULT_STATE);
   }
 }
@@ -335,8 +336,11 @@ async function syncToCloud(apiUrl, token, options = {}) {
   try {
     const state = readState();
     const syncOptions = state.preferences?.syncOptions || DEFAULT_STATE.preferences.syncOptions;
+    // Strip discoveredApps — it is machine-specific and can be re-scanned locally.
+    // Sending it would inflate the payload with up to 1000 app entries on every sync.
+    const { discoveredApps: _discoveredApps, ...prefsToSync } = state.preferences;
     const payload = {
-      preferences: state.preferences,
+      preferences: prefsToSync,
       history: state.history.slice(0, 50),
       tasks: state.tasks.slice(0, MAX_TASKS),
       schedules: state.schedules.slice(0, MAX_TASKS),

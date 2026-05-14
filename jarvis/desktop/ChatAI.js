@@ -16,21 +16,48 @@ window.addEventListener('DOMContentLoaded', () => {
   const input = document.getElementById('input');
   const send = document.getElementById('send');
 
+  // Reference to the in-flight "Thinking…" bubble so it can be replaced.
+  let thinkingBubble = null;
+
   function appendMsg(speaker, text) {
     const msg = document.createElement('div');
     msg.textContent = speaker + ': ' + text;
     chat.appendChild(msg);
     chat.scrollTop = chat.scrollHeight;
+    return msg;
   }
 
   if (onMessage) {
     onMessage((raw) => {
       try {
         const payload = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        const text = payload?.text || payload?.summary || String(raw);
-        appendMsg('Jarvis', text);
+
+        if (payload?.type === 'ai_thinking') {
+          if (payload.inFlight && !thinkingBubble) {
+            thinkingBubble = appendMsg('Jarvis', 'Thinking…');
+            thinkingBubble.style.opacity = '0.55';
+            thinkingBubble.style.fontStyle = 'italic';
+          } else if (!payload.inFlight && thinkingBubble) {
+            thinkingBubble.remove();
+            thinkingBubble = null;
+          }
+          return;
+        }
+
+        // Remove the thinking bubble when the actual response arrives.
+        if (thinkingBubble) {
+          thinkingBubble.remove();
+          thinkingBubble = null;
+        }
+
+        const text = payload?.text || payload?.summary;
+        if (text) appendMsg('Jarvis', text);
       } catch (err) {
         console.error('[ChatAI] Failed to parse message payload:', err);
+        if (thinkingBubble) {
+          thinkingBubble.remove();
+          thinkingBubble = null;
+        }
         appendMsg('Jarvis', String(raw));
       }
     });

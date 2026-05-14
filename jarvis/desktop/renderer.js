@@ -14,7 +14,7 @@ const {
 	loadFromCloud,
 } = require('./local-state');
 const { startScheduler } = require('./scheduler');
-const { getAccountSession, setAccountSession, clearAccountSession, getLinkedAccounts } = require('./accounts');
+const { getAccountSession, setAccountSession, clearAccountSession, getLinkedAccounts, refreshSessionIfNeeded } = require('./accounts');
 const { getJarvisApiUrl, getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
 
 // ipcRenderer for URL opening via main process
@@ -936,6 +936,12 @@ window.addEventListener('DOMContentLoaded', () => {
 	onMessage((rawMessage) => {
 		try {
 			const parsed = JSON.parse(rawMessage);
+			if (parsed.type === 'ai_thinking') {
+				if (parsed.inFlight) {
+					appendMessage(log, '🤔 Jarvis AI', 'Thinking…', 'system');
+				}
+				return;
+			}
 			if (parsed.type === 'presence_snapshot') {
 				appendMessage(log, 'Presence', `Connected clients: ${parsed?.active_connections ?? 0}`, 'system');
 				return;
@@ -979,9 +985,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	// ── Account / Cloud sync ─────────────────────────────────────────────────
 	function refreshAccountUI() {
 		const session = getAccountSession();
-		if (session?.email) {
-			if (accountStatusNode) accountStatusNode.textContent = `Signed in as ${session.email}`;
-			if (accountBadge) accountBadge.textContent = `AssistantX · ${session.email}`;
+		if (session?.accessToken) {
+			const displayName = session.email || 'your account';
+			if (accountStatusNode) accountStatusNode.textContent = `Signed in as ${displayName}`;
+			if (accountBadge) accountBadge.textContent = `AssistantX · ${displayName}`;
 			if (accountLoginButton) accountLoginButton.textContent = '🔓 Sign out';
 			if (accountSyncButton) accountSyncButton.disabled = false;
 		} else {
@@ -1062,7 +1069,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	if (accountLoginButton) {
 		accountLoginButton.addEventListener('click', async () => {
 			const session = getAccountSession();
-			if (session?.email) {
+			if (session?.accessToken) {
 				clearAccountSession();
 				refreshAccountUI();
 				refreshLinkedAccounts();
@@ -1182,4 +1189,13 @@ window.addEventListener('DOMContentLoaded', () => {
 	connectToBackend({ token });
 	updateStatus('ready');
 	appendMessage(log, 'Jarvis Desktop', 'Shell initialized. Connecting to backend…');
+
+	// Silently refresh the session if the stored access token has expired.
+	// If the refresh fails the session is cleared and the UI reflects "Not signed in".
+	void refreshSessionIfNeeded().then((newSession) => {
+		if (newSession === null) {
+			refreshAccountUI();
+			refreshLinkedAccounts();
+		}
+	}).catch(() => null);
 });

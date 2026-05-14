@@ -126,6 +126,13 @@ function emitUpdateStatus(status, detail, extra = {}) {
     ...extra,
   };
   sendToRenderer('auto-update-status', updateState);
+  if (tray && !tray.isDestroyed()) {
+    if (status === 'update-available' && extra?.version) {
+      tray.setToolTip(`Jarvis Desktop — Update ${extra.version} available ⬆️`);
+    } else if (status !== 'update-available') {
+      tray.setToolTip('Jarvis Desktop');
+    }
+  }
 }
 
 function getJarvisWebBaseUrl() {
@@ -764,8 +771,9 @@ function parseCallbackUrl(url, loginWin, resolve) {
         || jwtPayload?.email || '';
       const userId = params.get('sub') || params.get('user_id') || parsed.searchParams.get('user_id')
         || jwtPayload?.sub || '';
+      const refreshToken = params.get('refresh_token') || parsed.searchParams.get('refresh_token') || '';
       loginWin.close();
-      resolve({ accessToken, email, userId, signedInAt: new Date().toISOString() });
+      resolve({ accessToken, refreshToken, email, userId, signedInAt: new Date().toISOString() });
     }
   } catch {
     if (process.env.NODE_ENV !== 'production') {
