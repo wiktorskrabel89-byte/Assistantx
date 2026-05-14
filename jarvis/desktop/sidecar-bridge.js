@@ -17,8 +17,9 @@ const EventEmitter = require('events');
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
-const RECONNECT_DELAY_MS = 3000;
-const MAX_RECONNECT_ATTEMPTS = 20;
+const RECONNECT_BASE_DELAY_MS = 2000;
+const RECONNECT_MAX_DELAY_MS = 30000;
+const MAX_RECONNECT_ATTEMPTS = 10;
 const AUDIO_SAMPLE_RATE = 16000;
 const AUDIO_CHUNK_MS = 100; // send 100 ms chunks
 const AUDIO_CHUNK_SIZE = (AUDIO_SAMPLE_RATE * AUDIO_CHUNK_MS) / 1000; // samples per chunk
@@ -31,6 +32,7 @@ class SidecarBridge extends EventEmitter {
     this._reconnectAttempts = 0;
     this._reconnectTimer = null;
     this._connected = false;
+    this._wasEverConnected = false;
     this._audioContext = null;
     this._audioSource = null;
     this._audioWorklet = null;
@@ -78,6 +80,7 @@ class SidecarBridge extends EventEmitter {
 
     this._ws.onopen = () => {
       this._connected = true;
+      this._wasEverConnected = true;
       this._reconnectAttempts = 0;
       this.emit('connected');
       if (this._pendingSettings) {
@@ -87,8 +90,13 @@ class SidecarBridge extends EventEmitter {
     };
 
     this._ws.onclose = () => {
+      const wasConnected = this._connected;
       this._connected = false;
-      this.emit('disconnected');
+      // Only emit 'disconnected' when transitioning from connected → disconnected,
+      // not on every failed reconnect attempt, to avoid log spam.
+      if (wasConnected) {
+        this.emit('disconnected');
+      }
       this._scheduleReconnect();
     };
 
@@ -102,10 +110,22 @@ class SidecarBridge extends EventEmitter {
   }
 
   _scheduleReconnect() {
-    if (this._reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
+    if (this._reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      // All attempts exhausted — emit a single final notification only if the
+      // sidecar was never reachable (i.e. it's not installed / not running).
+      if (!this._wasEverConnected) {
+        this.emit('unavailable');
+      }
+      return;
+    }
     this._reconnectAttempts += 1;
+    // Exponential back-off: 2 s, 4 s, 8 s … capped at 30 s
+    const delay = Math.min(
+      RECONNECT_BASE_DELAY_MS * (2 ** (this._reconnectAttempts - 1)),
+      RECONNECT_MAX_DELAY_MS,
+    );
     clearTimeout(this._reconnectTimer);
-    this._reconnectTimer = setTimeout(() => this._openSocket(), RECONNECT_DELAY_MS);
+    this._reconnectTimer = setTimeout(() => this._openSocket(), delay);
   }
 
   // ── Message handling ─────────────────────────────────────────────────────

@@ -3,10 +3,13 @@ const APP_OPEN_MAP = {
   firefox: 'firefox',
   edge: 'msedge',
   notepad: 'notepad',
-  roblox: ['roblox-player:', 'roblox:'],
-  spotify: ['spotify', 'spotify:'],
-  discord: ['discord', 'discord:'],
-  steam: ['steam', 'steam://open/main'],
+  // Protocol handlers are listed first so Windows uses the registered URI scheme
+  // immediately, avoiding the "Windows cannot find '<name>'" error dialog that
+  // appears when trying a plain executable name that isn't on PATH.
+  roblox: ['roblox-player:', 'roblox:', 'roblox'],
+  spotify: ['spotify:', 'spotify'],
+  discord: ['discord:', 'discord'],
+  steam: ['steam://open/main', 'steam'],
   explorer: 'explorer',
   calc: 'calc',
   calculator: 'calc',
@@ -18,7 +21,7 @@ const APP_OPEN_MAP = {
   word: 'winword',
   excel: 'excel',
   powerpoint: 'powerpnt',
-  teams: ['ms-teams:', 'msteams:'],
+  teams: ['ms-teams:', 'msteams:', 'msteams'],
   zoom: ['zoommtg:', 'zoom'],
   vscode: 'code',
   notepadpp: 'notepad++',

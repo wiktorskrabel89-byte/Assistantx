@@ -37,6 +37,18 @@
     ],
     "extraResources": [
       {
+        "from": "../../ai-agent",
+        "to": "ai-agent",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo",
+          "!**/venv/**",
+          "!**/.git/**"
+        ]
+      },
+      {
         "from": "scripts/post-install.ps1",
         "to": "post-install.ps1"
       },

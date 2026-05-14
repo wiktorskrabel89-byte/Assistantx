@@ -645,6 +645,13 @@ window.addEventListener('DOMContentLoaded', () => {
 			appendMessage(log, 'AI Sidecar', 'Python voice sidecar disconnected — using browser fallback.', 'system');
 		});
 
+		sidecar.on('unavailable', () => {
+			// Emitted once after all reconnect attempts are exhausted without ever
+			// connecting — sidecar is not installed or Python is not available.
+			sidecarConnected = false;
+			appendMessage(log, 'AI Sidecar', 'Python voice sidecar is not available — browser speech APIs will be used instead.', 'system');
+		});
+
 		sidecar.on('error', (error) => {
 			appendMessage(log, 'AI Sidecar', formatVoiceCaptureError(error), 'error');
 			if (sidecarManualListening) {
@@ -1002,6 +1009,18 @@ window.addEventListener('DOMContentLoaded', () => {
 							const syncResult = await loadFromCloud(apiBaseUrl, result.accessToken);
 							if (syncResult?.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...syncResult.voiceSettings });
 						}
+					} else {
+						appendMessage(
+							log,
+							'Account',
+							[
+								'Sign-in was not completed. If you saw an error in the login window, check:',
+								'(1) Supabase Auth providers (Email/Google/GitHub) are enabled in your Supabase dashboard.',
+								'(2) Supabase → Auth → URL Configuration → Redirect URLs includes https://www.assistantx.pl/auth/callback.',
+								'(3) Your OAuth app allows https://<project>.supabase.co/auth/v1/callback as the callback URL.',
+							].join(' '),
+							'error',
+						);
 					}
 				} catch (err) {
 					appendMessage(log, 'Account', `Sign-in failed: ${err.message}`, 'error');

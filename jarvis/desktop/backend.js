@@ -5,6 +5,7 @@ const EventEmitter = require('events');
 const os = require('os');
 const path = require('path');
 const { getJarvisApiUrl } = require('./runtime-config');
+const { getAccountSession } = require('./accounts');
 const {
   appendHistory,
   getAppAliases,
@@ -372,6 +373,8 @@ async function extractAiResponseText(response) {
 
 async function runAiPrompt(prompt, meta = {}) {
   let lastError = null;
+  const session = getAccountSession();
+  const accessToken = session?.accessToken;
 
   for (const endpoint of getJarvisAiEndpointCandidates()) {
     try {
@@ -385,6 +388,7 @@ async function runAiPrompt(prompt, meta = {}) {
               message: prompt,
               mode: 'auto',
             },
+            token: accessToken,
             timeoutMs: 45_000,
           });
         } catch (error) {
@@ -396,9 +400,11 @@ async function runAiPrompt(prompt, meta = {}) {
           headers: proxyHeaders,
         });
       } else {
+        const headers = { 'Content-Type': 'application/json' };
+        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
         response = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             message: prompt,
             mode: 'auto',
