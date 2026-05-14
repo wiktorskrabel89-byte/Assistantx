@@ -9,6 +9,7 @@
     "url": "https://github.com/wiktorskrabel89-byte/Assistantx.git"
   },
   "scripts": {
+    "postinstall": "electron-builder install-app-deps",
     "dev": "electron .",
     "start": "electron .",
     "pack": "electron-builder --dir --publish never",
@@ -34,6 +35,9 @@
       "**/*",
       "!dist/**",
       "!scripts/**"
+    ],
+    "asarUnpack": [
+      "**/node_modules/sql.js/dist/**"
     ],
     "extraResources": [
       {
@@ -89,8 +93,8 @@
     ]
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.0",
     "electron-updater": "^6.8.3",
+    "sql.js": "^1.14.1",
     "ws": "^8.20.1"
   }
 }

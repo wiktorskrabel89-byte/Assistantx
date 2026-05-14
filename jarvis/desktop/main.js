@@ -771,7 +771,14 @@ function parseCallbackUrl(url, loginWin, resolve) {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Initialise the SQLite database (sql.js loads its WASM binary asynchronously)
+  // before any launcher or IPC code touches it.
+  try {
+    await require('./launcher/db').init();
+  } catch (err) {
+    console.error('[db] Failed to initialise database:', err.message);
+  }
   startSidecar();
   createWindow();
   createLauncherOverlayWindow();
