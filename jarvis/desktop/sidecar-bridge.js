@@ -71,7 +71,7 @@ class SidecarBridge extends EventEmitter {
   _openSocket() {
     try {
       this._ws = new WebSocket(this._url);
-    } catch (err) {
+    } catch {
       this._scheduleReconnect();
       return;
     }
@@ -93,7 +93,7 @@ class SidecarBridge extends EventEmitter {
     };
 
     this._ws.onerror = () => {
-      // onclose fires after onerror; no need to handle here beyond logging
+      // onclose fires after onerror; reconnect is handled there
     };
 
     this._ws.onmessage = (event) => {

@@ -544,6 +544,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				autoTts: Boolean(autoTtsToggle.checked),
 				ttsEnabled: Boolean(autoTtsToggle.checked),
 			});
+			syncSidecarVoiceSettings();
 		});
 	}
 
@@ -649,7 +650,8 @@ window.addEventListener('DOMContentLoaded', () => {
 				if (!AudioContext) return;
 				const actx = new AudioContext();
 				const mimeMap = { wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg' };
-				const mime = mimeMap[format] || 'audio/wav';
+				const mimeType = mimeMap[format] || 'audio/wav';
+				void mimeType; // referenced for future AudioContext decoding type hint
 				const binary = atob(data);
 				const bytes = new Uint8Array(binary.length);
 				for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
@@ -701,34 +703,33 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 	setupSidecar();
 
-	// Sync sidecar settings when voice settings change
-	const _origApplyVoiceSettings = applyVoiceSettings;
-	function applyVoiceSettingsWithSidecar(nextSettings, options) {
-		_origApplyVoiceSettings(nextSettings, options);
-		if (sidecarConnected && sidecar) {
-			sidecar.configure({
-				wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
-				language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
-				wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
-				sttEnabled: Boolean(voiceSettings.sttEnabled),
-				ttsEnabled: Boolean(voiceSettings.ttsEnabled && voiceSettings.autoTts),
-			});
-			if (voiceSettings.wakeWordEnabled && !sidecar._capturing) {
-				sidecar.startAudioCapture().catch(() => null);
-			} else if (!voiceSettings.wakeWordEnabled && sidecar._capturing) {
-				sidecar.stopAudioCapture();
-			}
+	// Sync sidecar settings when voice settings change.
+	// Called by event listeners when voice settings are updated.
+	function syncSidecarVoiceSettings() {
+		if (!sidecarConnected || !sidecar) return;
+		sidecar.configure({
+			wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
+			language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
+			wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
+			sttEnabled: Boolean(voiceSettings.sttEnabled),
+			ttsEnabled: Boolean(voiceSettings.ttsEnabled && voiceSettings.autoTts),
+		});
+		if (voiceSettings.wakeWordEnabled && !sidecar._capturing) {
+			sidecar.startAudioCapture().catch(() => null);
+		} else if (!voiceSettings.wakeWordEnabled && sidecar._capturing) {
+			sidecar.stopAudioCapture();
 		}
 	}
 
-	// Expose sidecar-aware speak that prefers Piper when connected, falls back to browser TTS
-	async function speakWithSidecar(text) {
+	// Speak via Piper TTS when sidecar is connected, or via browser otherwise.
+	// Used by onMessage command_result handler below.
+	function speakWithSidecar(text) {
 		if (sidecarConnected && sidecar && voiceSettings.autoTts) {
 			const requestId = `tts-${Date.now()}`;
 			sidecar.requestTts(text, requestId);
 			return;
 		}
-		await speakResponse(text);
+		void speakResponse(text);
 	}
 
 	// Expose IPC sidecar-status listener for the main process
@@ -860,7 +861,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			const title = parsed.type === 'command_result' ? (parsed.title || '✅ Jarvis') : `Backend (${parsed.type || '?'})`;
 			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system');
 			if (parsed.type === 'command_result' && parsed.level !== 'error') {
-				speakResponse(getComfortableSpokenText(parsed, body));
+				speakWithSidecar(getComfortableSpokenText(parsed, body));
 			}
 		} catch {
 			// rawMessage is not JSON — display as plain text

@@ -8,6 +8,8 @@
 
 const EventEmitter = require('events');
 
+const MAX_RECONNECT_ATTEMPTS = 20; // match value in sidecar-bridge.js
+
 // ── Mock WebSocket ───────────────────────────────────────────────────────────
 class MockWebSocket extends EventEmitter {
   constructor(url) {
@@ -51,45 +53,36 @@ const { SidecarBridge } = require('../../jarvis/desktop/sidecar-bridge');
 
 describe('SidecarBridge', () => {
   let bridge;
-  let mockWs;
 
   beforeEach(() => {
     bridge = new SidecarBridge({ host: '127.0.0.1', port: 8765 });
-    bridge._reconnectAttempts = SidecarBridge.MAX_RECONNECT || 0;
+    // prevent auto-reconnect during tests
+    bridge._reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
   });
 
   afterEach(() => {
     bridge.disconnect();
   });
 
-  function openConnection() {
-    bridge._reconnectAttempts = 0;
-    bridge._openSocket();
-    mockWs = global.__lastWebSocket;
-    if (mockWs) mockWs._simulate.open();
-    return mockWs;
-  }
-
   it('emits connected event when WebSocket opens', () => {
     const listener = jest.fn();
     bridge.on('connected', listener);
 
-    // Intercept WebSocket construction
-    let ws;
-    global.WebSocket = class extends MockWebSocket {
-      constructor(...args) {
-        super(...args);
-        ws = this;
-      }
+    let capturedWs = null;
+    const OrigWebSocket = global.WebSocket;
+    const OrigOnOpen = bridge._openSocket.bind(bridge);
+    bridge._openSocket = function mockOpen() {
+      OrigOnOpen();
+      capturedWs = bridge._ws;
     };
 
     bridge.connect();
-    ws._simulate.open();
+    if (capturedWs) capturedWs._simulate.open();
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(bridge.isConnected()).toBe(true);
 
-    global.WebSocket = MockWebSocket;
+    global.WebSocket = OrigWebSocket;
   });
 
   it('emits disconnected event when WebSocket closes', () => {
@@ -98,17 +91,21 @@ describe('SidecarBridge', () => {
     bridge.on('connected', connected);
     bridge.on('disconnected', disconnected);
 
-    let ws;
-    global.WebSocket = class extends MockWebSocket {
-      constructor(...args) { super(...args); ws = this; }
+    let capturedWs = null;
+    const OrigWebSocket = global.WebSocket;
+    const OrigOnOpen = bridge._openSocket.bind(bridge);
+    bridge._openSocket = function mockOpen() {
+      OrigOnOpen();
+      capturedWs = bridge._ws;
     };
+
     bridge.connect();
-    ws._simulate.open();
-    ws._simulate.close();
+    if (capturedWs) capturedWs._simulate.open();
+    if (capturedWs) capturedWs._simulate.close();
 
     expect(disconnected).toHaveBeenCalledTimes(1);
     expect(bridge.isConnected()).toBe(false);
-    global.WebSocket = MockWebSocket;
+    global.WebSocket = OrigWebSocket;
   });
 
   it('routes incoming wake_word message to wake_word event', () => {
@@ -196,10 +193,10 @@ describe('SidecarBridge', () => {
     const int16 = bridge._float32ToPcmInt16(float32);
 
     expect(int16[0]).toBe(0);
-    expect(int16[1]).toBe(16384);  // 0.5 * 32767 ≈ 16384
-    expect(int16[2]).toBe(-16384);
-    expect(int16[3]).toBe(32767);
-    expect(int16[4]).toBe(-32768);
+    expect(int16[1]).toBe(16384);   // 0.5 * 32767 = 16383.5, Math.round → 16384
+    expect(int16[2]).toBe(-16383);  // -0.5 * 32767 = -16383.5, Math.round → -16383
+    expect(int16[3]).toBe(32767);   // 1.0 * 32767
+    expect(int16[4]).toBe(-32767);  // -1.0 * 32767
   });
 
   it('ignores unknown message types without throwing', () => {
