@@ -511,7 +511,7 @@ async function openApp(app, options = {}) {
   const rawApp = String(app || '').trim();
   if (!rawApp) throw new Error('Missing app name.');
   const trigger = options.trigger || 'manual';
-  const result = await launcherService.launchApp(rawApp, {
+  let result = await launcherService.launchApp(rawApp, {
     trigger,
     confirmed: Boolean(options.confirmed),
     admin: Boolean(options.admin),
@@ -524,6 +524,18 @@ async function openApp(app, options = {}) {
     }));
   }
   if (result?.status === 'unknown') {
+    await refreshDiscoveredApps('open-unknown-fallback');
+    result = await launcherService.launchApp(rawApp, {
+      trigger,
+      confirmed: Boolean(options.confirmed),
+      admin: Boolean(options.admin),
+    });
+  }
+  if (result?.status === 'unknown') {
+    const lookupResult = await openAppFromFilesystemLookup(rawApp, options);
+    if (lookupResult) {
+      return lookupResult;
+    }
     throw new Error(`Unknown app: ${rawApp}.${result.suggestions?.length ? ` Did you mean: ${result.suggestions.map((item) => item.name || item.key).join(', ')}?` : ''}`);
   }
   return result;
@@ -540,10 +552,94 @@ async function closeApp(app) {
     await execFilePromise('osascript', ['-e', `tell application "${appName}" to quit`]);
     return { summary: `Closed ${appName}.`, app: normalized };
   }
-  const processName = APP_CLOSE_MAP[normalized];
+  let processName = APP_CLOSE_MAP[normalized];
+  if (!processName) {
+    processName = await findRunningProcessForApp(normalized);
+  }
   if (!processName) throw new Error(`Unknown app: ${app}. Supported for close: ${Object.keys(APP_CLOSE_MAP).join(', ')}`);
   await execFilePromise('taskkill.exe', ['/IM', processName, '/F']);
   return { summary: `Closed ${normalized}.`, app: normalized };
+}
+
+function escapePowerShellSingleQuotes(value) {
+  return String(value || '').replace(/'/g, "''");
+}
+
+async function openAppFromFilesystemLookup(app, options = {}) {
+  if (PLATFORM !== 'win32') return null;
+  const query = String(app || '').trim();
+  if (!query) return null;
+
+  const exeQuery = query.toLowerCase().endsWith('.exe') ? query : `${query}.exe`;
+  let candidatePath = '';
+  try {
+    const whereResult = await execFilePromise('where.exe', [exeQuery]);
+    candidatePath = String(whereResult || '').split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
+  } catch {
+    candidatePath = '';
+  }
+
+  if (!candidatePath) {
+    const safeQuery = escapePowerShellSingleQuotes(query);
+    const findInFilesCommand = [
+      `$name='${safeQuery}'`,
+      '$roots=@(',
+      '"$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",',
+      '"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs",',
+      '"$env:LOCALAPPDATA\\Programs"',
+      ')',
+      '$item = Get-ChildItem -Path $roots -File -Recurse -ErrorAction SilentlyContinue',
+      "  | Where-Object { ($_.Extension -eq '.lnk' -or $_.Extension -eq '.exe') -and $_.BaseName -like \"*$name*\" }",
+      '  | Select-Object -First 1 -ExpandProperty FullName',
+      'if ($item) { Write-Output $item }',
+    ].join(';');
+    try {
+      const fromSearch = await execFilePromise('powershell.exe', ['-NoProfile', '-Command', findInFilesCommand]);
+      candidatePath = String(fromSearch || '').trim();
+    } catch {
+      candidatePath = '';
+    }
+  }
+
+  if (!candidatePath) return null;
+
+  if (options.admin) {
+    const escapedPath = candidatePath.replace(/'/g, "''");
+    await execFilePromise('powershell.exe', ['-NoProfile', '-Command', `Start-Process -FilePath '${escapedPath}' -Verb RunAs`]);
+  } else {
+    await execFilePromise('cmd.exe', ['/c', 'start', '', candidatePath]);
+  }
+
+  return {
+    summary: `Opened ${query} from filesystem lookup.`,
+    app: query,
+    resolver: {
+      strategy: 'filesystem_lookup',
+      confidence: 0.4,
+      matchedInput: candidatePath,
+    },
+  };
+}
+
+async function findRunningProcessForApp(app) {
+  if (PLATFORM !== 'win32') return null;
+  const query = String(app || '').trim();
+  if (!query) return null;
+  const safeQuery = escapePowerShellSingleQuotes(query.replace(/\.exe$/i, ''));
+  const command = [
+    `$name='${safeQuery}'`,
+    '$process = Get-Process -ErrorAction SilentlyContinue',
+    "  | Where-Object { $_.ProcessName -like \"*$name*\" }",
+    '  | Select-Object -First 1 -ExpandProperty ProcessName',
+    'if ($process) { Write-Output $process }',
+  ].join(';');
+  try {
+    const process = String(await execFilePromise('powershell.exe', ['-NoProfile', '-Command', command]) || '').trim();
+    if (!process) return null;
+    return process.toLowerCase().endsWith('.exe') ? process : `${process}.exe`;
+  } catch {
+    return null;
+  }
 }
 
 async function takeScreenshot(displayIndex = 0) {
