@@ -1,21 +1,142 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const Database = require('better-sqlite3');
 const { readState } = require('../local-state');
 
 const BASE_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'JarvisDesktop');
 const DB_PATH = process.env.JARVIS_LAUNCHER_DB_PATH || path.join(BASE_DIR, 'launcher.db');
 
-let db;
+let db = null;
+// Tracks how many transaction wrappers are currently active.  Flushing to
+// disk via db.export() must not happen while a transaction is open because
+// sql.js's export() implicitly ends the active transaction.
+let _inTransaction = 0;
+
+// ── Disk persistence ─────────────────────────────────────────────────────────
 
 function ensureBaseDir() {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 }
 
-function runMigrations(database) {
-  database.pragma('journal_mode = WAL');
-  database.exec(`
+function flushToDisk() {
+  if (!db) return;
+  ensureBaseDir();
+  const data = db.export();
+  fs.writeFileSync(DB_PATH, Buffer.from(data));
+}
+
+// ── sql.js compatibility shim ─────────────────────────────────────────────────
+//
+// Provides a better-sqlite3-like synchronous API over an in-memory sql.js
+// Database so that callers (catalog.js, launch-service.js, etc.) need no
+// changes.
+
+function normalisedBindParams(args) {
+  if (args.length === 0) return undefined;
+
+  // Named-params object: { key: val } → { '@key': val }
+  if (
+    args.length === 1
+    && args[0] !== null
+    && typeof args[0] === 'object'
+    && !Array.isArray(args[0])
+  ) {
+    const obj = args[0];
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const prefixed = /^[@:$]/.test(k) ? k : `@${k}`;
+      out[prefixed] = v == null ? null : v;
+    }
+    return out;
+  }
+
+  // One or more positional args
+  return args.length === 1 ? [args[0]] : [...args];
+}
+
+function createStmtWrapper(sqlDb, sql) {
+  // Prepare once; reuse across calls (mirrors better-sqlite3 behaviour).
+  const stmt = sqlDb.prepare(sql);
+
+  function bindAndRun(args) {
+    stmt.reset();
+    const params = normalisedBindParams(args);
+    if (params !== undefined) stmt.bind(params);
+  }
+
+  return {
+    all(...args) {
+      bindAndRun(args);
+      const rows = [];
+      while (stmt.step()) rows.push(stmt.getAsObject());
+      stmt.reset();
+      return rows;
+    },
+    get(...args) {
+      bindAndRun(args);
+      const row = stmt.step() ? stmt.getAsObject() : undefined;
+      stmt.reset();
+      return row;
+    },
+    run(...args) {
+      bindAndRun(args);
+      stmt.step();
+      stmt.reset();
+      // Only flush to disk when NOT inside a transaction.  sql.js's export()
+      // implicitly ends any active transaction so we must defer flushing until
+      // after the surrounding transactionRunner calls COMMIT and flushes once.
+      if (_inTransaction === 0) flushToDisk();
+    },
+  };
+}
+
+function createDbWrapper(sqlDb) {
+  return {
+    pragma(text) {
+      // sql.js is in-memory so most PRAGMAs are no-ops; run anyway for
+      // correctness (e.g. PRAGMA integrity_check).
+      try { sqlDb.run(`PRAGMA ${text}`); } catch { /* ignore */ }
+    },
+    exec(sql) {
+      sqlDb.exec(sql);
+    },
+    prepare(sql) {
+      return createStmtWrapper(sqlDb, sql);
+    },
+    transaction(fn) {
+      // Returns a function that wraps fn in a BEGIN / COMMIT block,
+      // exactly like better-sqlite3's db.transaction().
+      return function transactionRunner(...args) {
+        _inTransaction += 1;
+        sqlDb.run('BEGIN');
+        let originalErr = null;
+        try {
+          const result = fn(...args);
+          sqlDb.run('COMMIT');
+          _inTransaction -= 1;
+          flushToDisk();
+          return result;
+        } catch (err) {
+          originalErr = err;
+          _inTransaction -= 1;
+          try {
+            sqlDb.run('ROLLBACK');
+          } catch {
+            // Transaction may already have been rolled back implicitly.
+          }
+          throw originalErr;
+        }
+      };
+    },
+  };
+}
+
+// ── Schema setup ──────────────────────────────────────────────────────────────
+
+function runMigrations(wrapper) {
+  // journal_mode = WAL has no effect for an in-memory / file-export DB but is
+  // harmless; skip it to avoid a sql.js warning.
+  wrapper.exec(`
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,
       value TEXT
@@ -85,13 +206,13 @@ function runMigrations(database) {
   `);
 }
 
-function migrateLegacyState(database) {
-  const migratedAt = database.prepare('SELECT value FROM meta WHERE key = ?').get('legacy_state_migrated_at');
+function migrateLegacyState(wrapper) {
+  const migratedAt = wrapper.prepare('SELECT value FROM meta WHERE key = ?').get('legacy_state_migrated_at');
   if (migratedAt?.value) return;
 
   const legacyState = readState();
   const now = new Date().toISOString();
-  const insertApp = database.prepare(`
+  const insertApp = wrapper.prepare(`
     INSERT INTO apps (
       key, name, launch_target, launch_type, source_provider, icon_path,
       install_root, risk_level, launch_count, last_used_at, usage_hours_json,
@@ -112,7 +233,7 @@ function migrateLegacyState(database) {
       last_indexed_at = COALESCE(excluded.last_indexed_at, apps.last_indexed_at),
       metadata_json = excluded.metadata_json
   `);
-  const insertAlias = database.prepare(`
+  const insertAlias = wrapper.prepare(`
     INSERT INTO aliases (alias, app_key, source, learned_confidence, created_at, updated_at)
     VALUES (@alias, @appKey, @source, @learnedConfidence, @createdAt, @updatedAt)
     ON CONFLICT(alias) DO UPDATE SET
@@ -121,13 +242,13 @@ function migrateLegacyState(database) {
       learned_confidence = excluded.learned_confidence,
       updated_at = excluded.updated_at
   `);
-  const insertResolver = database.prepare(`
+  const insertResolver = wrapper.prepare(`
     INSERT INTO resolver_history (input, app_key, strategy, confidence, matched_input, trigger, created_at)
     VALUES (@input, @appKey, @strategy, @confidence, @matchedInput, @trigger, @createdAt)
   `);
-  const insertMeta = database.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)');
+  const insertMeta = wrapper.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)');
 
-  const txn = database.transaction(() => {
+  const txn = wrapper.transaction(() => {
     const discoveredApps = Array.isArray(legacyState?.preferences?.discoveredApps)
       ? legacyState.preferences.discoveredApps
       : [];
@@ -204,13 +325,41 @@ function migrateLegacyState(database) {
   txn();
 }
 
-function getDb() {
-  if (db) return db;
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Initialise the database. Must be awaited once at app startup (before any
+ * DB calls are made) because sql.js loads a WebAssembly binary asynchronously.
+ * Subsequent calls are no-ops.
+ */
+async function init() {
+  if (db) return;
+
+  // Resolve WASM binary relative to this file.  Works in both development and
+  // the packaged Electron app (Electron's fs transparently reads from asar).
+  const wasmPath = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
+  const wasmBinary = fs.readFileSync(wasmPath);
+
+  const initSqlJs = require('sql.js');
+  const SQL = await initSqlJs({ wasmBinary });
+
   ensureBaseDir();
-  db = new Database(DB_PATH);
-  runMigrations(db);
-  migrateLegacyState(db);
-  return db;
+
+  const rawDb = fs.existsSync(DB_PATH)
+    ? new SQL.Database(fs.readFileSync(DB_PATH))
+    : new SQL.Database();
+
+  db = rawDb;
+
+  const wrapper = createDbWrapper(rawDb);
+  runMigrations(wrapper);
+  migrateLegacyState(wrapper);
+  flushToDisk();
+}
+
+function getDb() {
+  if (!db) throw new Error('[db] Database not initialised — await init() must be called first.');
+  return createDbWrapper(db);
 }
 
 function getMeta(key) {
@@ -225,6 +374,7 @@ function setMeta(key, value) {
 
 function closeDb() {
   if (db) {
+    flushToDisk();
     db.close();
     db = null;
   }
@@ -235,5 +385,8 @@ module.exports = {
   DB_PATH,
   getDb,
   getMeta,
+  init,
   setMeta,
 };
+
+

@@ -6,11 +6,15 @@ describe('jarvis launcher catalog', () => {
   let tempDir;
   let dbPath;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'assistantx-launcher-'));
     dbPath = path.join(tempDir, 'launcher.db');
     process.env.JARVIS_LAUNCHER_DB_PATH = dbPath;
     jest.resetModules();
+    // sql.js initialises its WASM binary asynchronously; must be awaited
+    // before any catalog functions that touch the database are called.
+    const { init } = require('../../jarvis/desktop/launcher/db');
+    await init();
   });
 
   afterEach(() => {
