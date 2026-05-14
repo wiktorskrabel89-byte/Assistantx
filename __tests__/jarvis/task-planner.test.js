@@ -28,4 +28,24 @@ describe('jarvis task planner', () => {
       targetPath: 'notes.txt',
     }));
   });
+
+  it('extracts alias learning commands', () => {
+    const step = planSegment('set music as spotify');
+
+    expect(step).toEqual(expect.objectContaining({
+      command: 'setAppAlias',
+      intent: 'set_app_alias',
+      alias: 'music',
+      app: 'spotify',
+    }));
+  });
+
+  it('extracts refresh app catalog commands', () => {
+    const step = planSegment('refresh app catalog');
+
+    expect(step).toEqual(expect.objectContaining({
+      command: 'refreshAppCatalog',
+      intent: 'refresh_app_catalog',
+    }));
+  });
 });

@@ -3,6 +3,92 @@ const path = require('path');
 const os = require('os');
 const { app, BrowserWindow, dialog, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
 const { getJarvisWebUrl } = require('./runtime-config');
+const { spawn } = require('child_process');
+
+// ── Python AI-Agent sidecar process management ───────────────────────────────
+let sidecarProcess = null;
+let sidecarStatus = 'idle';
+const SIDECAR_PORT = process.env.JARVIS_SIDECAR_PORT || '8765';
+
+function getSidecarMainPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'ai-agent', 'main.py');
+  }
+  return path.join(__dirname, '..', '..', 'ai-agent', 'main.py');
+}
+
+function getPythonExecutable() {
+  const sidecarDir = path.dirname(getSidecarMainPath());
+  const candidates = [
+    path.join(sidecarDir, 'venv', 'Scripts', 'python.exe'),
+    path.join(sidecarDir, 'venv', 'bin', 'python'),
+    'python3',
+    'python',
+  ];
+  for (const candidate of candidates) {
+    if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
+    return candidate;
+  }
+  return 'python';
+}
+
+function startSidecar() {
+  const mainPy = getSidecarMainPath();
+  if (!fs.existsSync(mainPy)) {
+    sidecarStatus = 'unavailable';
+    return;
+  }
+
+  const python = getPythonExecutable();
+  sidecarProcess = spawn(python, [mainPy], {
+    env: {
+      ...process.env,
+      JARVIS_SIDECAR_PORT: SIDECAR_PORT,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  sidecarStatus = 'starting';
+
+  sidecarProcess.stdout?.on('data', (data) => {
+    const line = data.toString().trim();
+    if (line) console.log(`[sidecar] ${line}`);
+    if (line.includes('listening on')) sidecarStatus = 'running';
+    sendToRenderer('sidecar-status', { status: sidecarStatus });
+  });
+
+  sidecarProcess.stderr?.on('data', (data) => {
+    const line = data.toString().trim();
+    if (line) console.error(`[sidecar:err] ${line}`);
+    if (line.includes('listening on')) sidecarStatus = 'running';
+    sendToRenderer('sidecar-status', { status: sidecarStatus });
+  });
+
+  sidecarProcess.on('exit', (code, signal) => {
+    console.log(`[sidecar] process exited: code=${code} signal=${signal}`);
+    sidecarProcess = null;
+    sidecarStatus = 'stopped';
+    sendToRenderer('sidecar-status', { status: sidecarStatus });
+  });
+
+  sidecarProcess.on('error', (err) => {
+    console.error('[sidecar] spawn error:', err.message);
+    sidecarStatus = 'error';
+    sendToRenderer('sidecar-status', { status: sidecarStatus });
+  });
+}
+
+function stopSidecar() {
+  if (sidecarProcess) {
+    try {
+      sidecarProcess.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
+    sidecarProcess = null;
+  }
+  sidecarStatus = 'stopped';
+}
 
 let win;
 let tray;
@@ -290,6 +376,17 @@ function createTray() {
   });
 }
 
+ipcMain.handle('get-sidecar-status', () => ({
+  status: sidecarStatus,
+  port: Number(SIDECAR_PORT),
+}));
+
+ipcMain.handle('restart-sidecar', () => {
+  stopSidecar();
+  setTimeout(() => startSidecar(), 500);
+  return { ok: true };
+});
+
 ipcMain.handle('open-url', (_event, url) => {
   if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
     return shell.openExternal(url);
@@ -392,6 +489,7 @@ function parseCallbackUrl(url, loginWin, resolve, reject) {
 }
 
 app.whenReady().then(() => {
+  startSidecar();
   createWindow();
   createTray();
   setupAutoUpdater();
@@ -403,8 +501,13 @@ app.on('window-all-closed', () => {
     updateInterval = null;
   }
   if (process.platform !== 'darwin') {
+    stopSidecar();
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  stopSidecar();
 });
 
 app.on('activate', () => {
