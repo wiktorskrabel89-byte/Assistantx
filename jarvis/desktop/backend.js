@@ -497,17 +497,22 @@ async function openApp(app, options = {}) {
     ].filter(Boolean))];
   let lastError = null;
 
+  // Allowlist of characters permitted in launch targets to prevent injection.
+  // Valid app names, paths, and exe names only need: alphanum, spaces, and :.\_-()
+  function isSafeLaunchTarget(value) {
+    return typeof value === 'string' && /^[a-zA-Z0-9 .:\\/_\-()]+$/.test(value);
+  }
+
   for (const candidate of launchCandidates) {
+    if (!isSafeLaunchTarget(candidate.value)) {
+      lastError = new Error(`Rejected unsafe launch target: ${candidate.value}`);
+      continue;
+    }
     try {
-      if (candidate.launchMode === 'start') {
-        await execFilePromise('cmd.exe', ['/c', 'start', '', candidate.value]);
-      } else {
-        await execFilePromise('powershell.exe', [
-          '-NoProfile',
-          '-Command',
-          `Start-Process -FilePath ${JSON.stringify(candidate.value)}`,
-        ]);
-      }
+      // Use cmd.exe /c start for all Windows launches — avoids PowerShell
+      // script string composition and is immune to command injection when
+      // arguments are passed as separate array entries via execFile.
+      await execFilePromise('cmd.exe', ['/c', 'start', '', candidate.value]);
       rememberApp(resolution.resolvedKey || normalized);
       recordResolverDecision({
         input: rawApp,
