@@ -41,7 +41,10 @@ function buildUnavailableNotificationsResponse(error: unknown): NotificationsRou
     || message.includes("url is required")
     || message.includes("invalid url")
     || message.includes("your project's url and key are required")
-    || message.includes("required to create a supabase client");
+    || message.includes("required to create a supabase client")
+    || message.includes("cannot use import statement outside a module")
+    || message.includes("unexpected token 'export'")
+    || message.includes("@supabase/ssr");
   if (missingConfig) {
     return {
       notifications: [],

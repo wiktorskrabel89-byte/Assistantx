@@ -68,7 +68,10 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
     || normalizedMessage.includes("url is required")
     || normalizedMessage.includes("invalid url")
     || normalizedMessage.includes("your project's url and key are required")
-    || normalizedMessage.includes("required to create a supabase client");
+    || normalizedMessage.includes("required to create a supabase client")
+    || normalizedMessage.includes("cannot use import statement outside a module")
+    || normalizedMessage.includes("unexpected token 'export'")
+    || normalizedMessage.includes("@supabase/ssr");
 
   if (missingConfig) {
     return {
