@@ -207,10 +207,12 @@ async function fetchLatestJarvisReleaseFromServer() {
 }
 
 async function fetchLatestJarvisReleaseFromGitHub() {
+  const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const response = await fetch(GITHUB_RELEASE_API, {
     headers: {
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
+      ...(ghToken ? { Authorization: `Bearer ${ghToken}` } : {}),
     },
     signal: AbortSignal.timeout(8_000),
     cache: 'no-store',
