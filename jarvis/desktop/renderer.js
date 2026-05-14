@@ -659,7 +659,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			// Emitted once after all reconnect attempts are exhausted without ever
 			// connecting — sidecar is not installed or Python is not available.
 			sidecarConnected = false;
-			appendMessage(log, 'AI Sidecar', 'Python voice sidecar is not available — browser speech APIs will be used instead.', 'system');
+			appendMessage(log, 'AI Sidecar', 'Python voice sidecar is not available — voice will use browser speech APIs, and text AI chat will still work.', 'system');
 		});
 
 		sidecar.on('error', (error) => {
@@ -1014,7 +1014,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		const currentUrl = getJarvisWebUrl();
 		// Only pre-fill when it's not the built-in default (so users see a blank
 		// field until they actually configure something).
-		const builtInDefaults = new Set(['https://www.assistantx.pl', 'http://localhost:3000']);
+		const builtInDefaults = new Set(['https://assistantx.pl', 'https://www.assistantx.pl', 'http://localhost:3000']);
 		if (!builtInDefaults.has(currentUrl)) {
 			serverUrlInput.value = currentUrl;
 		}

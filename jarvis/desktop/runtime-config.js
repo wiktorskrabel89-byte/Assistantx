@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 
 const DEFAULT_DEV_WEB_URL = 'http://localhost:3000';
-const DEFAULT_PROD_WEB_URL = 'https://www.assistantx.pl';
+const DEFAULT_PROD_WEB_URL = 'https://assistantx.pl';
 
 const CONFIG_PATH = path.join(
   process.env.APPDATA || path.join(os.homedir(), '.config'),

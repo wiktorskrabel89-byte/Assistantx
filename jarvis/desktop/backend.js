@@ -4,7 +4,7 @@ const { execFile } = require('child_process');
 const EventEmitter = require('events');
 const os = require('os');
 const path = require('path');
-const { getJarvisApiUrl } = require('./runtime-config');
+const runtimeConfig = require('./runtime-config');
 const { getAccountSession } = require('./accounts');
 const {
   appendHistory,
@@ -319,10 +319,29 @@ function getHttpBaseUrl(url) {
 }
 
 function getJarvisAiEndpointCandidates() {
-  const apiBaseUrl = getJarvisApiUrl();
+  const apiBaseUrl = runtimeConfig.getJarvisApiUrl();
+  const webBaseUrl = typeof runtimeConfig.getJarvisWebUrl === 'function'
+    ? runtimeConfig.getJarvisWebUrl()
+    : apiBaseUrl;
+  let alternateAssistantxBaseUrl = null;
+  try {
+    const parsed = new URL(webBaseUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === 'assistantx.pl') {
+      parsed.hostname = 'www.assistantx.pl';
+      alternateAssistantxBaseUrl = parsed.origin;
+    } else if (hostname === 'www.assistantx.pl') {
+      parsed.hostname = 'assistantx.pl';
+      alternateAssistantxBaseUrl = parsed.origin;
+    }
+  } catch {
+    alternateAssistantxBaseUrl = null;
+  }
+
   const candidates = [
     process.env.JARVIS_AI_URL,
     apiBaseUrl ? `${apiBaseUrl}/api/chat` : null,
+    alternateAssistantxBaseUrl ? `${alternateAssistantxBaseUrl}/api/chat` : null,
     BACKEND_URL ? `${getHttpBaseUrl(BACKEND_URL)}/chat` : null,
   ].filter(Boolean);
 
