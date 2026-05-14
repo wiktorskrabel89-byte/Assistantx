@@ -297,6 +297,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	let recognition = null;
 	let sidecarManualListening = false;
+	let pendingVoiceIntentRequestId = null;
+	let pendingVoiceIntentFallbackTimer = null;
 	readSpeechVoices();
 	if (typeof window !== 'undefined' && window.speechSynthesis && typeof window.speechSynthesis.addEventListener === 'function') {
 		window.speechSynthesis.addEventListener('voiceschanged', () => {
@@ -415,6 +417,12 @@ window.addEventListener('DOMContentLoaded', () => {
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
 		appendMessage(log, 'Prompt queued', text, 'system');
 		input.value = '';
+	}
+
+	function fallbackVoicePrompt(text) {
+		if (!text) return;
+		input.value = text;
+		submitPrompt();
 	}
 
 	send.addEventListener('click', submitPrompt);
@@ -683,7 +691,16 @@ window.addEventListener('DOMContentLoaded', () => {
 					sidecarManualListening = false;
 					setVoiceToTextUiActive(false);
 				}
-				submitPrompt();
+				const requestId = `voice-intent-${Date.now()}`;
+				pendingVoiceIntentRequestId = requestId;
+				clearTimeout(pendingVoiceIntentFallbackTimer);
+				pendingVoiceIntentFallbackTimer = setTimeout(() => {
+					if (pendingVoiceIntentRequestId === requestId) {
+						pendingVoiceIntentRequestId = null;
+						fallbackVoicePrompt(text);
+					}
+				}, 900);
+				sidecar.requestIntentParse(text, requestId);
 			} else {
 				setVoiceVisualizer('listening');
 			}
@@ -719,9 +736,17 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 		});
 
-		sidecar.on('intent_parsed', ({ intent, entities, confidence }) => {
+		sidecar.on('intent_parsed', ({ requestId, intent, entities, confidence }) => {
+			if (requestId && pendingVoiceIntentRequestId === requestId) {
+				pendingVoiceIntentRequestId = null;
+				clearTimeout(pendingVoiceIntentFallbackTimer);
+				pendingVoiceIntentFallbackTimer = null;
+			}
 			// Route structured intents from NLP back through the desktop executor
-			if (confidence < 0.6 || !intent || intent === 'unknown') return;
+			if (confidence < 0.6 || !intent || intent === 'unknown') {
+				if (entities?.transcript) fallbackVoicePrompt(entities.transcript);
+				return;
+			}
 			const INTENT_TO_COMMAND = {
 				open_app: 'openApp',
 				close_app: 'closeApp',
@@ -738,9 +763,13 @@ window.addEventListener('DOMContentLoaded', () => {
 				start_mode: 'startMode',
 			};
 			const command = INTENT_TO_COMMAND[intent];
-			if (!command) return;
+			if (!command) {
+				if (entities?.transcript) fallbackVoicePrompt(entities.transcript);
+				return;
+			}
+			input.value = '';
 			void executeStructuredCommand(
-				{ command, ...entities },
+				{ command, ...entities, admin: Boolean(entities?.admin || entities?.qualifiers?.admin) },
 				{ source: 'local', origin: 'sidecar' },
 			);
 		});

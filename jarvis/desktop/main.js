@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { app, BrowserWindow, dialog, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
 const { getJarvisWebUrl } = require('./runtime-config');
 const { spawn } = require('child_process');
+const launcherService = require('./launcher/launch-service');
 
 // ── Python AI-Agent sidecar process management ───────────────────────────────
 let sidecarProcess = null;
@@ -91,7 +92,9 @@ function stopSidecar() {
 }
 
 let win;
+let overlayWin;
 let tray;
+const pendingLauncherConfirmations = new Map();
 let updateInterval = null;
 let lastUpdateCheckAt = 0;
 const UPDATE_CHECK_INTERVAL_MS = Number(process.env.JARVIS_UPDATE_CHECK_INTERVAL_MS || 15 * 60 * 1000);
@@ -109,6 +112,9 @@ let updateState = {
 function sendToRenderer(channel, payload) {
   if (win && !win.isDestroyed()) {
     win.webContents.send(channel, payload);
+  }
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send(channel, payload);
   }
 }
 
@@ -280,6 +286,101 @@ function createWindow() {
   });
 }
 
+function createLauncherOverlayWindow() {
+  overlayWin = new BrowserWindow({
+    width: 640,
+    height: 460,
+    resizable: false,
+    show: false,
+    frame: false,
+    transparent: true,
+    hasShadow: true,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    title: 'AssistantX Launcher',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  overlayWin.loadFile('launcher-overlay.html');
+  overlayWin.webContents.on('did-finish-load', () => {
+    overlayWin.webContents.send('sidecar-status', { status: sidecarStatus });
+  });
+  overlayWin.on('blur', () => {
+    if (pendingLauncherConfirmations.size === 0 && !overlayWin.webContents.isDevToolsOpened()) {
+      overlayWin.hide();
+    }
+  });
+  overlayWin.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      overlayWin.hide();
+    }
+  });
+}
+
+async function showLauncherOverlay() {
+  if (!overlayWin || overlayWin.isDestroyed()) createLauncherOverlayWindow();
+  const [recent, providerStatus] = await Promise.all([
+    Promise.resolve(launcherService.getRecentApps(8)),
+    Promise.resolve(launcherService.getProviderStatus()),
+  ]);
+  overlayWin.show();
+  overlayWin.focus();
+  overlayWin.webContents.send('launcher-overlay-focus', { recent, providerStatus });
+}
+
+function toggleLauncherOverlay() {
+  if (overlayWin?.isVisible()) {
+    overlayWin.hide();
+    return;
+  }
+  void showLauncherOverlay();
+}
+
+function registerLauncherShortcut() {
+  const accelerator = process.platform === 'darwin' ? 'CommandOrControl+Space' : 'Control+Space';
+  globalShortcut.unregisterAll();
+  globalShortcut.register(accelerator, () => {
+    toggleLauncherOverlay();
+  });
+}
+
+async function maybePromptEverythingRecommendation() {
+  if (!launcherService.shouldRecommendEverything()) return;
+  const parentWindow = overlayWin && overlayWin.isVisible() ? overlayWin : win ?? null;
+  const { response } = await dialog.showMessageBox(parentWindow, {
+    type: 'question',
+    title: 'Install Everything Search?',
+    message: 'Install Everything Search for dramatically faster local search?',
+    detail: [
+      'Benefits:',
+      '• instant app launching',
+      '• ultra-fast file search',
+      '• lower CPU usage',
+      '• better Jarvis responsiveness',
+      '',
+      'AssistantX works without it, but performance improves significantly with Everything installed.',
+    ].join('\n'),
+    buttons: ['Install Everything', 'Maybe Later', "Don't Ask Again"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+
+  if (response === 0) {
+    await shell.openExternal('https://www.voidtools.com/downloads/');
+    launcherService.remindLaterForEverything();
+    return;
+  }
+  if (response === 2) {
+    launcherService.disableEverythingRecommendation();
+    return;
+  }
+  launcherService.remindLaterForEverything();
+}
+
 async function checkForUpdates() {
   if (!app.isPackaged) {
     emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
@@ -371,6 +472,7 @@ function createTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Jarvis', click: () => win.show() },
+    { label: 'Open Launcher', click: () => toggleLauncherOverlay() },
     { label: 'Check for updates', click: () => void checkForUpdates() },
     { type: 'separator' },
     {
@@ -414,6 +516,68 @@ ipcMain.handle('open-url', (_event, url) => {
 
 ipcMain.handle('open-path', (_event, filePath) => {
   return shell.openPath(filePath);
+});
+
+ipcMain.handle('launcher-search', async (_event, payload) => {
+  return launcherService.searchApps(payload?.query || '', { limit: Number(payload?.limit || 8) });
+});
+
+ipcMain.handle('launcher-recent', async (_event, payload) => {
+  return launcherService.searchApps('', { limit: Number(payload?.limit || 8) });
+});
+
+ipcMain.handle('launcher-refresh', async () => {
+  const result = await launcherService.refreshCatalog({ reason: 'overlay-manual' });
+  void maybePromptEverythingRecommendation();
+  return result;
+});
+
+ipcMain.handle('launcher-launch', async (_event, payload) => {
+  return launcherService.launchApp(payload?.query || payload?.key || '', {
+    trigger: 'manual',
+    confirmed: true,
+    admin: Boolean(payload?.admin),
+  });
+});
+
+ipcMain.handle('launcher-hide', () => {
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.hide();
+  return { ok: true };
+});
+
+ipcMain.handle('request-launcher-confirmation', async (_event, payload) => {
+  if (!overlayWin || overlayWin.isDestroyed()) createLauncherOverlayWindow();
+  const id = `launcher-confirm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  overlayWin.show();
+  overlayWin.focus();
+  overlayWin.webContents.send('launcher-confirmation-request', {
+    id,
+    ...payload,
+  });
+  return new Promise((resolve) => {
+    pendingLauncherConfirmations.set(id, resolve);
+  });
+});
+
+ipcMain.handle('launcher-confirmation-response', (_event, payload) => {
+  const pending = pendingLauncherConfirmations.get(payload?.id);
+  if (pending) {
+    pending(Boolean(payload?.approved));
+    pendingLauncherConfirmations.delete(payload.id);
+  }
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send('launcher-confirmation-cleared', { id: payload?.id || null });
+    if (pendingLauncherConfirmations.size === 0) {
+      overlayWin.webContents.send('launcher-overlay-focus');
+    }
+  }
+  return { ok: true };
+});
+
+ipcMain.handle('install-everything-search', async () => {
+  launcherService.remindLaterForEverything();
+  await shell.openExternal('https://www.voidtools.com/downloads/');
+  return { ok: true };
 });
 
 ipcMain.handle('jarvis-ai-request', async (_event, payload) => {
@@ -579,8 +743,15 @@ function parseCallbackUrl(url, loginWin, resolve) {
 app.whenReady().then(() => {
   startSidecar();
   createWindow();
+  createLauncherOverlayWindow();
   createTray();
+  registerLauncherShortcut();
   setupAutoUpdater();
+  launcherService.refreshCatalog({ reason: 'app-ready' })
+    .then(() => maybePromptEverythingRecommendation())
+    .catch((error) => {
+      console.warn('[launcher] startup refresh failed:', error.message);
+    });
 });
 
 app.on('window-all-closed', () => {
@@ -595,6 +766,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
   stopSidecar();
 });
 

@@ -21,3 +21,4 @@ numpy>=1.26.0
 
 # Voice Activity Detection (helps gate Whisper invocations)
 webrtcvad>=2.0.10
+rapidfuzz>=3.14.5

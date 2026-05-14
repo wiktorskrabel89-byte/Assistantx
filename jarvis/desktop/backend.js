@@ -8,24 +8,15 @@ const { getJarvisApiUrl } = require('./runtime-config');
 const { getAccountSession } = require('./accounts');
 const {
   appendHistory,
-  getAppAliases,
-  getDiscoveredApps,
   getFavoriteApp,
-  recordResolverDecision,
   readState,
-  rememberApp,
   rememberFile,
   rememberPrompt,
-  saveDiscoveredApps,
   saveTask,
-  setAppAlias,
 } = require('./local-state');
 const { planPrompt } = require('./task-planner');
-const { resolveAppTarget } = require('./app-resolver');
-const { scanWindowsApps } = require('./app-scanner');
+const launcherService = require('./launcher/launch-service');
 const {
-  APP_OPEN_MAP,
-  APP_OPEN_MAP_DARWIN,
   APP_CLOSE_MAP,
   APP_CLOSE_MAP_DARWIN,
 } = require('./app-launch-config');
@@ -157,29 +148,14 @@ function sendMessageToBackend(payload) {
 }
 
 async function refreshDiscoveredApps(reason = 'manual') {
-  if (PLATFORM !== 'win32') {
-    return {
-      summary: 'App scanning is currently enabled only on Windows.',
-      appCount: 0,
-      reason: 'unsupported-platform',
-    };
-  }
-  try {
-    const discoveredApps = await scanWindowsApps(execFilePromise);
-    saveDiscoveredApps(discoveredApps, { source: reason });
-    return {
-      summary: `App catalog refreshed (${discoveredApps.length} discovered apps).`,
-      appCount: discoveredApps.length,
-      reason,
-    };
-  } catch (error) {
-    return {
-      summary: `App scan failed: ${error.message}`,
-      appCount: 0,
-      reason: 'scan-failed',
-      level: 'warning',
-    };
-  }
+  const result = await launcherService.refreshCatalog({ reason, platform: PLATFORM });
+  return {
+    summary: `App catalog refreshed (${result.appCount} discovered apps) via ${result.provider}.`,
+    appCount: result.appCount,
+    provider: result.provider,
+    everythingAvailable: result.everythingAvailable,
+    reason,
+  };
 }
 
 async function buildPresencePayload() {
@@ -316,6 +292,25 @@ function normalizeHttpUrl(rawUrl) {
   return parsed.toString();
 }
 
+function getLauncherTrigger(context = {}) {
+  if (context.source === 'remote') return 'remote';
+  if (context.origin === 'sidecar' || context.origin === 'voice' || context.origin === 'browser-voice') return 'voice';
+  if (context.taskId || context.origin === 'workflow' || context.origin === 'ai') return 'workflow';
+  return 'manual';
+}
+
+async function requestLaunchConfirmation(result, approve) {
+  if (!result?.confirmation) return result;
+  if (!ipcRenderer) {
+    throw new Error(result.summary || 'Launch confirmation required.');
+  }
+  const approved = await ipcRenderer.invoke('request-launcher-confirmation', result.confirmation);
+  if (!approved) {
+    throw new Error(result.summary || 'Launch confirmation was denied.');
+  }
+  return approve();
+}
+
 function getHttpBaseUrl(url) {
   return String(url || '')
     .replace(/^wss?:\/\//, (match) => (match === 'wss://' ? 'https://' : 'http://'))
@@ -446,14 +441,20 @@ async function runAiPrompt(prompt, meta = {}) {
   });
 }
 
-async function openUrl(url) {
+async function openUrl(url, options = {}) {
   const nextUrl = normalizeHttpUrl(url);
-  if (ipcRenderer) {
-    await ipcRenderer.invoke('open-url', nextUrl);
-  } else {
-    await execFilePromise('cmd.exe', ['/c', 'start', '', nextUrl]);
+  const trigger = options.trigger || 'manual';
+  const result = await launcherService.launchUrl(nextUrl, {
+    trigger,
+    confirmed: Boolean(options.confirmed),
+  });
+  if (result?.status === 'confirmation_required') {
+    return requestLaunchConfirmation(result, async () => launcherService.launchUrl(nextUrl, {
+      trigger,
+      confirmed: true,
+    }));
   }
-  return { summary: `Opened URL in browser: ${nextUrl}`, url: nextUrl };
+  return result;
 }
 
 async function openChromeTab(url) {
@@ -473,125 +474,44 @@ async function openChromeTab(url) {
   return openUrl(nextUrl);
 }
 
-async function searchWeb(query) {
+async function searchWeb(query, options = {}) {
   const normalizedQuery = String(query || '').trim();
   if (!normalizedQuery) throw new Error('Missing search query.');
-  await openUrl(`https://www.google.com/search?q=${encodeURIComponent(normalizedQuery)}`);
+  await openUrl(`https://www.google.com/search?q=${encodeURIComponent(normalizedQuery)}`, options);
   return { summary: `Searching the web for: ${normalizedQuery}` };
 }
 
-async function searchYouTube(query) {
+async function searchYouTube(query, options = {}) {
   const normalizedQuery = String(query || '').trim();
   if (!normalizedQuery) throw new Error('Missing YouTube search query.');
-  await openUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(normalizedQuery)}`);
+  await openUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(normalizedQuery)}`, options);
   return { summary: `Searching YouTube for: ${normalizedQuery}` };
 }
 
 async function openApp(app, options = {}) {
   const rawApp = String(app || '').trim();
-  const normalized = rawApp.toLowerCase();
   if (!rawApp) throw new Error('Missing app name.');
-
-  if (PLATFORM === 'darwin') {
-    const appName = APP_OPEN_MAP_DARWIN[normalized] || rawApp;
-    await execFilePromise('open', ['-a', appName]);
-    rememberApp(normalized);
-    return { summary: `Opened ${appName}.`, app: normalized };
-  }
-
-  const state = readState();
-  const localAliases = getAppAliases();
-  const discoveredApps = getDiscoveredApps();
-  const resolution = resolveAppTarget(rawApp, {
-    aliases: localAliases,
-    discoveredApps,
-    knownOpenMap: APP_OPEN_MAP,
-    recentApps: state?.preferences?.recentApps || [],
-    strictRemote: options.source === 'remote',
+  const trigger = options.trigger || 'manual';
+  const result = await launcherService.launchApp(rawApp, {
+    trigger,
+    confirmed: Boolean(options.confirmed),
+    admin: Boolean(options.admin),
   });
-  if (resolution.status === 'ambiguous') {
-    throw new Error(`${resolution.feedback || 'App name is ambiguous.'} Suggestions: ${(resolution.suggestions || []).join(', ') || 'none'}`);
+  if (result?.status === 'confirmation_required') {
+    return requestLaunchConfirmation(result, async () => launcherService.launchApp(rawApp, {
+      trigger,
+      confirmed: true,
+      admin: Boolean(options.admin),
+    }));
   }
-  if (resolution.status === 'unknown') {
-    throw new Error(`Unknown app: ${rawApp}.${resolution.suggestions?.length ? ` Did you mean: ${resolution.suggestions.join(', ')}?` : ''}`);
+  if (result?.status === 'unknown') {
+    throw new Error(`Unknown app: ${rawApp}.${result.suggestions?.length ? ` Did you mean: ${result.suggestions.map((item) => item.name || item.key).join(', ')}?` : ''}`);
   }
-
-  const launchCandidates = (resolution.candidates || []).length > 0
-    ? resolution.candidates
-    : [...new Set([
-      { value: rawApp, launchMode: 'filePath', via: 'fallback' },
-      { value: rawApp.replace(/^['"]|['"]$/g, ''), launchMode: 'filePath', via: 'fallback' },
-      rawApp.toLowerCase().endsWith('.exe') ? null : { value: `${rawApp}.exe`, launchMode: 'filePath', via: 'fallback' },
-    ].filter(Boolean))];
-  let lastError = null;
-
-  // Allowlist of characters permitted in launch targets to prevent injection.
-  // Valid app names, paths, and exe names only need: alphanum, spaces, and :.\_-()
-  function isSafeLaunchTarget(value) {
-    return typeof value === 'string' && /^[a-zA-Z0-9 .:\\/_\-()]+$/.test(value);
-  }
-
-  for (const candidate of launchCandidates) {
-    if (!isSafeLaunchTarget(candidate.value)) {
-      lastError = new Error(`Rejected unsafe launch target: ${candidate.value}`);
-      continue;
-    }
-    try {
-      // Use cmd.exe /c start for all Windows launches — avoids PowerShell
-      // script string composition and is immune to command injection when
-      // arguments are passed as separate array entries via execFile.
-      await execFilePromise('cmd.exe', ['/c', 'start', '', candidate.value]);
-      rememberApp(resolution.resolvedKey || normalized);
-      recordResolverDecision({
-        input: rawApp,
-        strategy: resolution.strategy,
-        confidence: resolution.confidence,
-        resolvedKey: resolution.resolvedKey || normalized,
-        matchedInput: resolution.matchedInput || rawApp,
-        source: options.source || 'local',
-        launchCandidate: candidate.value,
-      });
-      return {
-        summary: `${resolution.feedback ? `${resolution.feedback} ` : ''}Opened ${resolution.resolvedKey || rawApp}.`,
-        app: resolution.resolvedKey || normalized,
-        resolver: {
-          strategy: resolution.strategy,
-          confidence: resolution.confidence,
-          matchedInput: resolution.matchedInput || rawApp,
-        },
-      };
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw new Error(`${lastError?.message || `Failed to open app: ${rawApp}`}. Tried: ${launchCandidates.map((item) => item.value).join(', ')}`);
+  return result;
 }
 
 async function teachAppAlias(alias, app) {
-  const normalizedAlias = String(alias || '').trim().toLowerCase();
-  const target = String(app || '').trim();
-  if (!normalizedAlias) throw new Error('Missing alias name.');
-  if (!target) throw new Error('Missing alias target app.');
-
-  const resolution = resolveAppTarget(target, {
-    aliases: getAppAliases(),
-    discoveredApps: getDiscoveredApps(),
-    knownOpenMap: APP_OPEN_MAP,
-  });
-  if (resolution.status !== 'resolved') {
-    throw new Error(`Cannot set alias: unknown target app "${target}".`);
-  }
-
-  setAppAlias(normalizedAlias, resolution.resolvedKey || target.toLowerCase());
-  recordResolverDecision({
-    input: normalizedAlias,
-    strategy: 'alias_teach',
-    confidence: 1,
-    resolvedKey: resolution.resolvedKey || target.toLowerCase(),
-    source: 'local',
-  });
-  return { summary: `Saved alias "${normalizedAlias}" → "${resolution.resolvedKey || target.toLowerCase()}".` };
+  return launcherService.teachAlias(alias, app);
 }
 
 async function closeApp(app) {
@@ -873,9 +793,16 @@ async function executeStructuredCommand(msg, context = {}) {
 
   try {
     let result;
+    const launcherTrigger = getLauncherTrigger(context);
     switch (command) {
       case 'openApp':
-        result = await openApp(appName || msg.appName || '', { source: context.source || 'local' });
+        result = await openApp(appName || msg.appName || '', {
+          source: context.source || 'local',
+          origin: context.origin || 'desktop',
+          trigger: launcherTrigger,
+          admin: Boolean(msg.admin || msg.runAsAdmin),
+          confirmed: Boolean(msg.confirmed),
+        });
         break;
       case 'closeApp':
         result = await closeApp(appName || '');
@@ -887,16 +814,19 @@ async function executeStructuredCommand(msg, context = {}) {
         result = await refreshDiscoveredApps('manual-command');
         break;
       case 'openUrl':
-        result = await openUrl(url || appName || '');
+        result = await openUrl(url || appName || '', {
+          trigger: launcherTrigger,
+          confirmed: Boolean(msg.confirmed),
+        });
         break;
       case 'openChromeTab':
         result = await openChromeTab(url || appName || '');
         break;
       case 'searchWeb':
-        result = await searchWeb(query || text || '');
+        result = await searchWeb(query || text || '', { trigger: launcherTrigger, confirmed: Boolean(msg.confirmed) });
         break;
       case 'searchYouTube':
-        result = await searchYouTube(query || text || '');
+        result = await searchYouTube(query || text || '', { trigger: launcherTrigger, confirmed: Boolean(msg.confirmed) });
         break;
       case 'volumeUp':
         if (PLATFORM === 'darwin') {
