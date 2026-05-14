@@ -83,6 +83,8 @@ describe("POST /api/upload", () => {
     jest.clearAllMocks();
     process.env.GROQ_API_KEY = "test-groq-key";
     process.env.GOOGLE_AI_STUDIO_API_KEY = "test-google-key";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "test-publishable-key";
   });
 
   function makeFileFormData(
@@ -111,6 +113,25 @@ describe("POST /api/upload", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBeDefined();
+  });
+
+  it("returns 503 when Supabase config is missing", async () => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+    const file = new File(["img"], "test.png", { type: "image/png" });
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const req = new Request("http://localhost/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(503);
+    const body = await res.json() as { code?: string };
+    expect(body.code).toBe("upload_not_configured");
   });
 
   it("streams a model label event first", async () => {
