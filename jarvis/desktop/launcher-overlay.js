@@ -1,4 +1,6 @@
-const { ipcRenderer } = require('electron');
+// All IPC with the main process is via window.launcherIpc (provided by
+// launcher-preload.js). nodeIntegration is disabled for this window.
+const ipc = window.launcherIpc;
 
 const queryInput = document.getElementById('query');
 const resultsNode = document.getElementById('results');
@@ -57,7 +59,7 @@ function renderResults() {
 }
 
 async function runSearch(query = '') {
-  const payload = await ipcRenderer.invoke('launcher-search', { query, limit: 8 });
+  const payload = await ipc.invoke('launcher-search', { query, limit: 8 });
   items = payload.results || [];
   activeIndex = 0;
   setProviderStatus(payload.providerStatus || []);
@@ -69,7 +71,7 @@ async function runSearch(query = '') {
 
 async function refreshIndex() {
   footerStatusNode.textContent = 'Refreshing local launcher index…';
-  const result = await ipcRenderer.invoke('launcher-refresh');
+  const result = await ipc.invoke('launcher-refresh');
   setProviderStatus(result.statuses || []);
   footerStatusNode.textContent = `Indexed ${result.appCount} launcher entries via ${result.provider}.`;
   await runSearch(queryInput.value.trim());
@@ -79,11 +81,11 @@ async function launchActiveItem() {
   const item = items[activeIndex];
   const query = item?.key || queryInput.value.trim();
   if (!query) return;
-  const result = await ipcRenderer.invoke('launcher-launch', { key: item?.key, query });
+  const result = await ipc.invoke('launcher-launch', { key: item?.key, query });
   footerStatusNode.textContent = result.summary || `Opened ${item?.name || query}.`;
   if (result.status === 'launched') {
     queryInput.value = '';
-    await ipcRenderer.invoke('launcher-hide');
+    await ipc.invoke('launcher-hide');
   }
 }
 
@@ -121,7 +123,7 @@ queryInput.addEventListener('keydown', (event) => {
     void launchActiveItem();
   } else if (event.key === 'Escape') {
     event.preventDefault();
-    void ipcRenderer.invoke('launcher-hide');
+    void ipc.invoke('launcher-hide');
   }
 });
 
@@ -131,41 +133,41 @@ refreshButton.addEventListener('click', () => {
 
 installEverythingButton.addEventListener('click', () => {
   footerStatusNode.textContent = 'Opening Everything Search download page…';
-  void ipcRenderer.invoke('install-everything-search');
+  void ipc.invoke('install-everything-search');
 });
 
 confirmationApproveButton.addEventListener('click', () => {
   if (!pendingConfirmationId) return;
-  void ipcRenderer.invoke('launcher-confirmation-response', { id: pendingConfirmationId, approved: true });
+  void ipc.invoke('launcher-confirmation-response', { id: pendingConfirmationId, approved: true });
   clearConfirmation();
 });
 
 confirmationCancelButton.addEventListener('click', () => {
   if (!pendingConfirmationId) return;
-  void ipcRenderer.invoke('launcher-confirmation-response', { id: pendingConfirmationId, approved: false });
+  void ipc.invoke('launcher-confirmation-response', { id: pendingConfirmationId, approved: false });
   clearConfirmation();
 });
 
-ipcRenderer.on('launcher-overlay-focus', (_event, payload) => {
+ipc.on('launcher-overlay-focus', (payload) => {
   if (payload?.providerStatus) setProviderStatus(payload.providerStatus);
   queryInput.focus();
   queryInput.select();
   void runSearch(queryInput.value.trim());
 });
 
-ipcRenderer.on('launcher-confirmation-request', (_event, payload) => {
+ipc.on('launcher-confirmation-request', (payload) => {
   showConfirmation(payload);
 });
 
-ipcRenderer.on('launcher-confirmation-cleared', () => {
+ipc.on('launcher-confirmation-cleared', () => {
   clearConfirmation();
 });
 
-ipcRenderer.on('sidecar-status', (_event, payload) => {
+ipc.on('sidecar-status', (payload) => {
   voiceStatusNode.textContent = `Voice sidecar: ${payload?.status || 'unknown'}`;
 });
 
-void ipcRenderer.invoke('launcher-recent', { limit: 8 }).then((payload) => {
+void ipc.invoke('launcher-recent', { limit: 8 }).then((payload) => {
   items = payload.results || [];
   setProviderStatus(payload.providerStatus || []);
   renderResults();

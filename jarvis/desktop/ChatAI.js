@@ -1,5 +1,5 @@
 // jarvis/desktop/ChatAI.js
-// Prosty komponent czatu AI (Electron)
+// Simple AI chat component for the Electron desktop app.
 
 let queuePromptExecution;
 let onMessage;
@@ -66,7 +66,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function submit() {
     const text = input.value.trim();
     if (!text) return;
-    appendMsg('Ty', text);
+    appendMsg('You', text);
     input.value = '';
     if (queuePromptExecution) {
       queuePromptExecution(text, { source: 'chat-ui', origin: 'desktop' });

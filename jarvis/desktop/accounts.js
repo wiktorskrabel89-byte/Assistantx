@@ -219,6 +219,7 @@ async function refreshSessionIfNeeded() {
 
 module.exports = {
   clearAccountSession,
+  decodeJwtPayload,
   fetchLinkedAccounts,
   getAccountSession,
   getLinkedAccounts,

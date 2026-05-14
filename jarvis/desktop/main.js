@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
+const { decodeJwtPayload } = require('./accounts');
 const { spawn } = require('child_process');
 const launcherService = require('./launcher/launch-service');
 
@@ -130,11 +130,6 @@ function emitUpdateStatus(status, detail, extra = {}) {
 
 function getJarvisWebBaseUrl() {
   return getJarvisWebUrl();
-}
-
-function getJarvisDownloadUrl() {
-  const arch = os.arch() === 'arm64' ? 'arm64' : 'x64';
-  return `${getJarvisWebBaseUrl()}/api/jarvis/download?platform=windows&arch=${arch}`;
 }
 
 // ── electron-updater integration ─────────────────────────────────────────────
@@ -270,8 +265,9 @@ function createWindow() {
     minHeight: 560,
     title: 'Jarvis Desktop',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -306,8 +302,9 @@ function createLauncherOverlayWindow() {
     alwaysOnTop: true,
     title: 'AssistantX Launcher',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'launcher-preload.js'),
     },
   });
 
@@ -747,20 +744,6 @@ ipcMain.handle('open-account-login', async () => {
     loginWin.on('closed', () => finalizeResolve(null));
   });
 });
-
-// Decodes the JWT payload (base64url) to extract claims such as email and sub.
-// Signature verification is intentionally omitted: the token arrives directly
-// from the Supabase OAuth callback URL over HTTPS and is used only for display
-// purposes; authorization is enforced server-side on every API call.
-function decodeJwtPayload(token) {
-  try {
-    const parts = String(token || '').split('.');
-    if (parts.length < 2) return null;
-    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-  } catch {
-    return null;
-  }
-}
 
 function parseCallbackUrl(url, loginWin, resolve) {
   try {
