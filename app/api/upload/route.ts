@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { PDFParse } from "pdf-parse/node";
+import { PDFParse } from "pdf-parse";
 import { createClient } from "@/lib/server";
 import { hasSupabaseConfig } from "@/lib/supabase-config";
 import { chunkTextByApproxTokens, createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
