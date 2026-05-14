@@ -104,7 +104,7 @@ function planSegment(segment, options = {}) {
     }, `Set alias ${match[1].trim()} → ${match[2].trim()}`);
   }
 
-  if (/(?:scan|refresh|rescan|rebuild|update)\s+(?:apps|applications|start menu|catalog|app list)/i.test(favoriteAwareText)
+  if (/(?:scan|refresh|rescan|rebuild|update)\s+(?:(?:app\s+)?catalog|apps|applications|start menu|app list)/i.test(favoriteAwareText)
     || /(?:przeskanuj|od[śs]wie[zż]|zaktualizuj)\s+(?:aplikacje|menu start|katalog aplikacji)/i.test(favoriteAwareText)) {
     return createStep('refreshAppCatalog', {}, 'Refresh app catalog');
   }

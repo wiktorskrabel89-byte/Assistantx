@@ -1,6 +1,6 @@
 const { normalizeKey, normalizeName } = require('./app-scanner');
 
-const AUTO_THRESHOLD = 0.88;
+const AUTO_THRESHOLD = 0.85;
 const CONFIRM_THRESHOLD = 0.72;
 
 function toCandidate(value, launchMode = 'start', via = 'fallback') {
@@ -19,8 +19,9 @@ function levDistance(a, b) {
   if (!x) return y.length;
   if (!y) return x.length;
 
-  const dp = Array.from({ length: x.length + 1 }, (_, i) => [i]);
-  for (let j = 1; j <= y.length; j += 1) dp[0][j] = j;
+  const dp = Array.from({ length: x.length + 1 }, () => Array(y.length + 1).fill(0));
+  for (let i = 0; i <= x.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= y.length; j += 1) dp[0][j] = j;
 
   for (let i = 1; i <= x.length; i += 1) {
     for (let j = 1; j <= y.length; j += 1) {
@@ -30,6 +31,15 @@ function levDistance(a, b) {
         dp[i][j - 1] + 1,
         dp[i - 1][j - 1] + cost,
       );
+
+      if (
+        i > 1
+        && j > 1
+        && x[i - 1] === y[j - 2]
+        && x[i - 2] === y[j - 1]
+      ) {
+        dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + cost);
+      }
     }
   }
   return dp[x.length][y.length];

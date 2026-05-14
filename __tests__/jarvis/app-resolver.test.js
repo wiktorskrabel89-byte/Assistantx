@@ -49,13 +49,13 @@ describe('jarvis app resolver', () => {
   });
 
   it('is stricter for remote fuzzy resolution', () => {
-    const local = resolveAppTarget('spofity', {
+    const local = resolveAppTarget('spotfy', {
       aliases: {},
       discoveredApps: [],
       knownOpenMap,
       strictRemote: false,
     });
-    const remote = resolveAppTarget('spofity', {
+    const remote = resolveAppTarget('spotfy', {
       aliases: {},
       discoveredApps: [],
       knownOpenMap,
