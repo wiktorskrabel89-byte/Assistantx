@@ -327,7 +327,7 @@ function getJarvisAiEndpointCandidates() {
   const candidates = [
     process.env.JARVIS_AI_URL,
     apiBaseUrl ? `${apiBaseUrl}/api/chat` : null,
-    `${getHttpBaseUrl(BACKEND_URL)}/chat`,
+    BACKEND_URL ? `${getHttpBaseUrl(BACKEND_URL)}/chat` : null,
   ].filter(Boolean);
 
   return [...new Set(candidates)];
@@ -375,15 +375,32 @@ async function runAiPrompt(prompt, meta = {}) {
 
   for (const endpoint of getJarvisAiEndpointCandidates()) {
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: prompt,
-          mode: 'auto',
-        }),
-        signal: AbortSignal.timeout(45_000),
-      });
+      let response;
+      if (ipcRenderer && /^https?:\/\//i.test(endpoint)) {
+        const proxyResult = await ipcRenderer.invoke('jarvis-ai-request', {
+          endpoint,
+          payload: {
+            message: prompt,
+            mode: 'auto',
+          },
+          timeoutMs: 45_000,
+        });
+        const proxyHeaders = new Headers(proxyResult?.headers || {});
+        response = new Response(proxyResult?.body || '', {
+          status: Number(proxyResult?.status) || 500,
+          headers: proxyHeaders,
+        });
+      } else {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: prompt,
+            mode: 'auto',
+          }),
+          signal: AbortSignal.timeout(45_000),
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`AI request failed (${response.status}) at ${endpoint}`);
@@ -1307,6 +1324,7 @@ module.exports = {
   connectToBackend,
   executeStructuredCommand,
   getBackendUrl: () => BACKEND_URL,
+  getJarvisAiEndpointCandidates,
   getCurrentToken: () => currentToken,
   getLocalStateSnapshot: () => readState(),
   onMessage: (callback) => emitter.on('message', callback),

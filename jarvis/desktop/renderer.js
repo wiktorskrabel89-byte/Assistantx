@@ -107,8 +107,11 @@ function setStatusDot(status) {
 	const dot = document.getElementById('status-dot');
 	if (!dot) return;
 	dot.className = 'dot';
-	if (status === 'connected') dot.classList.add('connected');
-	if (status === 'error') dot.classList.add('error');
+	const normalized = String(status || '').toLowerCase();
+	const healthyStates = new Set(['connected', 'ready', 'online', 'busy', 'running', 'starting']);
+	const errorStates = new Set(['error', 'disconnected', 'unavailable']);
+	if (healthyStates.has(normalized)) dot.classList.add('connected');
+	if (errorStates.has(normalized)) dot.classList.add('error');
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -293,6 +296,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	);
 
 	let recognition = null;
+	let sidecarManualListening = false;
 	readSpeechVoices();
 	if (typeof window !== 'undefined' && window.speechSynthesis && typeof window.speechSynthesis.addEventListener === 'function') {
 		window.speechSynthesis.addEventListener('voiceschanged', () => {
@@ -417,6 +421,21 @@ window.addEventListener('DOMContentLoaded', () => {
 	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPrompt(); });
 
 	function startSpeechToText({ autoSubmit = false } = {}) {
+		if (sidecarConnected && sidecar) {
+			sidecarManualListening = true;
+			setVoiceToTextUiActive(true);
+			sidecar.setListeningForCommand(true);
+			sidecar.startAudioCapture().catch((error) => {
+				appendMessage(
+					log,
+					'Speech-to-text',
+					formatVoiceCaptureError(error),
+					'error',
+				);
+				setVoiceToTextUiActive(false);
+			});
+			return;
+		}
 		const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
 		if (!SpeechRecognitionCtor) {
 			appendMessage(log, 'Speech-to-text', 'Speech recognition is not available in this Jarvis build.', 'error');
@@ -462,6 +481,12 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	function stopSpeechToText() {
+		if (sidecarConnected && sidecar) {
+			sidecarManualListening = false;
+			sidecar.setListeningForCommand(false);
+			setVoiceToTextUiActive(false);
+			return;
+		}
 		if (!recognition) return;
 		try {
 			recognition.stop();
@@ -611,11 +636,17 @@ window.addEventListener('DOMContentLoaded', () => {
 
 		sidecar.on('disconnected', () => {
 			sidecarConnected = false;
+			sidecarManualListening = false;
+			setVoiceToTextUiActive(false);
 			appendMessage(log, 'AI Sidecar', 'Python voice sidecar disconnected — using browser fallback.', 'system');
 		});
 
-		sidecar.on('error', () => {
-			// Non-fatal; browser pipeline takes over
+		sidecar.on('error', (error) => {
+			appendMessage(log, 'AI Sidecar', formatVoiceCaptureError(error), 'error');
+			if (sidecarManualListening) {
+				sidecarManualListening = false;
+				setVoiceToTextUiActive(false);
+			}
 		});
 
 		sidecar.on('status', (payload) => {
@@ -637,6 +668,10 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (isFinal) {
 				setVoiceVisualizer('idle');
 				sidecar.setListeningForCommand(false);
+				if (sidecarManualListening) {
+					sidecarManualListening = false;
+					setVoiceToTextUiActive(false);
+				}
 				submitPrompt();
 			} else {
 				setVoiceVisualizer('listening');
@@ -719,6 +754,31 @@ window.addEventListener('DOMContentLoaded', () => {
 		} else if (!voiceSettings.wakeWordEnabled && sidecar._capturing) {
 			sidecar.stopAudioCapture();
 		}
+	}
+
+	function setVoiceToTextUiActive(active) {
+		setSpeechToTextActive(active);
+		if (!active) {
+			setVoiceVisualizer('idle');
+		} else {
+			setVoiceVisualizer('listening');
+		}
+	}
+
+	function formatVoiceCaptureError(error) {
+		const message = String(error?.message || '').toLowerCase();
+		if (message.includes('notallowed') || message.includes('permission') || message.includes('denied')) {
+			return 'Microphone permission is blocked. Enable microphone access for Jarvis Desktop in system privacy settings.';
+		}
+		if (message.includes('notfound') || message.includes('device')) {
+			return 'No microphone device was found. Connect a microphone and try again.';
+		}
+		if (message.includes('secure context')) {
+			return 'Microphone capture requires a secure context. Use the packaged EXE and allow microphone access.';
+		}
+		return error?.message
+			? `Voice capture failed: ${error.message}`
+			: 'Voice capture failed. Check microphone permissions and sidecar status.';
 	}
 
 	// Speak via Piper TTS when sidecar is connected, or via browser otherwise.

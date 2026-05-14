@@ -162,6 +162,15 @@ function isTransientFetchFailure(error) {
   );
 }
 
+function isReleaseUnavailableError(error) {
+  const errorMessageLowerCase = String(error?.message || '').toLowerCase();
+  return (
+    errorMessageLowerCase.includes('http 404 from github release endpoint')
+    || errorMessageLowerCase.includes('release not found')
+    || errorMessageLowerCase.includes('not found')
+  );
+}
+
 async function fetchLatestJarvisReleaseFromServer() {
   try {
     const response = await fetch(`${getJarvisWebBaseUrl()}/api/jarvis/version`, {
@@ -173,6 +182,12 @@ async function fetchLatestJarvisReleaseFromServer() {
     if (!response.ok) return null;
 
     const payload = await response.json();
+    if (payload?.available === false) {
+      return {
+        unavailable: true,
+        reason: payload?.error || 'release-unavailable',
+      };
+    }
     if (!payload?.available || !payload?.version) return null;
 
     return {
@@ -209,6 +224,9 @@ async function fetchLatestJarvisReleaseFromGitHub() {
 
 async function fetchLatestJarvisRelease() {
   const serverRelease = await fetchLatestJarvisReleaseFromServer();
+  if (serverRelease?.unavailable) {
+    throw new Error(String(serverRelease.reason || 'release-unavailable'));
+  }
   if (serverRelease) return serverRelease;
   return fetchLatestJarvisReleaseFromGitHub();
 }
@@ -323,7 +341,7 @@ async function checkForUpdates() {
     });
     return { ok: true, reason: 'skipped' };
   } catch (error) {
-    if (isTransientFetchFailure(error)) {
+    if (isTransientFetchFailure(error) || isReleaseUnavailableError(error)) {
       emitUpdateStatus('unavailable', 'Update check is temporarily unavailable (network or release endpoint).', { downloaded: false });
       return { ok: false, reason: 'update-check-unavailable' };
     }
@@ -398,6 +416,30 @@ ipcMain.handle('open-path', (_event, filePath) => {
   return shell.openPath(filePath);
 });
 
+ipcMain.handle('jarvis-ai-request', async (_event, payload) => {
+  const endpoint = String(payload?.endpoint || '');
+  if (!/^https?:\/\//i.test(endpoint)) {
+    return { ok: false, status: 400, body: 'Invalid endpoint', headers: { 'content-type': 'text/plain' } };
+  }
+
+  const timeoutMs = Number(payload?.timeoutMs) > 0 ? Number(payload.timeoutMs) : 45_000;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload?.payload || {}),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const body = await response.text();
+  return {
+    ok: response.ok,
+    status: response.status,
+    body,
+    headers: {
+      'content-type': response.headers.get('content-type') || 'text/plain',
+    },
+  };
+});
+
 ipcMain.handle('get-app-meta', () => {
   return {
     version: app.getVersion(),
@@ -444,7 +486,7 @@ ipcMain.handle('open-account-login', async () => {
   const webUrl = getJarvisWebBaseUrl();
   const loginUrl = `${webUrl}/auth/login?client=jarvis-desktop`;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const loginWin = new BrowserWindow({
       width: 480,
       height: 680,
@@ -456,19 +498,42 @@ ipcMain.handle('open-account-login', async () => {
 
     loginWin.loadURL(loginUrl);
 
+    let settled = false;
+    const finalizeResolve = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    const inspectUrl = (url) => {
+      parseCallbackUrl(url, loginWin, finalizeResolve);
+    };
+
     // Detect callback URL carrying the session token
     loginWin.webContents.on('will-redirect', (_event, url) => {
-      parseCallbackUrl(url, loginWin, resolve, reject);
+      inspectUrl(url);
+    });
+    loginWin.webContents.on('did-redirect-navigation', (_event, url) => {
+      inspectUrl(url);
     });
     loginWin.webContents.on('did-navigate', (_event, url) => {
-      parseCallbackUrl(url, loginWin, resolve, reject);
+      inspectUrl(url);
+    });
+    loginWin.webContents.on('did-navigate-in-page', (_event, url) => {
+      inspectUrl(url);
+    });
+    loginWin.webContents.on('did-finish-load', () => {
+      try {
+        inspectUrl(loginWin.webContents.getURL());
+      } catch {
+        // ignore transient navigation state errors
+      }
     });
 
-    loginWin.on('closed', () => resolve(null));
+    loginWin.on('closed', () => finalizeResolve(null));
   });
 });
 
-function parseCallbackUrl(url, loginWin, resolve, reject) {
+function parseCallbackUrl(url, loginWin, resolve) {
   try {
     const parsed = new URL(url);
     // Look for /auth/callback with an access_token fragment or query param
@@ -484,7 +549,7 @@ function parseCallbackUrl(url, loginWin, resolve, reject) {
       resolve({ accessToken, email, userId, signedInAt: new Date().toISOString() });
     }
   } catch {
-    reject(new Error('Could not parse auth callback URL'));
+    // Ignore intermediate non-URL values during navigation.
   }
 }
 
