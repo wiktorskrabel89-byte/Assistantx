@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
-const { getJarvisWebUrl } = require('./runtime-config');
+const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
 const { spawn } = require('child_process');
 const launcherService = require('./launcher/launch-service');
 
@@ -643,6 +643,17 @@ ipcMain.handle('get-displays', () => {
 
 ipcMain.handle('check-for-updates', () => {
   return checkForUpdates();
+});
+
+ipcMain.handle('get-jarvis-web-url', () => getJarvisWebUrl());
+
+ipcMain.handle('set-jarvis-web-url', (_event, url) => {
+  const urlStr = typeof url === 'string' ? url.trim() : '';
+  if (urlStr && !/^https?:\/\//i.test(urlStr)) {
+    return { ok: false, error: 'Server URL must start with http:// or https://' };
+  }
+  setJarvisWebUrl(urlStr || null);
+  return { ok: true, url: getJarvisWebUrl() };
 });
 
 ipcMain.handle('download-update', async () => {
