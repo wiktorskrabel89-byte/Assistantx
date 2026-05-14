@@ -390,6 +390,18 @@ async function runAiPrompt(prompt, meta = {}) {
   const session = getAccountSession();
   const accessToken = session?.accessToken;
 
+  if (!accessToken) {
+    return publishResult({
+      title: 'Not logged in',
+      text: 'Please log in to use the AI assistant.',
+      summary: 'Please log in to use the AI assistant.',
+      level: 'error',
+      source: meta.source || 'local',
+      origin: meta.origin || 'desktop',
+      taskId: meta.taskId || null,
+    });
+  }
+
   for (const endpoint of getJarvisAiEndpointCandidates()) {
     try {
       let response;
