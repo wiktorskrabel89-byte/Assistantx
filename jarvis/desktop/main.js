@@ -424,9 +424,17 @@ ipcMain.handle('jarvis-ai-request', async (_event, payload) => {
 
   const timeoutMs = Number(payload?.timeoutMs) > 0 ? Number(payload.timeoutMs) : 45_000;
   try {
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent': `JarvisDesktop/${app.getVersion()} Electron`,
+      'Origin': new URL(endpoint).origin,
+    };
+    if (payload?.token) {
+      requestHeaders['Authorization'] = `Bearer ${payload.token}`;
+    }
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: requestHeaders,
       body: JSON.stringify(payload?.payload || {}),
       signal: AbortSignal.timeout(timeoutMs),
     });
