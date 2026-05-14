@@ -9,6 +9,7 @@
     "url": "https://github.com/wiktorskrabel89-byte/Assistantx.git"
   },
   "scripts": {
+    "postinstall": "electron-builder install-app-deps",
     "dev": "electron .",
     "start": "electron .",
     "pack": "electron-builder --dir --publish never",
