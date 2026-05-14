@@ -136,7 +136,7 @@ const conversationHistory = [];
 function recordConversationTurn(role, content) {
   conversationHistory.push({ role, content: String(content || '').trim() });
   if (conversationHistory.length > MAX_CONVERSATION_TURNS) {
-    conversationHistory.splice(0, conversationHistory.length - MAX_CONVERSATION_TURNS);
+    conversationHistory.shift();
   }
 }
 
@@ -408,6 +408,7 @@ async function runAiPrompt(prompt, meta = {}) {
   const accessToken = session?.accessToken;
 
   if (!accessToken) {
+    emitRawMessage({ type: 'ai_thinking', inFlight: false });
     return publishResult({
       title: 'Not logged in',
       text: 'Please log in to use the AI assistant.',
@@ -419,9 +420,9 @@ async function runAiPrompt(prompt, meta = {}) {
     });
   }
 
-  // Record the user turn and snapshot history before the network call.
-  const history = getConversationHistory();
+  // Record the user turn first, then snapshot — the current prompt is included.
   recordConversationTurn('user', prompt);
+  const history = getConversationHistory();
 
   // Signal to the UI that a response is in flight.
   emitRawMessage({ type: 'ai_thinking', inFlight: true });

@@ -1197,5 +1197,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			refreshAccountUI();
 			refreshLinkedAccounts();
 		}
-	}).catch(() => null);
+	}).catch((err) => {
+		console.warn('[renderer] Session refresh on startup failed:', err?.message || err);
+	});
 });
