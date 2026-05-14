@@ -554,6 +554,70 @@ describe("POST /api/chat — Gemini routing temperatures and prompts", () => {
   });
 });
 
+describe("POST /api/chat — reasoning extraction from provider stream chunks", () => {
+  let POST: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    ({ POST } = await import("@/app/api/chat/route"));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRequest(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("streams reasoning when provider emits reasoning_content deltas (Qwen-like)", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "chain", content: "answer" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Solve this",
+      mode: "chat",
+      modelId: "qwen/qwen3-32b",
+      userPlan: "pro",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(body).toContain(`"reasoning":"chain"`);
+    expect(body).toContain(`"token":"answer"`);
+  });
+
+  it("streams reasoning from typed content parts and normal text parts separately", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: [{ type: "reasoning", text: "think" }, { type: "text", text: "final" }] } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Explain",
+      mode: "chat",
+      modelId: "google/gemini-2.5-flash",
+      userPlan: "pro",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(body).toContain(`"reasoning":"think"`);
+    expect(body).toContain(`"token":"final"`);
+  });
+});
+
 describe("POST /api/chat — profile-based routing", () => {
   let POST: (req: Request) => Promise<Response>;
 
