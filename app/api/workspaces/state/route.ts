@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/server";
-import { hasSupabaseConfig, workspaceSyncNotConfiguredResponse } from "@/lib/supabase-config";
+import { hasSupabaseConfig, isSupabaseClientSetupMessage, workspaceSyncNotConfiguredResponse } from "@/lib/supabase-config";
 import { getAuthenticatedUserForSync } from "@/app/lib/sync-auth";
 import {
   mergeJarvisIntoWorkspaceState,
@@ -63,12 +63,7 @@ function buildWorkspaceSyncError(error: unknown, fallbackMessage: string): { sta
     };
   }
 
-  const missingConfig = normalizedMessage.includes("supabaseurl is required")
-    || normalizedMessage.includes("supabasekey is required")
-    || normalizedMessage.includes("url is required")
-    || normalizedMessage.includes("invalid url")
-    || normalizedMessage.includes("your project's url and key are required")
-    || normalizedMessage.includes("required to create a supabase client");
+  const missingConfig = isSupabaseClientSetupMessage(normalizedMessage);
 
   if (missingConfig) {
     return {
