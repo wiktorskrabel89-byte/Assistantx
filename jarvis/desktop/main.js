@@ -201,17 +201,23 @@ async function fetchLatestJarvisReleaseFromServer() {
       releaseNotes: String(payload.releaseNotes || ''),
       downloadUrl: payload.downloadUrlWindows || getJarvisDownloadUrl(),
     };
-  } catch {
+  } catch (err) {
+    console.warn('[update] Server version check failed:', err?.message || err);
     return null;
   }
 }
 
 async function fetchLatestJarvisReleaseFromGitHub() {
+  const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (ghToken) {
+    headers['Authorization'] = `Bearer ${ghToken}`;
+  }
   const response = await fetch(GITHUB_RELEASE_API, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
+    headers,
     signal: AbortSignal.timeout(8_000),
     cache: 'no-store',
   });
@@ -729,6 +735,20 @@ ipcMain.handle('open-account-login', async () => {
   });
 });
 
+// Decodes the JWT payload (base64url) to extract claims such as email and sub.
+// Signature verification is intentionally omitted: the token arrives directly
+// from the Supabase OAuth callback URL over HTTPS and is used only for display
+// purposes; authorization is enforced server-side on every API call.
+function decodeJwtPayload(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) return null;
+    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
 function parseCallbackUrl(url, loginWin, resolve) {
   try {
     const parsed = new URL(url);
@@ -737,10 +757,13 @@ function parseCallbackUrl(url, loginWin, resolve) {
 
     const params = new URLSearchParams(parsed.hash.slice(1));
     const accessToken = params.get('access_token') || parsed.searchParams.get('access_token');
-    const email = params.get('email') || parsed.searchParams.get('email') || '';
-    const userId = params.get('sub') || params.get('user_id') || parsed.searchParams.get('user_id') || '';
 
     if (accessToken) {
+      const jwtPayload = decodeJwtPayload(accessToken);
+      const email = params.get('email') || parsed.searchParams.get('email')
+        || jwtPayload?.email || '';
+      const userId = params.get('sub') || params.get('user_id') || parsed.searchParams.get('user_id')
+        || jwtPayload?.sub || '';
       loginWin.close();
       resolve({ accessToken, email, userId, signedInAt: new Date().toISOString() });
     }

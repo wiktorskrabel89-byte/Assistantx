@@ -1072,7 +1072,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (ipcRenderer) {
 				try {
 					const result = await ipcRenderer.invoke('open-account-login');
-					if (result?.email) {
+					if (result?.accessToken) {
 						setAccountSession(result);
 						refreshAccountUI();
 						refreshLinkedAccounts();

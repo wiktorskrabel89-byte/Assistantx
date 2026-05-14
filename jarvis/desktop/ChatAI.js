@@ -1,12 +1,12 @@
 // jarvis/desktop/ChatAI.js
 // Prosty komponent czatu AI (Electron)
 
-let _queuePromptExecution;
-let _onMessage;
+let queuePromptExecution;
+let onMessage;
 try {
   const backend = require('./backend');
-  _queuePromptExecution = backend.queuePromptExecution;
-  _onMessage = backend.onMessage;
+  queuePromptExecution = backend.queuePromptExecution;
+  onMessage = backend.onMessage;
 } catch (err) {
   console.error('[ChatAI] Failed to load backend module:', err);
 }
@@ -23,13 +23,14 @@ window.addEventListener('DOMContentLoaded', () => {
     chat.scrollTop = chat.scrollHeight;
   }
 
-  if (_onMessage) {
-    _onMessage((raw) => {
+  if (onMessage) {
+    onMessage((raw) => {
       try {
         const payload = typeof raw === 'string' ? JSON.parse(raw) : raw;
         const text = payload?.text || payload?.summary || String(raw);
         appendMsg('Jarvis', text);
-      } catch {
+      } catch (err) {
+        console.error('[ChatAI] Failed to parse message payload:', err);
         appendMsg('Jarvis', String(raw));
       }
     });
@@ -40,11 +41,16 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!text) return;
     appendMsg('Ty', text);
     input.value = '';
-    if (_queuePromptExecution) {
-      _queuePromptExecution(text, { source: 'chat-ui', origin: 'desktop' });
+    if (queuePromptExecution) {
+      queuePromptExecution(text, { source: 'chat-ui', origin: 'desktop' });
     }
   }
 
   send.onclick = submit;
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  });
 });
