@@ -177,6 +177,99 @@ function isRequestSizeTokenError(status: number, errorText: string): boolean {
   return /request too large|tokens per minute.*requested|limit \d+.*requested \d+/i.test(errorText);
 }
 
+function readTextChunk(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map((item) => readTextChunk(item)).join("");
+  if (value && typeof value === "object") {
+    const candidate = value as { text?: unknown; content?: unknown };
+    if (typeof candidate.text === "string") return candidate.text;
+    return readTextChunk(candidate.content);
+  }
+  return "";
+}
+
+function extractStreamDelta(parsed: unknown): { reasoning: string; token: string } {
+  const payload = parsed as {
+    choices?: Array<{
+      delta?: {
+        content?: unknown;
+        reasoning?: unknown;
+        reasoning_content?: unknown;
+        reasoningContent?: unknown;
+        thought?: unknown;
+        thinking?: unknown;
+      };
+      message?: {
+        content?: unknown;
+        reasoning?: unknown;
+        reasoning_content?: unknown;
+      };
+      reasoning?: unknown;
+      reasoning_content?: unknown;
+      text?: unknown;
+    }>;
+    reasoning?: unknown;
+  };
+
+  const choice = payload.choices?.[0];
+  const delta = (choice?.delta ?? choice?.message) as {
+    content?: unknown;
+    reasoning?: unknown;
+    reasoning_content?: unknown;
+    reasoningContent?: unknown;
+    thought?: unknown;
+    thinking?: unknown;
+  } | undefined;
+
+  let reasoning = "";
+  let token = "";
+  const content = delta?.content;
+
+  if (typeof content === "string") {
+    token += content;
+  } else if (Array.isArray(content)) {
+    for (const part of content) {
+      if (typeof part === "string") {
+        token += part;
+        continue;
+      }
+      if (!part || typeof part !== "object") continue;
+      const typedPart = part as { type?: unknown; text?: unknown; content?: unknown };
+      const partType = String(typedPart.type ?? "").toLowerCase();
+      const partText = readTextChunk(typedPart.text ?? typedPart.content);
+      if (!partText) continue;
+      if (partType.includes("reasoning") || partType.includes("thinking") || partType.includes("thought")) {
+        reasoning += partText;
+      } else {
+        token += partText;
+      }
+    }
+  } else {
+    token += readTextChunk(content);
+  }
+
+  const reasoningCandidates = [
+    delta?.reasoning,
+    delta?.reasoning_content,
+    delta?.reasoningContent,
+    delta?.thought,
+    delta?.thinking,
+    choice?.reasoning,
+    choice?.reasoning_content,
+    payload.reasoning,
+  ];
+  const seenReasoning = new Set<string>();
+  for (const candidate of reasoningCandidates) {
+    const text = readTextChunk(candidate);
+    if (!text || seenReasoning.has(text)) continue;
+    seenReasoning.add(text);
+    reasoning += text;
+  }
+
+  token += readTextChunk(choice?.text);
+  return { reasoning, token };
+}
+
 export const POST = async (req: Request) => {
   // Rate limit: 30 chat requests per minute per user/IP
   const rlKey = getRateLimitKey(req, "chat");
@@ -1108,11 +1201,10 @@ export const POST = async (req: Request) => {
               const usage = parsed.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
               if (usage?.prompt_tokens) actualInputTokens = usage.prompt_tokens;
               if (usage?.completion_tokens) actualOutputTokens = usage.completion_tokens;
-              const reasoning = parsed.choices?.[0]?.delta?.reasoning;
+              const { reasoning, token } = extractStreamDelta(parsed);
               if (reasoning) {
                 safeEnqueue(`data: ${JSON.stringify({ reasoning })}\n\n`);
               }
-              const token = parsed.choices?.[0]?.delta?.content;
               if (token) {
                 safeEnqueue(`data: ${JSON.stringify({ token })}\n\n`);
               }
