@@ -4,7 +4,7 @@ const { execFile } = require('child_process');
 const EventEmitter = require('events');
 const os = require('os');
 const path = require('path');
-const { getJarvisApiUrl } = require('./runtime-config');
+const runtimeConfig = require('./runtime-config');
 const { getAccountSession } = require('./accounts');
 const {
   appendHistory,
@@ -319,10 +319,29 @@ function getHttpBaseUrl(url) {
 }
 
 function getJarvisAiEndpointCandidates() {
-  const apiBaseUrl = getJarvisApiUrl();
+  const apiBaseUrl = runtimeConfig.getJarvisApiUrl();
+  const webBaseUrl = typeof runtimeConfig.getJarvisWebUrl === 'function'
+    ? runtimeConfig.getJarvisWebUrl()
+    : apiBaseUrl;
+  let alternateAssistantxBaseUrl = null;
+  try {
+    const parsed = new URL(webBaseUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === 'assistantx.pl') {
+      parsed.hostname = 'www.assistantx.pl';
+      alternateAssistantxBaseUrl = parsed.origin;
+    } else if (hostname === 'www.assistantx.pl') {
+      parsed.hostname = 'assistantx.pl';
+      alternateAssistantxBaseUrl = parsed.origin;
+    }
+  } catch {
+    alternateAssistantxBaseUrl = null;
+  }
+
   const candidates = [
     process.env.JARVIS_AI_URL,
     apiBaseUrl ? `${apiBaseUrl}/api/chat` : null,
+    alternateAssistantxBaseUrl ? `${alternateAssistantxBaseUrl}/api/chat` : null,
     BACKEND_URL ? `${getHttpBaseUrl(BACKEND_URL)}/chat` : null,
   ].filter(Boolean);
 
@@ -492,7 +511,7 @@ async function openApp(app, options = {}) {
   const rawApp = String(app || '').trim();
   if (!rawApp) throw new Error('Missing app name.');
   const trigger = options.trigger || 'manual';
-  const result = await launcherService.launchApp(rawApp, {
+  let result = await launcherService.launchApp(rawApp, {
     trigger,
     confirmed: Boolean(options.confirmed),
     admin: Boolean(options.admin),
@@ -505,6 +524,26 @@ async function openApp(app, options = {}) {
     }));
   }
   if (result?.status === 'unknown') {
+    await refreshDiscoveredApps('open-unknown-fallback');
+    result = await launcherService.launchApp(rawApp, {
+      trigger,
+      confirmed: Boolean(options.confirmed),
+      admin: Boolean(options.admin),
+    });
+  }
+  if (result?.status === 'unknown') {
+    const lookup = await launcherService.searchApps(rawApp, { limit: 1 });
+    const bestMatch = lookup?.results?.[0];
+    if (bestMatch?.key) {
+      const matchedResult = await launcherService.launchApp(bestMatch.key, {
+        trigger,
+        confirmed: Boolean(options.confirmed),
+        admin: Boolean(options.admin),
+      });
+      if (matchedResult?.status !== 'unknown') {
+        return matchedResult;
+      }
+    }
     throw new Error(`Unknown app: ${rawApp}.${result.suggestions?.length ? ` Did you mean: ${result.suggestions.map((item) => item.name || item.key).join(', ')}?` : ''}`);
   }
   return result;
@@ -521,10 +560,40 @@ async function closeApp(app) {
     await execFilePromise('osascript', ['-e', `tell application "${appName}" to quit`]);
     return { summary: `Closed ${appName}.`, app: normalized };
   }
-  const processName = APP_CLOSE_MAP[normalized];
+  let processName = APP_CLOSE_MAP[normalized];
+  if (!processName) {
+    processName = await findRunningProcessForApp(normalized);
+  }
   if (!processName) throw new Error(`Unknown app: ${app}. Supported for close: ${Object.keys(APP_CLOSE_MAP).join(', ')}`);
   await execFilePromise('taskkill.exe', ['/IM', processName, '/F']);
   return { summary: `Closed ${normalized}.`, app: normalized };
+}
+
+function normalizeProcessName(value) {
+  const process = String(value || '').trim();
+  if (!process) return '';
+  return process.toLowerCase().endsWith('.exe') ? process : `${process}.exe`;
+}
+
+async function findRunningProcessForApp(app) {
+  if (PLATFORM !== 'win32') return null;
+  const query = String(app || '').trim().replace(/\.exe$/i, '').toLowerCase();
+  if (!query) return null;
+  try {
+    const output = await execFilePromise('powershell.exe', ['-NoProfile', '-Command', 'Get-Process -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName']);
+    const processes = String(output || '')
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const normalizedQuery = query.toLowerCase();
+    const exactMatch = processes.find((value) => value.toLowerCase() === normalizedQuery);
+    const prefixMatch = processes.find((value) => value.toLowerCase().startsWith(`${normalizedQuery}-`))
+      || processes.find((value) => value.toLowerCase().startsWith(`${normalizedQuery}_`));
+    const process = exactMatch || prefixMatch || null;
+    return normalizeProcessName(process);
+  } catch {
+    return null;
+  }
 }
 
 async function takeScreenshot(displayIndex = 0) {

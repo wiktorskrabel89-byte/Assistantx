@@ -15,7 +15,7 @@ const {
 } = require('./local-state');
 const { startScheduler } = require('./scheduler');
 const { getAccountSession, setAccountSession, clearAccountSession, getLinkedAccounts } = require('./accounts');
-const { getJarvisApiUrl, getJarvisWebUrl } = require('./runtime-config');
+const { getJarvisApiUrl, getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
 
 // ipcRenderer for URL opening via main process
 let ipcRenderer;
@@ -154,7 +154,9 @@ window.addEventListener('DOMContentLoaded', () => {
 	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
 	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
 	const saveVoiceSettingsButton = document.getElementById('save-voice-settings');
-	const apiBaseUrl = getJarvisApiUrl();
+	const serverUrlInput = document.getElementById('jarvis-server-url');
+	const saveServerUrlButton = document.getElementById('save-server-url');
+	let apiBaseUrl = getJarvisApiUrl();
 	let cachedSpeechVoices = [];
 	let speechVoicePromise = null;
 
@@ -657,7 +659,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			// Emitted once after all reconnect attempts are exhausted without ever
 			// connecting — sidecar is not installed or Python is not available.
 			sidecarConnected = false;
-			appendMessage(log, 'AI Sidecar', 'Python voice sidecar is not available — browser speech APIs will be used instead.', 'system');
+			appendMessage(log, 'AI Sidecar', 'Python voice sidecar is not available — voice will use browser speech APIs, and text AI chat will still work.', 'system');
 		});
 
 		sidecar.on('error', (error) => {
@@ -1005,6 +1007,47 @@ window.addEventListener('DOMContentLoaded', () => {
 	refreshAccountUI();
 	refreshLinkedAccounts();
 
+	// ── Server URL configuration ─────────────────────────────────────────────
+	// Populate the Server URL input with the current value and wire up the save
+	// button so users can point Jarvis at their own AssistantX deployment.
+	if (serverUrlInput) {
+		const currentUrl = getJarvisWebUrl();
+		// Only pre-fill when it's not the built-in default (so users see a blank
+		// field until they actually configure something).
+		const builtInDefaults = new Set(['https://assistantx.pl', 'https://www.assistantx.pl', 'http://localhost:3000']);
+		if (!builtInDefaults.has(currentUrl)) {
+			serverUrlInput.value = currentUrl;
+		}
+	}
+
+	if (saveServerUrlButton && serverUrlInput) {
+		saveServerUrlButton.addEventListener('click', async () => {
+			const rawUrl = serverUrlInput.value.trim();
+			if (rawUrl && !/^https?:\/\//i.test(rawUrl)) {
+				appendMessage(log, 'Server URL', 'URL must start with http:// or https://', 'error');
+				return;
+			}
+			// Update in-process module so backend.js picks up the new URL immediately.
+			setJarvisWebUrl(rawUrl || null);
+			apiBaseUrl = getJarvisApiUrl();
+			// Also notify the main process so the login window and update checks use the new URL.
+			if (ipcRenderer) {
+				try {
+					await ipcRenderer.invoke('set-jarvis-web-url', rawUrl || null);
+				} catch {
+					// Non-fatal — in-renderer update already applied above.
+				}
+			}
+			appendMessage(
+				log,
+				'Server URL',
+				rawUrl
+					? `Server URL saved: ${rawUrl}`
+					: 'Server URL cleared — using built-in default.',
+			);
+		});
+	}
+
 	// Cloud sync on startup if signed in
 	const initialSession = getAccountSession();
 	if (initialSession?.accessToken && apiBaseUrl) {
@@ -1045,7 +1088,7 @@ window.addEventListener('DOMContentLoaded', () => {
 							[
 								'Sign-in was not completed. If you saw an error in the login window, check:',
 								'(1) Supabase Auth providers (Email/Google/GitHub) are enabled in your Supabase dashboard.',
-								'(2) Supabase → Auth → URL Configuration → Redirect URLs includes https://www.assistantx.pl/auth/callback.',
+								`(2) Supabase → Auth → URL Configuration → Redirect URLs includes ${getJarvisWebUrl()}/auth/callback.`,
 								'(3) Your OAuth app allows https://<project>.supabase.co/auth/v1/callback as the callback URL.',
 							].join(' '),
 							'error',

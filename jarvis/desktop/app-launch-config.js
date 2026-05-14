@@ -51,6 +51,8 @@ const APP_OPEN_MAP_DARWIN = {
 };
 
 const APP_CLOSE_MAP = {
+  jarvis: 'Jarvis.exe',
+  assistantx: 'Jarvis.exe',
   chrome: 'chrome.exe',
   firefox: 'firefox.exe',
   edge: 'msedge.exe',
@@ -64,6 +66,8 @@ const APP_CLOSE_MAP = {
 };
 
 const APP_CLOSE_MAP_DARWIN = {
+  jarvis: 'Jarvis',
+  assistantx: 'Jarvis',
   chrome: 'Google Chrome',
   firefox: 'Firefox',
   safari: 'Safari',
