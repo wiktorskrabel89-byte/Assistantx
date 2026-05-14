@@ -5,6 +5,24 @@ export function hasSupabaseConfig() {
   );
 }
 
+export function isSupabaseClientSetupMessage(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes("supabaseurl is required")
+    || normalized.includes("supabasekey is required")
+    || normalized.includes("url is required")
+    || normalized.includes("invalid url")
+    || normalized.includes("your project's url and key are required")
+    || normalized.includes("required to create a supabase client")
+    || normalized.includes("cannot use import statement outside a module")
+    || normalized.includes("unexpected token 'export'")
+    || normalized.includes("@supabase/ssr");
+}
+
+export function isSupabaseClientSetupError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return isSupabaseClientSetupMessage(message);
+}
+
 export function workspaceSyncNotConfiguredResponse() {
   return Response.json(
     {

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/server";
-import { hasSupabaseConfig } from "@/lib/supabase-config";
+import { hasSupabaseConfig, isSupabaseClientSetupMessage } from "@/lib/supabase-config";
 
 export const maxDuration = 30;
 
@@ -36,15 +36,7 @@ function buildUnavailableNotificationsResponse(error: unknown): NotificationsRou
     };
   }
 
-  const missingConfig = message.includes("supabaseurl is required")
-    || message.includes("supabasekey is required")
-    || message.includes("url is required")
-    || message.includes("invalid url")
-    || message.includes("your project's url and key are required")
-    || message.includes("required to create a supabase client")
-    || message.includes("cannot use import statement outside a module")
-    || message.includes("unexpected token 'export'")
-    || message.includes("@supabase/ssr");
+  const missingConfig = isSupabaseClientSetupMessage(message);
   if (missingConfig) {
     return {
       notifications: [],

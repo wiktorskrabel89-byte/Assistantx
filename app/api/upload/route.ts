@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { PDFParse } from "pdf-parse";
 import { createClient } from "@/lib/server";
-import { hasSupabaseConfig } from "@/lib/supabase-config";
+import { hasSupabaseConfig, isSupabaseClientSetupError } from "@/lib/supabase-config";
 import { chunkTextByApproxTokens, createOpenRouterEmbedding, toPgVectorLiteral } from "@/app/lib/knowledge";
 import { runWithConcurrency } from "@/app/lib/concurrency";
 import { ALL_MODELS, FREE_CHAT_MODEL, ROUTING_GEMINI_MODEL, ROUTING_VISION_MODEL, VISION_SYSTEM_PROMPT, getModelTemperature } from "@/lib/ai-config";
@@ -16,6 +16,11 @@ const MAX_INGESTION_CHUNKS = 60;
 const EMBEDDING_CONCURRENCY = 5;
 const IMAGE_ANALYSIS_MODEL = ROUTING_VISION_MODEL;
 const DOCUMENT_ANALYSIS_MODEL = FREE_CHAT_MODEL;
+const UPLOAD_NOT_CONFIGURED_ERROR = {
+  code: "upload_not_configured",
+  error: "Supabase is not configured. File uploads are unavailable.",
+  hint: "Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are set in your .env file.",
+} as const;
 
 function getUploadModelLabel(modelId: string, isImage: boolean): string {
   if (isImage && modelId === ROUTING_VISION_MODEL) return "Llama 4 Scout (Vision)";
@@ -87,14 +92,7 @@ import { checkRateLimit, getRateLimitKey, rateLimitedResponse } from "@/lib/rate
 
 export async function POST(req: Request) {
   if (!hasSupabaseConfig()) {
-    return Response.json(
-      {
-        code: "upload_not_configured",
-        error: "Supabase is not configured. File uploads are unavailable.",
-        hint: "Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are set in your .env file.",
-      },
-      { status: 503 },
-    );
+    return Response.json(UPLOAD_NOT_CONFIGURED_ERROR, { status: 503 });
   }
 
   // Require authentication: file analysis calls OpenRouter which costs money.
@@ -102,25 +100,8 @@ export async function POST(req: Request) {
   try {
     supabase = await createClient();
   } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : "";
-    const missingConfig = message.includes("supabaseurl is required")
-      || message.includes("supabasekey is required")
-      || message.includes("url is required")
-      || message.includes("invalid url")
-      || message.includes("your project's url and key are required")
-      || message.includes("required to create a supabase client")
-      || message.includes("cannot use import statement outside a module")
-      || message.includes("unexpected token 'export'")
-      || message.includes("@supabase/ssr");
-    if (missingConfig) {
-      return Response.json(
-        {
-          code: "upload_not_configured",
-          error: "Supabase is not configured. File uploads are unavailable.",
-          hint: "Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are set in your .env file.",
-        },
-        { status: 503 },
-      );
+    if (isSupabaseClientSetupError(error)) {
+      return Response.json(UPLOAD_NOT_CONFIGURED_ERROR, { status: 503 });
     }
     throw error;
   }
