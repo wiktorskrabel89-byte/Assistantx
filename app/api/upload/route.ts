@@ -232,6 +232,9 @@ export async function POST(req: Request) {
 
           const sendModelRequest = async (model: string) => {
             const useGoogleStudio = model.includes("gemini");
+            // Google AI Studio expects model IDs without the provider prefix
+            // (e.g. "gemini-2.5-flash", not "google/gemini-2.5-flash").
+            const googleModel = useGoogleStudio && model.startsWith("google/") ? model.slice("google/".length) : model;
             const endpoint = useGoogleStudio
               ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
               : "https://api.groq.com/openai/v1/chat/completions";
@@ -246,7 +249,7 @@ export async function POST(req: Request) {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model,
+                model: googleModel,
                 stream: true,
                 temperature: isImage
                   ? getModelTemperature(model, { isVisionRequest: true })

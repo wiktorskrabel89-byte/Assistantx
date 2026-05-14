@@ -823,6 +823,12 @@ export const POST = async (req: Request) => {
     // for a different provider (e.g. Groq body falling back to Google, or vice versa).
     const providerBody: Record<string, unknown> = { ...body };
     if (useGoogleStudio) {
+      // Google AI Studio's OpenAI-compatible endpoint expects model IDs without the
+      // provider prefix (e.g. "gemini-2.5-flash", not "google/gemini-2.5-flash").
+      const rawModelId = String(providerBody.model ?? "");
+      if (rawModelId.startsWith("google/")) {
+        providerBody.model = rawModelId.slice("google/".length);
+      }
       // Google AI Studio's OpenAI-compatible endpoint does not support reasoning_effort,
       // reasoning_level, or thinking_config. Strip all of them so the request succeeds.
       delete providerBody.reasoning_effort;
@@ -962,7 +968,8 @@ export const POST = async (req: Request) => {
           }
 
           const shouldFallbackToGemini =
-            !isGeminiModel(currentModel)
+            !found
+            && !isGeminiModel(currentModel)
             && (status >= 500 || status === 429 || isProviderRateLimit(status, err));
 
           if (shouldFallbackToGemini) {
