@@ -167,7 +167,7 @@ function isReleaseUnavailableError(error) {
   return (
     errorMessageLowerCase.includes('http 404 from github release endpoint')
     || errorMessageLowerCase.includes('release not found')
-    || errorMessageLowerCase.includes('not found')
+    || errorMessageLowerCase.includes('jarvis-latest')
   );
 }
 
@@ -423,21 +423,32 @@ ipcMain.handle('jarvis-ai-request', async (_event, payload) => {
   }
 
   const timeoutMs = Number(payload?.timeoutMs) > 0 ? Number(payload.timeoutMs) : 45_000;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload?.payload || {}),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const body = await response.text();
-  return {
-    ok: response.ok,
-    status: response.status,
-    body,
-    headers: {
-      'content-type': response.headers.get('content-type') || 'text/plain',
-    },
-  };
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload?.payload || {}),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const body = await response.text();
+    return {
+      ok: response.ok,
+      status: response.status,
+      body,
+      headers: {
+        'content-type': response.headers.get('content-type') || 'text/plain',
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 502,
+      body: `Main-process AI proxy failed: ${error?.message || 'unknown error'}`,
+      headers: {
+        'content-type': 'text/plain',
+      },
+    };
+  }
 });
 
 ipcMain.handle('get-app-meta', () => {
@@ -486,6 +497,8 @@ ipcMain.handle('open-account-login', async () => {
   const webUrl = getJarvisWebBaseUrl();
   const loginUrl = `${webUrl}/auth/login?client=jarvis-desktop`;
 
+  // Callback URLs are best-effort event detection; closing the window without
+  // a token should resolve null rather than reject to keep renderer flow stable.
   return new Promise((resolve) => {
     const loginWin = new BrowserWindow({
       width: 480,
@@ -549,7 +562,9 @@ function parseCallbackUrl(url, loginWin, resolve) {
       resolve({ accessToken, email, userId, signedInAt: new Date().toISOString() });
     }
   } catch {
-    // Ignore intermediate non-URL values during navigation.
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[auth] Ignoring non-callback navigation URL during login handoff.');
+    }
   }
 }
 

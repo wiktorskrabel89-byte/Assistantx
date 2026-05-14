@@ -377,17 +377,22 @@ async function runAiPrompt(prompt, meta = {}) {
     try {
       let response;
       if (ipcRenderer && /^https?:\/\//i.test(endpoint)) {
-        const proxyResult = await ipcRenderer.invoke('jarvis-ai-request', {
-          endpoint,
-          payload: {
-            message: prompt,
-            mode: 'auto',
-          },
-          timeoutMs: 45_000,
-        });
+        let proxyResult;
+        try {
+          proxyResult = await ipcRenderer.invoke('jarvis-ai-request', {
+            endpoint,
+            payload: {
+              message: prompt,
+              mode: 'auto',
+            },
+            timeoutMs: 45_000,
+          });
+        } catch (error) {
+          throw new Error(`AI proxy invocation failed at ${endpoint}: ${error?.message || 'unknown error'}`);
+        }
         const proxyHeaders = new Headers(proxyResult?.headers || {});
         response = new Response(proxyResult?.body || '', {
-          status: Number(proxyResult?.status) || 500,
+          status: Number(proxyResult?.status ?? 500),
           headers: proxyHeaders,
         });
       } else {

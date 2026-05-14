@@ -107,7 +107,7 @@ function setStatusDot(status) {
 	const dot = document.getElementById('status-dot');
 	if (!dot) return;
 	dot.className = 'dot';
-	const normalized = String(status || '').toLowerCase();
+	const normalized = String(status ?? '').toLowerCase();
 	const healthyStates = new Set(['connected', 'ready', 'online', 'busy', 'running', 'starting']);
 	const errorStates = new Set(['error', 'disconnected', 'unavailable']);
 	if (healthyStates.has(normalized)) dot.classList.add('connected');
@@ -422,18 +422,22 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	function startSpeechToText({ autoSubmit = false } = {}) {
 		if (sidecarConnected && sidecar) {
-			sidecarManualListening = true;
 			setVoiceToTextUiActive(true);
 			sidecar.setListeningForCommand(true);
-			sidecar.startAudioCapture().catch((error) => {
-				appendMessage(
-					log,
-					'Speech-to-text',
-					formatVoiceCaptureError(error),
-					'error',
-				);
-				setVoiceToTextUiActive(false);
-			});
+			sidecar.startAudioCapture()
+				.then(() => {
+					sidecarManualListening = true;
+				})
+				.catch((error) => {
+					appendMessage(
+						log,
+						'Speech-to-text',
+						formatVoiceCaptureError(error),
+						'error',
+					);
+					sidecar.setListeningForCommand(false);
+					setVoiceToTextUiActive(false);
+				});
 			return;
 		}
 		const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
