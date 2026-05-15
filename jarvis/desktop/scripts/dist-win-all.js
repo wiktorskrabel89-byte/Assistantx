@@ -13,6 +13,8 @@ function run(command, args, options = {}) {
     cwd: desktopDir,
     stdio: 'inherit',
     env: process.env,
+    // On Windows, .cmd files must be run through the shell to avoid EINVAL
+    shell: process.platform === 'win32',
     ...options,
   });
 
