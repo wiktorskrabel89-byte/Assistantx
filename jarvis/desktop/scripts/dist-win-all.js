@@ -26,7 +26,8 @@ function run(command, args, options = {}) {
 }
 
 if (!isLinux) {
-  run('npm', ['run', '_dist:win:all:native']);
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  run(npmCmd, ['run', '_dist:win:all:native']);
 } else {
   const dockerOk = spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0;
   if (!dockerOk) {
