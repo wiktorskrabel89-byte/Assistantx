@@ -616,6 +616,54 @@ describe("POST /api/chat — reasoning extraction from provider stream chunks", 
     expect(body).toContain(`"reasoning":"think"`);
     expect(body).toContain(`"token":"final"`);
   });
+
+  it("moves inline <think>...</think> text from token stream into reasoning", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "<think>chain of thought</think>final answer" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Explain",
+      mode: "chat",
+      modelId: "qwen/qwen3-32b",
+      userPlan: "pro",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(body).toContain(`"reasoning":"chain of thought"`);
+    expect(body).toContain(`"token":"final answer"`);
+    expect(body).not.toContain("<think>");
+  });
+
+  it("handles <think> tags that are split across multiple provider chunks", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "<thi" } }] })}\n`
+          + `data: ${JSON.stringify({ choices: [{ delta: { content: "nk>secret</think>visible" } }] })}\n`
+          + "data: [DONE]\n",
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Explain",
+      mode: "chat",
+      modelId: "qwen/qwen3-32b",
+      userPlan: "pro",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(body).toContain(`"reasoning":"secret"`);
+    expect(body).toContain(`"token":"visible"`);
+    expect(body).not.toContain(`"token":"<thi"`);
+  });
 });
 
 describe("POST /api/chat — profile-based routing", () => {
