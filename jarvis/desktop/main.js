@@ -5,11 +5,18 @@ const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
 const { decodeJwtPayload } = require('./accounts');
 const { spawn } = require('child_process');
 const launcherService = require('./launcher/launch-service');
+const { createStartupDiagnostics } = require('./services/startup-diagnostics');
+const { invalidResult, parseHttpUrl, validateInteger, validatePlainObject, validateString } = require('./services/ipc-guards');
+const { createEventBus } = require('./telemetry/event-bus');
+const { getLocalTelemetrySnapshot, wireLocalTelemetry } = require('./telemetry/local-telemetry');
 
 // ── Python AI-Agent sidecar process management ───────────────────────────────
 let sidecarProcess = null;
 let sidecarStatus = 'idle';
 const SIDECAR_PORT = process.env.JARVIS_SIDECAR_PORT || '8765';
+const startupDiagnostics = createStartupDiagnostics();
+const telemetryBus = createEventBus();
+wireLocalTelemetry(telemetryBus);
 
 function getSidecarMainPath() {
   if (app.isPackaged) {
@@ -37,10 +44,20 @@ function startSidecar() {
   const mainPy = getSidecarMainPath();
   if (!fs.existsSync(mainPy)) {
     sidecarStatus = 'unavailable';
+    startupDiagnostics.setComponent('sidecar', 'unavailable', 'Sidecar main.py not found.');
+    startupDiagnostics.pushEvent('sidecar', 'warn', 'Sidecar unavailable: main.py missing.');
+    telemetryBus.publish('sidecar.unavailable');
+    telemetryBus.publish('startup.unavailable');
+    emitDesktopHealth();
     return;
   }
 
   const python = getPythonExecutable();
+  telemetryBus.publish('sidecar.started');
+  startupDiagnostics.setComponent('sidecar', 'degraded', `Starting sidecar using ${python}.`);
+  startupDiagnostics.pushEvent('sidecar', 'info', 'Starting sidecar process.', { python });
+  telemetryBus.publish('startup.degraded');
+  emitDesktopHealth();
   sidecarProcess = spawn(python, [mainPy], {
     env: {
       ...process.env,
@@ -54,14 +71,31 @@ function startSidecar() {
   sidecarProcess.stdout?.on('data', (data) => {
     const line = data.toString().trim();
     if (line) console.log(`[sidecar] ${line}`);
-    if (line.includes('listening on')) sidecarStatus = 'running';
+    if (line.includes('listening on')) {
+      sidecarStatus = 'running';
+      startupDiagnostics.setComponent('sidecar', 'healthy', 'Sidecar listening for connections.');
+      startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar is running.');
+      telemetryBus.publish('sidecar.running');
+      telemetryBus.publish('startup.healthy');
+      emitDesktopHealth();
+    }
     sendToRenderer('sidecar-status', { status: sidecarStatus });
   });
 
   sidecarProcess.stderr?.on('data', (data) => {
     const line = data.toString().trim();
     if (line) console.error(`[sidecar:err] ${line}`);
-    if (line.includes('listening on')) sidecarStatus = 'running';
+    if (line.includes('listening on')) {
+      sidecarStatus = 'running';
+      startupDiagnostics.setComponent('sidecar', 'healthy', 'Sidecar listening for connections.');
+      startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar is running.');
+      telemetryBus.publish('sidecar.running');
+      telemetryBus.publish('startup.healthy');
+      emitDesktopHealth();
+    }
+    if (/reconnect|retry|re-?connect/i.test(line)) {
+      telemetryBus.publish('sidecar.reconnect');
+    }
     sendToRenderer('sidecar-status', { status: sidecarStatus });
   });
 
@@ -69,12 +103,22 @@ function startSidecar() {
     console.log(`[sidecar] process exited: code=${code} signal=${signal}`);
     sidecarProcess = null;
     sidecarStatus = 'stopped';
+    startupDiagnostics.setComponent('sidecar', 'degraded', `Sidecar stopped (code=${code} signal=${signal}).`);
+    startupDiagnostics.pushEvent('sidecar', 'warn', 'Sidecar process exited.', { code, signal });
+    telemetryBus.publish('sidecar.exit');
+    telemetryBus.publish('startup.degraded');
+    emitDesktopHealth();
     sendToRenderer('sidecar-status', { status: sidecarStatus });
   });
 
   sidecarProcess.on('error', (err) => {
     console.error('[sidecar] spawn error:', err.message);
     sidecarStatus = 'error';
+    startupDiagnostics.setComponent('sidecar', 'unavailable', `Sidecar spawn error: ${err.message}`);
+    startupDiagnostics.pushEvent('sidecar', 'error', 'Sidecar spawn error.', { message: err.message });
+    telemetryBus.publish('sidecar.error');
+    telemetryBus.publish('startup.unavailable');
+    emitDesktopHealth();
     sendToRenderer('sidecar-status', { status: sidecarStatus });
   });
 }
@@ -89,6 +133,9 @@ function stopSidecar() {
     sidecarProcess = null;
   }
   sidecarStatus = 'stopped';
+  startupDiagnostics.setComponent('sidecar', 'degraded', 'Sidecar stopped by desktop runtime.');
+  startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar stop requested.');
+  emitDesktopHealth();
 }
 
 let win;
@@ -109,6 +156,10 @@ function sendToRenderer(channel, payload) {
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.webContents.send(channel, payload);
   }
+}
+
+function emitDesktopHealth() {
+  sendToRenderer('desktop-health', startupDiagnostics.snapshot());
 }
 
 function emitUpdateStatus(status, detail, extra = {}) {
@@ -143,6 +194,10 @@ function getAutoUpdater() {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.autoDownload = false; // ask first, download on demand
     autoUpdater.autoInstallOnAppQuit = true;
+    startupDiagnostics.setComponent('updater', 'healthy', 'Updater initialized.');
+    startupDiagnostics.pushEvent('updater', 'info', 'Updater initialized.');
+    telemetryBus.publish('startup.healthy');
+    emitDesktopHealth();
 
     autoUpdater.on('checking-for-update', () => {
       emitUpdateStatus('checking', 'Checking for updates…', { downloaded: false });
@@ -202,6 +257,10 @@ function getAutoUpdater() {
       console.warn('[updater] autoUpdater error:', msg);
       // Treat network/endpoint failures as transient rather than hard errors.
       const isTransient = /network|fetch|econnrefused|enotfound|ehostunreach|timeout/i.test(msg);
+      startupDiagnostics.setComponent('updater', isTransient ? 'degraded' : 'unavailable', msg);
+      startupDiagnostics.pushEvent('updater', isTransient ? 'warn' : 'error', 'Updater emitted error event.', { message: msg });
+      telemetryBus.publish(isTransient ? 'startup.degraded' : 'startup.unavailable');
+      emitDesktopHealth();
       emitUpdateStatus(
         isTransient ? 'unavailable' : 'error',
         isTransient ? 'Update check is temporarily unavailable (network).' : `Update error: ${msg}`,
@@ -213,12 +272,20 @@ function getAutoUpdater() {
     return autoUpdater;
   } catch (err) {
     console.warn('[updater] electron-updater not available:', err.message);
+    startupDiagnostics.setComponent('updater', 'unavailable', `Updater unavailable: ${err.message}`);
+    startupDiagnostics.pushEvent('updater', 'warn', 'Updater module unavailable.', { message: err.message });
+    telemetryBus.publish('startup.unavailable');
+    emitDesktopHealth();
     return null;
   }
 }
 
 function checkForUpdates() {
   if (!app.isPackaged) {
+    startupDiagnostics.setComponent('updater', 'degraded', 'Updater disabled in development mode.');
+    startupDiagnostics.pushEvent('updater', 'info', 'Update check skipped in development mode.');
+    telemetryBus.publish('startup.degraded');
+    emitDesktopHealth();
     emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
     return Promise.resolve({ ok: false, reason: 'not-packaged' });
   }
@@ -229,16 +296,28 @@ function checkForUpdates() {
   try {
     updater.checkForUpdates().catch((err) => {
       console.warn('[updater] checkForUpdates failed:', err.message);
+      startupDiagnostics.setComponent('updater', 'degraded', `Check for updates failed: ${err.message}`);
+      startupDiagnostics.pushEvent('updater', 'warn', 'checkForUpdates failed.', { message: err.message });
+      telemetryBus.publish('startup.degraded');
+      emitDesktopHealth();
     });
     return Promise.resolve({ ok: true });
   } catch (err) {
     console.warn('[updater] checkForUpdates threw:', err.message);
+    startupDiagnostics.setComponent('updater', 'unavailable', `Update check threw: ${err.message}`);
+    startupDiagnostics.pushEvent('updater', 'error', 'checkForUpdates threw.', { message: err.message });
+    telemetryBus.publish('startup.unavailable');
+    emitDesktopHealth();
     return Promise.resolve({ ok: false, reason: err.message });
   }
 }
 
 function setupAutoUpdater() {
   if (!app.isPackaged) {
+    startupDiagnostics.setComponent('updater', 'degraded', 'Updater disabled in development mode.');
+    startupDiagnostics.pushEvent('updater', 'info', 'Updater setup skipped in development mode.');
+    telemetryBus.publish('startup.degraded');
+    emitDesktopHealth();
     emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
     return;
   }
@@ -279,6 +358,7 @@ function createWindow() {
       packaged: app.isPackaged,
     });
     sendToRenderer('auto-update-status', updateState);
+    sendToRenderer('desktop-health', startupDiagnostics.snapshot());
   });
 
   win.on('close', (event) => {
@@ -311,6 +391,7 @@ function createLauncherOverlayWindow() {
   overlayWin.loadFile('launcher-overlay.html');
   overlayWin.webContents.on('did-finish-load', () => {
     overlayWin.webContents.send('sidecar-status', { status: sidecarStatus });
+    overlayWin.webContents.send('desktop-health', startupDiagnostics.snapshot());
   });
   overlayWin.on('blur', () => {
     if (pendingLauncherConfirmations.size === 0 && !overlayWin.webContents.isDevToolsOpened()) {
@@ -327,13 +408,14 @@ function createLauncherOverlayWindow() {
 
 async function showLauncherOverlay() {
   if (!overlayWin || overlayWin.isDestroyed()) createLauncherOverlayWindow();
-  const [recent, providerStatus] = await Promise.all([
+  const [recent, providerStatus, catalogHealth] = await Promise.all([
     Promise.resolve(launcherService.getRecentApps(8)),
     Promise.resolve(launcherService.getProviderStatus()),
+    Promise.resolve(launcherService.getCatalogHealth()),
   ]);
   overlayWin.show();
   overlayWin.focus();
-  overlayWin.webContents.send('launcher-overlay-focus', { recent, providerStatus });
+  overlayWin.webContents.send('launcher-overlay-focus', { recent, providerStatus, catalogHealth });
 }
 
 function toggleLauncherOverlay() {
@@ -421,27 +503,37 @@ ipcMain.handle('get-sidecar-status', () => ({
 
 ipcMain.handle('restart-sidecar', () => {
   stopSidecar();
+  telemetryBus.publish('sidecar.restart');
   setTimeout(() => startSidecar(), 500);
   return { ok: true };
 });
 
 ipcMain.handle('open-url', (_event, url) => {
-  if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
-    return shell.openExternal(url);
-  }
-  return Promise.reject(new Error('Invalid URL'));
+  const parsed = parseHttpUrl(url);
+  if (!parsed) return invalidResult('open-url', 'url-must-be-http-or-https');
+  return shell.openExternal(parsed.toString()).then(() => ({ ok: true }));
 });
 
 ipcMain.handle('open-path', (_event, filePath) => {
-  return shell.openPath(filePath);
+  const normalizedPath = validateString(filePath, { maxLen: 8192 });
+  if (!normalizedPath) return invalidResult('open-path', 'path-must-be-non-empty-string');
+  return shell.openPath(normalizedPath).then((result) => ({
+    ok: !result,
+    error: result || null,
+  }));
 });
 
 ipcMain.handle('launcher-search', async (_event, payload) => {
-  return launcherService.searchApps(payload?.query || '', { limit: Number(payload?.limit || 8) });
+  const body = validatePlainObject(payload) || {};
+  const query = validateString(body.query, { allowEmpty: true, maxLen: 200 }) || '';
+  const limit = validateInteger(body.limit, { min: 1, max: 20, fallback: 8 });
+  return launcherService.searchApps(query, { limit });
 });
 
 ipcMain.handle('launcher-recent', async (_event, payload) => {
-  return launcherService.searchApps('', { limit: Number(payload?.limit || 8) });
+  const body = validatePlainObject(payload) || {};
+  const limit = validateInteger(body.limit, { min: 1, max: 20, fallback: 8 });
+  return launcherService.searchApps('', { limit });
 });
 
 ipcMain.handle('launcher-refresh', async () => {
@@ -451,10 +543,16 @@ ipcMain.handle('launcher-refresh', async () => {
 });
 
 ipcMain.handle('launcher-launch', async (_event, payload) => {
-  return launcherService.launchApp(payload?.query || payload?.key || '', {
+  const body = validatePlainObject(payload);
+  if (!body) return invalidResult('launcher-launch', 'payload-must-be-object');
+  const query = validateString(body.query, { allowEmpty: true, maxLen: 200 }) || '';
+  const key = validateString(body.key, { allowEmpty: true, maxLen: 200 }) || '';
+  const launchQuery = query || key;
+  if (!launchQuery) return invalidResult('launcher-launch', 'query-or-key-required');
+  return launcherService.launchApp(launchQuery, {
     trigger: 'manual',
     confirmed: true,
-    admin: Boolean(payload?.admin),
+    admin: Boolean(body.admin),
   });
 });
 
@@ -464,13 +562,18 @@ ipcMain.handle('launcher-hide', () => {
 });
 
 ipcMain.handle('request-launcher-confirmation', async (_event, payload) => {
+  const body = validatePlainObject(payload) || {};
+  const title = validateString(body.title, { allowEmpty: true, maxLen: 120 }) || 'Confirm launch';
+  const message = validateString(body.message, { allowEmpty: true, maxLen: 500 }) || 'Do you want to continue?';
   if (!overlayWin || overlayWin.isDestroyed()) createLauncherOverlayWindow();
   const id = `launcher-confirm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   overlayWin.show();
   overlayWin.focus();
   overlayWin.webContents.send('launcher-confirmation-request', {
     id,
-    ...payload,
+    ...body,
+    title,
+    message,
   });
   return new Promise((resolve) => {
     pendingLauncherConfirmations.set(id, resolve);
@@ -478,13 +581,17 @@ ipcMain.handle('request-launcher-confirmation', async (_event, payload) => {
 });
 
 ipcMain.handle('launcher-confirmation-response', (_event, payload) => {
-  const pending = pendingLauncherConfirmations.get(payload?.id);
+  const body = validatePlainObject(payload);
+  if (!body) return invalidResult('launcher-confirmation-response', 'payload-must-be-object');
+  const confirmationId = validateString(body.id, { maxLen: 120 });
+  if (!confirmationId) return invalidResult('launcher-confirmation-response', 'id-required');
+  const pending = pendingLauncherConfirmations.get(confirmationId);
   if (pending) {
-    pending(Boolean(payload?.approved));
-    pendingLauncherConfirmations.delete(payload.id);
+    pending(Boolean(body.approved));
+    pendingLauncherConfirmations.delete(confirmationId);
   }
   if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.webContents.send('launcher-confirmation-cleared', { id: payload?.id || null });
+    overlayWin.webContents.send('launcher-confirmation-cleared', { id: confirmationId || null });
     if (pendingLauncherConfirmations.size === 0) {
       overlayWin.webContents.send('launcher-overlay-focus');
     }
@@ -499,25 +606,31 @@ ipcMain.handle('install-everything-search', async () => {
 });
 
 ipcMain.handle('jarvis-ai-request', async (_event, payload) => {
-  const endpoint = String(payload?.endpoint || '');
-  if (!/^https?:\/\//i.test(endpoint)) {
+  const body = validatePlainObject(payload);
+  if (!body) {
+    return { ok: false, status: 400, body: 'Invalid payload', headers: { 'content-type': 'text/plain' } };
+  }
+  const endpoint = validateString(body.endpoint, { maxLen: 2000 });
+  const endpointUrl = parseHttpUrl(endpoint);
+  if (!endpointUrl) {
     return { ok: false, status: 400, body: 'Invalid endpoint', headers: { 'content-type': 'text/plain' } };
   }
 
-  const timeoutMs = Number(payload?.timeoutMs) > 0 ? Number(payload.timeoutMs) : 45_000;
+  const timeoutMs = validateInteger(body.timeoutMs, { min: 1_000, max: 120_000, fallback: 45_000 });
   try {
     const requestHeaders = {
       'Content-Type': 'application/json',
       'User-Agent': `JarvisDesktop/${app.getVersion()} Electron`,
-      'Origin': new URL(endpoint).origin,
+      'Origin': endpointUrl.origin,
     };
-    if (payload?.token) {
-      requestHeaders['Authorization'] = `Bearer ${payload.token}`;
+    const token = validateString(body.token, { allowEmpty: true, maxLen: 5000 });
+    if (token) {
+      requestHeaders['Authorization'] = `Bearer ${token}`;
     }
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: requestHeaders,
-      body: JSON.stringify(payload?.payload || {}),
+      body: JSON.stringify(validatePlainObject(body.payload) || {}),
       signal: AbortSignal.timeout(timeoutMs),
     });
     const body = await response.text();
@@ -540,6 +653,10 @@ ipcMain.handle('jarvis-ai-request', async (_event, payload) => {
     };
   }
 });
+
+ipcMain.handle('get-desktop-diagnostics', () => startupDiagnostics.snapshot());
+
+ipcMain.handle('get-local-telemetry', () => getLocalTelemetrySnapshot());
 
 ipcMain.handle('get-app-meta', () => {
   return {
@@ -566,9 +683,9 @@ ipcMain.handle('check-for-updates', () => {
 ipcMain.handle('get-jarvis-web-url', () => getJarvisWebUrl());
 
 ipcMain.handle('set-jarvis-web-url', (_event, url) => {
-  const urlStr = typeof url === 'string' ? url.trim() : '';
-  if (urlStr && !/^https?:\/\//i.test(urlStr)) {
-    return { ok: false, error: 'Server URL must start with http:// or https://' };
+  const urlStr = validateString(url, { allowEmpty: true, maxLen: 300 }) || '';
+  if (urlStr && !parseHttpUrl(urlStr)) {
+    return invalidResult('set-jarvis-web-url', 'server-url-must-be-http-or-https');
   }
   setJarvisWebUrl(urlStr || null);
   return { ok: true, url: getJarvisWebUrl() };
@@ -585,15 +702,24 @@ ipcMain.handle('download-update', async () => {
   try {
     emitUpdateStatus('downloading', 'Downloading update…', { downloaded: false });
     await updater.downloadUpdate();
+    startupDiagnostics.setComponent('updater', 'healthy', 'Update downloaded successfully.');
+    startupDiagnostics.pushEvent('updater', 'info', 'Update download completed.');
+    telemetryBus.publish('startup.healthy');
+    emitDesktopHealth();
     return { ok: true };
   } catch (error) {
     console.warn('[updater] Download failed:', error.message);
+    startupDiagnostics.setComponent('updater', 'degraded', `Update download failed: ${error.message}`);
+    startupDiagnostics.pushEvent('updater', 'warn', 'Update download failed.', { message: error.message });
+    telemetryBus.publish('startup.degraded');
+    emitDesktopHealth();
     emitUpdateStatus('error', `Download failed: ${error.message}`, { downloaded: false });
     return { ok: false, reason: error.message };
   }
 });
 
 ipcMain.handle('install-update', () => {
+  if (!app.isPackaged) return { ok: false, reason: 'not-packaged' };
   const updater = getAutoUpdater();
   if (!updater || !updateState.downloaded) {
     return { ok: false, reason: 'no-update-downloaded' };
@@ -690,9 +816,16 @@ app.whenReady().then(async () => {
   // before any launcher or IPC code touches it.
   try {
     await require('./launcher/db').init();
+    startupDiagnostics.setComponent('db', 'healthy', 'Launcher DB initialized.');
+    startupDiagnostics.pushEvent('startup', 'info', 'Launcher DB initialization completed.');
+    telemetryBus.publish('startup.healthy');
   } catch (err) {
     console.error('[db] Failed to initialise database:', err.message);
+    startupDiagnostics.setComponent('db', 'unavailable', `Launcher DB init failed: ${err.message}`);
+    startupDiagnostics.pushEvent('startup', 'error', 'Launcher DB initialization failed.', { message: err.message });
+    telemetryBus.publish('startup.unavailable');
   }
+  emitDesktopHealth();
   startSidecar();
   createWindow();
   createLauncherOverlayWindow();
@@ -700,9 +833,19 @@ app.whenReady().then(async () => {
   registerLauncherShortcut();
   setupAutoUpdater();
   launcherService.refreshCatalog({ reason: 'app-ready' })
-    .then(() => maybePromptEverythingRecommendation())
+    .then(() => {
+      startupDiagnostics.setComponent('launcher', 'healthy', 'Launcher catalog refreshed.');
+      startupDiagnostics.pushEvent('launcher', 'info', 'Launcher catalog refresh completed.');
+      telemetryBus.publish('startup.healthy');
+      emitDesktopHealth();
+      return maybePromptEverythingRecommendation();
+    })
     .catch((error) => {
       console.warn('[launcher] startup refresh failed:', error.message);
+      startupDiagnostics.setComponent('launcher', 'degraded', `Launcher refresh failed: ${error.message}`);
+      startupDiagnostics.pushEvent('launcher', 'warn', 'Launcher refresh failed.', { message: error.message });
+      telemetryBus.publish('startup.degraded');
+      emitDesktopHealth();
     });
 });
 

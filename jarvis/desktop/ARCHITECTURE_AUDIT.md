@@ -11,6 +11,8 @@ This audit covers:
 - Owns app lifecycle, tray, launcher overlay, updater, login popup, sidecar process lifecycle.
 - Registers privileged IPC handlers (open path/url, launcher actions, updater actions, AI proxy).
 - Initializes launcher DB (`launcher/db.init()`) before launcher use.
+- Uses startup diagnostics snapshots (`services/startup-diagnostics.js`) to expose normalized health states (`healthy/degraded/unavailable`).
+- Uses centralized IPC validation guards (`services/ipc-guards.js`) for privileged handler inputs.
 
 ## Electron preload (`jarvis/desktop/preload.js`)
 - Exposes only allow-listed invoke channels and receive channels.
@@ -40,6 +42,12 @@ This audit covers:
 - `auth.js` stores device token in `%APPDATA%/JarvisDesktop/token.txt`.
 - `local-state.js` stores desktop local state/preferences in `%APPDATA%/JarvisDesktop/state.json`.
 - `runtime-config.js` stores optional web URL override in `%APPDATA%/JarvisDesktop/config.json`.
+- `local-state.js` now stores local-only telemetry snapshot counters under `preferences.telemetry`.
+
+## Telemetry/eventing (`jarvis/desktop/telemetry/*`)
+- `event-bus.js` provides decoupled publish/subscribe events for runtime diagnostics.
+- `local-telemetry.js` subscribes to telemetry events and persists compact counters locally.
+- Remote diagnostics are architecture-ready but disabled by default (opt-in only, no upload path coupled into runtime flow).
 
 ## Python sidecar (`ai-agent/main.py`)
 - Local websocket server (`127.0.0.1:8765` default).
@@ -80,3 +88,4 @@ This audit covers:
 - Keep updater strategy single-source (`electron-updater` + release assets).
 - Incrementally modularize renderer and main-process orchestration.
 - Add desktop-focused smoke checks as part of release validation.
+- Keep product ideas marked as future/experimental until stabilization slices complete.

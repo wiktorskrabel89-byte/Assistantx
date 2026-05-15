@@ -16,6 +16,9 @@ Jarvis Desktop is the Electron runtime for AssistantX desktop automation, voice,
 - `backend.js` — command execution, AI prompt routing, local/remote command orchestration
 - `launcher/*` — local app catalog + ranking + launch logic (`sql.js`)
 - `accounts.js` / `auth.js` / `local-state.js` / `runtime-config.js` — local session/device/config state
+- `services/ipc-guards.js` — centralized privileged IPC input validation
+- `services/startup-diagnostics.js` — desktop health snapshots and startup diagnostics
+- `telemetry/event-bus.js` + `telemetry/local-telemetry.js` — local-only telemetry (event bus + subscriber persistence)
 
 ## Local development
 
@@ -69,6 +72,18 @@ Sidecar process (`ai-agent/main.py`) is spawned by `main.js` and renderer voice 
 - Architecture audit: `ARCHITECTURE_AUDIT.md`
 - Upgrade/fix/ideas backlog: `UPGRADE_BACKLOG.md`
 - Validation checklist: `VALIDATION_CHECKLIST.md`
+
+## Validation and release checklist usage
+
+- Use `VALIDATION_CHECKLIST.md` A–F for each desktop-impacting change.
+- Capture explicit evidence for lint/test/build and desktop/package smoke checks.
+- If a failure is unrelated/pre-existing, record it explicitly in PR/release notes.
+
+## Active implementation scope
+
+- Active phase includes only **critical + near-term** upgrades.
+- Product ideas remain **future/experimental** and non-blocking until stabilization is complete.
+- Modularization should be delivered in small module/service slices, not one giant refactor.
 
 ## Notes
 

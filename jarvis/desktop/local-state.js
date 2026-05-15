@@ -37,6 +37,28 @@ const DEFAULT_STATE = {
       encryptedSync: false,
       pauseSync: false,
     },
+    telemetry: {
+      enabledLocal: true,
+      remoteUploadEnabled: false,
+      consentGranted: false,
+      lastUpdatedAt: null,
+      sidecar: {
+        started: 0,
+        running: 0,
+        exits: 0,
+        errors: 0,
+        reconnects: 0,
+        unavailable: 0,
+        restarts: 0,
+        lastEventAt: null,
+      },
+      startup: {
+        healthy: 0,
+        degraded: 0,
+        unavailable: 0,
+        lastEventAt: null,
+      },
+    },
   },
 };
 
@@ -71,6 +93,24 @@ function normalizeState(raw) {
         }
         : { ...DEFAULT_STATE.preferences.appCatalogMeta },
       resolverHistory: Array.isArray(raw?.preferences?.resolverHistory) ? raw.preferences.resolverHistory : [],
+      telemetry: raw?.preferences?.telemetry && typeof raw.preferences.telemetry === 'object'
+        ? {
+          ...DEFAULT_STATE.preferences.telemetry,
+          ...raw.preferences.telemetry,
+          sidecar: {
+            ...DEFAULT_STATE.preferences.telemetry.sidecar,
+            ...(raw.preferences.telemetry.sidecar && typeof raw.preferences.telemetry.sidecar === 'object'
+              ? raw.preferences.telemetry.sidecar
+              : {}),
+          },
+          startup: {
+            ...DEFAULT_STATE.preferences.telemetry.startup,
+            ...(raw.preferences.telemetry.startup && typeof raw.preferences.telemetry.startup === 'object'
+              ? raw.preferences.telemetry.startup
+              : {}),
+          },
+        }
+        : { ...DEFAULT_STATE.preferences.telemetry },
     },
   };
 }
@@ -246,6 +286,38 @@ function saveTask(task) {
     ...current,
     tasks: [task, ...current.tasks.filter((item) => item.id !== task.id)].slice(0, MAX_TASKS),
   }));
+}
+
+function getTelemetrySnapshot() {
+  return { ...(readState().preferences.telemetry || DEFAULT_STATE.preferences.telemetry) };
+}
+
+function updateTelemetry(updater) {
+  if (typeof updater !== 'function') return getTelemetrySnapshot();
+  const nextState = updateState((current) => {
+    const currentTelemetry = current.preferences?.telemetry || DEFAULT_STATE.preferences.telemetry;
+    const updatedTelemetry = updater({ ...currentTelemetry }) || currentTelemetry;
+    return {
+      ...current,
+      preferences: {
+        ...current.preferences,
+        telemetry: {
+          ...DEFAULT_STATE.preferences.telemetry,
+          ...updatedTelemetry,
+          sidecar: {
+            ...DEFAULT_STATE.preferences.telemetry.sidecar,
+            ...(updatedTelemetry?.sidecar || {}),
+          },
+          startup: {
+            ...DEFAULT_STATE.preferences.telemetry.startup,
+            ...(updatedTelemetry?.startup || {}),
+          },
+          lastUpdatedAt: new Date().toISOString(),
+        },
+      },
+    };
+  });
+  return { ...(nextState.preferences.telemetry || DEFAULT_STATE.preferences.telemetry) };
 }
 
 function getFavoriteApp() {
@@ -425,10 +497,12 @@ module.exports = {
   rememberFile,
   rememberPrompt,
   removeSchedule,
+  getTelemetrySnapshot,
   saveDiscoveredApps,
   saveTask,
   setAppAlias,
   statePath: STATE_PATH,
   syncToCloud,
+  updateTelemetry,
   updateScheduleRun,
 };

@@ -1,5 +1,5 @@
 const path = require('path');
-const { getDb } = require('./db');
+const { getDb, getMeta } = require('./db');
 const { normalizeKey, normalizeName } = require('../app-scanner');
 const { saveDiscoveredApps, setAppAlias } = require('../local-state');
 
@@ -232,7 +232,31 @@ function recordProviderStatus(provider, status, detail = '') {
 
 function getProviderStatus() {
   const db = getDb();
-  return db.prepare('SELECT * FROM provider_status ORDER BY provider ASC').all();
+  const statuses = db.prepare('SELECT * FROM provider_status ORDER BY provider ASC').all();
+  return statuses.map((entry) => ({
+    ...entry,
+    checkedAt: entry.checked_at || null,
+  }));
+}
+
+function getCatalogFreshness() {
+  const lastSuccessfulScanAt = getMeta('catalog_last_successful_scan_at');
+  const activeProvider = getMeta('catalog_active_provider');
+  const parsed = Date.parse(lastSuccessfulScanAt || '');
+  const ageMs = Number.isFinite(parsed) ? Math.max(0, Date.now() - parsed) : null;
+  const freshness = ageMs == null
+    ? 'unknown'
+    : ageMs <= (15 * 60 * 1000)
+      ? 'fresh'
+      : ageMs <= (2 * 60 * 60 * 1000)
+        ? 'stale'
+        : 'degraded';
+  return {
+    activeProvider: activeProvider || null,
+    lastSuccessfulScanAt: lastSuccessfulScanAt || null,
+    ageMs,
+    freshness,
+  };
 }
 
 function recordResolverDecision({ input, resolvedKey, strategy, confidence, matchedInput, trigger }) {
@@ -308,6 +332,7 @@ module.exports = {
   getAliasMap,
   getAppByKey,
   getProviderStatus,
+  getCatalogFreshness,
   getRecentApps,
   listApps,
   recordLaunch,

@@ -77,7 +77,14 @@ jobs:
             "**How to use:**",
             "1. Download the installer for your architecture.",
             "2. Run it — Windows may warn about an unsigned binary; click *More info → Run anyway*.",
-            "3. Jarvis will start and connect to your AssistantX backend automatically."
+            "3. Jarvis will start and connect to your AssistantX backend automatically.",
+            "",
+            "**Release validation checklist:**",
+            "- [ ] Repo baseline (`npm run lint`, `npm test -- --runInBand`, `npm run build`)",
+            "- [ ] Desktop smoke (`jarvis/desktop`: `npm ci`, `npm run dev`)",
+            "- [ ] Packaged smoke (startup/tray, launcher, account, updater flow)",
+            "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `latest.yml`, `*.blockmap`)",
+            "- [ ] Pre-existing/unrelated failures documented (if any)"
           ) -join "`n"
 
           $body | Set-Content -Path "changelog_body.txt" -Encoding UTF8
