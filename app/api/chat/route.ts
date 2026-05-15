@@ -109,6 +109,7 @@ const COMPACT_RETRY_MAX_OUTPUT_TOKENS = 512;
 const COMPACT_SYSTEM_PROMPT_CHARS = 2500;
 const COMPACT_HISTORY_MESSAGE_CHARS = 1200;
 const COMPACT_USER_MESSAGE_CHARS = 2200;
+const COMPACT_SYSTEM_SEPARATOR = "\n\n[Context compacted for token limits]\n\n";
 
 function estimateTokensFromText(text: string): number {
   // Approximation only: OpenAI-compatible tokenizers vary by model/language/code content.
@@ -120,20 +121,31 @@ function estimateTokensFromMessages(messages: LlmMessage[]): number {
   return messages.reduce((sum, message) => sum + estimateTokensFromText(message.content) + 4, 0);
 }
 
-function compactMessages(messages: LlmMessage[]): LlmMessage[] {
+export function compactSystemPrompt(content: string): string {
+  if (content.length <= COMPACT_SYSTEM_PROMPT_CHARS) return content;
+  const separatorBudget = COMPACT_SYSTEM_SEPARATOR.length;
+  const headBudget = Math.max(
+    200,
+    Math.min(COMPACT_SYSTEM_PROMPT_CHARS - separatorBudget - 200, Math.floor(COMPACT_SYSTEM_PROMPT_CHARS * 0.6)),
+  );
+  const tailBudget = Math.max(200, COMPACT_SYSTEM_PROMPT_CHARS - separatorBudget - headBudget);
+  return `${content.slice(0, headBudget)}${COMPACT_SYSTEM_SEPARATOR}${content.slice(-tailBudget)}`;
+}
+
+export function compactMessages(messages: LlmMessage[]): LlmMessage[] {
   if (messages.length === 0) return [];
   const system = messages.find((message) => message.role === "system");
   const latestUser = [...messages].reverse().find((message) => message.role === "user");
   if (!latestUser) {
     return system
-      ? [{ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) }]
+      ? [{ role: "system", content: compactSystemPrompt(system.content) }]
       : [];
   }
   const latestHistory = messages
     .filter((message) => message !== system && message !== latestUser)
     .slice(-2);
   const compacted: LlmMessage[] = [];
-  if (system) compacted.push({ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) });
+  if (system) compacted.push({ role: "system", content: compactSystemPrompt(system.content) });
   // Keep newest turns (tail) because they are usually the most relevant for continuity.
   compacted.push(...latestHistory.map((message) => ({
     ...message,
@@ -344,12 +356,13 @@ export const POST = async (req: Request) => {
     );
   }
 
-  // Detect "websearch" trigger word at the very start of the message (any case).
+  // Detect "websearch" trigger word at the very start of the message (any case),
+  // allowing leading whitespace from pasted prompts.
   // Require a word boundary after "websearch" so "websearching ..." is not matched.
   // When present, strip it so the model receives a clean prompt.
-  const websearchTrigger = /^websearch(?=\s|$)/i.test(typeof message === "string" ? message : "");
+  const websearchTrigger = /^\s*websearch(?=\s|$)/i.test(typeof message === "string" ? message : "");
   const effectiveMessage: string = websearchTrigger && typeof message === "string"
-    ? message.replace(/^websearch(?=\s|$)/i, "").trim()
+    ? message.replace(/^\s*websearch(?=\s|$)/i, "").trim()
     : (typeof message === "string" ? message : "");
 
   // Override addInternetContext if the workspace has web_search tool enabled
