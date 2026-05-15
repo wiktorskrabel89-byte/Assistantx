@@ -7,6 +7,9 @@ const BASE_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), '.conf
 const DB_PATH = process.env.JARVIS_LAUNCHER_DB_PATH || path.join(BASE_DIR, 'launcher.db');
 
 let db = null;
+// Single in-flight init promise so that concurrent callers awaiting init()
+// share the same WASM load rather than each triggering a separate one.
+let _initPromise = null;
 // Tracks how many transaction wrappers are currently active.  Flushing to
 // disk via db.export() must not happen while a transaction is open because
 // sql.js's export() implicitly ends the active transaction.
@@ -335,31 +338,39 @@ function migrateLegacyState(wrapper) {
 /**
  * Initialise the database. Must be awaited once at app startup (before any
  * DB calls are made) because sql.js loads a WebAssembly binary asynchronously.
- * Subsequent calls are no-ops.
+ * Concurrent calls share the same in-flight promise so WASM is only loaded once.
  */
-async function init() {
-  if (db) return;
+function init() {
+  // Already initialised — fast path.
+  if (db) return Promise.resolve();
 
-  // Resolve WASM binary via Node module resolution so tests and app runtime
-  // both work regardless of which node_modules directory provides sql.js.
-  const wasmPath = require.resolve('sql.js/dist/sql-wasm.wasm');
-  const wasmBinary = fs.readFileSync(wasmPath);
+  // Another caller is already loading WASM — piggyback on that promise.
+  if (_initPromise) return _initPromise;
 
-  const initSqlJs = require('sql.js');
-  const SQL = await initSqlJs({ wasmBinary });
+  _initPromise = (async () => {
+    // Resolve WASM binary via Node module resolution so tests and app runtime
+    // both work regardless of which node_modules directory provides sql.js.
+    const wasmPath = require.resolve('sql.js/dist/sql-wasm.wasm');
+    const wasmBinary = fs.readFileSync(wasmPath);
 
-  ensureBaseDir();
+    const initSqlJs = require('sql.js');
+    const SQL = await initSqlJs({ wasmBinary });
 
-  const rawDb = fs.existsSync(DB_PATH)
-    ? new SQL.Database(fs.readFileSync(DB_PATH))
-    : new SQL.Database();
+    ensureBaseDir();
 
-  db = rawDb;
+    const rawDb = fs.existsSync(DB_PATH)
+      ? new SQL.Database(fs.readFileSync(DB_PATH))
+      : new SQL.Database();
 
-  const wrapper = createDbWrapper(rawDb);
-  runMigrations(wrapper);
-  migrateLegacyState(wrapper);
-  flushToDisk();
+    db = rawDb;
+
+    const wrapper = createDbWrapper(rawDb);
+    runMigrations(wrapper);
+    migrateLegacyState(wrapper);
+    flushToDisk();
+  })();
+
+  return _initPromise;
 }
 
 function getDb() {
@@ -382,6 +393,7 @@ function closeDb() {
     flushToDisk();
     db.close();
     db = null;
+    _initPromise = null;
   }
 }
 
