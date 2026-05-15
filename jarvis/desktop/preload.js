@@ -27,12 +27,15 @@ const ALLOWED_INVOKE = new Set([
   'open-path',
   'jarvis-ai-request',
   'get-displays',
+  'get-desktop-diagnostics',
+  'get-local-telemetry',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
   'app-meta',
   'auto-update-status',
   'sidecar-status',
+  'desktop-health',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────

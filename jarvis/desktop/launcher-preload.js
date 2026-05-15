@@ -21,6 +21,7 @@ const ALLOWED_RECEIVE = new Set([
   'launcher-confirmation-request',
   'launcher-confirmation-cleared',
   'sidecar-status',
+  'desktop-health',
 ]);
 
 contextBridge.exposeInMainWorld('launcherIpc', {

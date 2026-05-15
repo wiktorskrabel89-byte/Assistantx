@@ -12,6 +12,11 @@ Run from repository root:
 
 If failures are unrelated/pre-existing, record them explicitly in PR notes.
 
+Evidence matrix (recommended):
+- Lint: pass/fail + command output summary
+- Tests: pass/fail + suite totals
+- Build: pass/fail + artifact/output summary
+
 ## B) Desktop smoke checks (manual)
 
 From `jarvis/desktop`:
@@ -53,3 +58,11 @@ Validate sidecar bridge behavior:
 ## E) Workflow/release checks
 
 Confirm `.github/workflows/build-jarvis.yml` still matches expected desktop outputs and release tag flow (`jarvis-latest`).
+
+## F) Release notes / PR checklist block
+
+For every desktop-impacting PR/release, include:
+- Validation status for A–E (pass/fail)
+- Any pre-existing failures (explicitly marked as unrelated)
+- Packaged-flow verification notes (startup/tray, launcher, account, updater)
+- Architecture alignment note against `FINAL_AI_VOICE_ARCHITECTURE_PLAN.md` (if scope touched AI/voice routing or sidecar behavior)

@@ -861,6 +861,14 @@ window.addEventListener('DOMContentLoaded', () => {
 				appendMessage(log, 'Updater', payload.detail || payload.status, payload?.status === 'error' ? 'error' : 'system');
 			}
 		});
+
+		ipcRenderer.on('desktop-health', (payload) => {
+			const overall = String(payload?.overall || 'unknown');
+			const componentList = Object.entries(payload?.components || {})
+				.map(([name, component]) => `${name}:${component?.status || 'unknown'}`)
+				.join(', ');
+			appendMessage(log, 'Desktop health', `${overall} (${componentList || 'no component data'})`, overall === 'unavailable' ? 'error' : 'system');
+		});
 	}
 
 	if (checkUpdatesButton && ipcRenderer) {
@@ -870,6 +878,24 @@ window.addEventListener('DOMContentLoaded', () => {
 				appendMessage(log, 'Updater', 'Running in dev mode — download and install the EXE to get automatic updates.', 'system');
 			}
 		});
+	}
+
+	if (ipcRenderer) {
+		ipcRenderer.invoke('get-desktop-diagnostics').then((snapshot) => {
+			if (!snapshot) return;
+			appendMessage(log, 'Desktop diagnostics', `Startup status: ${snapshot.overall || 'unknown'}`, snapshot.overall === 'unavailable' ? 'error' : 'system');
+		}).catch(() => null);
+
+		ipcRenderer.invoke('get-local-telemetry').then((telemetry) => {
+			if (!telemetry?.sidecar) return;
+			const summary = [
+				`started ${telemetry.sidecar.started || 0}`,
+				`running ${telemetry.sidecar.running || 0}`,
+				`errors ${telemetry.sidecar.errors || 0}`,
+				`restarts ${telemetry.sidecar.restarts || 0}`,
+			].join(' · ');
+			appendMessage(log, 'Local telemetry', summary, 'system');
+		}).catch(() => null);
 	}
 
 	if (installUpdateButton && ipcRenderer) {

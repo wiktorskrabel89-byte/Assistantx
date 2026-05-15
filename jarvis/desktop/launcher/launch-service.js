@@ -7,6 +7,7 @@ const { APP_OPEN_MAP, APP_OPEN_MAP_DARWIN } = require('../app-launch-config');
 const { normalizeKey, normalizeName } = require('../app-scanner');
 const { getMeta, setMeta } = require('./db');
 const {
+  getCatalogFreshness,
   getAliasMap,
   getAppByKey,
   getProviderStatus,
@@ -190,14 +191,21 @@ async function refreshCatalog({ reason = 'manual', platform = process.platform }
   upsertApps(toBuiltinApps(platform), { provider: 'builtin', replaceProvider: true });
 
   const discovery = await discoverApps(execFilePromise, { platform });
+  const nowIso = new Date().toISOString();
   discovery.statuses.forEach((entry) => recordProviderStatus(entry.provider, entry.status, entry.detail));
   if (discovery.apps.length > 0) {
     upsertApps(discovery.apps, { provider: discovery.activeProvider, replaceProvider: true });
+    setMeta('catalog_last_successful_scan_at', nowIso);
+    setMeta('catalog_active_provider', discovery.activeProvider);
   }
+  const providerStatus = getProviderStatus();
+  const catalogHealth = getCatalogFreshness();
   return {
     provider: discovery.activeProvider,
     appCount: listApps(2000).length,
-    statuses: getProviderStatus(),
+    statuses: providerStatus,
+    providerStatus,
+    catalogHealth,
     everythingAvailable: discovery.activeProvider === 'everything',
     reason,
   };
@@ -300,8 +308,8 @@ async function searchApps(query, { limit = 8 } = {}) {
   await ensureCatalogReady('search');
   if (!String(query || '').trim()) {
     const recent = getRecentApps(limit);
-    return {
-      query: '',
+      return {
+        query: '',
       results: recent.map((app) => ({
         key: app.key,
         name: app.name,
@@ -311,8 +319,9 @@ async function searchApps(query, { limit = 8 } = {}) {
         riskLevel: classifyLaunchRisk(app).level,
         subtitle: [app.sourceProvider, app.launchCount ? `${app.launchCount} launches` : null].filter(Boolean).join(' · '),
       })),
-      providerStatus: getProviderStatus(),
-    };
+        providerStatus: getProviderStatus(),
+        catalogHealth: getCatalogFreshness(),
+      };
   }
 
   const ranking = rankApps(query, getAllApps());
@@ -329,7 +338,12 @@ async function searchApps(query, { limit = 8 } = {}) {
       subtitle: [item.app.sourceProvider, item.reasons.join(', ')].filter(Boolean).join(' · '),
     })),
     providerStatus: getProviderStatus(),
+    catalogHealth: getCatalogFreshness(),
   };
+}
+
+function getCatalogHealth() {
+  return getCatalogFreshness();
 }
 
 async function launchApp(input, options = {}) {
@@ -470,6 +484,7 @@ module.exports = {
   ensureCatalogReady,
   getProviderStatus,
   getRecentApps,
+  getCatalogHealth,
   isEverythingAvailable,
   launchApp,
   launchUrl,

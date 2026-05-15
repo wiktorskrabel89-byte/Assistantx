@@ -2,6 +2,24 @@
 
 Balanced backlog across reliability, security, and product UX.
 
+## Active implementation phase (stabilization only)
+
+Only **critical + near-term** upgrades are in the active phase.
+
+Included now:
+- core stabilization
+- modularization (thin-slice)
+- IPC/API cleanup
+- runtime separation
+- telemetry/logging (local-only)
+- packaging/update reliability
+
+Deferred:
+- product expansion ideas remain **future/experimental**, non-blocking, architecture-aware.
+
+Reference architecture baseline:
+- `FINAL_AI_VOICE_ARCHITECTURE_PLAN.md` (routing, voice stack, local-vs-remote boundaries, streaming requirements)
+
 ## Critical fixes (high impact, high priority)
 
 1. **Consolidate duplicate update paths in `main.js`**
@@ -41,18 +59,32 @@ Balanced backlog across reliability, security, and product UX.
 4. **Sidecar lifecycle telemetry**
 - Persist compact health counters (connect, reconnect, unavailable events) to help diagnose field failures.
 
-## Product ideas (balanced UX improvements)
+## Modularization slicing policy (active)
 
-1. **Offline-first mode UX**
+Use multiple small PRs per module/service (no giant refactor):
+- `core/ipc`
+- `core/runtime`
+- `voice`
+- `automation`
+- `search`
+- `launcher`
+- `settings`
+- `plugins/extensions`
+- `telemetry`
+- `remote-control`
+
+## Product ideas (future/experimental, non-blocking)
+
+1. **[future/experimental] Offline-first mode UX**
 - Show explicit state when cloud AI is unavailable and guide user to local-only commands.
 
-2. **Launcher confidence UX**
+2. **[future/experimental] Launcher confidence UX**
 - Display why app match was selected (alias/exact/fuzzy) and one-click alias training.
 
-3. **Account troubleshooting panel**
+3. **[future/experimental] Account troubleshooting panel**
 - Surface token/session expiration, linked-account sync state, and retry actions.
 
-4. **Update UX improvements**
+4. **[future/experimental] Update UX improvements**
 - Show release notes and updater source status in a dedicated settings section.
 - Add one-click “download and install on restart” flow in desktop settings.
 

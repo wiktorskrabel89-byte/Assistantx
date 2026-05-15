@@ -20,15 +20,21 @@ let activeIndex = 0;
 let pendingConfirmationId = null;
 let searchTimer = null;
 
-function setProviderStatus(providerStatus = []) {
+function setProviderStatus(providerStatus = [], catalogHealth = null) {
   const everything = providerStatus.find((entry) => entry.provider === 'everything');
+  const freshness = catalogHealth?.freshness ? ` · ${catalogHealth.freshness}` : '';
+  const refreshedAt = catalogHealth?.lastSuccessfulScanAt
+    ? ` · last scan ${new Date(catalogHealth.lastSuccessfulScanAt).toLocaleString()}`
+    : '';
   if (everything?.status === 'available') {
-    providerStatusNode.textContent = 'Everything Search active';
+    providerStatusNode.textContent = `Everything Search active${freshness}${refreshedAt}`;
     installEverythingButton.classList.add('hidden');
     return;
   }
   const fallback = providerStatus.find((entry) => entry.provider === 'windows-fallback');
-  providerStatusNode.textContent = fallback ? 'SQLite fallback index active' : 'Search backend unavailable';
+  providerStatusNode.textContent = fallback
+    ? `SQLite fallback index active${freshness}${refreshedAt}`
+    : `Search backend unavailable${freshness}${refreshedAt}`;
   installEverythingButton.classList.remove('hidden');
 }
 
@@ -62,7 +68,7 @@ async function runSearch(query = '') {
   const payload = await ipc.invoke('launcher-search', { query, limit: 8 });
   items = payload.results || [];
   activeIndex = 0;
-  setProviderStatus(payload.providerStatus || []);
+  setProviderStatus(payload.providerStatus || [], payload.catalogHealth || null);
   footerStatusNode.textContent = query
     ? `Showing ${items.length} result${items.length === 1 ? '' : 's'} for “${query}”.`
     : 'Recent apps and launcher suggestions.';
@@ -72,7 +78,7 @@ async function runSearch(query = '') {
 async function refreshIndex() {
   footerStatusNode.textContent = 'Refreshing local launcher index…';
   const result = await ipc.invoke('launcher-refresh');
-  setProviderStatus(result.statuses || []);
+  setProviderStatus(result.providerStatus || result.statuses || [], result.catalogHealth || null);
   footerStatusNode.textContent = `Indexed ${result.appCount} launcher entries via ${result.provider}.`;
   await runSearch(queryInput.value.trim());
 }
@@ -149,7 +155,9 @@ confirmationCancelButton.addEventListener('click', () => {
 });
 
 ipc.on('launcher-overlay-focus', (payload) => {
-  if (payload?.providerStatus) setProviderStatus(payload.providerStatus);
+  if (payload?.providerStatus || payload?.catalogHealth) {
+    setProviderStatus(payload?.providerStatus || [], payload?.catalogHealth || null);
+  }
   queryInput.focus();
   queryInput.select();
   void runSearch(queryInput.value.trim());
@@ -167,8 +175,13 @@ ipc.on('sidecar-status', (payload) => {
   voiceStatusNode.textContent = `Voice sidecar: ${payload?.status || 'unknown'}`;
 });
 
+ipc.on('desktop-health', (payload) => {
+  const overall = payload?.overall || 'unknown';
+  footerStatusNode.textContent = `Desktop health: ${overall}`;
+});
+
 void ipc.invoke('launcher-recent', { limit: 8 }).then((payload) => {
   items = payload.results || [];
-  setProviderStatus(payload.providerStatus || []);
+  setProviderStatus(payload.providerStatus || [], payload.catalogHealth || null);
   renderResults();
 });
