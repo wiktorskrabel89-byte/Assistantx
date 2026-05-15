@@ -65,3 +65,4 @@ For every desktop-impacting PR/release, include:
 - Validation status for A–E (pass/fail)
 - Any pre-existing failures (explicitly marked as unrelated)
 - Packaged-flow verification notes (startup/tray, launcher, account, updater)
+- Architecture alignment note against `FINAL_AI_VOICE_ARCHITECTURE_PLAN.md` (if scope touched AI/voice routing or sidecar behavior)

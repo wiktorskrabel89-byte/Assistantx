@@ -5,6 +5,9 @@ This audit covers:
 - `ai-agent`
 - `.github/workflows/build-jarvis.yml`
 
+Target-state reference:
+- `jarvis/desktop/FINAL_AI_VOICE_ARCHITECTURE_PLAN.md`
+
 ## 1) Runtime ownership boundaries
 
 ## Electron main process (`jarvis/desktop/main.js`)

@@ -17,6 +17,9 @@ Included now:
 Deferred:
 - product expansion ideas remain **future/experimental**, non-blocking, architecture-aware.
 
+Reference architecture baseline:
+- `FINAL_AI_VOICE_ARCHITECTURE_PLAN.md` (routing, voice stack, local-vs-remote boundaries, streaming requirements)
+
 ## Critical fixes (high impact, high priority)
 
 1. **Consolidate duplicate update paths in `main.js`**

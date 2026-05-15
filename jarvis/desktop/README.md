@@ -70,6 +70,7 @@ Sidecar process (`ai-agent/main.py`) is spawned by `main.js` and renderer voice 
 ## Related docs
 
 - Architecture audit: `ARCHITECTURE_AUDIT.md`
+- Final AI + voice architecture plan: `FINAL_AI_VOICE_ARCHITECTURE_PLAN.md`
 - Upgrade/fix/ideas backlog: `UPGRADE_BACKLOG.md`
 - Validation checklist: `VALIDATION_CHECKLIST.md`
 
