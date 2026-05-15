@@ -5,10 +5,19 @@ const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
 const { decodeJwtPayload } = require('./accounts');
 const { spawn } = require('child_process');
 const launcherService = require('./launcher/launch-service');
+const launcherDb = require('./launcher/db');
 const { createStartupDiagnostics } = require('./services/startup-diagnostics');
 const { invalidResult, parseHttpUrl, validateInteger, validatePlainObject, validateString } = require('./services/ipc-guards');
 const { createEventBus } = require('./telemetry/event-bus');
 const { getLocalTelemetrySnapshot, wireLocalTelemetry } = require('./telemetry/local-telemetry');
+
+// ── DB readiness helper ───────────────────────────────────────────────────────
+// Ensures the launcher SQLite database is initialised before any IPC handler
+// that touches it.  Concurrent callers share the same in-flight promise thanks
+// to the deduplication logic inside db.init().
+function ensureDbReady() {
+  return launcherDb.init();
+}
 
 // ── Python AI-Agent sidecar process management ───────────────────────────────
 let sidecarProcess = null;
@@ -197,6 +206,14 @@ function getAutoUpdater() {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.autoDownload = false; // ask first, download on demand
     autoUpdater.autoInstallOnAppQuit = true;
+
+    // Authenticate GitHub requests so the updater works with private repos and
+    // avoids spurious 404s once a release is published.
+    const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    if (ghToken) {
+      autoUpdater.requestHeaders = { Authorization: `token ${ghToken}` };
+    }
+
     startupDiagnostics.setComponent('updater', 'healthy', 'Updater initialized.');
     startupDiagnostics.pushEvent('updater', 'info', 'Updater initialized.');
     telemetryBus.publish('startup.healthy');
@@ -258,6 +275,17 @@ function getAutoUpdater() {
     autoUpdater.on('error', (err) => {
       const msg = err?.message || String(err);
       console.warn('[updater] autoUpdater error:', msg);
+      // A 404 means the repository has no published release yet — treat it as
+      // "nothing to update" rather than a hard error so the UI stays green.
+      const isNoRelease = /404|no published|not found/i.test(msg);
+      if (isNoRelease) {
+        startupDiagnostics.setComponent('updater', 'healthy', 'No published release found — app is up to date.');
+        startupDiagnostics.pushEvent('updater', 'info', 'No release published yet.', { message: msg });
+        telemetryBus.publish('startup.healthy');
+        emitDesktopHealth();
+        emitUpdateStatus('up-to-date', 'Jarvis is up to date (no release published yet).', { downloaded: false });
+        return;
+      }
       // Treat network/endpoint failures as transient rather than hard errors.
       const isTransient = /network|fetch|econnrefused|enotfound|ehostunreach|timeout/i.test(msg);
       startupDiagnostics.setComponent('updater', isTransient ? 'degraded' : 'unavailable', msg);
@@ -327,7 +355,7 @@ function setupAutoUpdater() {
   getAutoUpdater(); // wire up event listeners
   setTimeout(() => {
     void checkForUpdates();
-  }, 4000);
+  }, 15000);
 }
 
 function getTrayIcon() {
@@ -529,6 +557,7 @@ ipcMain.handle('open-path', (_event, filePath) => {
 });
 
 ipcMain.handle('launcher-search', async (_event, payload) => {
+  await ensureDbReady();
   const body = validatePlainObject(payload) || {};
   const query = validateString(body.query, { allowEmpty: true, maxLen: 200 }) || '';
   const limit = validateInteger(body.limit, { min: 1, max: 20, fallback: 8 });
@@ -536,18 +565,21 @@ ipcMain.handle('launcher-search', async (_event, payload) => {
 });
 
 ipcMain.handle('launcher-recent', async (_event, payload) => {
+  await ensureDbReady();
   const body = validatePlainObject(payload) || {};
   const limit = validateInteger(body.limit, { min: 1, max: 20, fallback: 8 });
   return launcherService.searchApps('', { limit });
 });
 
 ipcMain.handle('launcher-refresh', async () => {
+  await ensureDbReady();
   const result = await launcherService.refreshCatalog({ reason: 'overlay-manual' });
   void maybePromptEverythingRecommendation();
   return result;
 });
 
 ipcMain.handle('launcher-launch', async (_event, payload) => {
+  await ensureDbReady();
   const body = validatePlainObject(payload);
   if (!body) return invalidResult('launcher-launch', 'payload-must-be-object');
   const query = validateString(body.query, { allowEmpty: true, maxLen: 200 }) || '';
@@ -793,22 +825,26 @@ ipcMain.handle('open-account-login', async () => {
 function parseCallbackUrl(url, loginWin, resolve) {
   try {
     const parsed = new URL(url);
-    // Look for /auth/callback with an access_token fragment or query param
-    if (!parsed.pathname.includes('/auth/callback') && !parsed.pathname.includes('/jarvis/callback')) return;
+    const hashParams = new URLSearchParams(parsed.hash.slice(1));
+    const accessToken = hashParams.get('access_token') || parsed.searchParams.get('access_token');
 
-    const params = new URLSearchParams(parsed.hash.slice(1));
-    const accessToken = params.get('access_token') || parsed.searchParams.get('access_token');
+    // Match dedicated callback routes OR any URL that already carries a token
+    // in the fragment (Supabase PKCE / implicit flows may land on / or /auth/confirm).
+    const isCallbackPath = parsed.pathname.includes('/auth/callback')
+      || parsed.pathname.includes('/jarvis/callback')
+      || parsed.pathname.includes('/auth/confirm');
 
-    if (accessToken) {
-      const jwtPayload = decodeJwtPayload(accessToken);
-      const email = params.get('email') || parsed.searchParams.get('email')
-        || jwtPayload?.email || '';
-      const userId = params.get('sub') || params.get('user_id') || parsed.searchParams.get('user_id')
-        || jwtPayload?.sub || '';
-      const refreshToken = params.get('refresh_token') || parsed.searchParams.get('refresh_token') || '';
-      loginWin.close();
-      resolve({ accessToken, refreshToken, email, userId, signedInAt: new Date().toISOString() });
-    }
+    if (!isCallbackPath && !accessToken) return;
+    if (!accessToken) return;
+
+    const jwtPayload = decodeJwtPayload(accessToken);
+    const email = hashParams.get('email') || parsed.searchParams.get('email')
+      || jwtPayload?.email || '';
+    const userId = hashParams.get('sub') || hashParams.get('user_id') || parsed.searchParams.get('user_id')
+      || jwtPayload?.sub || '';
+    const refreshToken = hashParams.get('refresh_token') || parsed.searchParams.get('refresh_token') || '';
+    loginWin.close();
+    resolve({ accessToken, refreshToken, email, userId, signedInAt: new Date().toISOString() });
   } catch {
     if (process.env.NODE_ENV !== 'production') {
       console.debug('[auth] Ignoring non-callback navigation URL during login handoff.');

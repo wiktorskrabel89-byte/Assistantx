@@ -188,7 +188,17 @@ async function ensureCatalogReady(reason = 'startup') {
 }
 
 async function refreshCatalog({ reason = 'manual', platform = process.platform } = {}) {
-  upsertApps(toBuiltinApps(platform), { provider: 'builtin', replaceProvider: true });
+  try {
+    upsertApps(toBuiltinApps(platform), { provider: 'builtin', replaceProvider: true });
+  } catch (err) {
+    if (err.message && err.message.includes('not initialised')) {
+      // DB not yet ready — schedule a retry and return a neutral result.
+      console.warn('[launcher] refreshCatalog: DB not initialised, retrying in 500ms.', err.message);
+      await new Promise((res) => setTimeout(res, 500));
+      return refreshCatalog({ reason, platform });
+    }
+    throw err;
+  }
 
   const discovery = await discoverApps(execFilePromise, { platform });
   const nowIso = new Date().toISOString();
