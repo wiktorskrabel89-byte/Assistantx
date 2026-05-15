@@ -401,6 +401,31 @@ describe('POST /api/chat — "websearch" prefix enables web plugin on current mo
     expect(userMsg?.content).toBe("latest news today");
   });
 
+  it('triggers web plugin when message starts with whitespace + "websearch"', async () => {
+    const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "result" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: " \n\twebsearch latest Apple earnings",
+      mode: "chat",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const calledBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string) as {
+      plugins: Array<{ id: string }>;
+      messages: Array<{ role: string; content: string }>;
+    };
+
+    expect(calledBody.plugins).toEqual([{ id: "web" }]);
+    const userMsg = calledBody.messages.find((m) => m.role === "user");
+    expect(userMsg?.content).toBe("latest Apple earnings");
+  });
+
   it('does NOT add the web plugin when message does not start with "websearch"', async () => {
     const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -476,6 +501,31 @@ describe('POST /api/chat — "websearch" prefix enables web plugin on current mo
     expect(calledBody.model).not.toBe("perplexity/sonar");
     expect(calledBody.model).toBe("openai/gpt-oss-120b");
     expect(calledUrl).toBe("https://openrouter.ai/api/v1/chat/completions");
+  });
+});
+
+describe("chat request compaction helpers", () => {
+  let compactMessages: (messages: Array<{ role: string; content: string }>) => Array<{ role: string; content: string }>;
+
+  beforeAll(async () => {
+    ({ compactMessages } = await import("@/app/api/chat/route"));
+  });
+
+  it("preserves both prefix instructions and tail context in compacted system prompts", () => {
+    const header = "SYSTEM_INSTRUCTIONS_START ";
+    const filler = "x".repeat(4000);
+    const tail = "Retrieved live web context: SOURCE_A SOURCE_B";
+    const messages = [
+      { role: "system", content: `${header}${filler}${tail}` },
+      { role: "user", content: "question" },
+    ];
+
+    const compacted = compactMessages(messages);
+    const compactedSystem = compacted.find((message) => message.role === "system");
+
+    expect(compactedSystem).toBeDefined();
+    expect(compactedSystem?.content).toContain("SYSTEM_INSTRUCTIONS_START");
+    expect(compactedSystem?.content).toContain("Retrieved live web context");
   });
 });
 
@@ -615,6 +665,54 @@ describe("POST /api/chat — reasoning extraction from provider stream chunks", 
     const body = await res.text();
     expect(body).toContain(`"reasoning":"think"`);
     expect(body).toContain(`"token":"final"`);
+  });
+
+  it("moves inline <think>...</think> text from token stream into reasoning", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "<think>chain of thought</think>final answer" } }] })}\ndata: [DONE]\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Explain",
+      mode: "chat",
+      modelId: "qwen/qwen3-32b",
+      userPlan: "pro",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(body).toContain(`"reasoning":"chain of thought"`);
+    expect(body).toContain(`"token":"final answer"`);
+    expect(body).not.toContain("<think>");
+  });
+
+  it("handles <think> tags that are split across multiple provider chunks", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "<thi" } }] })}\n`
+          + `data: ${JSON.stringify({ choices: [{ delta: { content: "nk>secret</think>visible" } }] })}\n`
+          + "data: [DONE]\n",
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+
+    const req = makeRequest({
+      message: "Explain",
+      mode: "chat",
+      modelId: "qwen/qwen3-32b",
+      userPlan: "pro",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(body).toContain(`"reasoning":"secret"`);
+    expect(body).toContain(`"token":"visible"`);
+    expect(body).not.toContain(`"token":"<thi"`);
   });
 });
 

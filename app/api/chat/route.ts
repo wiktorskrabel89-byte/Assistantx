@@ -109,6 +109,7 @@ const COMPACT_RETRY_MAX_OUTPUT_TOKENS = 512;
 const COMPACT_SYSTEM_PROMPT_CHARS = 2500;
 const COMPACT_HISTORY_MESSAGE_CHARS = 1200;
 const COMPACT_USER_MESSAGE_CHARS = 2200;
+const COMPACT_SYSTEM_SEPARATOR = "\n\n[Context compacted for token limits]\n\n";
 
 function estimateTokensFromText(text: string): number {
   // Approximation only: OpenAI-compatible tokenizers vary by model/language/code content.
@@ -120,20 +121,31 @@ function estimateTokensFromMessages(messages: LlmMessage[]): number {
   return messages.reduce((sum, message) => sum + estimateTokensFromText(message.content) + 4, 0);
 }
 
-function compactMessages(messages: LlmMessage[]): LlmMessage[] {
+export function compactSystemPrompt(content: string): string {
+  if (content.length <= COMPACT_SYSTEM_PROMPT_CHARS) return content;
+  const separatorBudget = COMPACT_SYSTEM_SEPARATOR.length;
+  const headBudget = Math.max(
+    200,
+    Math.min(COMPACT_SYSTEM_PROMPT_CHARS - separatorBudget - 200, Math.floor(COMPACT_SYSTEM_PROMPT_CHARS * 0.6)),
+  );
+  const tailBudget = Math.max(200, COMPACT_SYSTEM_PROMPT_CHARS - separatorBudget - headBudget);
+  return `${content.slice(0, headBudget)}${COMPACT_SYSTEM_SEPARATOR}${content.slice(-tailBudget)}`;
+}
+
+export function compactMessages(messages: LlmMessage[]): LlmMessage[] {
   if (messages.length === 0) return [];
   const system = messages.find((message) => message.role === "system");
   const latestUser = [...messages].reverse().find((message) => message.role === "user");
   if (!latestUser) {
     return system
-      ? [{ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) }]
+      ? [{ role: "system", content: compactSystemPrompt(system.content) }]
       : [];
   }
   const latestHistory = messages
     .filter((message) => message !== system && message !== latestUser)
     .slice(-2);
   const compacted: LlmMessage[] = [];
-  if (system) compacted.push({ role: "system", content: system.content.slice(0, COMPACT_SYSTEM_PROMPT_CHARS) });
+  if (system) compacted.push({ role: "system", content: compactSystemPrompt(system.content) });
   // Keep newest turns (tail) because they are usually the most relevant for continuity.
   compacted.push(...latestHistory.map((message) => ({
     ...message,
@@ -186,6 +198,55 @@ function readTextChunk(value: unknown): string {
     return readTextChunk(candidate.content);
   }
   return "";
+}
+
+type ThinkTagStreamState = {
+  inThinkBlock: boolean;
+  carry: string;
+};
+
+function splitTrailingThinkFragment(text: string): { safeText: string; trailingFragment: string } {
+  const fragmentStart = text.lastIndexOf("<");
+  if (fragmentStart < 0) return { safeText: text, trailingFragment: "" };
+  const trailing = text.slice(fragmentStart);
+  if (trailing.includes(">")) return { safeText: text, trailingFragment: "" };
+  const trailingLower = trailing.toLowerCase();
+  const maybeThinkFragment = "<think".startsWith(trailingLower)
+    || "</think".startsWith(trailingLower)
+    || trailingLower.startsWith("<think")
+    || trailingLower.startsWith("</think");
+  if (!maybeThinkFragment) return { safeText: text, trailingFragment: "" };
+  return { safeText: text.slice(0, fragmentStart), trailingFragment: trailing };
+}
+
+function normalizeThinkTaggedToken(token: string, state: ThinkTagStreamState): { token: string; reasoning: string } {
+  if (!token && !state.carry) return { token: "", reasoning: "" };
+  const input = `${state.carry}${token}`;
+  state.carry = "";
+
+  const tagRegex = /<\/?think\b[^>]*>/gi;
+  let visible = "";
+  let reasoning = "";
+  let cursor = 0;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = tagRegex.exec(input)) !== null) {
+    const segment = input.slice(cursor, match.index);
+    if (state.inThinkBlock) reasoning += segment;
+    else visible += segment;
+    state.inThinkBlock = /^<\s*\/\s*think\b/i.test(match[0]) ? false : true;
+    cursor = match.index + match[0].length;
+  }
+
+  const trailing = input.slice(cursor);
+  const { safeText, trailingFragment } = splitTrailingThinkFragment(trailing);
+  if (safeText) {
+    if (state.inThinkBlock) reasoning += safeText;
+    else visible += safeText;
+  }
+  state.carry = trailingFragment;
+
+  return { token: visible, reasoning };
 }
 
 function extractStreamDelta(parsed: unknown): { reasoning: string; token: string } {
@@ -344,12 +405,13 @@ export const POST = async (req: Request) => {
     );
   }
 
-  // Detect "websearch" trigger word at the very start of the message (any case).
+  // Detect "websearch" trigger word at the very start of the message (any case),
+  // allowing leading whitespace from pasted prompts.
   // Require a word boundary after "websearch" so "websearching ..." is not matched.
   // When present, strip it so the model receives a clean prompt.
-  const websearchTrigger = /^websearch(?=\s|$)/i.test(typeof message === "string" ? message : "");
+  const websearchTrigger = /^\s*websearch(?=\s|$)/i.test(typeof message === "string" ? message : "");
   const effectiveMessage: string = websearchTrigger && typeof message === "string"
-    ? message.replace(/^websearch(?=\s|$)/i, "").trim()
+    ? message.replace(/^\s*websearch(?=\s|$)/i, "").trim()
     : (typeof message === "string" ? message : "");
 
   // Override addInternetContext if the workspace has web_search tool enabled
@@ -1175,6 +1237,7 @@ export const POST = async (req: Request) => {
         const decoder = new TextDecoder();
         let modelSent = false;
         let buf = "";
+        const thinkTagState: ThinkTagStreamState = { inThinkBlock: false, carry: "" };
 
         while (true) {
           if (requestSignal.aborted) return;
@@ -1202,11 +1265,13 @@ export const POST = async (req: Request) => {
               if (usage?.prompt_tokens) actualInputTokens = usage.prompt_tokens;
               if (usage?.completion_tokens) actualOutputTokens = usage.completion_tokens;
               const { reasoning, token } = extractStreamDelta(parsed);
-              if (reasoning) {
-                safeEnqueue(`data: ${JSON.stringify({ reasoning })}\n\n`);
+              const normalized = normalizeThinkTaggedToken(token, thinkTagState);
+              const mergedReasoning = `${reasoning}${normalized.reasoning}`;
+              if (mergedReasoning) {
+                safeEnqueue(`data: ${JSON.stringify({ reasoning: mergedReasoning })}\n\n`);
               }
-              if (token) {
-                safeEnqueue(`data: ${JSON.stringify({ token })}\n\n`);
+              if (normalized.token) {
+                safeEnqueue(`data: ${JSON.stringify({ token: normalized.token })}\n\n`);
               }
             } catch {
               // Ignore malformed provider chunks.
