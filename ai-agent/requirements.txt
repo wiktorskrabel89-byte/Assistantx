@@ -5,13 +5,13 @@ websockets>=12.0
 # Wake word detection
 openwakeword>=0.6.0
 
-# Speech-to-text
+# Speech-to-text (legacy local fallback only; primary STT is remote via AssistantX API gateway)
 faster-whisper>=1.0.3
 
-# Text-to-speech (Piper)
+# Text-to-speech (legacy local fallback only; primary TTS is remote via AssistantX API gateway)
 piper-tts>=1.2.0
 
-# NLP / intent parsing
+# NLP / intent parsing (legacy local fallback only)
 spacy>=3.7.0
 # English model installed separately: python -m spacy download en_core_web_sm
 
@@ -19,6 +19,7 @@ spacy>=3.7.0
 sounddevice>=0.4.7
 numpy>=1.26.0
 
-# Voice Activity Detection (helps gate Whisper invocations)
+# Voice Activity Detection (primary local gate before remote STT)
+silero-vad>=5.1.2
 webrtcvad>=2.0.10
 rapidfuzz>=3.14.5

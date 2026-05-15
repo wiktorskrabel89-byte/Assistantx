@@ -75,6 +75,8 @@ const {
   setJarvisWebUrl,
 } = require('./runtime-config');
 
+const { VoiceGateway } = require('./voice-gateway');
+
 // SidecarBridge — instantiated once in the preload so its WebSocket/Web Audio
 // APIs (which are renderer-process browser globals) are available.
 let sidecarBridge = null;
@@ -84,6 +86,17 @@ try {
 } catch {
   // Python sidecar not packaged or sidecar-bridge unavailable — browser fallback.
 }
+
+const voiceGateway = sidecarBridge
+  ? new VoiceGateway({
+    sidecar: sidecarBridge,
+    invokeMain: (channel, payload) => ipcRenderer.invoke(channel, payload),
+    getApiBaseUrl: () => getJarvisApiUrl(),
+    getAccessToken: () => getAccountSession()?.accessToken || null,
+    queuePromptExecution,
+    executeStructuredCommand,
+  })
+  : null;
 
 // ── contextBridge exposure ────────────────────────────────────────────────────
 
@@ -162,5 +175,17 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     connect: () => sidecarBridge.connect(),
     /** Returns the current _capturing state. */
     isCapturing: () => Boolean(sidecarBridge._capturing),
+  } : null,
+  voiceGateway: voiceGateway ? {
+    on(event, listener) {
+      voiceGateway.on(event, listener);
+      return () => voiceGateway.removeListener(event, listener);
+    },
+    configure: (settings) => voiceGateway.configure(settings),
+    connect: () => voiceGateway.connect(),
+    startAudioCapture: () => voiceGateway.startAudioCapture(),
+    stopAudioCapture: () => voiceGateway.stopAudioCapture(),
+    setListeningForCommand: (active) => voiceGateway.setListeningForCommand(active),
+    synthesize: (text, options) => voiceGateway.synthesize(text, options),
   } : null,
 });

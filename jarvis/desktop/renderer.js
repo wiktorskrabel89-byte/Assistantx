@@ -31,6 +31,7 @@ const ipcRenderer = window.jarvisIpc || null;
 // The SidecarBridge instance is created in preload.js (which runs with Node
 // access) and exposed via window.jarvisApi.sidecar.
 const sidecar = window.jarvisApi.sidecar || null;
+const voiceGateway = window.jarvisApi.voiceGateway || null;
 let sidecarConnected = false;
 
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
@@ -145,6 +146,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const ttsModelSelect = document.getElementById('tts-model');
 	const ttsVoiceProfileSelect = document.getElementById('tts-voice-profile');
 	const voiceLanguageSelect = document.getElementById('voice-language');
+	const voiceProviderModeSelect = document.getElementById('voice-provider-mode');
 	const sttEnabledToggle = document.getElementById('stt-enabled');
 	const autoTtsToggle = document.getElementById('auto-tts');
 	const voiceVisualizer = document.getElementById('voice-visualizer');
@@ -187,6 +189,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		allowBackgroundWake: true,
 		voiceLanguage: voiceLanguageSelect?.value || 'en-US',
 		autoTts: true,
+		providerMode: 'assistantx-server',
 	};
 
 	function readVoiceSettings() {
@@ -221,6 +224,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
 		if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
 		if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
+		if (voiceProviderModeSelect && voiceSettings.providerMode) voiceProviderModeSelect.value = voiceSettings.providerMode;
 		if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
 		if (voiceInputButton) {
 			voiceInputButton.disabled = !voiceSettings.sttEnabled;
@@ -432,8 +436,9 @@ window.addEventListener('DOMContentLoaded', () => {
 	function startSpeechToText({ autoSubmit = false } = {}) {
 		if (sidecarConnected && sidecar) {
 			setVoiceToTextUiActive(true);
-			sidecar.setListeningForCommand(true);
-			sidecar.startAudioCapture()
+			const bridge = voiceGateway || sidecar;
+			bridge.setListeningForCommand(true);
+			bridge.startAudioCapture()
 				.then(() => {
 					sidecarManualListening = true;
 				})
@@ -444,7 +449,7 @@ window.addEventListener('DOMContentLoaded', () => {
 						formatVoiceCaptureError(error),
 						'error',
 					);
-					sidecar.setListeningForCommand(false);
+					bridge.setListeningForCommand(false);
 					setVoiceToTextUiActive(false);
 				});
 			return;
@@ -496,7 +501,11 @@ window.addEventListener('DOMContentLoaded', () => {
 	function stopSpeechToText() {
 		if (sidecarConnected && sidecar) {
 			sidecarManualListening = false;
-			sidecar.setListeningForCommand(false);
+			if (voiceGateway) {
+				voiceGateway.setListeningForCommand(false);
+			} else {
+				sidecar.setListeningForCommand(false);
+			}
 			setVoiceToTextUiActive(false);
 			return;
 		}
@@ -532,6 +541,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				allowBackgroundWake: Boolean(allowBackgroundWakeToggle?.checked),
 				voiceLanguage: voiceLanguageSelect?.value || 'en-US',
 				autoTts: Boolean(autoTtsToggle?.checked),
+				providerMode: voiceProviderModeSelect?.value || 'assistantx-server',
 			});
 			appendMessage(log, 'Settings', 'Voice settings saved.');
 		});
@@ -572,6 +582,13 @@ window.addEventListener('DOMContentLoaded', () => {
 	if (voiceLanguageSelect) {
 		voiceLanguageSelect.addEventListener('change', () => {
 			applyVoiceSettings({ ...voiceSettings, voiceLanguage: voiceLanguageSelect.value });
+		});
+	}
+
+	if (voiceProviderModeSelect) {
+		voiceProviderModeSelect.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, providerMode: voiceProviderModeSelect.value || 'assistantx-server' });
+			syncSidecarVoiceSettings();
 		});
 	}
 
@@ -633,17 +650,27 @@ window.addEventListener('DOMContentLoaded', () => {
 		sidecar.on('connected', () => {
 			sidecarConnected = true;
 			appendMessage(log, 'AI Sidecar', '🤖 Python voice sidecar connected (offline mode active).', 'system');
-			sidecar.configure({
+			const configuration = {
 				wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
 				language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
 				wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
-				sttEnabled: Boolean(voiceSettings.sttEnabled),
-				ttsEnabled: Boolean(voiceSettings.ttsEnabled && voiceSettings.autoTts),
+				sttEnabled: false,
+				ttsEnabled: false,
+				nlpEnabled: false,
+				vadEnabled: true,
 				sampleRate: 16000,
+			};
+			sidecar.configure(configuration);
+			voiceGateway?.configure({
+				...configuration,
+				providerMode: voiceSettings.providerMode || 'assistantx-server',
+				sttModel: voiceSettings.sttModel,
+				persona: voiceSettings.ttsVoiceId,
+				fallbackToBrowserSpeech: true,
 			});
 			// Start microphone capture immediately if wake word is enabled
 			if (voiceSettings.wakeWordEnabled) {
-				sidecar.startAudioCapture().catch(() => null);
+				(voiceGateway || sidecar).startAudioCapture().catch(() => null);
 			}
 		});
 
@@ -679,7 +706,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (!voiceSettings.allowBackgroundWake && !document.hasFocus()) return;
 			appendMessage(log, 'AI Sidecar', `Wake word detected — listening…`);
 			setVoiceVisualizer('listening');
-			sidecar.setListeningForCommand(true);
+			(voiceGateway || sidecar).setListeningForCommand(true);
 		});
 
 		sidecar.on('stt_result', ({ text, isFinal }) => {
@@ -701,7 +728,9 @@ window.addEventListener('DOMContentLoaded', () => {
 						fallbackVoicePrompt(text);
 					}
 				}, 900);
-				sidecar.requestIntentParse(text, requestId);
+				if (!voiceGateway) {
+					sidecar.requestIntentParse(text, requestId);
+				}
 			} else {
 				setVoiceVisualizer('listening');
 			}
@@ -776,6 +805,26 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 
 		sidecar.connect();
+		voiceGateway?.connect();
+		voiceGateway?.on('stt_result', ({ text, isFinal }) => {
+			if (!text) return;
+			input.value = text;
+			if (isFinal) {
+				setVoiceVisualizer('idle');
+				if (sidecarManualListening) {
+					sidecarManualListening = false;
+					setVoiceToTextUiActive(false);
+				}
+			} else {
+				setVoiceVisualizer('listening');
+			}
+		});
+		voiceGateway?.on('route', ({ mode }) => {
+			if (mode) appendMessage(log, 'Voice route', `Routing via ${mode}`, 'system');
+		});
+		voiceGateway?.on('fallback_required', () => {
+			appendMessage(log, 'Voice gateway', 'Falling back to browser speech APIs.', 'system');
+		});
 	}
 	setupSidecar();
 
@@ -787,13 +836,24 @@ window.addEventListener('DOMContentLoaded', () => {
 			wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
 			language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
 			wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
-			sttEnabled: Boolean(voiceSettings.sttEnabled),
-			ttsEnabled: Boolean(voiceSettings.ttsEnabled && voiceSettings.autoTts),
+			sttEnabled: false,
+			ttsEnabled: false,
+			nlpEnabled: false,
+			vadEnabled: true,
+		});
+		voiceGateway?.configure({
+			providerMode: voiceSettings.providerMode || 'assistantx-server',
+			wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
+			language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
+			wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
+			sttModel: voiceSettings.sttModel,
+			persona: voiceSettings.ttsVoiceId,
+			fallbackToBrowserSpeech: true,
 		});
 		if (voiceSettings.wakeWordEnabled && !sidecar.isCapturing()) {
-			sidecar.startAudioCapture().catch(() => null);
+			(voiceGateway || sidecar).startAudioCapture().catch(() => null);
 		} else if (!voiceSettings.wakeWordEnabled && sidecar.isCapturing()) {
-			sidecar.stopAudioCapture();
+			(voiceGateway || sidecar).stopAudioCapture();
 		}
 	}
 
@@ -824,13 +884,46 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	// Speak via Piper TTS when sidecar is connected, or via browser otherwise.
 	// Used by onMessage command_result handler below.
-	function speakWithSidecar(text) {
+	async function speakWithSidecar(text) {
+		if (sidecarConnected && voiceSettings.autoTts && voiceGateway) {
+			const tts = await voiceGateway.synthesize(text, {
+				persona: voiceSettings.ttsVoiceId,
+				language: getVoiceLanguage(),
+			});
+			if (tts?.ok && tts.audioBase64) {
+				try {
+					const AudioContext = window.AudioContext || window.webkitAudioContext;
+					if (AudioContext) {
+						const actx = new AudioContext();
+						const binary = atob(tts.audioBase64);
+						const bytes = new Uint8Array(binary.length);
+						for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+						actx.decodeAudioData(bytes.buffer, (decoded) => {
+							const source = actx.createBufferSource();
+							source.buffer = decoded;
+							source.connect(actx.destination);
+							setVoiceVisualizer('speaking');
+							source.onended = () => {
+								setVoiceVisualizer('idle');
+								actx.close().catch(() => null);
+							};
+							source.start(0);
+						}, () => {
+							actx.close().catch(() => null);
+						});
+						return;
+					}
+				} catch {
+					// Continue to fallback.
+				}
+			}
+		}
 		if (sidecarConnected && sidecar && voiceSettings.autoTts) {
 			const requestId = `tts-${Date.now()}`;
 			sidecar.requestTts(text, requestId);
 			return;
 		}
-		void speakResponse(text);
+		await speakResponse(text);
 	}
 
 	if (ipcRenderer) {
@@ -1003,7 +1096,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			const title = parsed.type === 'command_result' ? (parsed.title || '✅ Jarvis') : `Backend (${parsed.type || '?'})`;
 			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system');
 			if (parsed.type === 'command_result' && parsed.level !== 'error') {
-				speakWithSidecar(getComfortableSpokenText(parsed, body));
+				void speakWithSidecar(getComfortableSpokenText(parsed, body));
 			}
 		} catch {
 			// rawMessage is not JSON — display as plain text
