@@ -340,9 +340,9 @@ function migrateLegacyState(wrapper) {
 async function init() {
   if (db) return;
 
-  // Resolve WASM binary relative to this file.  Works in both development and
-  // the packaged Electron app (Electron's fs transparently reads from asar).
-  const wasmPath = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
+  // Resolve WASM binary via Node module resolution so tests and app runtime
+  // both work regardless of which node_modules directory provides sql.js.
+  const wasmPath = require.resolve('sql.js/dist/sql-wasm.wasm');
   const wasmBinary = fs.readFileSync(wasmPath);
 
   const initSqlJs = require('sql.js');
@@ -393,5 +393,4 @@ module.exports = {
   init,
   setMeta,
 };
-
 
