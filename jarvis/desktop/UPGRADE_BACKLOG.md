@@ -4,7 +4,7 @@ Balanced backlog across reliability, security, and product UX.
 
 ## Critical fixes (high impact, high priority)
 
-1. **[Done in this change] Consolidate duplicate update paths in `main.js`**
+1. **Consolidate duplicate update paths in `main.js`**
 - Keep one updater strategy with `electron-updater`.
 - Remove conflicting duplicate implementation that referenced undefined symbols.
 

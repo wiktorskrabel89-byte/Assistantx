@@ -4,7 +4,7 @@ Use this checklist for desktop-impacting changes.
 
 ## A) Repository baseline validation
 
-Run from `/home/runner/work/Assistantx/Assistantx`:
+Run from repository root:
 
 1. `npm run lint`
 2. `npm test -- --runInBand`
@@ -14,7 +14,7 @@ If failures are unrelated/pre-existing, record them explicitly in PR notes.
 
 ## B) Desktop smoke checks (manual)
 
-From `/home/runner/work/Assistantx/Assistantx/jarvis/desktop`:
+From `jarvis/desktop`:
 
 1. `npm ci`
 2. `npm run dev`

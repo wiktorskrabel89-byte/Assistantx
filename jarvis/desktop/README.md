@@ -4,9 +4,9 @@ Jarvis Desktop is the Electron runtime for AssistantX desktop automation, voice,
 
 ## Scope in this repository
 
-- Desktop app: `/home/runner/work/Assistantx/Assistantx/jarvis/desktop`
-- Python voice sidecar: `/home/runner/work/Assistantx/Assistantx/ai-agent`
-- Release pipeline: `/home/runner/work/Assistantx/Assistantx/.github/workflows/build-jarvis.yml`
+- Desktop app: `jarvis/desktop`
+- Python voice sidecar: `ai-agent`
+- Release pipeline: `.github/workflows/build-jarvis.yml`
 
 ## Core runtime modules
 
@@ -20,7 +20,7 @@ Jarvis Desktop is the Electron runtime for AssistantX desktop automation, voice,
 ## Local development
 
 ```bash
-cd /home/runner/work/Assistantx/Assistantx/jarvis/desktop
+cd jarvis/desktop
 npm ci
 npm run dev
 ```
@@ -28,7 +28,7 @@ npm run dev
 ## Build Windows installers
 
 ```bash
-cd /home/runner/work/Assistantx/Assistantx/jarvis/desktop
+cd jarvis/desktop
 npm ci
 npm run dist:win:all
 ```
@@ -53,7 +53,7 @@ Jarvis Desktop uses `electron-updater` in `main.js` with GitHub publish metadata
   - `install-update`
 
 Release assets are published via:
-- `/home/runner/work/Assistantx/Assistantx/.github/workflows/build-jarvis.yml`
+- `.github/workflows/build-jarvis.yml`
 
 ## Runtime endpoints and sidecar
 

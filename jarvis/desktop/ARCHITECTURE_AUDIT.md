@@ -1,9 +1,9 @@
 # Jarvis Desktop Architecture Audit (Full Repo Scope)
 
 This audit covers:
-- `/home/runner/work/Assistantx/Assistantx/jarvis/desktop`
-- `/home/runner/work/Assistantx/Assistantx/ai-agent`
-- `/home/runner/work/Assistantx/Assistantx/.github/workflows/build-jarvis.yml`
+- `jarvis/desktop`
+- `ai-agent`
+- `.github/workflows/build-jarvis.yml`
 
 ## 1) Runtime ownership boundaries
 
