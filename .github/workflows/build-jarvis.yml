@@ -134,18 +134,23 @@ jobs:
             exit 1
           }
 
-          $latest = Get-Content $latestPath -Raw | ConvertFrom-Yaml
-          if (-not $latest) {
+          $latestRaw = Get-Content $latestPath -Raw
+          if ([string]::IsNullOrWhiteSpace($latestRaw)) {
             Write-Error "Unable to parse latest.yml"
             exit 1
           }
 
           $candidateFiles = @()
-          if ($latest.path) { $candidateFiles += [string]$latest.path }
-          if ($latest.files) {
-            foreach ($fileEntry in $latest.files) {
-              if ($fileEntry.url) { $candidateFiles += [string]$fileEntry.url }
-            }
+          $pathMatches = [regex]::Matches($latestRaw, '(?m)^\s*path:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          foreach ($match in $pathMatches) {
+            $value = $match.Groups['value'].Value.Trim()
+            if ($value) { $candidateFiles += $value }
+          }
+
+          $urlMatches = [regex]::Matches($latestRaw, '(?m)^\s*url:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          foreach ($match in $urlMatches) {
+            $value = $match.Groups['value'].Value.Trim()
+            if ($value) { $candidateFiles += $value }
           }
 
           if ($candidateFiles.Count -eq 0) {
