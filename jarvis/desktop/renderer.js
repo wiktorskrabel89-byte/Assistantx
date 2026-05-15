@@ -393,7 +393,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (!updateStatusNode) return;
 
 		const detail = payload?.detail ? `${payload.status}: ${payload.detail}` : payload?.status || 'idle';
-		updateStatusNode.textContent = detail;
+		const reasonLine = payload?.reason ? `\nreason: ${payload.reason}` : '';
+		updateStatusNode.textContent = `${detail}${reasonLine}`;
 
 		if (installUpdateButton) {
 			installUpdateButton.hidden = !payload?.downloaded;

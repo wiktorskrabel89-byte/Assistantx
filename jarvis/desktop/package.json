@@ -87,10 +87,8 @@
     },
     "publish": [
       {
-        "provider": "github",
-        "owner": "wiktorskrabel89-byte",
-        "repo": "Assistantx",
-        "releaseType": "release"
+        "provider": "generic",
+        "url": "https://updates.assistantx.pl/stable"
       }
     ]
   },

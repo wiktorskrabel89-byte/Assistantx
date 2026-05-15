@@ -196,9 +196,116 @@ function getJarvisWebBaseUrl() {
 }
 
 // ── electron-updater integration ─────────────────────────────────────────────
-// autoUpdater reads the publish config from package.json (GitHub provider,
-// wiktorskrabel89-byte/Assistantx) and handles detection, download, and install.
+// autoUpdater reads publish config from package.json (generic/public feed in
+// production) and handles detection, download, and install.
 let _autoUpdater = null;
+let _updaterPublishConfig = null;
+
+function getUpdaterPublishConfig() {
+  if (_updaterPublishConfig) return _updaterPublishConfig;
+  try {
+    const pkg = require('./package.json');
+    const publish = Array.isArray(pkg?.build?.publish) ? pkg.build.publish : [];
+    const first = publish[0] || {};
+    _updaterPublishConfig = {
+      provider: String(first.provider || 'unknown'),
+      url: typeof first.url === 'string' ? first.url : '',
+      owner: typeof first.owner === 'string' ? first.owner : '',
+      repo: typeof first.repo === 'string' ? first.repo : '',
+      releaseType: typeof first.releaseType === 'string' ? first.releaseType : '',
+    };
+  } catch {
+    _updaterPublishConfig = {
+      provider: 'unknown',
+      url: '',
+      owner: '',
+      repo: '',
+      releaseType: '',
+    };
+  }
+  return _updaterPublishConfig;
+}
+
+function buildUpdaterContext(updater) {
+  const publish = getUpdaterPublishConfig();
+  return {
+    appVersion: app.getVersion(),
+    packaged: app.isPackaged,
+    arch: process.arch,
+    platform: process.platform,
+    channel: String(updater?.channel || 'latest'),
+    provider: publish.provider,
+    feedUrl: publish.url || null,
+    githubOwner: publish.owner || null,
+    githubRepo: publish.repo || null,
+    githubReleaseType: publish.releaseType || null,
+  };
+}
+
+function toUpdaterErrorMetadata(err) {
+  const message = String(err?.message || err || 'Unknown updater error');
+  const code = typeof err?.code === 'string' || typeof err?.code === 'number'
+    ? String(err.code)
+    : null;
+  const statusCodeRaw = err?.statusCode ?? err?.status ?? err?.response?.status;
+  const statusCode = Number.isFinite(Number(statusCodeRaw)) ? Number(statusCodeRaw) : null;
+  const lower = `${message} ${code || ''}`.toLowerCase();
+  return {
+    message,
+    code,
+    statusCode,
+    isNetwork: /network|fetch|econnrefused|enotfound|ehostunreach|timeout|eai_again|socket hang up|etimedout/.test(lower),
+    isAuth: /401|403|unauthorized|forbidden|bad credentials|token|authentication/.test(lower) || statusCode === 401 || statusCode === 403,
+    isNoRelease: /no published versions? on github|no published releases? on github/.test(lower),
+    isMetadataIssue: /latest\.yml|yaml|cannot parse|invalid update info|blockmap|sha512|checksum/.test(lower),
+  };
+}
+
+function classifyUpdaterFailure(errorMeta, updaterContext) {
+  if (errorMeta.isNoRelease) {
+    return {
+      status: 'up-to-date',
+      health: 'healthy',
+      severity: 'info',
+      reason: 'no-published-release',
+      detail: 'No published update release was found yet.',
+    };
+  }
+  if (errorMeta.isNetwork) {
+    return {
+      status: 'unavailable',
+      health: 'degraded',
+      severity: 'warn',
+      reason: 'network-unavailable',
+      detail: 'Update check is temporarily unavailable (network).',
+    };
+  }
+  if (errorMeta.isAuth || (updaterContext.provider === 'github' && errorMeta.statusCode === 404)) {
+    return {
+      status: 'error',
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'feed-auth-or-permission',
+      detail: 'Update feed authentication/permission failed. Verify feed visibility and credentials.',
+    };
+  }
+  if (errorMeta.isMetadataIssue || errorMeta.statusCode === 404) {
+    return {
+      status: 'error',
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'feed-metadata-invalid-or-missing',
+      detail: 'Update metadata is missing or invalid (latest.yml / artifact mismatch).',
+    };
+  }
+  return {
+    status: 'error',
+    health: 'unavailable',
+    severity: 'error',
+    reason: 'updater-error',
+    detail: `Update error: ${errorMeta.message}`,
+  };
+}
 
 function getAutoUpdater() {
   if (_autoUpdater) return _autoUpdater;
@@ -207,27 +314,40 @@ function getAutoUpdater() {
     autoUpdater.autoDownload = false; // ask first, download on demand
     autoUpdater.autoInstallOnAppQuit = true;
 
-    // Authenticate GitHub requests so the updater works with private repos and
-    // avoids spurious 404s once a release is published.
+    // Optional auth for GitHub provider only.
+    const publish = getUpdaterPublishConfig();
     const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
-    if (ghToken) {
+    if (publish.provider === 'github' && ghToken) {
       autoUpdater.requestHeaders = { Authorization: `token ${ghToken}` };
     }
 
     startupDiagnostics.setComponent('updater', 'healthy', 'Updater initialized.');
-    startupDiagnostics.pushEvent('updater', 'info', 'Updater initialized.');
+    startupDiagnostics.pushEvent('updater', 'info', 'Updater initialized.', {
+      ...buildUpdaterContext(autoUpdater),
+      hasGithubToken: Boolean(ghToken),
+    });
     telemetryBus.publish('startup.healthy');
     emitDesktopHealth();
 
     autoUpdater.on('checking-for-update', () => {
-      emitUpdateStatus('checking', 'Checking for updates…', { downloaded: false });
+      const context = buildUpdaterContext(autoUpdater);
+      startupDiagnostics.pushEvent('updater', 'info', 'Checking for update.', context);
+      emitUpdateStatus('checking', 'Checking for updates…', { downloaded: false, diagnostics: context });
     });
 
     autoUpdater.on('update-available', (info) => {
+      const context = buildUpdaterContext(autoUpdater);
+      startupDiagnostics.setComponent('updater', 'healthy', `Update ${info.version} is available.`);
+      startupDiagnostics.pushEvent('updater', 'info', 'Update available.', {
+        ...context,
+        availableVersion: String(info.version || ''),
+      });
+      emitDesktopHealth();
       emitUpdateStatus('update-available', `Update ${info.version} available.`, {
         downloaded: false,
         version: info.version,
         releaseNotes: String(info.releaseNotes || info.releaseName || ''),
+        diagnostics: context,
       });
       const notes = String(info.releaseNotes || '').trim().slice(0, 1500);
       dialog.showMessageBox(win ?? null, {
@@ -257,7 +377,16 @@ function getAutoUpdater() {
     });
 
     autoUpdater.on('update-not-available', () => {
-      emitUpdateStatus('up-to-date', 'Jarvis is already up to date.', { downloaded: false });
+      const context = buildUpdaterContext(autoUpdater);
+      startupDiagnostics.setComponent('updater', 'healthy', 'No update available.');
+      startupDiagnostics.pushEvent('updater', 'info', 'No update available.', context);
+      telemetryBus.publish('startup.healthy');
+      emitDesktopHealth();
+      emitUpdateStatus('up-to-date', 'Jarvis is already up to date.', {
+        downloaded: false,
+        reason: 'up-to-date',
+        diagnostics: context,
+      });
     });
 
     autoUpdater.on('download-progress', (progress) => {
@@ -273,30 +402,23 @@ function getAutoUpdater() {
     });
 
     autoUpdater.on('error', (err) => {
-      const msg = err?.message || String(err);
-      console.warn('[updater] autoUpdater error:', msg);
-      // A 404 means the repository has no published release yet — treat it as
-      // "nothing to update" rather than a hard error so the UI stays green.
-      const isNoRelease = /404|no published|not found/i.test(msg);
-      if (isNoRelease) {
-        startupDiagnostics.setComponent('updater', 'healthy', 'No published release found — app is up to date.');
-        startupDiagnostics.pushEvent('updater', 'info', 'No release published yet.', { message: msg });
-        telemetryBus.publish('startup.healthy');
-        emitDesktopHealth();
-        emitUpdateStatus('up-to-date', 'Jarvis is up to date (no release published yet).', { downloaded: false });
-        return;
-      }
-      // Treat network/endpoint failures as transient rather than hard errors.
-      const isTransient = /network|fetch|econnrefused|enotfound|ehostunreach|timeout/i.test(msg);
-      startupDiagnostics.setComponent('updater', isTransient ? 'degraded' : 'unavailable', msg);
-      startupDiagnostics.pushEvent('updater', isTransient ? 'warn' : 'error', 'Updater emitted error event.', { message: msg });
-      telemetryBus.publish(isTransient ? 'startup.degraded' : 'startup.unavailable');
+      const errorMeta = toUpdaterErrorMetadata(err);
+      const context = buildUpdaterContext(autoUpdater);
+      const classification = classifyUpdaterFailure(errorMeta, context);
+      console.warn('[updater] autoUpdater error:', errorMeta.message);
+      startupDiagnostics.setComponent('updater', classification.health, classification.detail);
+      startupDiagnostics.pushEvent('updater', classification.severity, 'Updater emitted error event.', {
+        ...context,
+        ...errorMeta,
+        classification: classification.reason,
+      });
+      telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : classification.health === 'healthy' ? 'startup.healthy' : 'startup.unavailable');
       emitDesktopHealth();
-      emitUpdateStatus(
-        isTransient ? 'unavailable' : 'error',
-        isTransient ? 'Update check is temporarily unavailable (network).' : `Update error: ${msg}`,
-        { downloaded: false },
-      );
+      emitUpdateStatus(classification.status, classification.detail, {
+        downloaded: false,
+        reason: classification.reason,
+        diagnostics: context,
+      });
     });
 
     _autoUpdater = autoUpdater;
@@ -325,21 +447,46 @@ function checkForUpdates() {
     return Promise.resolve({ ok: false, reason: 'updater-unavailable' });
   }
   try {
+    const context = buildUpdaterContext(updater);
+    startupDiagnostics.pushEvent('updater', 'info', 'Manual update check requested.', context);
     updater.checkForUpdates().catch((err) => {
-      console.warn('[updater] checkForUpdates failed:', err.message);
-      startupDiagnostics.setComponent('updater', 'degraded', `Check for updates failed: ${err.message}`);
-      startupDiagnostics.pushEvent('updater', 'warn', 'checkForUpdates failed.', { message: err.message });
-      telemetryBus.publish('startup.degraded');
+      const errorMeta = toUpdaterErrorMetadata(err);
+      const classification = classifyUpdaterFailure(errorMeta, context);
+      console.warn('[updater] checkForUpdates failed:', errorMeta.message);
+      startupDiagnostics.setComponent('updater', classification.health, `Check for updates failed: ${classification.detail}`);
+      startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates failed.', {
+        ...context,
+        ...errorMeta,
+        classification: classification.reason,
+      });
+      telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : classification.health === 'healthy' ? 'startup.healthy' : 'startup.unavailable');
       emitDesktopHealth();
+      emitUpdateStatus(classification.status, classification.detail, {
+        downloaded: false,
+        reason: classification.reason,
+        diagnostics: context,
+      });
     });
     return Promise.resolve({ ok: true });
   } catch (err) {
-    console.warn('[updater] checkForUpdates threw:', err.message);
-    startupDiagnostics.setComponent('updater', 'unavailable', `Update check threw: ${err.message}`);
-    startupDiagnostics.pushEvent('updater', 'error', 'checkForUpdates threw.', { message: err.message });
+    const errorMeta = toUpdaterErrorMetadata(err);
+    const context = buildUpdaterContext(updater);
+    const classification = classifyUpdaterFailure(errorMeta, context);
+    console.warn('[updater] checkForUpdates threw:', errorMeta.message);
+    startupDiagnostics.setComponent('updater', classification.health, `Update check threw: ${classification.detail}`);
+    startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates threw.', {
+      ...context,
+      ...errorMeta,
+      classification: classification.reason,
+    });
     telemetryBus.publish('startup.unavailable');
     emitDesktopHealth();
-    return Promise.resolve({ ok: false, reason: err.message });
+    emitUpdateStatus(classification.status, classification.detail, {
+      downloaded: false,
+      reason: classification.reason,
+      diagnostics: context,
+    });
+    return Promise.resolve({ ok: false, reason: errorMeta.message });
   }
 }
 

@@ -2,34 +2,44 @@
 
 ## Prerequisites
 
-Before `electron-updater` can detect new versions the GitHub release feed
-(`releases.atom`) must contain at least one published release.  Until that
-happens electron-updater receives a 404, which the app now treats as
-"nothing to update" rather than an error.
+The source repository is private, but end-user updates must be served from a
+public generic feed:
 
-## First release
-
-```bash
-# Build and publish a release from a tagged commit.
-# electron-builder will create the GitHub release, upload the installer
-# artefacts, and — critically — upload latest.yml which electron-updater
-# uses to compare versions.
-GH_TOKEN=<your-token> npm run dist:win:public
+```
+Private GitHub repo (CI/CD) -> Public update feed -> electron-updater clients
 ```
 
-Make sure the tag matches `version` in `package.json` (e.g. `v0.1.0`).
+Configured updater feed:
 
-## Authentication
+- `https://updates.assistantx.pl/stable`
 
-Set the `GH_TOKEN` (or `GITHUB_TOKEN`) environment variable on machines that
-build / run packaged versions of Jarvis.  The desktop app reads this variable
-at runtime and passes it as the `Authorization` header to electron-updater so
-that update checks succeed against private repositories.
+## Required artifacts in the public feed
 
-## Subsequent releases
+For each release, publish these files to the same feed directory:
 
-1. Bump `version` in `jarvis/desktop/package.json`.
-2. Commit, tag, and push.
-3. Run `GH_TOKEN=<token> npm run dist:win:public`.
-4. The new `latest.yml` will be picked up by running Jarvis instances on the
-   next update check (≈15 seconds after launch).
+- `latest.yml`
+- `JarvisSetup-x64.exe`
+- `JarvisSetup-x64.exe.blockmap`
+- `JarvisSetup-arm64.exe`
+- `JarvisSetup-arm64.exe.blockmap`
+
+`latest.yml` must reference exact filenames that actually exist in that folder.
+
+## Build and publish
+
+1. Bump `version` in `jarvis/desktop/package.json` (or let CI bump it).
+2. Build installers and updater metadata (`latest.yml`) in CI.
+3. Publish installer artifacts and `latest.yml` to:
+   - GitHub release (optional mirror/internal traceability), and
+   - public feed path `https://updates.assistantx.pl/stable` (required for app updates).
+4. Verify packaged app update detection against a lower installed version.
+
+## Pre-ship updater verification checklist
+
+- [ ] Packaged app (not dev mode) shows real app version.
+- [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
+- [ ] On feed errors (auth/network/metadata), UI shows actionable degraded/unavailable reason.
+- [ ] `latest.yml` exists and parses cleanly.
+- [ ] Every file referenced in `latest.yml` exists in the same feed directory.
+- [ ] Download path works (`update-available` -> `downloading` -> `ready-to-install`).
+- [ ] Install path works on restart (`quitAndInstall` / install-on-quit).
