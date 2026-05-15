@@ -46,7 +46,8 @@ Artifacts are written to `jarvis/desktop/dist/`:
 
 ## Update model (current)
 
-Jarvis Desktop uses `electron-updater` in `main.js` with GitHub publish metadata from desktop `package.json`.
+Jarvis Desktop uses `electron-updater` in `main.js` with a generic public feed
+configured in desktop `package.json` (`https://updates.assistantx.pl/stable`).
 
 - Dev mode: updates are disabled.
 - Packaged mode: updater checks, prompts, downloads, and installs.

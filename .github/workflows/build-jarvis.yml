@@ -79,13 +79,14 @@ jobs:
             "2. Run it — Windows may warn about an unsigned binary; click *More info → Run anyway*.",
             "3. Jarvis will start and connect to your AssistantX backend automatically.",
             "",
-            "**Release validation checklist:**",
-            "- [ ] Repo baseline (`npm run lint`, `npm test -- --runInBand`, `npm run build`)",
-            "- [ ] Desktop smoke (`jarvis/desktop`: `npm ci`, `npm run dev`)",
-            "- [ ] Packaged smoke (startup/tray, launcher, account, updater flow)",
-            "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `latest.yml`, `*.blockmap`)",
-            "- [ ] Pre-existing/unrelated failures documented (if any)"
-          ) -join "`n"
+             "**Release validation checklist:**",
+             "- [ ] Repo baseline (`npm run lint`, `npm test -- --runInBand`, `npm run build`)",
+             "- [ ] Desktop smoke (`jarvis/desktop`: `npm ci`, `npm run dev`)",
+             "- [ ] Packaged smoke (startup/tray, launcher, account, updater flow)",
+             "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `latest.yml`, `*.blockmap`)",
+             "- [ ] Public update feed sync verification (`https://updates.assistantx.pl/stable`: `latest.yml` + referenced files)",
+             "- [ ] Pre-existing/unrelated failures documented (if any)"
+           ) -join "`n"
 
           $body | Set-Content -Path "changelog_body.txt" -Encoding UTF8
           Write-Host "Changelog written to changelog_body.txt"
@@ -122,6 +123,44 @@ jobs:
       - name: List dist directory
         working-directory: jarvis/desktop
         run: dir dist
+
+      - name: Validate updater metadata and referenced artifacts
+        shell: pwsh
+        working-directory: jarvis/desktop
+        run: |
+          $latestPath = Join-Path (Get-Location) "dist/latest.yml"
+          if (-not (Test-Path $latestPath)) {
+            Write-Error "Missing updater metadata: $latestPath"
+            exit 1
+          }
+
+          $latest = Get-Content $latestPath -Raw | ConvertFrom-Yaml
+          if (-not $latest) {
+            Write-Error "Unable to parse latest.yml"
+            exit 1
+          }
+
+          $candidateFiles = @()
+          if ($latest.path) { $candidateFiles += [string]$latest.path }
+          if ($latest.files) {
+            foreach ($fileEntry in $latest.files) {
+              if ($fileEntry.url) { $candidateFiles += [string]$fileEntry.url }
+            }
+          }
+
+          if ($candidateFiles.Count -eq 0) {
+            Write-Error "latest.yml does not contain path/files entries."
+            exit 1
+          }
+
+          foreach ($candidate in ($candidateFiles | Select-Object -Unique)) {
+            $artifactPath = Join-Path (Join-Path (Get-Location) "dist") $candidate
+            if (-not (Test-Path $artifactPath)) {
+              Write-Error "latest.yml references missing artifact: $candidate"
+              exit 1
+            }
+            Write-Host "Verified updater artifact: $candidate"
+          }
 
       - name: Upload x64 installer artifact
         uses: actions/upload-artifact@v4
