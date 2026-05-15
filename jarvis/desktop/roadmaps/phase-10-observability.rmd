@@ -1,0 +1,35 @@
+# Phase 10 — Observability
+
+## Vision
+Provide end-to-end operational visibility for AI routing, orchestration, tools, and runtime health.
+
+## Scope boundaries
+- AI decision logs
+- Tool execution logs and latency metrics
+- Error and retry analytics
+- Crash and startup diagnostics
+
+## Dependencies on Phase 1
+- Event bus and runtime state store
+- Router telemetry hooks
+- Structured tool execution events
+
+## Security constraints
+- Local-first defaults
+- PII-safe log redaction
+- Explicit opt-in for remote diagnostics
+
+## Rollout gates
+- Internal dashboards and alert thresholds
+- Redaction validation
+- Performance overhead budget checks
+
+## Success criteria
+- Actionable traces for failed tasks
+- Reliable latency/cost trend visibility
+- Diagnosable provider failovers
+
+## Risks
+- Over-collection of sensitive data
+- Excessive telemetry overhead
+- Inconsistent event schemas across modules

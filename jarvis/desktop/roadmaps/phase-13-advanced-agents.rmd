@@ -1,0 +1,34 @@
+# Phase 13 — Advanced Agents
+
+## Vision
+Enable long-running autonomous agent systems with robust verification and recovery.
+
+## Scope boundaries
+- Multi-agent orchestration
+- Persistent workflows and supervision
+- Self-healing retry and recovery loops
+
+## Dependencies on Phase 1
+- Orchestration state machine
+- Structured tools and verification gates
+- Recovery layer and runtime state tracking
+
+## Security constraints
+- Permission-gated autonomous actions
+- Full auditability of agent decisions
+- Sandbox isolation for risky execution steps
+
+## Rollout gates
+- Agent simulation suites
+- Bounded autonomy policies
+- Incident response and rollback playbooks
+
+## Success criteria
+- Agents complete multi-step goals reliably
+- Verification catches unsafe/incorrect actions
+- Recovery limits cascading failures
+
+## Risks
+- Feedback loop instability
+- Tool misuse under ambiguous intent
+- Resource starvation from long-running tasks

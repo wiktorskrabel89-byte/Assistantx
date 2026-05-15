@@ -1,0 +1,35 @@
+# Phase 11 — UI Rewrite
+
+## Vision
+Migrate desktop UI to a maintainable component architecture aligned with orchestrated runtime state.
+
+## Scope boundaries
+- Componentized view model
+- State-driven orchestration UI
+- Accessibility and interaction quality
+- No provider/routing core rewrites
+
+## Dependencies on Phase 1
+- Stable API surfaces (`jarvisApi` + `jarvisApiV2`)
+- Runtime state snapshots
+- Event bus stream/status events
+
+## Security constraints
+- CSP-compliant rendering
+- No direct privileged API access from UI
+- Strict preload bridge boundaries
+
+## Rollout gates
+- Feature parity checks with legacy UI
+- Incremental tab/panel migration
+- Regression and usability validation
+
+## Success criteria
+- Reduced UI coupling to backend internals
+- Improved maintainability and testability
+- No degradation of critical desktop flows
+
+## Risks
+- UI parity gaps during migration
+- Increased temporary complexity from dual UI paths
+- Performance regressions from rendering churn

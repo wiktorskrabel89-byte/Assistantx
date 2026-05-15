@@ -11,6 +11,7 @@
 'use strict';
 
 const { contextBridge, ipcRenderer } = require('electron');
+const { buildJarvisApiV2 } = require('./electron/preload/capabilities');
 
 // ── IPC channel allow-lists ───────────────────────────────────────────────────
 const ALLOWED_INVOKE = new Set([
@@ -189,3 +190,64 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     synthesize: (text, options) => voiceGateway.synthesize(text, options),
   } : null,
 });
+
+const jarvisApiV2 = buildJarvisApiV2({
+  getToken,
+  backend: {
+    connectToBackend,
+    executeStructuredCommand,
+    getLocalStateSnapshot,
+    onMessage,
+    onStatus,
+    queuePromptExecution,
+  },
+  localState: {
+    addSchedule,
+    getSchedules,
+    syncToCloud,
+    loadFromCloud,
+  },
+  scheduler: {
+    startScheduler,
+  },
+  accounts: {
+    getAccountSession,
+    setAccountSession,
+    clearAccountSession,
+    getLinkedAccounts,
+    refreshSessionIfNeeded,
+  },
+  runtime: {
+    getJarvisApiUrl,
+    getJarvisWebUrl,
+    setJarvisWebUrl,
+  },
+  sidecar: sidecarBridge ? {
+    on(event, listener) {
+      sidecarBridge.on(event, listener);
+      return () => sidecarBridge.removeListener(event, listener);
+    },
+    configure: (settings) => sidecarBridge.configure(settings),
+    setListeningForCommand: (active) => sidecarBridge.setListeningForCommand(active),
+    startAudioCapture: () => sidecarBridge.startAudioCapture(),
+    stopAudioCapture: () => sidecarBridge.stopAudioCapture(),
+    requestIntentParse: (text, requestId) => sidecarBridge.requestIntentParse(text, requestId),
+    requestTts: (text, requestId) => sidecarBridge.requestTts(text, requestId),
+    connect: () => sidecarBridge.connect(),
+    isCapturing: () => Boolean(sidecarBridge._capturing),
+  } : null,
+  voiceGateway: voiceGateway ? {
+    on(event, listener) {
+      voiceGateway.on(event, listener);
+      return () => voiceGateway.removeListener(event, listener);
+    },
+    configure: (settings) => voiceGateway.configure(settings),
+    connect: () => voiceGateway.connect(),
+    startAudioCapture: () => voiceGateway.startAudioCapture(),
+    stopAudioCapture: () => voiceGateway.stopAudioCapture(),
+    setListeningForCommand: (active) => voiceGateway.setListeningForCommand(active),
+    synthesize: (text, options) => voiceGateway.synthesize(text, options),
+  } : null,
+});
+
+contextBridge.exposeInMainWorld('jarvisApiV2', jarvisApiV2);

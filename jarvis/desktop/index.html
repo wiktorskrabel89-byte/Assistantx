@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https: http: ws: wss:; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'">
   <title>Jarvis Desktop</title>
   <style>
     :root {
@@ -764,16 +765,6 @@
     </main>
   </div>
   <script src="renderer.js"></script>
-  <script>
-    // Hide the empty-state placeholder once the first real message appears
-    const logEl = document.getElementById('log');
-    const emptyEl = document.getElementById('log-empty');
-    if (logEl && emptyEl) {
-      const obs = new MutationObserver(() => {
-        emptyEl.hidden = !!logEl.querySelector('.message');
-      });
-      obs.observe(logEl, { childList: true });
-    }
-  </script>
+  <script src="log-empty-state.js"></script>
 </body>
 </html>
