@@ -1,0 +1,35 @@
+# Phase 09 — Multi-Device System
+
+## Vision
+Secure multi-device AssistantX access with encrypted transport and controlled remote actions.
+
+## Scope boundaries
+- Device identity and pairing lifecycle
+- Encrypted peer connectivity and policy checks
+- Remote session orchestration and notifications
+- No deep UI rewrite in this phase
+
+## Dependencies on Phase 1
+- IPC permissions and audit layer
+- Router/orchestrator contracts
+- Tool execution safety boundaries
+
+## Security constraints
+- End-to-end encrypted channels
+- Device trust and revocation controls
+- Least-privilege remote command scopes
+
+## Rollout gates
+- Internal alpha with trusted devices
+- Session replay and abuse simulations
+- Gradual rollout with telemetry checkpoints
+
+## Success criteria
+- Stable remote command execution
+- Revocation effective within one session window
+- No permission bypass in remote mode
+
+## Risks
+- Session hijacking complexity
+- Network instability and reconnect storms
+- Latency regressions on low-bandwidth links
