@@ -828,14 +828,7 @@ function parseCallbackUrl(url, loginWin, resolve) {
     const hashParams = new URLSearchParams(parsed.hash.slice(1));
     const accessToken = hashParams.get('access_token') || parsed.searchParams.get('access_token');
 
-    // Match dedicated callback routes OR any URL that already carries a token
-    // in the fragment (Supabase PKCE / implicit flows may land on / or /auth/confirm).
-    const isCallbackPath = parsed.pathname.includes('/auth/callback')
-      || parsed.pathname.includes('/jarvis/callback')
-      || parsed.pathname.includes('/auth/confirm');
-
-    if (!isCallbackPath && !accessToken) return;
-    if (!accessToken) return;
+    if (!accessToken) return; // not a callback URL, keep watching
 
     const jwtPayload = decodeJwtPayload(accessToken);
     const email = hashParams.get('email') || parsed.searchParams.get('email')

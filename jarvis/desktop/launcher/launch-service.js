@@ -5,7 +5,7 @@ const shell = process.versions?.electron
   : null;
 const { APP_OPEN_MAP, APP_OPEN_MAP_DARWIN } = require('../app-launch-config');
 const { normalizeKey, normalizeName } = require('../app-scanner');
-const { getMeta, setMeta } = require('./db');
+const { getMeta, setMeta, init: initDb } = require('./db');
 const {
   getCatalogFreshness,
   getAliasMap,
@@ -182,6 +182,7 @@ async function launchResolvedApp(app, options = {}) {
 }
 
 async function ensureCatalogReady(reason = 'startup') {
+  await initDb();
   const apps = listApps(5);
   if (apps.length > 0) return { appCount: apps.length, provider: 'cached' };
   return refreshCatalog({ reason });
