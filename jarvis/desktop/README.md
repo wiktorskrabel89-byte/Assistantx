@@ -65,7 +65,24 @@ Release assets are published via:
 - Optional legacy backend websocket is used **only** when `JARVIS_BACKEND_URL` is set.
 - Python sidecar websocket default: `ws://127.0.0.1:8765`
 
+### Voice provider mode
+
+- Default (recommended): `assistantx-server` (Desktop → AssistantX API → Groq/OpenRouter)
+- Optional advanced mode (future/BYOK): `desktop-direct`
+- Configure via `JARVIS_VOICE_PROVIDER_MODE` or desktop voice settings.
+
+This keeps provider keys server-side by default for routing, billing, moderation, and failover.
+
 Sidecar process (`ai-agent/main.py`) is spawned by `main.js` and renderer voice APIs are bridged through `sidecar-bridge.js` via preload exposure.
+
+## Embedded Python runtime (packaged Windows)
+
+Packaged desktop runtime now checks embedded Python candidates first:
+
+- `resources/ai-agent/runtime/python/python.exe`
+- `resources/python/python.exe`
+
+before falling back to local `venv` or system `python`.
 
 ## Related docs
 

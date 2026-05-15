@@ -28,6 +28,9 @@ function getSidecarMainPath() {
 function getPythonExecutable() {
   const sidecarDir = path.dirname(getSidecarMainPath());
   const candidates = [
+    // Embedded runtime candidates for packaged Windows builds.
+    path.join(process.resourcesPath || '', 'ai-agent', 'runtime', 'python', 'python.exe'),
+    path.join(process.resourcesPath || '', 'python', 'python.exe'),
     path.join(sidecarDir, 'venv', 'Scripts', 'python.exe'),
     path.join(sidecarDir, 'venv', 'bin', 'python'),
     'python3',

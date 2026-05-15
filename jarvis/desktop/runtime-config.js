@@ -4,6 +4,7 @@ const path = require('path');
 
 const DEFAULT_DEV_WEB_URL = 'http://localhost:3000';
 const DEFAULT_PROD_WEB_URL = 'https://assistantx.pl';
+const DEFAULT_VOICE_PROVIDER_MODE = 'assistantx-server';
 
 const CONFIG_PATH = path.join(
   process.env.APPDATA || path.join(os.homedir(), '.config'),
@@ -73,9 +74,21 @@ function getJarvisApiUrl() {
   return trimTrailingSlash(process.env.JARVIS_API_URL || getJarvisWebUrl());
 }
 
+function getVoiceProviderMode() {
+  const fromEnv = String(process.env.JARVIS_VOICE_PROVIDER_MODE || '').trim().toLowerCase();
+  if (fromEnv === 'desktop-direct') return 'desktop-direct';
+  return DEFAULT_VOICE_PROVIDER_MODE;
+}
+
+function isDesktopDirectVoiceEnabled() {
+  return getVoiceProviderMode() === 'desktop-direct';
+}
+
 module.exports = {
   getJarvisApiUrl,
   getJarvisWebUrl,
+  getVoiceProviderMode,
+  isDesktopDirectVoiceEnabled,
   isPackagedDesktopRuntime,
   setJarvisWebUrl,
 };

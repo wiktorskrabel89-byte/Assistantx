@@ -15,6 +15,8 @@ Message protocol (JSON lines sent by client → handled here):
 Events emitted to client:
   { "type": "status",           "phase": "...", "message": "..." }
   { "type": "wake_word",        "phrase": "..." }
+  { "type": "vad_event",        "phase": "speech_start|speech_end", "sampleRate": 16000 }
+  { "type": "audio_segment",    "data": "<base64 PCM int16 LE>", "format": "audio/raw", "sampleRate": 16000 }
   { "type": "stt_result",       "text": "...", "isFinal": bool }
   { "type": "tts_audio",        "requestId": "...", "data": "<base64 WAV>", "format": "wav" }
   { "type": "intent_parsed",    "requestId": "...", "intent": "...", "entities": {...}, "confidence": float }
@@ -49,6 +51,7 @@ _wake_detector: Any = None
 _stt_engine: Any = None
 _tts_engine: Any = None
 _nlp_engine: Any = None
+_vad_engine: Any = None
 
 
 def _get_wake_detector():
@@ -83,17 +86,29 @@ def _get_nlp_engine():
     return _nlp_engine
 
 
+def _get_vad_engine():
+    global _vad_engine
+    if _vad_engine is None:
+        from speech.vad import SileroVAD
+        _vad_engine = SileroVAD()
+    return _vad_engine
+
+
 # ── Per-connection audio pipeline state ──────────────────────────────────────
 class ConnectionState:
     def __init__(self) -> None:
         self.wake_word_phrase: str = "hey jarvis"
         self.language: str = "en"
         self.wake_word_enabled: bool = True
-        self.stt_enabled: bool = True
-        self.tts_enabled: bool = True
-        self.nlp_enabled: bool = True
+        self.stt_enabled: bool = False
+        self.tts_enabled: bool = False
+        self.nlp_enabled: bool = False
+        self.vad_enabled: bool = True
         self.listening_for_command: bool = False
         self.audio_buffer: list[bytes] = []
+        self.command_audio_buffer: list[bytes] = []
+        self.speech_active: bool = False
+        self.trailing_silence_frames: int = 0
         self.sample_rate: int = 16000
 
 
@@ -119,6 +134,8 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         state.nlp_enabled = bool(msg["nlpEnabled"])
     if "sampleRate" in msg:
         state.sample_rate = int(msg["sampleRate"])
+    if "vadEnabled" in msg:
+        state.vad_enabled = bool(msg["vadEnabled"])
     if "listeningForCommand" in msg:
         state.listening_for_command = bool(msg["listeningForCommand"])
     await _send(ws, {"type": "status", "phase": "configured", "message": "Settings applied."})
@@ -160,7 +177,52 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
         except Exception as exc:
             logger.debug("Wake word processing error: %s", exc)
 
-    # STT path — only when we're actively collecting a command
+    # VAD-gated command audio path (primary architecture path)
+    if state.vad_enabled and state.listening_for_command:
+        try:
+            vad = _get_vad_engine()
+            speech = await loop.run_in_executor(
+                None, vad.is_speech, pcm_bytes, state.sample_rate
+            )
+            if speech:
+                state.command_audio_buffer.append(pcm_bytes)
+                state.trailing_silence_frames = 0
+                if not state.speech_active:
+                    state.speech_active = True
+                    await _send(ws, {
+                        "type": "vad_event",
+                        "phase": "speech_start",
+                        "sampleRate": state.sample_rate,
+                    })
+            else:
+                if state.speech_active:
+                    state.command_audio_buffer.append(pcm_bytes)
+                state.trailing_silence_frames += 1
+
+            # ~0.4 s silence threshold for end-of-utterance with 100 ms chunks.
+            if state.speech_active and state.trailing_silence_frames >= 4:
+                segment = b"".join(state.command_audio_buffer).strip()
+                await _send(ws, {
+                    "type": "vad_event",
+                    "phase": "speech_end",
+                    "sampleRate": state.sample_rate,
+                })
+                if segment:
+                    encoded = base64.b64encode(segment).decode("ascii")
+                    await _send(ws, {
+                        "type": "audio_segment",
+                        "data": encoded,
+                        "format": "audio/raw",
+                        "sampleRate": state.sample_rate,
+                    })
+                state.command_audio_buffer.clear()
+                state.speech_active = False
+                state.trailing_silence_frames = 0
+                state.listening_for_command = False
+        except Exception as exc:
+            logger.debug("VAD processing error: %s", exc)
+
+    # Legacy local STT fallback path — disabled by default
     if state.stt_enabled and state.listening_for_command:
         try:
             stt = _get_stt_engine()
@@ -180,6 +242,9 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                 if is_final:
                     state.listening_for_command = False
                     state.audio_buffer.clear()
+                    state.command_audio_buffer.clear()
+                    state.speech_active = False
+                    state.trailing_silence_frames = 0
         except Exception as exc:
             logger.debug("STT processing error: %s", exc)
 
