@@ -200,6 +200,55 @@ function readTextChunk(value: unknown): string {
   return "";
 }
 
+type ThinkTagStreamState = {
+  inThinkBlock: boolean;
+  carry: string;
+};
+
+function splitTrailingThinkFragment(text: string): { safeText: string; trailingFragment: string } {
+  const fragmentStart = text.lastIndexOf("<");
+  if (fragmentStart < 0) return { safeText: text, trailingFragment: "" };
+  const trailing = text.slice(fragmentStart);
+  if (trailing.includes(">")) return { safeText: text, trailingFragment: "" };
+  const trailingLower = trailing.toLowerCase();
+  const maybeThinkFragment = "<think".startsWith(trailingLower)
+    || "</think".startsWith(trailingLower)
+    || trailingLower.startsWith("<think")
+    || trailingLower.startsWith("</think");
+  if (!maybeThinkFragment) return { safeText: text, trailingFragment: "" };
+  return { safeText: text.slice(0, fragmentStart), trailingFragment: trailing };
+}
+
+function normalizeThinkTaggedToken(token: string, state: ThinkTagStreamState): { token: string; reasoning: string } {
+  if (!token && !state.carry) return { token: "", reasoning: "" };
+  const input = `${state.carry}${token}`;
+  state.carry = "";
+
+  const tagRegex = /<\/?think\b[^>]*>/gi;
+  let visible = "";
+  let reasoning = "";
+  let cursor = 0;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = tagRegex.exec(input)) !== null) {
+    const segment = input.slice(cursor, match.index);
+    if (state.inThinkBlock) reasoning += segment;
+    else visible += segment;
+    state.inThinkBlock = /^<\s*\/\s*think\b/i.test(match[0]) ? false : true;
+    cursor = match.index + match[0].length;
+  }
+
+  const trailing = input.slice(cursor);
+  const { safeText, trailingFragment } = splitTrailingThinkFragment(trailing);
+  if (safeText) {
+    if (state.inThinkBlock) reasoning += safeText;
+    else visible += safeText;
+  }
+  state.carry = trailingFragment;
+
+  return { token: visible, reasoning };
+}
+
 function extractStreamDelta(parsed: unknown): { reasoning: string; token: string } {
   const payload = parsed as {
     choices?: Array<{
@@ -1188,6 +1237,7 @@ export const POST = async (req: Request) => {
         const decoder = new TextDecoder();
         let modelSent = false;
         let buf = "";
+        const thinkTagState: ThinkTagStreamState = { inThinkBlock: false, carry: "" };
 
         while (true) {
           if (requestSignal.aborted) return;
@@ -1215,11 +1265,13 @@ export const POST = async (req: Request) => {
               if (usage?.prompt_tokens) actualInputTokens = usage.prompt_tokens;
               if (usage?.completion_tokens) actualOutputTokens = usage.completion_tokens;
               const { reasoning, token } = extractStreamDelta(parsed);
-              if (reasoning) {
-                safeEnqueue(`data: ${JSON.stringify({ reasoning })}\n\n`);
+              const normalized = normalizeThinkTaggedToken(token, thinkTagState);
+              const mergedReasoning = `${reasoning}${normalized.reasoning}`;
+              if (mergedReasoning) {
+                safeEnqueue(`data: ${JSON.stringify({ reasoning: mergedReasoning })}\n\n`);
               }
-              if (token) {
-                safeEnqueue(`data: ${JSON.stringify({ token })}\n\n`);
+              if (normalized.token) {
+                safeEnqueue(`data: ${JSON.stringify({ token: normalized.token })}\n\n`);
               }
             } catch {
               // Ignore malformed provider chunks.
