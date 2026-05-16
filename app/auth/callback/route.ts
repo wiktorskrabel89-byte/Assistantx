@@ -56,13 +56,14 @@ export async function GET(request: Request) {
   const isDesktop = client === "jarvis-desktop" || redirectTo.startsWith("assistantx://");
   const desktopCallbackUrl = redirectTo.startsWith("assistantx://") ? new URL(redirectTo) : new URL("assistantx://auth/callback");
   if (isDesktop && data.session?.access_token) {
+    const sessionUser = data.session.user;
     const hashParams = new URLSearchParams({
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token ?? "",
       token_type: "bearer",
-      email: data.user?.email ?? "",
-      user_id: data.user?.id ?? "",
-      signed_in_at: new Date().toISOString(),
+      email: sessionUser?.email ?? "",
+      user_id: sessionUser?.id ?? "",
+      signed_in_at: sessionUser?.last_sign_in_at ?? new Date().toISOString(),
     });
     if (state) hashParams.set("state", state);
     desktopCallbackUrl.hash = hashParams.toString();

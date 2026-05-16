@@ -135,7 +135,7 @@ function parseAuthCallback(url, { expectedState = null } = {}) {
         refreshToken: allParams.get('refresh_token') || '',
         email: allParams.get('email') || jwtPayload.email || '',
         userId: allParams.get('user_id') || allParams.get('sub') || jwtPayload.sub || '',
-        signedInAt: new Date().toISOString(),
+        signedInAt: allParams.get('signed_in_at') || allParams.get('signedInAt') || new Date().toISOString(),
       }),
       state: receivedState || null,
     };
