@@ -163,4 +163,17 @@ describe("GET /auth/callback", () => {
     expect(location).toContain("email=jarvis%40example.com");
     expect(location).toContain("user_id=user-123");
   });
+
+  it("passes OAuth state through jarvis-desktop callback hash", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeMockSupabase({
+        user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
+        session: { access_token: "session-token-123", provider_token: null, expires_in: 3600 },
+      }),
+    );
+    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop", state: "desktop-state-abc" }));
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/jarvis/callback");
+    expect(location).toContain("state=desktop-state-abc");
+  });
 });
