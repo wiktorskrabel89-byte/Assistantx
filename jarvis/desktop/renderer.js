@@ -15,15 +15,20 @@ const {
 	syncToCloud,
 	loadFromCloud,
 	startScheduler,
-	getAccountSession,
-	setAccountSession,
-	clearAccountSession,
 	getLinkedAccounts,
-	refreshSessionIfNeeded,
 	getJarvisApiUrl,
 	getJarvisWebUrl,
 	setJarvisWebUrl,
 } = window.jarvisApi;
+
+const authApi = window.jarvisApi.auth || {};
+const {
+	getSession: getAccountSession,
+	refresh: refreshSessionIfNeeded,
+	signOut: signOutAccount,
+	onSessionChanged,
+	onSignedOut,
+} = authApi;
 
 const ipcRenderer = window.jarvisIpc || null;
 
@@ -1115,9 +1120,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	});
 
 	// ── Account / Cloud sync ─────────────────────────────────────────────────
-	function refreshAccountUI() {
-		const session = getAccountSession();
-		if (session?.accessToken) {
+	let currentSession = null;
+
+	function refreshAccountUI(session = currentSession) {
+		if (session?.userId || session?.email) {
 			const displayName = session.email || 'your account';
 			if (accountStatusNode) accountStatusNode.textContent = `Signed in as ${displayName}`;
 			if (accountBadge) accountBadge.textContent = `AssistantX · ${displayName}`;
@@ -1129,6 +1135,15 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (accountLoginButton) accountLoginButton.textContent = '🔑 Sign in';
 			if (accountSyncButton) accountSyncButton.disabled = true;
 		}
+	}
+
+	async function refreshCurrentSession() {
+		if (typeof getAccountSession !== 'function') {
+			currentSession = null;
+			return currentSession;
+		}
+		currentSession = await getAccountSession();
+		return currentSession;
 	}
 
 	function refreshLinkedAccounts() {
@@ -1145,6 +1160,21 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	refreshAccountUI();
 	refreshLinkedAccounts();
+
+	if (typeof onSessionChanged === 'function') {
+		onSessionChanged(({ session }) => {
+			currentSession = session || null;
+			refreshAccountUI(currentSession);
+		});
+	}
+
+	if (typeof onSignedOut === 'function') {
+		onSignedOut(() => {
+			currentSession = null;
+			refreshAccountUI(currentSession);
+			refreshLinkedAccounts();
+		});
+	}
 
 	// ── Server URL configuration ─────────────────────────────────────────────
 	// Populate the Server URL input with the current value and wire up the save
@@ -1188,21 +1218,25 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	// Cloud sync on startup if signed in
-	const initialSession = getAccountSession();
-	if (initialSession?.accessToken && apiBaseUrl) {
-		void loadFromCloud(apiBaseUrl, initialSession.accessToken).then((res) => {
-			if (res.ok) {
-				if (res.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...res.voiceSettings });
-				appendMessage(log, 'Cloud sync', 'Memory and Jarvis voice settings loaded from your account.', 'system');
-			}
-		});
-	}
+	void refreshCurrentSession().then((initialSession) => {
+		refreshAccountUI(initialSession);
+		if (initialSession?.userId && apiBaseUrl) {
+			return loadFromCloud(apiBaseUrl).then((res) => {
+				if (res.ok) {
+					if (res.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...res.voiceSettings });
+					appendMessage(log, 'Cloud sync', 'Memory and Jarvis voice settings loaded from your account.', 'system');
+				}
+				return null;
+			});
+		}
+		return null;
+	});
 
 	if (accountLoginButton) {
 		accountLoginButton.addEventListener('click', async () => {
-			const session = getAccountSession();
-			if (session?.accessToken) {
-				clearAccountSession();
+			if (currentSession?.userId || currentSession?.email) {
+				await signOutAccount();
+				currentSession = null;
 				refreshAccountUI();
 				refreshLinkedAccounts();
 				appendMessage(log, 'Account', 'Signed out of AssistantX account.');
@@ -1211,13 +1245,13 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (ipcRenderer) {
 				try {
 					const result = await ipcRenderer.invoke('open-account-login');
-					if (result?.accessToken) {
-						setAccountSession(result);
-						refreshAccountUI();
+					if (result?.userId || result?.email) {
+						currentSession = result;
+						refreshAccountUI(currentSession);
 						refreshLinkedAccounts();
-						appendMessage(log, 'Account', `Signed in as ${result.email}. Syncing memory…`);
+						appendMessage(log, 'Account', `Signed in as ${result.email || 'your account'}. Syncing memory…`);
 						if (apiBaseUrl) {
-							const syncResult = await loadFromCloud(apiBaseUrl, result.accessToken);
+							const syncResult = await loadFromCloud(apiBaseUrl);
 							if (syncResult?.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...syncResult.voiceSettings });
 						}
 					} else {
@@ -1227,8 +1261,8 @@ window.addEventListener('DOMContentLoaded', () => {
 							[
 								'Sign-in was not completed. If you saw an error in the login window, check:',
 								'(1) Supabase Auth providers (Email/Google/GitHub) are enabled in your Supabase dashboard.',
-								`(2) Supabase → Auth → URL Configuration → Redirect URLs includes ${getJarvisWebUrl()}/auth/callback.`,
-								'(3) Your OAuth app allows https://<project>.supabase.co/auth/v1/callback as the callback URL.',
+								'(2) Supabase → Auth → URL Configuration → Redirect URLs includes assistantx://auth/callback.',
+								'(3) Your OAuth app allows assistantx://auth/callback and the Supabase project callback URL.',
 							].join(' '),
 							'error',
 						);
@@ -1244,13 +1278,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	if (accountSyncButton) {
 		accountSyncButton.addEventListener('click', async () => {
-			const session = getAccountSession();
-			if (!session?.accessToken || !apiBaseUrl) {
+			if (!(currentSession?.userId || currentSession?.email) || !apiBaseUrl) {
 				appendMessage(log, 'Cloud sync', 'Sign in first to sync.', 'error');
 				return;
 			}
 			accountSyncButton.disabled = true;
-			const res = await syncToCloud(apiBaseUrl, session.accessToken, { voiceSettings });
+			const res = await syncToCloud(apiBaseUrl, { voiceSettings });
 			accountSyncButton.disabled = false;
 			appendMessage(log, 'Cloud sync', res.ok ? '✅ Memory and Jarvis voice settings synced to cloud.' : `Sync failed: ${res.reason || res.status}`, res.ok ? 'system' : 'error');
 		});
@@ -1258,8 +1291,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	if (openLinkedAccountsButton && ipcRenderer) {
 		openLinkedAccountsButton.addEventListener('click', () => {
-			const session = getAccountSession();
-			if (!session?.email) {
+			if (!currentSession?.email) {
 				appendMessage(log, 'Linked accounts', 'Sign into your AssistantX account first.', 'error');
 				return;
 			}
@@ -1312,9 +1344,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	// Periodic cloud sync (every 5 minutes) if signed in
 	setInterval(async () => {
-		const session = getAccountSession();
-		if (session?.accessToken && apiBaseUrl) {
-			await syncToCloud(apiBaseUrl, session.accessToken, { voiceSettings }).catch(() => null);
+		if ((currentSession?.userId || currentSession?.email) && apiBaseUrl) {
+			await syncToCloud(apiBaseUrl, { voiceSettings }).catch(() => null);
 		}
 	}, 5 * 60_000);
 
@@ -1322,11 +1353,11 @@ window.addEventListener('DOMContentLoaded', () => {
 	updateStatus('ready');
 	appendMessage(log, 'Jarvis Desktop', 'Shell initialized. Connecting to backend…');
 
-	// Silently refresh the session if the stored access token has expired.
-	// If the refresh fails the session is cleared and the UI reflects "Not signed in".
+	// Silently refresh the session if the stored access token is near expiry.
 	void refreshSessionIfNeeded().then((newSession) => {
+		currentSession = newSession;
+		refreshAccountUI(currentSession);
 		if (newSession === null) {
-			refreshAccountUI();
 			refreshLinkedAccounts();
 		}
 	}).catch((err) => {

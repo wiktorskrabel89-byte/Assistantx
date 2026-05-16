@@ -2,7 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
-const { decodeJwtPayload } = require('./accounts');
+const {
+  getAccountProfile,
+  getSafeAccountSession,
+  loadAccountSession,
+  refreshSessionIfNeeded,
+  setAccountSession,
+  signOutAccountSession,
+} = require('./accounts');
 const { spawn } = require('child_process');
 const launcherService = require('./launcher/launch-service');
 const launcherDb = require('./launcher/db');
@@ -13,6 +20,10 @@ const { buildSecureWebPreferences } = require('./electron/main/window-security')
 const { createMainIpcHandlers } = require('./electron/ipc/register-main-handlers');
 const { createPermissionPolicy } = require('./electron/permissions/policy');
 const { assertNoDynamicCodeExecution, sanitizeAuditValue } = require('./electron/security/guardrails');
+const { emitSessionChanged } = require('./electron/auth/events');
+const { redactUrl } = require('./electron/auth/redaction');
+const { bindAuthEvents } = require('./electron/auth/sync');
+const { generateOAuthState, parseAuthCallback, toSafeSessionView } = require('./electron/auth/validators');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
 // Ensures the launcher SQLite database is initialised before any IPC handler
@@ -45,6 +56,17 @@ function securityAudit(entry = {}) {
 }
 
 assertNoDynamicCodeExecution('main-process-guardrails', 'main.js bootstrap');
+
+const AUTH_PROTOCOL = 'assistantx';
+const AUTH_CALLBACK_URL = `${AUTH_PROTOCOL}://auth/callback`;
+const SILENT_REFRESH_INTERVAL_MS = 5 * 60_000;
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+app.setAsDefaultProtocolClient(AUTH_PROTOCOL);
 
 function getSidecarMainPath() {
   if (app.isPackaged) {
@@ -179,6 +201,8 @@ let updateState = {
   downloaded: false,
   downloadUrl: null,
 };
+let pendingAuthFlow = null;
+let silentRefreshTimer = null;
 
 function sendToRenderer(channel, payload) {
   if (win && !win.isDestroyed()) {
@@ -212,6 +236,144 @@ function emitUpdateStatus(status, detail, extra = {}) {
 
 function getJarvisWebBaseUrl() {
   return getJarvisWebUrl();
+}
+
+function getDesktopWindows() {
+  return [win, overlayWin].filter((candidate) => candidate && !candidate.isDestroyed());
+}
+
+bindAuthEvents(() => getDesktopWindows());
+
+function extractProtocolUrl(argv = []) {
+  return argv.find((arg) => typeof arg === 'string' && arg.startsWith(`${AUTH_PROTOCOL}://`)) || null;
+}
+
+function getDesktopLoginUrl(state) {
+  const loginUrl = new URL('/auth/login', getJarvisWebBaseUrl());
+  loginUrl.searchParams.set('client', 'jarvis-desktop');
+  loginUrl.searchParams.set('redirect_to', AUTH_CALLBACK_URL);
+  loginUrl.searchParams.set('state', state);
+  return loginUrl.toString();
+}
+
+function settlePendingAuth(result) {
+  if (!pendingAuthFlow || pendingAuthFlow.settled) return;
+  const flow = pendingAuthFlow;
+  pendingAuthFlow = null;
+  flow.settled = true;
+  flow.resolve(result);
+  if (flow.loginWin && !flow.loginWin.isDestroyed()) {
+    flow.loginWin.close();
+  }
+}
+
+async function consumeAuthCallback(url, source = 'browser') {
+  if (!pendingAuthFlow) return false;
+  const parsed = parseAuthCallback(url, { expectedState: pendingAuthFlow.state });
+  if (!parsed) return false;
+  if (parsed.error) {
+    console.warn(`[auth] Ignoring invalid OAuth callback from ${source}:`, redactUrl(url));
+    return true;
+  }
+  const savedSession = await setAccountSession(parsed.session, { reason: `login-${source}` });
+  settlePendingAuth(toSafeSessionView(savedSession));
+  return true;
+}
+
+function watchLoginWindow(loginWin) {
+  const inspectUrl = (url, source = 'browser') => {
+    void consumeAuthCallback(url, source).catch((error) => {
+      console.warn('[auth] Failed to process OAuth callback:', error?.message || error);
+    });
+  };
+  loginWin.webContents.on('will-redirect', (_event, url) => inspectUrl(url, 'browser-redirect'));
+  loginWin.webContents.on('did-redirect-navigation', (_event, url) => inspectUrl(url, 'browser-redirect'));
+  loginWin.webContents.on('did-navigate', (_event, url) => inspectUrl(url, 'browser-navigate'));
+  loginWin.webContents.on('did-navigate-in-page', (_event, url) => inspectUrl(url, 'browser-navigate'));
+  loginWin.webContents.on('did-finish-load', () => {
+    try {
+      inspectUrl(loginWin.webContents.getURL(), 'browser-finish-load');
+    } catch {
+      // ignore transient navigation state errors
+    }
+  });
+}
+
+function beginDesktopLogin({ parentWindow } = {}) {
+  if (pendingAuthFlow?.promise) {
+    if (pendingAuthFlow.loginWin && !pendingAuthFlow.loginWin.isDestroyed()) {
+      pendingAuthFlow.loginWin.show();
+      pendingAuthFlow.loginWin.focus();
+    }
+    return pendingAuthFlow.promise;
+  }
+
+  const state = generateOAuthState();
+  const loginUrl = getDesktopLoginUrl(state);
+  const loginWin = new BrowserWindow({
+    width: 480,
+    height: 680,
+    title: 'Sign in to AssistantX',
+    parent: parentWindow || undefined,
+    modal: true,
+    webPreferences: buildSecureWebPreferences(),
+  });
+
+  const promise = new Promise((resolve) => {
+    pendingAuthFlow = {
+      state,
+      resolve,
+      promise: null,
+      loginWin,
+      settled: false,
+    };
+  });
+  pendingAuthFlow.promise = promise;
+
+  loginWin.on('closed', () => settlePendingAuth(null));
+  watchLoginWindow(loginWin);
+  loginWin.loadURL(loginUrl);
+  return promise;
+}
+
+async function handleProtocolCallback(url, source = 'protocol') {
+  if (!url) return false;
+  const consumed = await consumeAuthCallback(url, source);
+  if (consumed && win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  }
+  return consumed;
+}
+
+async function restoreAuthSession() {
+  const storedSession = await loadAccountSession();
+  if (!storedSession?.accessToken) return null;
+  const refreshedSession = await refreshSessionIfNeeded({ reason: 'restore' });
+  if (refreshedSession?.accessToken) {
+    if (refreshedSession.accessToken === storedSession.accessToken) {
+      emitSessionChanged(refreshedSession, { reason: 'restore' });
+    }
+    return refreshedSession;
+  }
+  return null;
+}
+
+function startSilentRefreshLoop() {
+  if (silentRefreshTimer) clearInterval(silentRefreshTimer);
+  silentRefreshTimer = setInterval(() => {
+    void refreshSessionIfNeeded({ reason: 'silent-refresh' }).catch((error) => {
+      console.warn('[auth] Silent refresh failed:', error?.message || error);
+    });
+  }, SILENT_REFRESH_INTERVAL_MS);
+}
+
+function stopSilentRefreshLoop() {
+  if (silentRefreshTimer) {
+    clearInterval(silentRefreshTimer);
+    silentRefreshTimer = null;
+  }
 }
 
 // ── electron-updater integration ─────────────────────────────────────────────
@@ -552,6 +714,13 @@ function createWindow() {
     });
     sendToRenderer('auto-update-status', updateState);
     sendToRenderer('desktop-health', startupDiagnostics.snapshot());
+    const safeSession = getSafeAccountSession();
+    if (safeSession) {
+      sendToRenderer('auth:session-changed', {
+        session: safeSession,
+        reason: 'window-ready',
+      });
+    }
   });
 
   win.on('close', (event) => {
@@ -713,9 +882,11 @@ createMainIpcHandlers({
   emitUpdateStatus,
   telemetryBus,
   emitDesktopHealth,
-  getJarvisWebBaseUrl,
-  decodeJwtPayload,
-  parseCallbackUrl,
+  getAuthSessionView: () => getSafeAccountSession(),
+  refreshAuthSession: async () => toSafeSessionView(await refreshSessionIfNeeded({ reason: 'ipc-refresh' })),
+  signOutAccountSession: async (meta) => signOutAccountSession(meta),
+  getAccountProfile: async () => getAccountProfile(),
+  beginDesktopLogin,
   getMainWindow: () => win,
   getOverlayWindow: () => overlayWin,
   createLauncherOverlayWindow,
@@ -724,28 +895,22 @@ createMainIpcHandlers({
   securityAudit,
 });
 
-function parseCallbackUrl(url, loginWin, resolve, decodeJwt = decodeJwtPayload) {
-  try {
-    const parsed = new URL(url);
-    const hashParams = new URLSearchParams(parsed.hash.slice(1));
-    const accessToken = hashParams.get('access_token') || parsed.searchParams.get('access_token');
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  void handleProtocolCallback(url, 'open-url');
+});
 
-    if (!accessToken) return; // not a callback URL, keep watching
-
-    const jwtPayload = decodeJwt(accessToken);
-    const email = hashParams.get('email') || parsed.searchParams.get('email')
-      || jwtPayload?.email || '';
-    const userId = hashParams.get('sub') || hashParams.get('user_id') || parsed.searchParams.get('user_id')
-      || jwtPayload?.sub || '';
-    const refreshToken = hashParams.get('refresh_token') || parsed.searchParams.get('refresh_token') || '';
-    loginWin.close();
-    resolve({ accessToken, refreshToken, email, userId, signedInAt: new Date().toISOString() });
-  } catch {
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug('[auth] Ignoring non-callback navigation URL during login handoff.');
-    }
+app.on('second-instance', (_event, argv) => {
+  const protocolUrl = extractProtocolUrl(argv);
+  if (protocolUrl) {
+    void handleProtocolCallback(protocolUrl, 'second-instance');
   }
-}
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  }
+});
 
 app.whenReady().then(async () => {
   // Initialise the SQLite database (sql.js loads its WASM binary asynchronously)
@@ -762,12 +927,18 @@ app.whenReady().then(async () => {
     telemetryBus.publish('startup.unavailable');
   }
   emitDesktopHealth();
+  await restoreAuthSession();
+  startSilentRefreshLoop();
   startSidecar();
   createWindow();
   createLauncherOverlayWindow();
   createTray();
   registerLauncherShortcut();
   setupAutoUpdater();
+  const startupProtocolUrl = extractProtocolUrl(process.argv);
+  if (startupProtocolUrl) {
+    void handleProtocolCallback(startupProtocolUrl, 'startup-argv');
+  }
   launcherService.refreshCatalog({ reason: 'app-ready' })
     .then(() => {
       startupDiagnostics.setComponent('launcher', 'healthy', 'Launcher catalog refreshed.');
@@ -794,6 +965,7 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  stopSilentRefreshLoop();
   stopSidecar();
 });
 

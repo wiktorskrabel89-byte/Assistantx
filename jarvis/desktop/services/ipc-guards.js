@@ -1,7 +1,9 @@
 'use strict';
 
+const { redactAuthValue } = require('../electron/auth/redaction');
+
 function logInvalidIpc(channel, reason, details = {}) {
-  console.warn('[ipc][invalid]', JSON.stringify({ channel, reason, ...details }));
+  console.warn('[ipc][invalid]', JSON.stringify(redactAuthValue({ channel, reason, ...details })));
 }
 
 function invalidResult(channel, reason, details = {}) {
