@@ -400,6 +400,15 @@ function stopSilentRefreshLoop() {
 // production) and handles detection, download, and install.
 let _autoUpdater = null;
 let _updaterPublishConfig = null;
+const UPDATER_FEED_SELF_TEST_TIMEOUT_MS = 8000;
+
+function logUpdaterEvent(event, payload = {}) {
+  try {
+    console.info(`[updater] ${event}`, JSON.stringify(payload));
+  } catch {
+    console.info(`[updater] ${event}`);
+  }
+}
 
 function getUpdaterPublishConfig() {
   if (_updaterPublishConfig) return _updaterPublishConfig;
@@ -426,6 +435,12 @@ function getUpdaterPublishConfig() {
   return _updaterPublishConfig;
 }
 
+function toFeedMetadataUrl(publish) {
+  if (!publish || publish.provider !== 'generic' || !publish.url) return null;
+  const base = String(publish.url).trim().replace(/\/+$/, '');
+  return `${base}/latest.yml`;
+}
+
 function buildUpdaterContext(updater) {
   const publish = getUpdaterPublishConfig();
   return {
@@ -436,6 +451,7 @@ function buildUpdaterContext(updater) {
     channel: String(updater?.channel || 'latest'),
     provider: publish.provider,
     feedUrl: publish.url || null,
+    metadataUrl: toFeedMetadataUrl(publish),
     githubOwner: publish.owner || null,
     githubRepo: publish.repo || null,
     githubReleaseType: publish.releaseType || null,
@@ -507,6 +523,217 @@ function classifyUpdaterFailure(errorMeta, updaterContext) {
   };
 }
 
+function classifyFeedSelfTestFailure({ statusCode = null, message = '', code = null } = {}) {
+  const lower = `${message} ${code || ''}`.toLowerCase();
+  if (statusCode === 404) {
+    return {
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'feed-metadata-missing',
+      detail: 'Updater feed is reachable but latest.yml is missing (404).',
+    };
+  }
+  if (statusCode === 401 || statusCode === 403) {
+    return {
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'feed-auth-or-permission',
+      detail: 'Updater feed returned an authentication/permission error.',
+    };
+  }
+  if (statusCode !== null && statusCode >= 400) {
+    return {
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'feed-http-error',
+      detail: `Updater feed returned HTTP ${statusCode}.`,
+    };
+  }
+  if (/err_name_not_resolved|name_not_resolved|enotfound|dns|eai_again/.test(lower)) {
+    return {
+      health: 'degraded',
+      severity: 'warn',
+      reason: 'feed-dns-failure',
+      detail: 'Updater feed DNS lookup failed.',
+    };
+  }
+  if (/offline|network|fetch|econnrefused|ehostunreach|socket hang up|etimedout|timeout/.test(lower)) {
+    return {
+      health: 'degraded',
+      severity: 'warn',
+      reason: 'feed-offline',
+      detail: 'Updater feed is temporarily unreachable (offline/network).',
+    };
+  }
+  if (/yaml|latest\.yml|invalid update info|cannot parse/.test(lower)) {
+    return {
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'feed-invalid-yaml',
+      detail: 'Updater metadata is invalid (latest.yml parsing/format error).',
+    };
+  }
+  return {
+    health: 'unavailable',
+    severity: 'error',
+    reason: 'feed-self-test-failed',
+    detail: `Updater feed self-test failed: ${message || 'Unknown error'}`,
+  };
+}
+
+async function runUpdaterFeedSelfTest() {
+  const publish = getUpdaterPublishConfig();
+  const context = {
+    ...buildUpdaterContext(null),
+    phase: 'startup-self-test',
+  };
+  if (!app.isPackaged) {
+    startupDiagnostics.pushEvent('updater', 'info', 'Updater feed self-test skipped in development mode.', context);
+    logUpdaterEvent('feed-self-test:skipped-dev', context);
+    return;
+  }
+  if (publish.provider !== 'generic') {
+    const detail = `Updater provider is '${publish.provider}', expected 'generic'.`;
+    startupDiagnostics.setComponent('updater', 'unavailable', detail);
+    startupDiagnostics.pushEvent('updater', 'error', 'Updater feed self-test failed.', {
+      ...context,
+      classification: 'feed-provider-mismatch',
+      detail,
+    });
+    telemetryBus.publish('startup.unavailable');
+    emitDesktopHealth();
+    logUpdaterEvent('feed-self-test:provider-mismatch', {
+      ...context,
+      expectedProvider: 'generic',
+    });
+    return;
+  }
+
+  const metadataUrl = toFeedMetadataUrl(publish);
+  if (!metadataUrl) {
+    const detail = 'Updater feed URL is empty or invalid.';
+    startupDiagnostics.setComponent('updater', 'unavailable', detail);
+    startupDiagnostics.pushEvent('updater', 'error', 'Updater feed self-test failed.', {
+      ...context,
+      classification: 'feed-url-missing',
+      detail,
+    });
+    telemetryBus.publish('startup.unavailable');
+    emitDesktopHealth();
+    logUpdaterEvent('feed-self-test:url-missing', context);
+    return;
+  }
+
+  startupDiagnostics.pushEvent('updater', 'info', 'Updater feed self-test started.', {
+    ...context,
+    metadataUrl,
+  });
+  logUpdaterEvent('feed-self-test:start', { ...context, metadataUrl });
+
+  try {
+    const res = await fetch(metadataUrl, {
+      cache: 'no-store',
+      redirect: 'follow',
+      headers: { Accept: 'application/octet-stream,text/yaml,text/plain,*/*' },
+      signal: AbortSignal.timeout(UPDATER_FEED_SELF_TEST_TIMEOUT_MS),
+    });
+    const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+    const raw = await res.text();
+    const hasVersion = /^\s*version\s*:/m.test(raw);
+    const hasArtifactRef = /^\s*(path|url)\s*:/m.test(raw) || /^\s*files\s*:/m.test(raw);
+
+    if (!res.ok) {
+      const classification = classifyFeedSelfTestFailure({
+        statusCode: res.status,
+        message: `HTTP ${res.status} ${res.statusText}`.trim(),
+      });
+      startupDiagnostics.setComponent('updater', classification.health, classification.detail);
+      startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
+        ...context,
+        metadataUrl,
+        statusCode: res.status,
+        statusText: res.statusText,
+        classification: classification.reason,
+      });
+      telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : 'startup.unavailable');
+      emitDesktopHealth();
+      logUpdaterEvent('feed-self-test:failed-http', {
+        ...context,
+        metadataUrl,
+        statusCode: res.status,
+        classification: classification.reason,
+      });
+      return;
+    }
+
+    if (!raw.trim() || !hasVersion || !hasArtifactRef) {
+      const classification = classifyFeedSelfTestFailure({ message: 'Invalid latest.yml payload.' });
+      startupDiagnostics.setComponent('updater', classification.health, classification.detail);
+      startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
+        ...context,
+        metadataUrl,
+        classification: classification.reason,
+        contentType,
+      });
+      telemetryBus.publish('startup.unavailable');
+      emitDesktopHealth();
+      logUpdaterEvent('feed-self-test:invalid-yaml', {
+        ...context,
+        metadataUrl,
+        contentType,
+      });
+      return;
+    }
+
+    const allowedContentType = !contentType
+      || contentType.includes('yaml')
+      || contentType.includes('text/plain')
+      || contentType.includes('application/octet-stream');
+    const health = allowedContentType ? 'healthy' : 'degraded';
+    const detail = allowedContentType
+      ? 'Updater feed self-test passed.'
+      : `Updater metadata loaded but returned unexpected content-type: ${contentType}`;
+    startupDiagnostics.setComponent('updater', health, detail);
+    startupDiagnostics.pushEvent('updater', allowedContentType ? 'info' : 'warn', 'Updater feed self-test passed.', {
+      ...context,
+      metadataUrl,
+      contentType: contentType || null,
+      bytes: raw.length,
+    });
+    telemetryBus.publish(health === 'healthy' ? 'startup.healthy' : 'startup.degraded');
+    emitDesktopHealth();
+    logUpdaterEvent('feed-self-test:passed', {
+      ...context,
+      metadataUrl,
+      contentType: contentType || null,
+      bytes: raw.length,
+      health,
+    });
+  } catch (err) {
+    const classification = classifyFeedSelfTestFailure({
+      message: String(err?.message || err || 'Unknown feed self-test error'),
+      code: err?.code || err?.cause?.code || null,
+    });
+    startupDiagnostics.setComponent('updater', classification.health, classification.detail);
+    startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
+      ...context,
+      metadataUrl,
+      errorMessage: String(err?.message || err || 'Unknown feed self-test error'),
+      errorCode: err?.code || err?.cause?.code || null,
+      classification: classification.reason,
+    });
+    telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : 'startup.unavailable');
+    emitDesktopHealth();
+    logUpdaterEvent('feed-self-test:failed-exception', {
+      ...context,
+      metadataUrl,
+      errorMessage: String(err?.message || err || 'Unknown feed self-test error'),
+      errorCode: err?.code || err?.cause?.code || null,
+      classification: classification.reason,
+    });
+  }
+}
+
 function getAutoUpdater() {
   if (_autoUpdater) return _autoUpdater;
   try {
@@ -526,17 +753,28 @@ function getAutoUpdater() {
       ...buildUpdaterContext(autoUpdater),
       hasGithubToken: Boolean(ghToken),
     });
+    logUpdaterEvent('init', {
+      ...buildUpdaterContext(autoUpdater),
+      hasGithubToken: Boolean(ghToken),
+      autoDownload: autoUpdater.autoDownload,
+      autoInstallOnAppQuit: autoUpdater.autoInstallOnAppQuit,
+    });
     telemetryBus.publish('startup.healthy');
     emitDesktopHealth();
 
     autoUpdater.on('checking-for-update', () => {
       const context = buildUpdaterContext(autoUpdater);
+      logUpdaterEvent('checking-for-update', context);
       startupDiagnostics.pushEvent('updater', 'info', 'Checking for update.', context);
       emitUpdateStatus('checking', 'Checking for updates…', { downloaded: false, diagnostics: context });
     });
 
     autoUpdater.on('update-available', (info) => {
       const context = buildUpdaterContext(autoUpdater);
+      logUpdaterEvent('update-available', {
+        ...context,
+        availableVersion: String(info?.version || ''),
+      });
       startupDiagnostics.setComponent('updater', 'healthy', `Update ${info.version} is available.`);
       startupDiagnostics.pushEvent('updater', 'info', 'Update available.', {
         ...context,
@@ -578,6 +816,7 @@ function getAutoUpdater() {
 
     autoUpdater.on('update-not-available', () => {
       const context = buildUpdaterContext(autoUpdater);
+      logUpdaterEvent('update-not-available', context);
       startupDiagnostics.setComponent('updater', 'healthy', 'No update available.');
       startupDiagnostics.pushEvent('updater', 'info', 'No update available.', context);
       telemetryBus.publish('startup.healthy');
@@ -591,10 +830,20 @@ function getAutoUpdater() {
 
     autoUpdater.on('download-progress', (progress) => {
       const pct = Math.round(progress.percent || 0);
+      logUpdaterEvent('download-progress', {
+        ...buildUpdaterContext(autoUpdater),
+        percent: pct,
+        transferred: Number(progress.transferred || 0),
+        total: Number(progress.total || 0),
+      });
       emitUpdateStatus('downloading', `Downloading update… ${pct}%`, { downloaded: false });
     });
 
     autoUpdater.on('update-downloaded', (info) => {
+      logUpdaterEvent('update-downloaded', {
+        ...buildUpdaterContext(autoUpdater),
+        downloadedVersion: String(info?.version || ''),
+      });
       emitUpdateStatus('ready-to-install', `Update ${info.version} downloaded — will install on next restart.`, {
         downloaded: true,
         version: info.version,
@@ -606,6 +855,11 @@ function getAutoUpdater() {
       const context = buildUpdaterContext(autoUpdater);
       const classification = classifyUpdaterFailure(errorMeta, context);
       console.warn('[updater] autoUpdater error:', errorMeta.message);
+      logUpdaterEvent('error', {
+        ...context,
+        ...errorMeta,
+        classification: classification.reason,
+      });
       startupDiagnostics.setComponent('updater', classification.health, classification.detail);
       startupDiagnostics.pushEvent('updater', classification.severity, 'Updater emitted error event.', {
         ...context,
@@ -635,6 +889,7 @@ function getAutoUpdater() {
 
 function checkForUpdates() {
   if (!app.isPackaged) {
+    logUpdaterEvent('check-for-updates:skipped-dev', buildUpdaterContext(null));
     startupDiagnostics.setComponent('updater', 'degraded', 'Updater disabled in development mode.');
     startupDiagnostics.pushEvent('updater', 'info', 'Update check skipped in development mode.');
     telemetryBus.publish('startup.degraded');
@@ -648,11 +903,17 @@ function checkForUpdates() {
   }
   try {
     const context = buildUpdaterContext(updater);
+    logUpdaterEvent('check-for-updates:requested', context);
     startupDiagnostics.pushEvent('updater', 'info', 'Manual update check requested.', context);
     updater.checkForUpdates().catch((err) => {
       const errorMeta = toUpdaterErrorMetadata(err);
       const classification = classifyUpdaterFailure(errorMeta, context);
       console.warn('[updater] checkForUpdates failed:', errorMeta.message);
+      logUpdaterEvent('check-for-updates:failed', {
+        ...context,
+        ...errorMeta,
+        classification: classification.reason,
+      });
       startupDiagnostics.setComponent('updater', classification.health, `Check for updates failed: ${classification.detail}`);
       startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates failed.', {
         ...context,
@@ -673,6 +934,11 @@ function checkForUpdates() {
     const context = buildUpdaterContext(updater);
     const classification = classifyUpdaterFailure(errorMeta, context);
     console.warn('[updater] checkForUpdates threw:', errorMeta.message);
+    logUpdaterEvent('check-for-updates:threw', {
+      ...context,
+      ...errorMeta,
+      classification: classification.reason,
+    });
     startupDiagnostics.setComponent('updater', classification.health, `Update check threw: ${classification.detail}`);
     startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates threw.', {
       ...context,
@@ -692,6 +958,7 @@ function checkForUpdates() {
 
 function setupAutoUpdater() {
   if (!app.isPackaged) {
+    logUpdaterEvent('setup:skipped-dev', buildUpdaterContext(null));
     startupDiagnostics.setComponent('updater', 'degraded', 'Updater disabled in development mode.');
     startupDiagnostics.pushEvent('updater', 'info', 'Updater setup skipped in development mode.');
     telemetryBus.publish('startup.degraded');
@@ -699,6 +966,7 @@ function setupAutoUpdater() {
     emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
     return;
   }
+  void runUpdaterFeedSelfTest();
   getAutoUpdater(); // wire up event listeners
   setTimeout(() => {
     void checkForUpdates();
