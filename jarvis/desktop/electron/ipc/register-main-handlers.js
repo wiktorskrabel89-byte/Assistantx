@@ -275,12 +275,19 @@ function createMainIpcHandlers(deps) {
         emitDesktopHealth();
         return { ok: true };
       } catch (error) {
-        startupDiagnostics.setComponent('updater', 'degraded', `Update download failed: ${error.message}`);
-        startupDiagnostics.pushEvent('updater', 'warn', 'Update download failed.', { message: error.message });
+        const message = String(error?.message || error || 'unknown error');
+        startupDiagnostics.setComponent('updater', 'degraded', `Update download failed: ${message}`);
+        startupDiagnostics.pushEvent('updater', 'warn', 'Update download failed.', {
+          message,
+          classification: 'update-download-failed',
+        });
         telemetryBus.publish('startup.degraded');
         emitDesktopHealth();
-        emitUpdateStatus('error', `Download failed: ${error.message}`, { downloaded: false });
-        return { ok: false, reason: error.message };
+        emitUpdateStatus('error', `Download failed: ${message}`, {
+          downloaded: false,
+          reason: 'update-download-failed',
+        });
+        return { ok: false, reason: message };
       }
     },
 
@@ -290,8 +297,27 @@ function createMainIpcHandlers(deps) {
       if (!updater || !updateState.downloaded) {
         return { ok: false, reason: 'no-update-downloaded' };
       }
-      updater.quitAndInstall();
-      return { ok: true };
+      try {
+        emitUpdateStatus('installing', 'Installing downloaded update…', {
+          downloaded: true,
+        });
+        updater.quitAndInstall();
+        return { ok: true };
+      } catch (error) {
+        const message = String(error?.message || error || 'unknown error');
+        startupDiagnostics.setComponent('updater', 'unavailable', `Update install failed: ${message}`);
+        startupDiagnostics.pushEvent('updater', 'error', 'Update install failed.', {
+          message,
+          classification: 'installer-execution-failed',
+        });
+        telemetryBus.publish('startup.unavailable');
+        emitDesktopHealth();
+        emitUpdateStatus('error', `Install failed: ${message}`, {
+          downloaded: true,
+          reason: 'installer-execution-failed',
+        });
+        return { ok: false, reason: message };
+      }
     },
 
     'open-account-login': async () => {

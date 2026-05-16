@@ -167,6 +167,8 @@ jobs:
         shell: pwsh
         working-directory: jarvis/desktop
         run: |
+          $expectedVersion = "${{ steps.meta.outputs.version }}"
+          $semverRegex = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$'
           $latestPath = Join-Path (Get-Location) "dist/latest.yml"
           if (-not (Test-Path $latestPath)) {
             Write-Error "Missing updater metadata: $latestPath"
@@ -176,6 +178,35 @@ jobs:
           $latestRaw = Get-Content $latestPath -Raw
           if ([string]::IsNullOrWhiteSpace($latestRaw)) {
             Write-Error "Unable to parse latest.yml"
+            exit 1
+          }
+
+          $versionMatch = [regex]::Match($latestRaw, '(?m)^\s*version\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          if (-not $versionMatch.Success) {
+            Write-Error "latest.yml is missing version."
+            exit 1
+          }
+          $latestVersion = $versionMatch.Groups['value'].Value.Trim()
+          if ($latestVersion -notmatch $semverRegex) {
+            Write-Error "latest.yml version is not valid semver: $latestVersion"
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($expectedVersion) -or $latestVersion -ne $expectedVersion) {
+            Write-Error "latest.yml version mismatch. Expected $expectedVersion, got $latestVersion"
+            exit 1
+          }
+
+          $channelMatch = [regex]::Match($latestRaw, '(?m)^\s*channel\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          if ($channelMatch.Success) {
+            $channel = $channelMatch.Groups['value'].Value.Trim().ToLowerInvariant()
+            if ($channel -ne 'latest' -and $channel -ne 'stable') {
+              Write-Error "Stable feed must not publish non-stable channel metadata. Found channel: $channel"
+              exit 1
+            }
+          }
+
+          if ($latestVersion.Contains('-')) {
+            Write-Error "Stable feed must not publish prerelease versions. Found: $latestVersion"
             exit 1
           }
 
@@ -464,6 +495,8 @@ jobs:
       - name: Verify public generic feed metadata and artifact parity
         shell: pwsh
         run: |
+          $expectedVersion = "${{ steps.meta.outputs.version }}"
+          $semverRegex = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$'
           $feedBase = $env:UPDATER_FEED_URL.TrimEnd("/")
           if ([string]::IsNullOrWhiteSpace($feedBase)) {
             Write-Error "UPDATER_FEED_URL is empty."
@@ -472,9 +505,14 @@ jobs:
 
           $latestUrl = "$feedBase/latest.yml"
           Write-Host "Validating public updater metadata: $latestUrl"
-          $latestRes = Invoke-WebRequest -Uri $latestUrl -Method Get -TimeoutSec 30 -MaximumRedirection 5
+          $latestRes = Invoke-WebRequest -Uri $latestUrl -Method Get -TimeoutSec 30 -MaximumRedirection 5 -Headers @{ "Cache-Control" = "no-cache" }
           if ($latestRes.StatusCode -ne 200) {
             Write-Error "Public feed latest.yml returned HTTP $($latestRes.StatusCode)."
+            exit 1
+          }
+          $latestCacheControl = [string]$latestRes.Headers["Cache-Control"]
+          if ([string]::IsNullOrWhiteSpace($latestCacheControl) -or $latestCacheControl -notmatch '(?i)no-cache') {
+            Write-Error "Public latest.yml must return Cache-Control containing no-cache. Got: '$latestCacheControl'"
             exit 1
           }
           $contentType = [string]$latestRes.Headers["Content-Type"]
@@ -491,6 +529,28 @@ jobs:
           if ($latestRaw -notmatch "(?m)^\s*version\s*:") {
             Write-Error "Public feed latest.yml is missing version."
             exit 1
+          }
+          $versionMatch = [regex]::Match($latestRaw, '(?m)^\s*version\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          $latestVersion = $versionMatch.Groups['value'].Value.Trim()
+          if ($latestVersion -notmatch $semverRegex) {
+            Write-Error "Public feed latest.yml has invalid semver version: $latestVersion"
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($expectedVersion) -or $latestVersion -ne $expectedVersion) {
+            Write-Error "Public feed latest.yml version mismatch. Expected $expectedVersion, got $latestVersion"
+            exit 1
+          }
+          if ($latestVersion.Contains('-')) {
+            Write-Error "Stable public feed must not expose prerelease versions. Found: $latestVersion"
+            exit 1
+          }
+          $channelMatch = [regex]::Match($latestRaw, '(?m)^\s*channel\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          if ($channelMatch.Success) {
+            $channel = $channelMatch.Groups['value'].Value.Trim().ToLowerInvariant()
+            if ($channel -ne 'latest' -and $channel -ne 'stable') {
+              Write-Error "Stable public feed channel mismatch. Found channel: $channel"
+              exit 1
+            }
           }
 
           $candidateFiles = @()
@@ -522,6 +582,11 @@ jobs:
             }
             if ($assetHead.StatusCode -lt 200 -or $assetHead.StatusCode -ge 400) {
               Write-Error "Updater artifact not publicly accessible: $artifactUrl (HTTP $($assetHead.StatusCode))"
+              exit 1
+            }
+            $artifactCacheControl = [string]$assetHead.Headers["Cache-Control"]
+            if ($candidate -match '\.(exe|blockmap)$' -and $artifactCacheControl -match '(?i)no-cache|no-store') {
+              Write-Error "Installer artifacts should remain cacheable; got Cache-Control '$artifactCacheControl' for $candidate"
               exit 1
             }
             Write-Host "Verified public updater artifact: $artifactUrl"

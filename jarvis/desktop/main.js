@@ -401,6 +401,117 @@ function stopSilentRefreshLoop() {
 let _autoUpdater = null;
 let _updaterPublishConfig = null;
 const UPDATER_FEED_SELF_TEST_TIMEOUT_MS = 8000;
+const SEMVER_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-.]+))?(?:\+[0-9A-Za-z-.]+)?$/;
+
+function parseSemver(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(SEMVER_PATTERN);
+  if (!match) return null;
+  return {
+    raw,
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4] || '',
+  };
+}
+
+function compareSemverIdentifiers(left, right) {
+  const leftNumeric = /^\d+$/.test(left);
+  const rightNumeric = /^\d+$/.test(right);
+  if (leftNumeric && rightNumeric) {
+    const leftNum = Number(left);
+    const rightNum = Number(right);
+    if (leftNum > rightNum) return 1;
+    if (leftNum < rightNum) return -1;
+    return 0;
+  }
+  if (leftNumeric) return -1;
+  if (rightNumeric) return 1;
+  if (left > right) return 1;
+  if (left < right) return -1;
+  return 0;
+}
+
+function compareSemver(left, right) {
+  const a = parseSemver(left);
+  const b = parseSemver(right);
+  if (!a || !b) return null;
+  if (a.major !== b.major) return a.major > b.major ? 1 : -1;
+  if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
+  if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
+  if (!a.prerelease && !b.prerelease) return 0;
+  if (!a.prerelease) return 1;
+  if (!b.prerelease) return -1;
+  const aIds = a.prerelease.split('.');
+  const bIds = b.prerelease.split('.');
+  const maxLen = Math.max(aIds.length, bIds.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const aId = aIds[i];
+    const bId = bIds[i];
+    if (aId === undefined) return -1;
+    if (bId === undefined) return 1;
+    const cmp = compareSemverIdentifiers(aId, bId);
+    if (cmp !== 0) return cmp;
+  }
+  return 0;
+}
+
+function normalizeUpdaterChannel(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw || raw === 'latest' || raw === 'stable') return 'stable';
+  if (raw.includes('beta') || raw === 'prerelease') return 'beta';
+  return raw;
+}
+
+function isStableChannel(channel) {
+  return normalizeUpdaterChannel(channel) === 'stable';
+}
+
+function classifyUpdateVersionSanity({ availableVersion, currentVersion, runtimeChannel, metadataChannel }) {
+  if (!parseSemver(availableVersion)) {
+    return {
+      ok: false,
+      reason: 'feed-version-invalid',
+      detail: `Updater metadata version '${availableVersion}' is not valid semver.`,
+    };
+  }
+  if (!parseSemver(currentVersion)) {
+    return {
+      ok: false,
+      reason: 'current-version-invalid',
+      detail: `Current app version '${currentVersion}' is not valid semver.`,
+    };
+  }
+  const cmp = compareSemver(availableVersion, currentVersion);
+  if (cmp === null) {
+    return {
+      ok: false,
+      reason: 'feed-version-compare-failed',
+      detail: 'Failed to compare updater version metadata.',
+    };
+  }
+  if (cmp <= 0) {
+    return {
+      ok: false,
+      reason: 'feed-version-not-newer',
+      detail: `Updater metadata version (${availableVersion}) is not newer than current app version (${currentVersion}).`,
+    };
+  }
+
+  const stableRuntime = isStableChannel(runtimeChannel);
+  const normalizedMetadataChannel = normalizeUpdaterChannel(metadataChannel);
+  const metadataExplicitlyBeta = normalizedMetadataChannel === 'beta';
+  const isPrereleaseVersion = String(availableVersion).includes('-');
+  if (stableRuntime && (metadataExplicitlyBeta || isPrereleaseVersion)) {
+    return {
+      ok: false,
+      reason: 'feed-channel-version-mismatch',
+      detail: 'Stable updater channel received beta/prerelease metadata.',
+    };
+  }
+  return { ok: true };
+}
 
 function logUpdaterEvent(event, payload = {}) {
   try {
@@ -474,10 +585,40 @@ function toUpdaterErrorMetadata(err) {
     isAuth: /401|403|unauthorized|forbidden|bad credentials|token|authentication/.test(lower) || statusCode === 401 || statusCode === 403,
     isNoRelease: /no published versions? on github|no published releases? on github/.test(lower),
     isMetadataIssue: /latest\.yml|yaml|cannot parse|invalid update info|blockmap|sha512|checksum/.test(lower),
+    isSignatureIssue: /signature|code sign|publisher name|certificate|trust chain|unable to verify|digital signature|authenticode/.test(lower),
+    isInstallerExecutionIssue: /quitandinstall|installer|elevat|spawn|access is denied|eperm|execution failed|windows cannot access/.test(lower),
+    isDownloadIssue: /download|differential/i.test(lower),
   };
 }
 
 function classifyUpdaterFailure(errorMeta, updaterContext) {
+  if (errorMeta.isSignatureIssue) {
+    return {
+      status: 'error',
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'signature-validation-failed',
+      detail: 'Update signature verification failed. Verify Windows code signing certificate and release metadata parity.',
+    };
+  }
+  if (errorMeta.isInstallerExecutionIssue && updateState.status === 'installing') {
+    return {
+      status: 'error',
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'installer-execution-failed',
+      detail: 'Update installer execution failed after download.',
+    };
+  }
+  if (errorMeta.isDownloadIssue || updateState.status === 'downloading') {
+    return {
+      status: 'error',
+      health: 'degraded',
+      severity: 'warn',
+      reason: 'update-download-failed',
+      detail: 'Update download failed before installation.',
+    };
+  }
   if (errorMeta.isNoRelease) {
     return {
       status: 'up-to-date',
@@ -641,6 +782,10 @@ async function runUpdaterFeedSelfTest() {
     const raw = await res.text();
     const hasVersion = /^\s*version\s*:/m.test(raw);
     const hasArtifactRef = /^\s*(path|url)\s*:/m.test(raw) || /^\s*files\s*:/m.test(raw);
+    const versionMatch = raw.match(/^\s*version\s*:\s*["']?([^"'\r\n]+)["']?\s*$/m);
+    const latestVersion = versionMatch ? versionMatch[1].trim() : '';
+    const channelMatch = raw.match(/^\s*channel\s*:\s*["']?([^"'\r\n]+)["']?\s*$/m);
+    const metadataChannel = channelMatch ? channelMatch[1].trim() : 'stable';
 
     if (!res.ok) {
       const classification = classifyFeedSelfTestFailure({
@@ -685,6 +830,46 @@ async function runUpdaterFeedSelfTest() {
       return;
     }
 
+    if (!parseSemver(latestVersion)) {
+      const detail = `Updater metadata has invalid semver version: '${latestVersion || '(missing)'}'.`;
+      startupDiagnostics.setComponent('updater', 'unavailable', detail);
+      startupDiagnostics.pushEvent('updater', 'error', 'Updater feed self-test failed.', {
+        ...context,
+        metadataUrl,
+        classification: 'feed-version-invalid',
+        latestVersion: latestVersion || null,
+      });
+      telemetryBus.publish('startup.unavailable');
+      emitDesktopHealth();
+      logUpdaterEvent('feed-self-test:invalid-version', {
+        ...context,
+        metadataUrl,
+        latestVersion: latestVersion || null,
+      });
+      return;
+    }
+
+    if (isStableChannel(context.channel) && !isStableChannel(metadataChannel)) {
+      const detail = `Updater metadata channel mismatch: runtime='${context.channel}', metadata='${metadataChannel}'.`;
+      startupDiagnostics.setComponent('updater', 'unavailable', detail);
+      startupDiagnostics.pushEvent('updater', 'error', 'Updater feed self-test failed.', {
+        ...context,
+        metadataUrl,
+        classification: 'feed-channel-mismatch',
+        latestVersion,
+        metadataChannel,
+      });
+      telemetryBus.publish('startup.unavailable');
+      emitDesktopHealth();
+      logUpdaterEvent('feed-self-test:channel-mismatch', {
+        ...context,
+        metadataUrl,
+        latestVersion,
+        metadataChannel,
+      });
+      return;
+    }
+
     const allowedContentType = !contentType
       || contentType.includes('yaml')
       || contentType.includes('text/plain')
@@ -699,6 +884,8 @@ async function runUpdaterFeedSelfTest() {
       metadataUrl,
       contentType: contentType || null,
       bytes: raw.length,
+      latestVersion,
+      metadataChannel,
     });
     telemetryBus.publish(health === 'healthy' ? 'startup.healthy' : 'startup.degraded');
     emitDesktopHealth();
@@ -708,6 +895,8 @@ async function runUpdaterFeedSelfTest() {
       contentType: contentType || null,
       bytes: raw.length,
       health,
+      latestVersion,
+      metadataChannel,
     });
   } catch (err) {
     const classification = classifyFeedSelfTestFailure({
@@ -771,9 +960,37 @@ function getAutoUpdater() {
 
     autoUpdater.on('update-available', (info) => {
       const context = buildUpdaterContext(autoUpdater);
+      const availableVersion = String(info?.version || '');
+      const sanity = classifyUpdateVersionSanity({
+        availableVersion,
+        currentVersion: context.appVersion,
+        runtimeChannel: context.channel,
+        metadataChannel: info?.channel || info?.releaseChannel || context.channel,
+      });
+      if (!sanity.ok) {
+        logUpdaterEvent('update-available:rejected', {
+          ...context,
+          availableVersion,
+          classification: sanity.reason,
+        });
+        startupDiagnostics.setComponent('updater', 'unavailable', sanity.detail);
+        startupDiagnostics.pushEvent('updater', 'error', 'Update metadata validation failed.', {
+          ...context,
+          availableVersion,
+          classification: sanity.reason,
+        });
+        telemetryBus.publish('startup.unavailable');
+        emitDesktopHealth();
+        emitUpdateStatus('error', sanity.detail, {
+          downloaded: false,
+          reason: sanity.reason,
+          diagnostics: context,
+        });
+        return;
+      }
       logUpdaterEvent('update-available', {
         ...context,
-        availableVersion: String(info?.version || ''),
+        availableVersion,
       });
       startupDiagnostics.setComponent('updater', 'healthy', `Update ${info.version} is available.`);
       startupDiagnostics.pushEvent('updater', 'info', 'Update available.', {

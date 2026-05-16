@@ -60,15 +60,22 @@ Post-publish CI must verify:
 
 - `latest.yml` is reachable at `https://updates.assistantx.pl/stable/latest.yml`
 - `latest.yml` is parseable and includes `version` + artifact refs
+- `latest.yml` `version` is valid semver, matches the release build version, and
+  is stable-channel compatible (no beta/prerelease drift on stable feed)
+- `latest.yml` must return `Cache-Control` with `no-cache`
 - every artifact referenced by `latest.yml` is publicly reachable via the same
   feed directory
+- installer artifacts (`*.exe`, `*.blockmap`) stay cacheable (must not return
+  `no-cache`/`no-store`)
 
 ## Pre-ship updater verification checklist
 
 - [ ] Packaged app (not dev mode) shows real app version.
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
 - [ ] Startup updater self-test checks `latest.yml` fetch + validation and logs explicit error class (`offline`, DNS, `404`, invalid YAML, auth/permission).
+- [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection).
 - [ ] On feed errors (auth/network/metadata), UI shows actionable degraded/unavailable reason.
+- [ ] Signature validation failures are explicitly classified separately from download/metadata/install execution failures.
 - [ ] `latest.yml` exists and parses cleanly.
 - [ ] Every file referenced in `latest.yml` exists in the same feed directory.
 - [ ] Download path works (`update-available` -> `downloading` -> `ready-to-install`).
