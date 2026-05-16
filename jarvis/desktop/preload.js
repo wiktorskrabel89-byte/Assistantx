@@ -188,6 +188,7 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     stopAudioCapture: () => voiceGateway.stopAudioCapture(),
     setListeningForCommand: (active) => voiceGateway.setListeningForCommand(active),
     synthesize: (text, options) => voiceGateway.synthesize(text, options),
+    interrupt: (reason) => voiceGateway.interrupt(reason),
   } : null,
 });
 
@@ -247,6 +248,7 @@ const jarvisApiV2 = buildJarvisApiV2({
     stopAudioCapture: () => voiceGateway.stopAudioCapture(),
     setListeningForCommand: (active) => voiceGateway.setListeningForCommand(active),
     synthesize: (text, options) => voiceGateway.synthesize(text, options),
+    interrupt: (reason) => voiceGateway.interrupt(reason),
   } : null,
 });
 

@@ -420,6 +420,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	function submitPrompt() {
 		const text = input.value.trim();
 		if (!text) return;
+		voiceGateway?.interrupt?.('new-prompt');
+		if (typeof window !== 'undefined' && window.speechSynthesis) {
+			window.speechSynthesis.cancel();
+		}
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
 		appendMessage(log, 'Prompt queued', text, 'system');
 		input.value = '';
