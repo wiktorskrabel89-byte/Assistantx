@@ -42,10 +42,11 @@ Validate:
    - `latest.yml`
    - `*.blockmap`
 3. Install packaged build and verify:
-   - startup + tray
-   - launcher search + launch
-   - account login flow
-   - update check/download/install flow
+    - startup + tray
+    - launcher search + launch
+    - account login flow
+    - updater startup self-test (`latest.yml` reachability + classification in diagnostics)
+    - update check/download/install flow
 
 ## D) Sidecar checks
 
@@ -58,6 +59,12 @@ Validate sidecar bridge behavior:
 ## E) Workflow/release checks
 
 Confirm `.github/workflows/build-jarvis.yml` still matches expected desktop outputs and release tag flow (`jarvis-latest`).
+- Confirm updater topology guard still enforces `generic` provider with `https://updates.assistantx.pl/stable`.
+- Confirm CI syncs updater artifacts (`latest.yml`, `JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `*.blockmap`) to the same public feed folder.
+- Confirm post-publish CI checks:
+  - public `latest.yml` availability/content
+  - public access to every artifact referenced from `latest.yml`
+  - `jarvis-latest` visibility and required release assets
 
 ## F) Release notes / PR checklist block
 
@@ -65,4 +72,10 @@ For every desktop-impacting PR/release, include:
 - Validation status for A–E (pass/fail)
 - Any pre-existing failures (explicitly marked as unrelated)
 - Packaged-flow verification notes (startup/tray, launcher, account, updater)
+- Updater regression notes:
+  - feed endpoint health
+  - `latest.yml` validity
+  - artifact parity (`latest.yml` refs vs feed files)
+  - provider/privacy compatibility (private repo + public generic feed)
+  - correctness of updater error classification (`network unavailable` vs metadata/auth)
 - Architecture alignment note against `FINAL_AI_VOICE_ARCHITECTURE_PLAN.md` (if scope touched AI/voice routing or sidecar behavior)
