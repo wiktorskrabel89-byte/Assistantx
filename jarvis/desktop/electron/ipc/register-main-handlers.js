@@ -1,6 +1,5 @@
 'use strict';
 
-const { BrowserWindow } = require('electron');
 const {
   invalidResult,
   parseHttpUrl,
@@ -10,7 +9,6 @@ const {
 } = require('../../services/ipc-guards');
 const { withSchema } = require('./schema');
 const { registerIpcHandlers } = require('./channel-registry');
-const { buildSecureWebPreferences } = require('../main/window-security');
 
 function denied(action, reason) {
   return {
@@ -40,9 +38,11 @@ function createMainIpcHandlers(deps) {
     emitUpdateStatus,
     telemetryBus,
     emitDesktopHealth,
-    getJarvisWebBaseUrl,
-    decodeJwtPayload,
-    parseCallbackUrl,
+    getAuthSessionView,
+    refreshAuthSession,
+    signOutAccountSession,
+    getAccountProfile,
+    beginDesktopLogin,
     getMainWindow,
     getOverlayWindow,
     createLauncherOverlayWindow,
@@ -232,6 +232,10 @@ function createMainIpcHandlers(deps) {
     'get-desktop-diagnostics': () => startupDiagnostics.snapshot(),
     'get-local-telemetry': () => getLocalTelemetrySnapshot(),
     'get-app-meta': () => ({ version: app.getVersion(), packaged: app.isPackaged }),
+    'auth:get-session': () => getAuthSessionView(),
+    'auth:refresh': async () => refreshAuthSession(),
+    'auth:sign-out': async () => signOutAccountSession({ reason: 'renderer-sign-out' }),
+    'auth:get-profile': async () => getAccountProfile(),
 
     'get-displays': () => {
       const { screen } = require('electron');
@@ -291,47 +295,7 @@ function createMainIpcHandlers(deps) {
     'open-account-login': async () => {
       const auth = await permissions.authorize('open-account-login');
       if (!auth.allowed) return denied('open-account-login', auth.reason);
-      const webUrl = getJarvisWebBaseUrl();
-      const loginUrl = `${webUrl}/auth/login?client=jarvis-desktop`;
-      const mainWindow = getMainWindow();
-
-      return new Promise((resolve) => {
-        const loginWin = new BrowserWindow({
-          width: 480,
-          height: 680,
-          title: 'Sign in to AssistantX',
-          parent: mainWindow || undefined,
-          modal: true,
-          webPreferences: buildSecureWebPreferences(),
-        });
-
-        loginWin.loadURL(loginUrl);
-
-        let settled = false;
-        const finalizeResolve = (result) => {
-          if (settled) return;
-          settled = true;
-          resolve(result);
-        };
-
-        const inspectUrl = (url) => {
-          parseCallbackUrl(url, loginWin, finalizeResolve, decodeJwtPayload);
-        };
-
-        loginWin.webContents.on('will-redirect', (_event, url) => inspectUrl(url));
-        loginWin.webContents.on('did-redirect-navigation', (_event, url) => inspectUrl(url));
-        loginWin.webContents.on('did-navigate', (_event, url) => inspectUrl(url));
-        loginWin.webContents.on('did-navigate-in-page', (_event, url) => inspectUrl(url));
-        loginWin.webContents.on('did-finish-load', () => {
-          try {
-            inspectUrl(loginWin.webContents.getURL());
-          } catch {
-            // ignore transient navigation state errors
-          }
-        });
-
-        loginWin.on('closed', () => finalizeResolve(null));
-      });
+      return beginDesktopLogin({ parentWindow: getMainWindow() });
     },
   };
 

@@ -1,42 +1,25 @@
 // jarvis/desktop/accounts.js
 // Manages the Jarvis desktop account session (AssistantX / Supabase auth)
 // and the list of linked third-party accounts (GitHub, Gmail, Google Drive, etc.).
-//
-// Sessions are persisted to Electron's store via the local-state mechanism.
-// Linked account tokens are fetched from the cloud API and cached in memory
-// (never written to disk — only the cloud-side encrypted store holds tokens).
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+'use strict';
 
-const SESSION_FILE = path.join(
-  process.env.APPDATA || path.join(os.homedir(), '.config'),
-  'JarvisDesktop',
-  'session.json',
-);
+const { clearProfileCache, getProfileBundle } = require('./electron/auth/profile');
+const { clearSession, getCachedSession, loadSession, saveSession, toSafeSessionView } = require('./electron/auth/session');
+const {
+  AUTH_FAILURE,
+  REFRESH_BUFFER_SECONDS,
+  classifyAuthFailure,
+  decodeJwtPayload,
+  isTokenExpired,
+} = require('./electron/auth/validators');
+const { emitSessionChanged, emitSignedOut } = require('./electron/auth/events');
 
-// ── JWT helpers ───────────────────────────────────────────────────────────────
+// ── Linked accounts (cached in memory) ───────────────────────────────────────
+// Fetched from the cloud API; never stored locally for security.
 
-// Decodes the base64url-encoded payload section of a JWT.
-// Signature verification is intentionally omitted — the token is used only for
-// reading claims (email, exp, iss) and authorization is enforced server-side.
-function decodeJwtPayload(token) {
-  try {
-    const parts = String(token || '').split('.');
-    if (parts.length < 2) return null;
-    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-  } catch {
-    return null;
-  }
-}
-
-// Returns true when the access token's exp claim is within bufferSeconds of now.
-function isTokenExpired(accessToken, bufferSeconds = 60) {
-  const payload = decodeJwtPayload(accessToken);
-  if (!payload?.exp) return false; // cannot determine; treat as valid
-  return Date.now() / 1000 >= payload.exp - bufferSeconds;
-}
+let _linkedAccountsCache = null;
+let _lastAuthFailure = null;
 
 // Extracts the Supabase project base URL from the JWT iss claim.
 // iss is normally "https://<project>.supabase.co/auth/v1".
@@ -51,38 +34,39 @@ function getSupabaseAuthBaseUrl(accessToken) {
   }
 }
 
-// ── Session persistence ───────────────────────────────────────────────────────
+function setLastAuthFailure(classification, detail = null) {
+  _lastAuthFailure = {
+    classification,
+    detail,
+    at: new Date().toISOString(),
+  };
+}
 
-function ensureSessionDir() {
-  const dir = path.dirname(SESSION_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+function getLastAuthFailure() {
+  return _lastAuthFailure ? { ..._lastAuthFailure } : null;
 }
 
 function getAccountSession() {
-  try {
-    const raw = fs.readFileSync(SESSION_FILE, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return getCachedSession();
 }
 
-function setAccountSession(session) {
-  ensureSessionDir();
-  fs.writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2), 'utf-8');
+function getSafeAccountSession() {
+  return toSafeSessionView(getAccountSession());
 }
 
-function clearAccountSession() {
-  try {
-    fs.unlinkSync(SESSION_FILE);
-  } catch { /* already gone */ }
+async function setAccountSession(session, meta = {}) {
+  const saved = await saveSession(session);
+  setLastAuthFailure(null);
+  emitSessionChanged(saved, meta);
+  return saved;
+}
+
+async function clearAccountSession(meta = {}) {
   _linkedAccountsCache = null;
+  clearProfileCache();
+  await clearSession();
+  emitSignedOut(meta);
 }
-
-// ── Linked accounts (cached in memory) ───────────────────────────────────────
-// Fetched from the cloud API; never stored locally for security.
-
-let _linkedAccountsCache = null;
 
 function getLinkedAccounts() {
   return _linkedAccountsCache || [];
@@ -104,10 +88,6 @@ async function fetchLinkedAccounts(apiUrl, accessToken) {
   }
 }
 
-// ── OAuth actions ─────────────────────────────────────────────────────────────
-// Ask the backend to initiate an OAuth flow for a given provider.
-// The user completes it in a browser; the backend stores the resulting tokens.
-
 async function linkAccount(apiUrl, accessToken, provider) {
   if (!apiUrl || !accessToken) throw new Error('Not signed in');
   const res = await fetch(`${apiUrl}/api/jarvis/linked-accounts/${provider}/initiate`, {
@@ -118,8 +98,7 @@ async function linkAccount(apiUrl, accessToken, provider) {
     },
   });
   if (!res.ok) throw new Error(`Failed to initiate ${provider} link (HTTP ${res.status})`);
-  const data = await res.json();
-  return data; // { authUrl: string }
+  return res.json();
 }
 
 async function unlinkAccount(apiUrl, accessToken, provider) {
@@ -132,9 +111,6 @@ async function unlinkAccount(apiUrl, accessToken, provider) {
   _linkedAccountsCache = (_linkedAccountsCache || []).filter((a) => a.provider !== provider);
   return true;
 }
-
-// ── GitHub helpers ────────────────────────────────────────────────────────────
-// Perform GitHub actions on behalf of the user using their linked token.
 
 async function githubRequest(apiUrl, accessToken, ghPath, options = {}) {
   const res = await fetch(`${apiUrl}/api/jarvis/linked-accounts/github/proxy`, {
@@ -149,8 +125,6 @@ async function githubRequest(apiUrl, accessToken, ghPath, options = {}) {
   return res.json();
 }
 
-// ── Gmail helpers ─────────────────────────────────────────────────────────────
-
 async function gmailRequest(apiUrl, accessToken, action, params = {}) {
   const res = await fetch(`${apiUrl}/api/jarvis/linked-accounts/google/gmail-proxy`, {
     method: 'POST',
@@ -164,14 +138,19 @@ async function gmailRequest(apiUrl, accessToken, action, params = {}) {
   return res.json();
 }
 
-// Attempts to exchange the stored refresh token for a new access token via the
-// Supabase auth REST API.  Returns the updated session object on success, or
-// null if the refresh token is missing/invalid or the network call fails.
 async function refreshAccountSession(session) {
-  const { accessToken, refreshToken } = session;
-  if (!refreshToken) return null;
+  const activeSession = session || getAccountSession();
+  const { accessToken, refreshToken } = activeSession || {};
+  if (!refreshToken) {
+    setLastAuthFailure(AUTH_FAILURE.INVALID_REFRESH, 'Missing refresh token');
+    return null;
+  }
   const supabaseBase = getSupabaseAuthBaseUrl(accessToken);
-  if (!supabaseBase) return null;
+  if (!supabaseBase) {
+    setLastAuthFailure(AUTH_FAILURE.UNKNOWN, 'Missing Supabase base URL');
+    return null;
+  }
+
   try {
     const response = await fetch(`${supabaseBase}/auth/v1/token?grant_type=refresh_token`, {
       method: 'POST',
@@ -179,55 +158,126 @@ async function refreshAccountSession(session) {
       body: JSON.stringify({ refresh_token: refreshToken }),
       signal: AbortSignal.timeout(10_000),
     });
+
     if (!response.ok) {
-      console.warn('[accounts] Supabase token refresh returned HTTP', response.status);
+      const classification = classifyAuthFailure({ status: response.status });
+      setLastAuthFailure(classification, `Refresh returned HTTP ${response.status}`);
+      if (classification !== AUTH_FAILURE.OFFLINE && classification !== AUTH_FAILURE.SUPABASE_OUTAGE) {
+        console.warn('[accounts] Supabase token refresh returned HTTP', response.status);
+      }
       return null;
     }
+
     const data = await response.json();
-    if (!data?.access_token) return null;
+    if (!data?.access_token) {
+      setLastAuthFailure(AUTH_FAILURE.UNKNOWN, 'Refresh response missing access token');
+      return null;
+    }
+
     const jwtPayload = decodeJwtPayload(data.access_token);
+    setLastAuthFailure(null);
     return {
-      ...session,
+      version: 2,
       accessToken: data.access_token,
       refreshToken: data.refresh_token || refreshToken,
-      email: jwtPayload?.email || session.email || '',
-      userId: jwtPayload?.sub || session.userId || '',
+      email: jwtPayload?.email || activeSession?.email || '',
+      userId: jwtPayload?.sub || activeSession?.userId || '',
+      signedInAt: activeSession?.signedInAt || new Date().toISOString(),
     };
   } catch (err) {
-    console.warn('[accounts] Token refresh failed:', err?.message || err);
+    const classification = classifyAuthFailure({ error: err });
+    setLastAuthFailure(classification, err?.message || String(err));
+    if (classification !== AUTH_FAILURE.OFFLINE) {
+      console.warn('[accounts] Token refresh failed:', err?.message || err);
+    }
     return null;
   }
 }
 
-// Checks whether the stored session is expired and, if so, attempts a silent
-// refresh.  If the refresh succeeds the new session is persisted and returned.
-// If the refresh fails the expired session is cleared and null is returned.
-// Returns the current session unchanged when it is not yet expired.
-async function refreshSessionIfNeeded() {
+async function refreshSessionIfNeeded(options = {}) {
+  const { force = false, reason = 'refresh' } = options;
   const session = getAccountSession();
   if (!session?.accessToken) return null;
-  if (!isTokenExpired(session.accessToken)) return session;
+  if (!force && !isTokenExpired(session.accessToken, REFRESH_BUFFER_SECONDS)) return session;
+
   const refreshed = await refreshAccountSession(session);
   if (refreshed) {
-    setAccountSession(refreshed);
+    await setAccountSession(refreshed, { reason });
     return refreshed;
   }
-  console.warn('[accounts] Could not refresh expired session — clearing login state.');
-  clearAccountSession();
+
+  const classification = getLastAuthFailure()?.classification;
+  if (classification === AUTH_FAILURE.OFFLINE || classification === AUTH_FAILURE.SUPABASE_OUTAGE) {
+    return session;
+  }
+
+  console.warn('[accounts] Refresh failed; clearing login state.', classification || 'unknown');
+  await clearAccountSession({ reason: classification || 'refresh-failed' });
   return null;
+}
+
+async function revokeAccountSession() {
+  const session = getAccountSession();
+  if (!session?.accessToken) return { ok: true, revoked: false, reason: 'not-signed-in' };
+  const supabaseBase = getSupabaseAuthBaseUrl(session.accessToken);
+  if (!supabaseBase) return { ok: false, revoked: false, reason: 'missing-supabase-url' };
+
+  try {
+    const response = await fetch(`${supabaseBase}/auth/v1/logout`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        apikey: session.accessToken,
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    return { ok: response.ok, revoked: response.ok, status: response.status };
+  } catch (error) {
+    const classification = classifyAuthFailure({ error });
+    setLastAuthFailure(classification, error?.message || String(error));
+    console.warn('[accounts] Logout revoke failed:', error?.message || error);
+    return { ok: false, revoked: false, reason: classification };
+  }
+}
+
+async function signOutAccountSession(meta = {}) {
+  const revokeResult = await revokeAccountSession();
+  await clearAccountSession(meta);
+  return revokeResult;
+}
+
+async function getAccountProfile(options = {}) {
+  const session = getAccountSession();
+  if (!session?.accessToken) return null;
+  const supabaseBase = getSupabaseAuthBaseUrl(session.accessToken);
+  if (!supabaseBase) return null;
+  return getProfileBundle({
+    supabaseUrl: supabaseBase,
+    accessToken: session.accessToken,
+    userId: session.userId,
+    forceRefresh: Boolean(options.forceRefresh),
+  });
 }
 
 module.exports = {
   clearAccountSession,
   decodeJwtPayload,
   fetchLinkedAccounts,
+  getAccountProfile,
   getAccountSession,
+  getLastAuthFailure,
   getLinkedAccounts,
+  getSafeAccountSession,
+  getSupabaseAuthBaseUrl,
   githubRequest,
   gmailRequest,
   isTokenExpired,
   linkAccount,
+  loadAccountSession: loadSession,
+  refreshAccountSession,
   refreshSessionIfNeeded,
+  revokeAccountSession,
   setAccountSession,
+  signOutAccountSession,
   unlinkAccount,
 };
