@@ -25,6 +25,10 @@ function getDesktopRedirectTarget(value: string | null) {
   return null;
 }
 
+function isAuthDebugEnabled(): boolean {
+  return process.env.AUTH_DEBUG === "true";
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const publicOrigin = getPublicRequestOrigin(request);
@@ -37,6 +41,17 @@ export async function GET(request: Request) {
   const next = requestUrl.searchParams.get("next") ?? "/";
   const state = requestUrl.searchParams.get("state") ?? "";
 
+  if (isAuthDebugEnabled()) {
+    console.log("[auth-debug][callback] incoming callback params", {
+      hasCode: Boolean(code),
+      code,
+      client,
+      next,
+      hasDesktopRedirectTarget: Boolean(desktopRedirectTarget),
+      state,
+    });
+  }
+
   if (!code) {
     const url = new URL("/auth/login", publicOrigin);
     url.searchParams.set("error", "Missing auth code.");
@@ -45,6 +60,15 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+  if (isAuthDebugEnabled()) {
+    console.log("[auth-debug][callback] exchange result", {
+      hasSession: Boolean(data?.session),
+      userId: data?.user?.id ?? null,
+      errorMessage: error?.message ?? null,
+      errorCode: error && "code" in error ? error.code : null,
+    });
+  }
 
   if (error) {
     console.error("[auth/callback] OAuth code exchange failed", {

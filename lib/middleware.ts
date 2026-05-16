@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_METADATA_PATHS = new Set(['/manifest.json', '/manifest.webmanifest'])
 const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support']
+const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/support']
 
 function hasSupabaseConfig() {
   return Boolean(
@@ -13,6 +14,10 @@ function hasSupabaseConfig() {
 
 function isAuthOptionalPath(pathname: string): boolean {
   return pathname === '/' || AUTH_OPTIONAL_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
+function isAuthDebugEnabled(): boolean {
+  return process.env.AUTH_DEBUG === 'true'
 }
 
 /**
@@ -71,9 +76,9 @@ export async function updateSession(request: NextRequest) {
   })
 
   if (
-    PUBLIC_METADATA_PATHS.has(request.nextUrl.pathname)
+    PUBLIC_METADATA_PATHS.has(pathname)
     || !hasSupabaseConfig()
-    || isAuthOptionalPath(request.nextUrl.pathname)
+    || isAuthOptionalPath(pathname)
   ) {
     supabaseResponse.headers.set('Content-Security-Policy', csp)
     supabaseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
@@ -106,28 +111,38 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Do not run code between createServerClient and
-  // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
+  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  // IMPORTANT: If you remove getClaims() and you use server-side rendering
+  // IMPORTANT: If you remove getUser() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  const { data } = await supabase.auth.getClaims()
-  const user = data?.claims
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/api') &&
-    request.nextUrl.pathname !== '/' &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth') &&
-    !request.nextUrl.pathname.startsWith('/api/debug') &&
-    !request.nextUrl.pathname.startsWith('/privacy') &&
-    !request.nextUrl.pathname.startsWith('/terms') &&
-    !request.nextUrl.pathname.startsWith('/support')
-  ) {
+  if (isAuthDebugEnabled()) {
+    console.log('[auth-debug][middleware] resolved session', {
+      pathname,
+      hasUser: Boolean(user),
+      userId: user?.id ?? null,
+    })
+  }
+
+  const shouldRedirectToLogin =
+    !user
+    && pathname !== '/'
+    && !AUTH_REDIRECT_EXCLUDED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+
+  if (shouldRedirectToLogin) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
+    if (isAuthDebugEnabled()) {
+      console.log('[auth-debug][middleware] redirecting unauthenticated request', {
+        pathname,
+        redirectTo: url.pathname,
+      })
+    }
     return NextResponse.redirect(url)
   }
 
@@ -151,3 +166,4 @@ export async function updateSession(request: NextRequest) {
 
   return supabaseResponse
 }
+  const pathname = request.nextUrl.pathname

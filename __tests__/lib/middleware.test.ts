@@ -6,13 +6,13 @@ import { createServerClient } from "@supabase/ssr";
 import { updateSession } from "@/lib/middleware";
 
 const mockCreateServerClient = createServerClient as jest.Mock;
-const mockGetClaims = jest.fn();
+const mockGetUser = jest.fn();
 const mockGetAll = jest.fn(() => []);
 
 jest.mock("@supabase/ssr", () => ({
   createServerClient: jest.fn(() => ({
     auth: {
-      getClaims: mockGetClaims,
+      getUser: mockGetUser,
     },
   })),
 }));
@@ -30,7 +30,7 @@ describe("updateSession", () => {
   });
 
   it("redirects to /auth/login when there is no user and path is not /login or /auth", async () => {
-    mockGetClaims.mockResolvedValue({ data: { claims: null } });
+    mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const req = makeRequest("/dashboard");
     const res = await updateSession(req);
@@ -40,7 +40,7 @@ describe("updateSession", () => {
   });
 
   it("does not redirect when path starts with /login", async () => {
-    mockGetClaims.mockResolvedValue({ data: { claims: null } });
+    mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const req = makeRequest("/login");
     const res = await updateSession(req);
@@ -49,7 +49,7 @@ describe("updateSession", () => {
   });
 
   it("does not redirect when path starts with /auth", async () => {
-    mockGetClaims.mockResolvedValue({ data: { claims: null } });
+    mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const req = makeRequest("/auth/callback");
     const res = await updateSession(req);
@@ -58,8 +58,8 @@ describe("updateSession", () => {
   });
 
   it("does not redirect when a user is present", async () => {
-    mockGetClaims.mockResolvedValue({
-      data: { claims: { sub: "user-id-123", email: "user@example.com" } },
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "user-id-123", email: "user@example.com" } },
     });
 
     const req = makeRequest("/dashboard");
@@ -69,8 +69,8 @@ describe("updateSession", () => {
   });
 
   it("returns a NextResponse", async () => {
-    mockGetClaims.mockResolvedValue({
-      data: { claims: { sub: "user-id-123" } },
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "user-id-123" } },
     });
 
     const req = makeRequest("/home");
@@ -80,7 +80,7 @@ describe("updateSession", () => {
   });
 
   it("redirects to /auth/login (not /login) when unauthenticated", async () => {
-    mockGetClaims.mockResolvedValue({ data: { claims: null } });
+    mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const req = makeRequest("/profile");
     const res = await updateSession(req);
@@ -90,8 +90,8 @@ describe("updateSession", () => {
   });
 
   it("sets Content-Security-Policy header with a nonce on authenticated responses", async () => {
-    mockGetClaims.mockResolvedValue({
-      data: { claims: { sub: "user-id-123" } },
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "user-id-123" } },
     });
 
     const req = makeRequest("/home");
@@ -103,8 +103,8 @@ describe("updateSession", () => {
   });
 
   it("nonce in CSP is a non-empty base64 string", async () => {
-    mockGetClaims.mockResolvedValue({
-      data: { claims: { sub: "user-id-123" } },
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "user-id-123" } },
     });
 
     const req = makeRequest("/home");
@@ -118,7 +118,7 @@ describe("updateSession", () => {
   });
 
   it("does not redirect manifest requests when there is no authenticated user", async () => {
-    mockGetClaims.mockResolvedValue({ data: { claims: null } });
+    mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const req = makeRequest("/manifest.json");
     const res = await updateSession(req);
@@ -135,5 +135,32 @@ describe("updateSession", () => {
 
     expect(res.status).toBe(200);
     expect(mockCreateServerClient).not.toHaveBeenCalled();
+  });
+
+  it("does not redirect when path starts with /api and there is no user", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+
+    const req = makeRequest("/api/history");
+    const res = await updateSession(req);
+
+    expect(res.status).not.toBe(307);
+  });
+
+  it("accepts a freshly-created authenticated session user without redirecting", async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "fresh-session-user",
+          email: "fresh@example.com",
+          last_sign_in_at: "2026-05-16T20:00:00.000Z",
+        },
+      },
+    });
+
+    const req = makeRequest("/workspace");
+    const res = await updateSession(req);
+
+    expect(res.status).not.toBe(307);
+    expect(res.headers.get("location")).toBeNull();
   });
 });
