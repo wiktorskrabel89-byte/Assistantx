@@ -22,11 +22,16 @@ function sanitizeRedirectPath(value: string | null | undefined) {
   return next.startsWith("/") && !next.startsWith("//") ? next : "/";
 }
 
+function sanitizeDesktopRedirect(value: string | null | undefined) {
+  const redirectTo = String(value ?? "").trim();
+  return redirectTo.startsWith("assistantx://") ? redirectTo : "";
+}
+
 export default function LoginPage() {
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const [redirectContext] = useState(() => {
     if (typeof window === "undefined") {
-      return { client: "", next: "/", state: "" };
+      return { client: "", next: "/", state: "", redirectTo: "" };
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -34,6 +39,7 @@ export default function LoginPage() {
       client: params.get("client") ?? "",
       next: sanitizeRedirectPath(params.get("next")),
       state: params.get("state") ?? "",
+      redirectTo: sanitizeDesktopRedirect(params.get("redirect_to")),
     };
   });
   const [initialLocationError] = useState(() => {
@@ -114,6 +120,7 @@ export default function LoginPage() {
     const safeRedirectPath = sanitizeRedirectPath(redirectContext.next);
     if (safeRedirectPath !== "/") redirectTo.searchParams.set("next", safeRedirectPath);
     if (redirectContext.state) redirectTo.searchParams.set("state", redirectContext.state);
+    if (redirectContext.redirectTo) redirectTo.searchParams.set("redirect_to", redirectContext.redirectTo);
     return redirectTo.toString();
   }
 
