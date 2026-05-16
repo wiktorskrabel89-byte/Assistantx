@@ -137,6 +137,7 @@ function buildSidecarApi() {
     setListeningForCommand: (active) => sidecarBridge.setListeningForCommand(active),
     startAudioCapture: () => sidecarBridge.startAudioCapture(),
     stopAudioCapture: () => sidecarBridge.stopAudioCapture(),
+    disconnect: () => sidecarBridge.disconnect(),
     requestIntentParse: (text, requestId) => sidecarBridge.requestIntentParse(text, requestId),
     requestTts: (text, requestId) => sidecarBridge.requestTts(text, requestId),
     connect: () => sidecarBridge.connect(),
