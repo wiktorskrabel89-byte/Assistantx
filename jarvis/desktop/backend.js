@@ -20,6 +20,11 @@ const {
   APP_CLOSE_MAP,
   APP_CLOSE_MAP_DARWIN,
 } = require('./app-launch-config');
+const { createRuntimeV2, isRuntimeV2Enabled } = require('./electron/runtime');
+const { createBackendRuntimeAdapter } = require('./electron/runtime/backend-runtime-adapter');
+const { createExecutionSandbox } = require('./electron/sandbox/execution-sandbox');
+const { createPromptRegistry } = require('./prompts/registry');
+const { createModelCapabilityRegistry } = require('./electron/ai/models/registry');
 
 let ipcRenderer;
 let clipboard;
@@ -36,6 +41,21 @@ try {
 const PLATFORM = process.platform; // 'win32', 'darwin', 'linux'
 
 const emitter = new EventEmitter();
+const runtimeV2Enabled = isRuntimeV2Enabled();
+const promptRegistry = createPromptRegistry();
+const modelRegistry = createModelCapabilityRegistry();
+const runtimeV2 = runtimeV2Enabled
+  ? createRuntimeV2({
+    logSink(entry) {
+      if (entry.level === 'error') console.error('[runtime-v2]', entry.event, entry.payload || {});
+      else if (entry.level === 'warn') console.warn('[runtime-v2]', entry.event, entry.payload || {});
+    },
+  })
+  : null;
+if (runtimeV2) {
+  runtimeV2.sandbox = createExecutionSandbox();
+}
+let runtimeV2Adapter = null;
 const DEFAULT_BACKEND_URL = '';
 const EXPLICIT_BACKEND_URL = (process.env.JARVIS_BACKEND_URL || '').trim();
 const BACKEND_URL = EXPLICIT_BACKEND_URL || DEFAULT_BACKEND_URL;
@@ -76,6 +96,7 @@ const REMOTE_ALLOWED_COMMANDS = new Set([
   'cancelShutdown',
   'readClipboard',
   'writeClipboard',
+  'cancelTask',
 ]);
 
 // ── Command risk tiers ───────────────────────────────────────────────────────
@@ -91,6 +112,7 @@ const COMMAND_RISK_TIER = {
   listFiles: 'low',
   readFile: 'low',
   readClipboard: 'low',
+  cancelTask: 'low',
   volumeUp: 'low',
   volumeDown: 'low',
   mute: 'low',
@@ -402,6 +424,33 @@ async function extractAiResponseText(response) {
   return collected.trim();
 }
 
+function getRuntimeV2Adapter() {
+  if (!runtimeV2Enabled || !runtimeV2) return null;
+  if (runtimeV2Adapter) return runtimeV2Adapter;
+  runtimeV2Adapter = createBackendRuntimeAdapter({
+    runtime: runtimeV2,
+    planPrompt,
+    runAiPrompt,
+    executeStructuredCommand,
+    publishTaskUpdate,
+    saveTask,
+    rememberPrompt,
+    getFavoriteApp,
+  });
+  return runtimeV2Adapter;
+}
+
+function buildRouteHint(message) {
+  const normalized = String(message || '').toLowerCase();
+  const choice = modelRegistry.chooseBest({
+    requiresTools: true,
+    minContext: normalized.length > 1500 ? 64000 : 0,
+    prefersLowCost: normalized.length < 260,
+    prefersLowLatency: normalized.length < 260,
+  });
+  return choice || { provider: 'groq', model: 'qwen-32b' };
+}
+
 async function runAiPrompt(prompt, meta = {}) {
   let lastError = null;
   const session = getAccountSession();
@@ -423,13 +472,36 @@ async function runAiPrompt(prompt, meta = {}) {
   // Record the user turn first, then snapshot — the current prompt is included.
   recordConversationTurn('user', prompt);
   const history = getConversationHistory();
+  const routeHint = buildRouteHint(prompt);
+  const composedPrompt = promptRegistry.composer.compose({
+    taskPrompt: String(prompt || ''),
+    memoryContext: history.map((item) => `${item.role}: ${item.content}`).join('\n'),
+  });
 
   // Signal to the UI that a response is in flight.
   emitRawMessage({ type: 'ai_thinking', inFlight: true });
 
   for (const endpoint of getJarvisAiEndpointCandidates()) {
     try {
-      const chatPayload = { message: prompt, mode: 'auto', history };
+      const cached = runtimeV2?.cache?.get(`prompt:${routeHint.provider}:${routeHint.model}:${composedPrompt}`);
+      if (cached) {
+        emitRawMessage({ type: 'ai_thinking', inFlight: false });
+        return publishResult({
+          title: 'Jarvis AI',
+          text: cached.text,
+          summary: cached.text,
+          source: meta.source || 'local',
+          origin: meta.origin || 'desktop',
+          taskId: meta.taskId || null,
+        });
+      }
+
+      const chatPayload = {
+        message: composedPrompt,
+        mode: 'auto',
+        history,
+        routeHint,
+      };
       let response;
       if (ipcRenderer && /^https?:\/\//i.test(endpoint)) {
         let proxyResult;
@@ -470,6 +542,11 @@ async function runAiPrompt(prompt, meta = {}) {
 
       // Record the assistant's reply so subsequent turns have full context.
       recordConversationTurn('assistant', answer);
+      runtimeV2?.cache?.set(`prompt:${routeHint.provider}:${routeHint.model}:${composedPrompt}`, { text: answer }, 45_000);
+      runtimeV2?.metrics?.increment('runtime.tokens.request.count', 1, {
+        provider: routeHint.provider,
+        model: routeHint.model,
+      });
       emitRawMessage({ type: 'ai_thinking', inFlight: false });
 
       return publishResult({
@@ -911,6 +988,16 @@ async function executeStructuredCommand(msg, context = {}) {
           confirmed: Boolean(msg.confirmed),
         });
         break;
+      case 'cancelTask': {
+        if (!runtimeV2Enabled) {
+          result = { summary: 'Runtime v2 is disabled; no task cancellation adapter active.' };
+          break;
+        }
+        const adapter = getRuntimeV2Adapter();
+        const cancellationResult = adapter?.interruptTask?.(msg.taskId || context.taskId, 'command-cancel');
+        result = { summary: cancellationResult?.ok ? `Cancelled task ${cancellationResult.taskId}` : 'Task cancellation failed.' };
+        break;
+      }
       case 'closeApp':
         result = await closeApp(appName || '');
         break;
@@ -1147,6 +1234,26 @@ async function processTaskQueue() {
 function queuePromptExecution(text, meta = {}) {
   const prompt = String(text || '').trim();
   if (!prompt) return null;
+
+  if (runtimeV2Enabled) {
+    const adapter = getRuntimeV2Adapter();
+    if (adapter) {
+      const taskId = `rt-queued-${Date.now()}-${++taskCounter}`;
+      void adapter.executePrompt(prompt, meta).catch((error) => {
+        publishResult({
+          title: 'Runtime v2 failed',
+          text: error?.message || 'Runtime v2 execution failed.',
+          summary: error?.message || 'Runtime v2 execution failed.',
+          level: 'error',
+          source: meta.source || 'local',
+          origin: meta.origin || 'desktop',
+          taskId,
+        });
+      });
+      return taskId;
+    }
+  }
+
   rememberPrompt(prompt);
   const plan = planPrompt(prompt, { favoriteApp: getFavoriteApp() });
 
@@ -1368,6 +1475,28 @@ if (PLATFORM === 'win32') {
   }, 500);
 }
 
+if (runtimeV2Enabled) {
+  try {
+    const adapter = getRuntimeV2Adapter();
+    const resumable = adapter?.resumePersistedWorkflows?.() || [];
+    for (const workflow of resumable) {
+      emitRawMessage({
+        type: 'task_update',
+        taskId: workflow.id,
+        status: 'rehydrated',
+        summary: workflow.prompt || 'Recovered workflow',
+      });
+    }
+  } catch (error) {
+    emitRawMessage({
+      type: 'command_result',
+      level: 'warning',
+      title: 'Runtime v2',
+      summary: `Failed to rehydrate workflows: ${error?.message || 'unknown error'}`,
+    });
+  }
+}
+
 module.exports = {
   connectToBackend,
   executeStructuredCommand,
@@ -1380,4 +1509,5 @@ module.exports = {
   pluginsDir: PLUGINS_DIR,
   queuePromptExecution,
   sendMessageToBackend,
+  isRuntimeV2Enabled: () => runtimeV2Enabled,
 };

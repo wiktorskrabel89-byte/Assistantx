@@ -1,6 +1,7 @@
 'use strict';
 
 const EventEmitter = require('events');
+const { createVoiceBackendAbstraction } = require('./voice/backend-abstraction');
 
 const DEFAULT_STT_MODEL = 'whisper-large-v3-turbo';
 const DEFAULT_VOICE_PERSONA = 'jarvis';
@@ -27,6 +28,13 @@ class VoiceGateway extends EventEmitter {
       autoSubmit: true,
       fallbackToBrowserSpeech: true,
     };
+    this._backend = createVoiceBackendAbstraction({
+      sidecar: this._sidecar,
+      remoteApi: {
+        transcribe: (payload) => this._requestJson('/api/jarvis/voice/stt', payload),
+        synthesize: (payload) => this._requestJson('/api/jarvis/voice/tts', payload),
+      },
+    });
     this._bindSidecarEvents();
   }
 
@@ -139,7 +147,7 @@ class VoiceGateway extends EventEmitter {
     const persona = String(options.persona || this._settings.persona || DEFAULT_VOICE_PERSONA);
     const language = String(options.language || this._settings.language || DEFAULT_LANGUAGE);
     try {
-      const payload = await this._requestJson('/api/jarvis/voice/tts', {
+      const payload = await this._backend.synthesize({
         text: input,
         persona,
         language,
@@ -160,7 +168,12 @@ class VoiceGateway extends EventEmitter {
     if (this._settings.providerMode === PROVIDER_MODE_DIRECT) {
       throw new Error('Desktop-direct STT mode is not implemented yet.');
     }
-    return this._requestJson('/api/jarvis/voice/stt', payload);
+    return this._backend.transcribe(payload);
+  }
+
+  interrupt(reason = 'user-interrupt') {
+    this.emit('status', { phase: 'interrupted', source: 'gateway', reason });
+    this._backend.interrupt();
   }
 
   async _requestJson(path, payload) {

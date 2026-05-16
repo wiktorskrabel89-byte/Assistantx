@@ -1,15 +1,19 @@
 'use strict';
 
-const MODEL_CAPABILITIES = {
-  'groq:qwen-32b': { coding: true, vision: false, maxContext: 32768, supportsTools: true, latencyTier: 'fast' },
-  'openrouter:gpt-120b': { coding: true, vision: true, maxContext: 128000, supportsTools: true, latencyTier: 'heavy' },
-};
+const { createModelCapabilityRegistry, DEFAULT_MODELS } = require('./registry');
+
+const registry = createModelCapabilityRegistry({ models: DEFAULT_MODELS });
+
+const MODEL_CAPABILITIES = Object.fromEntries(
+  DEFAULT_MODELS.map((entry) => [`${entry.provider}:${entry.model}`, entry]),
+);
 
 function getModelCapabilities(provider, model) {
-  return MODEL_CAPABILITIES[`${provider}:${model}`] || null;
+  return registry.get(provider, model);
 }
 
 module.exports = {
   MODEL_CAPABILITIES,
   getModelCapabilities,
+  createModelCapabilityRegistry,
 };
