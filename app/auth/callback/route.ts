@@ -22,6 +22,7 @@ export async function GET(request: Request) {
   const client = requestUrl.searchParams.get("client");
   const next = requestUrl.searchParams.get("next") ?? "/";
   const state = requestUrl.searchParams.get("state") ?? "";
+  const redirectTo = requestUrl.searchParams.get("redirect_to") ?? "";
 
   if (!code) {
     const url = new URL("/auth/login", publicOrigin);
@@ -52,10 +53,13 @@ export async function GET(request: Request) {
   }
 
   const redirectPath = next.startsWith("/") && !next.startsWith("//") ? next : "/";
-  const desktopCallbackUrl = new URL("/jarvis/callback", publicOrigin);
-  if (data.session?.access_token) {
+  const isDesktop = client === "jarvis-desktop" || redirectTo.startsWith("assistantx://");
+  const desktopCallbackUrl = redirectTo.startsWith("assistantx://") ? new URL(redirectTo) : new URL("assistantx://auth/callback");
+  if (isDesktop && data.session?.access_token) {
     const hashParams = new URLSearchParams({
       access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token ?? "",
+      token_type: "bearer",
       email: data.user?.email ?? "",
       user_id: data.user?.id ?? "",
       signed_in_at: new Date().toISOString(),
@@ -64,7 +68,7 @@ export async function GET(request: Request) {
     desktopCallbackUrl.hash = hashParams.toString();
   }
   const response = NextResponse.redirect(
-    client === "jarvis-desktop" && data.session?.access_token
+    isDesktop && data.session?.access_token
       ? desktopCallbackUrl
       : new URL(redirectPath, publicOrigin)
   );

@@ -1179,13 +1179,31 @@ window.addEventListener('DOMContentLoaded', () => {
 		).join('<br>');
 	}
 
+	async function syncCloudAfterSignIn(session, { announce = false } = {}) {
+		if (!(session?.userId || session?.email)) return;
+		if (announce) {
+			appendMessage(log, 'Account', `Signed in as ${session.email || 'your account'}. Syncing memory…`);
+		}
+		if (!apiBaseUrl) return;
+		try {
+			const syncResult = await loadFromCloud(apiBaseUrl);
+			if (syncResult?.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...syncResult.voiceSettings });
+		} catch {
+			// ignore transient sync failures after sign-in
+		}
+	}
+
 	refreshAccountUI();
 	refreshLinkedAccounts();
 
 	if (typeof onSessionChanged === 'function') {
-		onSessionChanged(({ session }) => {
+		onSessionChanged(({ session, reason }) => {
 			currentSession = session || null;
 			refreshAccountUI(currentSession);
+			refreshLinkedAccounts();
+			if ((session?.userId || session?.email) && String(reason || '').startsWith('login-')) {
+				void syncCloudAfterSignIn(session, { announce: true });
+			}
 		});
 	}
 
@@ -1270,11 +1288,7 @@ window.addEventListener('DOMContentLoaded', () => {
 						currentSession = result;
 						refreshAccountUI(currentSession);
 						refreshLinkedAccounts();
-						appendMessage(log, 'Account', `Signed in as ${result.email || 'your account'}. Syncing memory…`);
-						if (apiBaseUrl) {
-							const syncResult = await loadFromCloud(apiBaseUrl);
-							if (syncResult?.voiceSettings) applyVoiceSettings({ ...voiceSettings, ...syncResult.voiceSettings });
-						}
+						await syncCloudAfterSignIn(result);
 					} else {
 						appendMessage(
 							log,

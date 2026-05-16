@@ -66,7 +66,12 @@ if (!gotSingleInstanceLock) {
   app.quit();
 }
 
-app.setAsDefaultProtocolClient(AUTH_PROTOCOL);
+if (process.defaultApp) {
+  const appEntry = process.argv[1] ? [path.resolve(process.argv[1])] : [];
+  app.setAsDefaultProtocolClient(AUTH_PROTOCOL, process.execPath, appEntry);
+} else {
+  app.setAsDefaultProtocolClient(AUTH_PROTOCOL);
+}
 
 function getSidecarMainPath() {
   if (app.isPackaged) {
@@ -267,16 +272,15 @@ function settlePendingAuth(result) {
   }
 }
 
-async function consumeAuthCallback(url, source = 'browser') {
-  if (!pendingAuthFlow) return false;
-  const parsed = parseAuthCallback(url, { expectedState: pendingAuthFlow.state });
+async function consumeAuthCallback(url, source = 'browser', { expectedState = null, settlePending = false } = {}) {
+  const parsed = parseAuthCallback(url, expectedState ? { expectedState } : {});
   if (!parsed) return false;
   if (parsed.error) {
     console.warn(`[auth] Ignoring invalid OAuth callback from ${source}:`, redactUrl(url));
     return true;
   }
   const savedSession = await setAccountSession(parsed.session, { reason: `login-${source}` });
-  settlePendingAuth(toSafeSessionView(savedSession));
+  if (settlePending) settlePendingAuth(toSafeSessionView(savedSession));
   return true;
 }
 
@@ -338,7 +342,10 @@ function beginDesktopLogin({ parentWindow } = {}) {
 
 async function handleProtocolCallback(url, source = 'protocol') {
   if (!url) return false;
-  const consumed = await consumeAuthCallback(url, source);
+  const consumed = await consumeAuthCallback(url, source, {
+    expectedState: pendingAuthFlow?.state || null,
+    settlePending: Boolean(pendingAuthFlow),
+  });
   if (consumed && win && !win.isDestroyed()) {
     if (win.isMinimized()) win.restore();
     win.show();
@@ -913,6 +920,10 @@ app.on('second-instance', (_event, argv) => {
 });
 
 app.whenReady().then(async () => {
+  const startupProtocolUrl = extractProtocolUrl(process.argv);
+  if (startupProtocolUrl) {
+    void handleProtocolCallback(startupProtocolUrl, 'startup-argv');
+  }
   // Initialise the SQLite database (sql.js loads its WASM binary asynchronously)
   // before any launcher or IPC code touches it.
   try {
@@ -935,10 +946,6 @@ app.whenReady().then(async () => {
   createTray();
   registerLauncherShortcut();
   setupAutoUpdater();
-  const startupProtocolUrl = extractProtocolUrl(process.argv);
-  if (startupProtocolUrl) {
-    void handleProtocolCallback(startupProtocolUrl, 'startup-argv');
-  }
   launcherService.refreshCatalog({ reason: 'app-ready' })
     .then(() => {
       startupDiagnostics.setComponent('launcher', 'healthy', 'Launcher catalog refreshed.');
