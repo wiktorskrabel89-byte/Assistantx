@@ -8,8 +8,20 @@ jest.mock("@/lib/server", () => ({
   createClient: jest.fn(),
 }));
 
+const mockGetUser = jest.fn();
+
+jest.mock("@supabase/ssr", () => ({
+  createServerClient: jest.fn(() => ({
+    auth: {
+      getUser: mockGetUser,
+    },
+  })),
+}));
+
 import { createClient } from "@/lib/server";
+import { NextRequest } from "next/server";
 import { GET } from "@/app/auth/callback/route";
+import { updateSession } from "@/lib/middleware";
 
 const mockCreateClient = createClient as jest.Mock;
 
@@ -41,6 +53,7 @@ function parseRedirectHash(location: string): URLSearchParams {
 beforeEach(() => {
   jest.clearAllMocks();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "test-key";
 });
 
 describe("GET /auth/callback", () => {
@@ -208,6 +221,42 @@ describe("GET /auth/callback", () => {
     expect(hashParams.get("email")).toBe("jarvis@example.com");
     expect(hashParams.get("user_id")).toBe("user-123");
     expect(hashParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
+  });
+
+  it("does not redirect immediately after successful callback exchange when middleware sees fresh user session", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeMockSupabase({
+        user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "email" } },
+        session: {
+          access_token: "session-token-123",
+          provider_token: null,
+          expires_in: 3600,
+          refresh_token: "refresh-token-123",
+          user: {
+            id: "user-123",
+            email: "jarvis@example.com",
+            last_sign_in_at: "2026-05-16T08:00:00.000Z",
+          },
+        },
+      }),
+    );
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "jarvis@example.com",
+          last_sign_in_at: "2026-05-16T08:00:00.000Z",
+        },
+      },
+    });
+
+    const callbackResponse = await GET(makeReq({ code: "valid-code", next: "/workspace" }));
+    expect(callbackResponse.status).toBe(307);
+    expect(callbackResponse.headers.get("location")).toContain("/workspace");
+
+    const middlewareResponse = await updateSession(new NextRequest("http://localhost/workspace"));
+    expect(middlewareResponse.status).not.toBe(307);
+    expect(middlewareResponse.headers.get("location")).toBeNull();
   });
 
   it("redirects to the provided desktop redirect target when redirect_to uses assistantx://", async () => {
