@@ -26,13 +26,14 @@ export default function LoginPage() {
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const [redirectContext] = useState(() => {
     if (typeof window === "undefined") {
-      return { client: "", next: "/" };
+      return { client: "", next: "/", state: "" };
     }
 
     const params = new URLSearchParams(window.location.search);
     return {
       client: params.get("client") ?? "",
       next: sanitizeRedirectPath(params.get("next")),
+      state: params.get("state") ?? "",
     };
   });
   const [initialLocationError] = useState(() => {
@@ -112,6 +113,7 @@ export default function LoginPage() {
     if (redirectContext.client) redirectTo.searchParams.set("client", redirectContext.client);
     const safeRedirectPath = sanitizeRedirectPath(redirectContext.next);
     if (safeRedirectPath !== "/") redirectTo.searchParams.set("next", safeRedirectPath);
+    if (redirectContext.state) redirectTo.searchParams.set("state", redirectContext.state);
     return redirectTo.toString();
   }
 
@@ -123,12 +125,14 @@ export default function LoginPage() {
     if (!accessToken) return false;
 
     const callbackUrl = new URL("/jarvis/callback", window.location.origin);
-    callbackUrl.hash = new URLSearchParams({
+    const hashParams = new URLSearchParams({
       access_token: accessToken,
       email: session.user?.email ?? "",
       user_id: session.user?.id ?? "",
       signed_in_at: new Date().toISOString(),
-    }).toString();
+    });
+    if (redirectContext.state) hashParams.set("state", redirectContext.state);
+    callbackUrl.hash = hashParams.toString();
     window.location.href = callbackUrl.toString();
     return true;
   }

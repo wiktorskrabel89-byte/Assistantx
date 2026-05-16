@@ -21,6 +21,7 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get("code");
   const client = requestUrl.searchParams.get("client");
   const next = requestUrl.searchParams.get("next") ?? "/";
+  const state = requestUrl.searchParams.get("state") ?? "";
 
   if (!code) {
     const url = new URL("/auth/login", publicOrigin);
@@ -53,12 +54,14 @@ export async function GET(request: Request) {
   const redirectPath = next.startsWith("/") && !next.startsWith("//") ? next : "/";
   const desktopCallbackUrl = new URL("/jarvis/callback", publicOrigin);
   if (data.session?.access_token) {
-    desktopCallbackUrl.hash = new URLSearchParams({
+    const hashParams = new URLSearchParams({
       access_token: data.session.access_token,
       email: data.user?.email ?? "",
       user_id: data.user?.id ?? "",
       signed_in_at: new Date().toISOString(),
-    }).toString();
+    });
+    if (state) hashParams.set("state", state);
+    desktopCallbackUrl.hash = hashParams.toString();
   }
   const response = NextResponse.redirect(
     client === "jarvis-desktop" && data.session?.access_token
