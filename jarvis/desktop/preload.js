@@ -29,6 +29,7 @@ const ALLOWED_INVOKE = new Set([
   'auth:refresh',
   'auth:sign-out',
   'auth:get-profile',
+  'auth:get-device-token',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -41,8 +42,6 @@ const ALLOWED_RECEIVE = new Set([
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────
-const { getToken } = require('./auth');
-
 const {
   connectToBackend,
   executeStructuredCommand,
@@ -201,7 +200,7 @@ contextBridge.exposeInMainWorld('jarvisIpc', {
 });
 
 contextBridge.exposeInMainWorld('jarvisApi', {
-  getToken,
+  getToken: () => invokeAllowed('auth:get-device-token'),
   connectToBackend,
   executeStructuredCommand,
   getLocalStateSnapshot,

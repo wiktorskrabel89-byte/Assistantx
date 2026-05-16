@@ -12,6 +12,19 @@ function getPublicRequestOrigin(request: Request) {
   return `${protocol}://${host}`;
 }
 
+function getDesktopRedirectTarget(value: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "assistantx:" && url.hostname === "auth" && url.pathname === "/callback") {
+      return url;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const publicOrigin = getPublicRequestOrigin(request);
@@ -20,6 +33,7 @@ export async function GET(request: Request) {
   const supabaseProviderCallbackUrl = new URL("/auth/v1/callback", process.env.NEXT_PUBLIC_SUPABASE_URL).toString();
   const code = requestUrl.searchParams.get("code");
   const client = requestUrl.searchParams.get("client");
+  const desktopRedirectTarget = getDesktopRedirectTarget(requestUrl.searchParams.get("redirect_to"));
   const next = requestUrl.searchParams.get("next") ?? "/";
   const state = requestUrl.searchParams.get("state") ?? "";
 
@@ -79,21 +93,21 @@ export async function GET(request: Request) {
     }
   }
 
-  const isDesktop = client === "jarvis-desktop" && Boolean(data.session?.access_token);
+  const isDesktop = (client === "jarvis-desktop" || Boolean(desktopRedirectTarget)) && Boolean(data.session?.access_token);
 
   if (isDesktop) {
+    const target = desktopRedirectTarget ?? new URL("assistantx://auth/callback");
     const hashParams = new URLSearchParams({
       access_token: data.session!.access_token,
       refresh_token: data.session!.refresh_token ?? "",
       token_type: "bearer",
       email: data.user?.email ?? "",
       user_id: data.user?.id ?? "",
-      signed_in_at: data.user?.last_sign_in_at ?? new Date().toISOString(),
+      signed_in_at: data.user?.last_sign_in_at ?? data.session?.user?.last_sign_in_at ?? new Date().toISOString(),
     });
     if (state) hashParams.set("state", state);
-    const response = NextResponse.redirect(
-      `assistantx://auth/callback#${hashParams.toString()}`
-    );
+    target.hash = hashParams.toString();
+    const response = NextResponse.redirect(target.toString());
     applyProviderCookies(response);
     return response;
   }

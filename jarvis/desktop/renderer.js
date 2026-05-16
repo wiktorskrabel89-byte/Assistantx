@@ -120,7 +120,10 @@ function setStatusDot(status) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-	const token = getToken();
+	const tokenPromise = Promise.resolve(getToken()).catch((error) => {
+		console.warn('[renderer] Failed to get device token:', error?.message || error);
+		return null;
+	});
 	const log = document.getElementById('log');
 	const input = document.getElementById('input');
 	const send = document.getElementById('send');
@@ -1384,9 +1387,11 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	}, 5 * 60_000);
 
-	connectToBackend({ token });
-	updateStatus('ready');
-	appendMessage(log, 'Jarvis Desktop', 'Shell initialized. Connecting to backend…');
+	void tokenPromise.then((token) => {
+		connectToBackend({ token });
+		updateStatus('ready');
+		appendMessage(log, 'Jarvis Desktop', 'Shell initialized. Connecting to backend…');
+	});
 
 	// Silently refresh the session if the stored access token is near expiry.
 	void refreshSessionIfNeeded().then((newSession) => {

@@ -1,6 +1,5 @@
 'use strict';
 
-const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -18,7 +17,6 @@ const ENCRYPTED_SESSION_PATH = path.join(BASE_DIR, 'session.enc');
 const LEGACY_SESSION_PATH = path.join(BASE_DIR, 'session.json');
 const KEYTAR_SERVICE = 'AssistantX';
 const KEYTAR_ACCOUNT = 'session';
-const KEY_SALT = 'assistantx-desktop-session-cache-v2';
 let cachedSession = null;
 let lock = Promise.resolve();
 
@@ -26,60 +24,6 @@ function withLock(task) {
   const next = lock.then(task, task);
   lock = next.then(() => undefined, () => undefined);
   return next;
-}
-
-function ensureBaseDir() {
-  fs.mkdirSync(BASE_DIR, { recursive: true });
-}
-
-function buildCipherKey() {
-  const source = [
-    os.hostname(),
-    os.userInfo({ encoding: 'utf8' }).username,
-    os.platform(),
-    os.arch(),
-  ].join('|');
-  return crypto.pbkdf2Sync(source, KEY_SALT, 150000, 32, 'sha256');
-}
-
-function encryptSession(session) {
-  const iv = crypto.randomBytes(12);
-  const key = buildCipherKey();
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const plaintext = Buffer.from(JSON.stringify(session), 'utf8');
-  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return JSON.stringify({ iv: iv.toString('base64'), tag: tag.toString('base64'), payload: encrypted.toString('base64') });
-}
-
-function decryptSession(raw) {
-  const parsed = JSON.parse(raw);
-  if (!parsed?.iv || !parsed?.tag || !parsed?.payload) return null;
-  const decipher = crypto.createDecipheriv(
-    'aes-256-gcm',
-    buildCipherKey(),
-    Buffer.from(parsed.iv, 'base64'),
-  );
-  decipher.setAuthTag(Buffer.from(parsed.tag, 'base64'));
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(parsed.payload, 'base64')),
-    decipher.final(),
-  ]).toString('utf8');
-  return normalizeSession(JSON.parse(decrypted));
-}
-
-function writeEncryptedCacheSync(session) {
-  ensureBaseDir();
-  fs.writeFileSync(ENCRYPTED_SESSION_PATH, encryptSession(session), 'utf8');
-}
-
-function readEncryptedCacheSync() {
-  try {
-    if (!fs.existsSync(ENCRYPTED_SESSION_PATH)) return null;
-    return decryptSession(fs.readFileSync(ENCRYPTED_SESSION_PATH, 'utf8'));
-  } catch {
-    return null;
-  }
 }
 
 function readLegacySessionSync() {
@@ -99,8 +43,19 @@ function deleteLegacySessionSync() {
   }
 }
 
+function deleteEncryptedCacheSync() {
+  try {
+    if (fs.existsSync(ENCRYPTED_SESSION_PATH)) fs.unlinkSync(ENCRYPTED_SESSION_PATH);
+  } catch {
+    // ignore
+  }
+}
+
 async function persistKeytarSession(session) {
-  if (!keytar) return false;
+  if (!keytar) {
+    console.warn('[auth][session] Keytar is unavailable; session will not persist after restart.');
+    return false;
+  }
   try {
     await keytar.setPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT, JSON.stringify(session));
     return true;
@@ -133,12 +88,7 @@ async function deleteKeytarSession() {
 
 function bootstrapCachedSession() {
   if (cachedSession) return cachedSession;
-  cachedSession = readEncryptedCacheSync() || readLegacySessionSync() || null;
-  if (cachedSession && cachedSession.version !== SESSION_VERSION) {
-    cachedSession = normalizeSession({ ...cachedSession, version: SESSION_VERSION });
-    writeEncryptedCacheSync(cachedSession);
-    deleteLegacySessionSync();
-  }
+  cachedSession = null;
   return cachedSession;
 }
 
@@ -147,28 +97,21 @@ async function loadSession() {
     const keytarSession = await readKeytarSession();
     if (keytarSession) {
       cachedSession = normalizeSession({ ...keytarSession, version: SESSION_VERSION });
-      writeEncryptedCacheSync(cachedSession);
+      deleteEncryptedCacheSync();
       deleteLegacySessionSync();
       return cachedSession ? { ...cachedSession } : null;
-    }
-
-    const encrypted = readEncryptedCacheSync();
-    if (encrypted) {
-      cachedSession = normalizeSession({ ...encrypted, version: SESSION_VERSION });
-      await persistKeytarSession(cachedSession);
-      deleteLegacySessionSync();
-      return { ...cachedSession };
     }
 
     const legacy = readLegacySessionSync();
     if (legacy) {
       cachedSession = normalizeSession({ ...legacy, version: SESSION_VERSION });
-      writeEncryptedCacheSync(cachedSession);
       await persistKeytarSession(cachedSession);
       deleteLegacySessionSync();
+      deleteEncryptedCacheSync();
       return { ...cachedSession };
     }
 
+    deleteEncryptedCacheSync();
     cachedSession = null;
     return null;
   });
@@ -184,8 +127,8 @@ async function saveSession(session) {
     const normalized = normalizeSession({ ...session, version: SESSION_VERSION });
     if (!normalized) throw new Error('Invalid session payload');
     cachedSession = normalized;
-    writeEncryptedCacheSync(normalized);
     await persistKeytarSession(normalized);
+    deleteEncryptedCacheSync();
     deleteLegacySessionSync();
     return { ...normalized };
   });
@@ -194,11 +137,7 @@ async function saveSession(session) {
 async function clearSession() {
   return withLock(async () => {
     cachedSession = null;
-    try {
-      if (fs.existsSync(ENCRYPTED_SESSION_PATH)) fs.unlinkSync(ENCRYPTED_SESSION_PATH);
-    } catch {
-      // ignore
-    }
+    deleteEncryptedCacheSync();
     deleteLegacySessionSync();
     await deleteKeytarSession();
   });

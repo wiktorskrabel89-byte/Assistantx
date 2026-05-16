@@ -19,8 +19,6 @@ const ARTIFACTS: Artifact[] = [
     language: "typescript",
     code: "export function help() {}",
     sourceTitle: "Message 1",
-    sourceId: "msg-1",
-    createdAt: 1,
   },
   {
     id: "art-2",
@@ -28,8 +26,6 @@ const ARTIFACTS: Artifact[] = [
     language: "python",
     code: "def run(): pass",
     sourceTitle: "Message 2",
-    sourceId: "msg-2",
-    createdAt: 2,
   },
 ];
 
