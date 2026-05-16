@@ -31,6 +31,7 @@ function createMainIpcHandlers(deps) {
     startupDiagnostics,
     getLocalTelemetrySnapshot,
     checkForUpdates,
+    downloadUpdateWithFallback,
     getJarvisWebUrl,
     setJarvisWebUrl,
     getAutoUpdater,
@@ -47,6 +48,8 @@ function createMainIpcHandlers(deps) {
     getMainWindow,
     getOverlayWindow,
     createLauncherOverlayWindow,
+    prepareForQuitAndInstall,
+    resetQuitAndInstallPreparation,
     permissions,
     securityAudit,
   } = deps;
@@ -268,7 +271,7 @@ function createMainIpcHandlers(deps) {
       if (!updater) return { ok: false, reason: 'updater-unavailable' };
       try {
         emitUpdateStatus('downloading', 'Downloading update…', { downloaded: false });
-        await updater.downloadUpdate();
+        await downloadUpdateWithFallback(updater, { version: updateState.version || null });
         startupDiagnostics.setComponent('updater', 'healthy', 'Update downloaded successfully.');
         startupDiagnostics.pushEvent('updater', 'info', 'Update download completed.');
         telemetryBus.publish('startup.healthy');
@@ -280,6 +283,10 @@ function createMainIpcHandlers(deps) {
         startupDiagnostics.pushEvent('updater', 'warn', 'Update download failed.', {
           message,
           classification: 'update-download-failed',
+        });
+        telemetryBus.publish('updater.download.failed', {
+          version: updateState.version || null,
+          message,
         });
         telemetryBus.publish('startup.degraded');
         emitDesktopHealth();
@@ -298,17 +305,23 @@ function createMainIpcHandlers(deps) {
         return { ok: false, reason: 'no-update-downloaded' };
       }
       try {
+        prepareForQuitAndInstall(updateState.version || null);
         emitUpdateStatus('installing', 'Installing downloaded update…', {
           downloaded: true,
         });
         updater.quitAndInstall();
         return { ok: true };
       } catch (error) {
+        resetQuitAndInstallPreparation();
         const message = String(error?.message || error || 'unknown error');
         startupDiagnostics.setComponent('updater', 'unavailable', `Update install failed: ${message}`);
         startupDiagnostics.pushEvent('updater', 'error', 'Update install failed.', {
           message,
           classification: 'installer-execution-failed',
+        });
+        telemetryBus.publish('updater.install.failed', {
+          version: updateState.version || null,
+          reason: 'installer-execution-failed',
         });
         telemetryBus.publish('startup.unavailable');
         emitDesktopHealth();

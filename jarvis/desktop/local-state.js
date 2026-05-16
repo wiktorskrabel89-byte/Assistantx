@@ -37,11 +37,11 @@ const DEFAULT_STATE = {
       encryptedSync: false,
       pauseSync: false,
     },
-    telemetry: {
-      enabledLocal: true,
-      remoteUploadEnabled: false,
-      consentGranted: false,
-      lastUpdatedAt: null,
+     telemetry: {
+       enabledLocal: true,
+       remoteUploadEnabled: false,
+       consentGranted: false,
+       lastUpdatedAt: null,
       sidecar: {
         started: 0,
         running: 0,
@@ -52,15 +52,35 @@ const DEFAULT_STATE = {
         restarts: 0,
         lastEventAt: null,
       },
-      startup: {
-        healthy: 0,
-        degraded: 0,
-        unavailable: 0,
-        lastEventAt: null,
-      },
-    },
-  },
-};
+       startup: {
+         healthy: 0,
+         degraded: 0,
+         unavailable: 0,
+         lastEventAt: null,
+       },
+       updater: {
+         offered: 0,
+         accepted: 0,
+         deferred: 0,
+         rolloutDeferred: 0,
+         downloadStarted: 0,
+         downloaded: 0,
+         downloadFailed: 0,
+         fullFallbacks: 0,
+         installStarted: 0,
+         installSucceeded: 0,
+         installFailed: 0,
+         signatureVerified: 0,
+         signatureFailed: 0,
+         lastEventAt: null,
+         lastOfferedVersion: null,
+         lastDownloadedVersion: null,
+         pendingInstallVersion: null,
+         lastInstallerExitCode: null,
+       },
+     },
+   },
+ };
 
 function ensureBaseDir() {
   fs.mkdirSync(BASE_DIR, { recursive: true });
@@ -107,6 +127,12 @@ function normalizeState(raw) {
             ...DEFAULT_STATE.preferences.telemetry.startup,
             ...(raw.preferences.telemetry.startup && typeof raw.preferences.telemetry.startup === 'object'
               ? raw.preferences.telemetry.startup
+              : {}),
+          },
+          updater: {
+            ...DEFAULT_STATE.preferences.telemetry.updater,
+            ...(raw.preferences.telemetry.updater && typeof raw.preferences.telemetry.updater === 'object'
+              ? raw.preferences.telemetry.updater
               : {}),
           },
         }
@@ -311,6 +337,10 @@ function updateTelemetry(updater) {
           startup: {
             ...DEFAULT_STATE.preferences.telemetry.startup,
             ...(updatedTelemetry?.startup || {}),
+          },
+          updater: {
+            ...DEFAULT_STATE.preferences.telemetry.updater,
+            ...(updatedTelemetry?.updater || {}),
           },
           lastUpdatedAt: new Date().toISOString(),
         },
