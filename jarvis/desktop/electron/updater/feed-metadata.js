@@ -80,7 +80,7 @@ function escapeRegExp(value) {
 
 function extractYamlScalar(raw, key) {
   const source = String(raw || '');
-  const match = source.match(new RegExp(`(?m)^\\s*${escapeRegExp(key)}\\s*:\\s*["']?([^"'\\r\\n#]+)["']?\\s*$`));
+  const match = source.match(new RegExp(`^\\s*${escapeRegExp(key)}\\s*:\\s*["']?([^"'\\r\\n#]+)["']?\\s*$`, 'm'));
   return match ? match[1].trim() : '';
 }
 
@@ -96,8 +96,8 @@ function normalizeStagingPercentage(value) {
 function collectArtifactReferences(raw) {
   const source = String(raw || '');
   const matches = [
-    ...source.matchAll(/(?m)^\s*path\s*:\s*["']?([^"'\r\n#]+)["']?\s*$/g),
-    ...source.matchAll(/(?m)^\s*url\s*:\s*["']?([^"'\r\n#]+)["']?\s*$/g),
+    ...source.matchAll(/^\s*path\s*:\s*["']?([^"'\r\n#]+)["']?\s*$/gm),
+    ...source.matchAll(/^\s*url\s*:\s*["']?([^"'\r\n#]+)["']?\s*$/gm),
   ];
   return matches
     .map((match) => String(match[1] || '').trim())
@@ -272,8 +272,13 @@ function verifyDetachedMetadataSignature({ payload, signature, publicKey }) {
 }
 
 function computeRolloutBucket({ stableId, version }) {
-  const digest = crypto.createHash('sha256').update(`${stableId || ''}:${version || ''}`).digest();
-  return (digest.readUInt32BE(0) / 0xffffffff) * 100;
+  const input = `${stableId || ''}:${version || ''}`;
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) / 0xffffffff) * 100;
 }
 
 function isUserWithinStagedRollout({ stagingPercentage, stableId, version }) {
@@ -313,7 +318,7 @@ function classifySignatureDiagnostic(message) {
 
 function classifyInstallerBlocker(message) {
   const lower = String(message || '').toLowerCase();
-  if (/access is denied|used by another process|being used|file in use|sharing violation|locked|lock contention|eperm/.test(lower)) {
+  if (/access is denied|used by another process|being used|file in use|sharing violation|\blocked\b|lock contention|eperm/.test(lower)) {
     return 'file-lock-detected';
   }
   if (/antivirus|defender|malware|virus|security software/.test(lower)) {
