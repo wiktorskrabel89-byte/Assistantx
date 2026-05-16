@@ -33,6 +33,11 @@ function makeReq(params: Record<string, string> = {}, headers: Record<string, st
   return new Request(url.toString(), { headers });
 }
 
+function parseRedirectHash(location: string): URLSearchParams {
+  const [, hash = ""] = location.split("#");
+  return new URLSearchParams(hash);
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
@@ -152,37 +157,74 @@ describe("GET /auth/callback", () => {
     mockCreateClient.mockResolvedValue(
       makeMockSupabase({
         user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
-        session: { access_token: "session-token-123", provider_token: null, expires_in: 3600 },
+        session: {
+          access_token: "session-token-123",
+          provider_token: null,
+          expires_in: 3600,
+          refresh_token: "refresh-token-123",
+          user: {
+            id: "user-123",
+            email: "jarvis@example.com",
+            last_sign_in_at: "2026-05-16T08:00:00.000Z",
+          },
+        },
       }),
     );
     const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop" }));
     expect(res.status).toBe(307);
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("assistantx://auth/callback#");
-    expect(location).toContain("access_token=session-token-123");
-    expect(location).toContain("token_type=bearer");
-    expect(location).toContain("email=jarvis%40example.com");
-    expect(location).toContain("user_id=user-123");
+    const hashParams = parseRedirectHash(location);
+    expect(hashParams.get("access_token")).toBe("session-token-123");
+    expect(hashParams.get("refresh_token")).toBe("refresh-token-123");
+    expect(hashParams.get("token_type")).toBe("bearer");
+    expect(hashParams.get("email")).toBe("jarvis@example.com");
+    expect(hashParams.get("user_id")).toBe("user-123");
+    expect(hashParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
   });
 
   it("passes OAuth state through jarvis-desktop callback hash", async () => {
     mockCreateClient.mockResolvedValue(
       makeMockSupabase({
         user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
-        session: { access_token: "session-token-123", provider_token: null, expires_in: 3600 },
+        session: {
+          access_token: "session-token-123",
+          provider_token: null,
+          expires_in: 3600,
+          refresh_token: "refresh-token-123",
+          user: {
+            id: "user-123",
+            email: "jarvis@example.com",
+            last_sign_in_at: "2026-05-16T08:00:00.000Z",
+          },
+        },
       }),
     );
     const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop", state: "desktop-state-abc" }));
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("assistantx://auth/callback#");
-    expect(location).toContain("state=desktop-state-abc");
+    const hashParams = parseRedirectHash(location);
+    expect(hashParams.get("state")).toBe("desktop-state-abc");
+    expect(hashParams.get("email")).toBe("jarvis@example.com");
+    expect(hashParams.get("user_id")).toBe("user-123");
+    expect(hashParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
   });
 
   it("redirects to the provided desktop redirect target when redirect_to uses assistantx://", async () => {
     mockCreateClient.mockResolvedValue(
       makeMockSupabase({
         user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
-        session: { access_token: "session-token-123", provider_token: null, expires_in: 3600 },
+        session: {
+          access_token: "session-token-123",
+          provider_token: null,
+          expires_in: 3600,
+          refresh_token: "refresh-token-123",
+          user: {
+            id: "user-123",
+            email: "jarvis@example.com",
+            last_sign_in_at: "2026-05-16T08:00:00.000Z",
+          },
+        },
       }),
     );
     const res = await GET(makeReq({
@@ -191,6 +233,12 @@ describe("GET /auth/callback", () => {
     }));
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("assistantx://auth/callback#");
-    expect(location).toContain("access_token=session-token-123");
+    const hashParams = parseRedirectHash(location);
+    expect(hashParams.get("access_token")).toBe("session-token-123");
+    expect(hashParams.get("refresh_token")).toBe("refresh-token-123");
+    expect(hashParams.get("token_type")).toBe("bearer");
+    expect(hashParams.get("email")).toBe("jarvis@example.com");
+    expect(hashParams.get("user_id")).toBe("user-123");
+    expect(hashParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
   });
 });

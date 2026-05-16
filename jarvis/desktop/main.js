@@ -284,9 +284,12 @@ async function consumeAuthCallback(url, source = 'browser', { expectedState = nu
   return true;
 }
 
-function watchLoginWindow(loginWin) {
+function watchLoginWindow(loginWin, expectedState = null) {
   const inspectUrl = (url, source = 'browser') => {
-    void consumeAuthCallback(url, source).catch((error) => {
+    void consumeAuthCallback(url, source, {
+      expectedState,
+      settlePending: true,
+    }).catch((error) => {
       console.warn('[auth] Failed to process OAuth callback:', error?.message || error);
     });
   };
@@ -335,7 +338,7 @@ function beginDesktopLogin({ parentWindow } = {}) {
   pendingAuthFlow.promise = promise;
 
   loginWin.on('closed', () => settlePendingAuth(null));
-  watchLoginWindow(loginWin);
+  watchLoginWindow(loginWin, state);
   loginWin.loadURL(loginUrl);
   return promise;
 }
