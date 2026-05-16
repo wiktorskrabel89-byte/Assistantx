@@ -286,6 +286,7 @@ async function consumeAuthCallback(url, source = 'browser', { expectedState = nu
 
 function watchLoginWindow(loginWin, expectedState = null) {
   const inspectUrl = (url, source = 'browser') => {
+    console.log('[login-debug] inspecting URL:', url);
     void consumeAuthCallback(url, source, {
       expectedState,
       settlePending: true,

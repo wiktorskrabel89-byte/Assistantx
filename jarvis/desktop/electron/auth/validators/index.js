@@ -104,6 +104,22 @@ function matchesExpectedState(expected, received) {
   return crypto.timingSafeEqual(left, right);
 }
 
+function normalizeCallbackPathname(pathname) {
+  const value = String(pathname || '').trim();
+  if (!value) return '';
+  return value.replace(/\/+$/, '') || '/';
+}
+
+function isWebAuthCallbackPath(pathname) {
+  const normalizedPathname = normalizeCallbackPathname(pathname);
+  if (!normalizedPathname) return false;
+  if (normalizedPathname === '/') return true;
+  if (normalizedPathname === '/auth/callback') return true;
+  if (normalizedPathname === '/jarvis/callback') return true;
+  if (normalizedPathname === '/auth/confirm') return true;
+  return /^\/auth\/v\d+\/callback$/.test(normalizedPathname);
+}
+
 function parseAuthCallback(url, { expectedState = null } = {}) {
   try {
     const parsed = new URL(url);
@@ -119,7 +135,7 @@ function parseAuthCallback(url, { expectedState = null } = {}) {
     const isAssistantxCallback = parsed.protocol === 'assistantx:'
       && parsed.hostname === 'auth'
       && parsed.pathname === '/callback';
-    const isWebCallback = ['/auth/callback', '/jarvis/callback', '/auth/confirm', '/'].includes(parsed.pathname);
+    const isWebCallback = isWebAuthCallbackPath(parsed.pathname);
     if (!isAssistantxCallback && !isWebCallback) return null;
 
     const receivedState = allParams.get('state') || '';
