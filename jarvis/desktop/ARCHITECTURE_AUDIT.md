@@ -41,8 +41,8 @@ Target-state reference:
 - Alias learning and resolver history persisted in launcher DB.
 
 ## Account/session/storage modules
-- `accounts.js` stores desktop session in `%APPDATA%/JarvisDesktop/session.json`.
-- `auth.js` stores device token in `%APPDATA%/JarvisDesktop/token.txt`.
+- `accounts.js` stores desktop auth sessions in Keytar and removes legacy `session.json` / `session.enc` files.
+- `auth.js` stores the desktop device token in Keytar and removes legacy `token.txt` files, falling back to memory-only tokens if Keytar is unavailable.
 - `local-state.js` stores desktop local state/preferences in `%APPDATA%/JarvisDesktop/state.json`.
 - `runtime-config.js` stores optional web URL override in `%APPDATA%/JarvisDesktop/config.json`.
 - `local-state.js` now stores local-only telemetry snapshot counters under `preferences.telemetry`.

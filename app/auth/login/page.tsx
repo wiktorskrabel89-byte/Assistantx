@@ -24,7 +24,14 @@ function sanitizeRedirectPath(value: string | null | undefined) {
 
 function sanitizeDesktopRedirect(value: string | null | undefined) {
   const redirectTo = String(value ?? "").trim();
-  return redirectTo.startsWith("assistantx://") ? redirectTo : "";
+  try {
+    const url = new URL(redirectTo);
+    return url.protocol === "assistantx:" && url.hostname === "auth" && url.pathname === "/callback"
+      ? url.toString()
+      : "";
+  } catch {
+    return "";
+  }
 }
 
 export default function LoginPage() {
@@ -126,14 +133,19 @@ export default function LoginPage() {
 
   function handoffJarvisDesktopSession(session: {
     access_token?: string | null;
+    refresh_token?: string | null;
     user?: { email?: string | null; id?: string | null } | null;
   }) {
     const accessToken = session.access_token;
     if (!accessToken) return false;
 
-    const callbackUrl = new URL("/jarvis/callback", window.location.origin);
+    const callbackUrl = redirectContext.redirectTo
+      ? new URL(redirectContext.redirectTo)
+      : new URL("/jarvis/callback", window.location.origin);
     const hashParams = new URLSearchParams({
       access_token: accessToken,
+      refresh_token: session.refresh_token ?? "",
+      token_type: "bearer",
       email: session.user?.email ?? "",
       user_id: session.user?.id ?? "",
       signed_in_at: new Date().toISOString(),
@@ -261,6 +273,7 @@ export default function LoginPage() {
         redirectContext.client === "jarvis-desktop"
         && handoffJarvisDesktopSession({
           access_token: data.session?.access_token ?? null,
+          refresh_token: data.session?.refresh_token ?? null,
           user: data.user
             ? {
               email: data.user.email ?? null,

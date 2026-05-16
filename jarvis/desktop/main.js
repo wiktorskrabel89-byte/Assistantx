@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
+const { getToken: getDeviceToken } = require('./auth');
 const {
   getAccountProfile,
   getSafeAccountSession,
@@ -286,7 +287,7 @@ async function consumeAuthCallback(url, source = 'browser', { expectedState = nu
 
 function watchLoginWindow(loginWin, expectedState = null) {
   const inspectUrl = (url, source = 'browser') => {
-    console.log('[login-debug] inspecting URL:', url);
+    console.log('[auth] inspecting callback candidate:', redactUrl(url));
     void consumeAuthCallback(url, source, {
       expectedState,
       settlePending: true,
@@ -294,7 +295,14 @@ function watchLoginWindow(loginWin, expectedState = null) {
       console.warn('[auth] Failed to process OAuth callback:', error?.message || error);
     });
   };
-  loginWin.webContents.on('will-redirect', (_event, url) => inspectUrl(url, 'browser-redirect'));
+  const inspectNavigation = (event, url, source) => {
+    if (typeof url === 'string' && url.startsWith(`${AUTH_CALLBACK_URL}#`)) {
+      event.preventDefault();
+    }
+    inspectUrl(url, source);
+  };
+  loginWin.webContents.on('will-navigate', (event, url) => inspectNavigation(event, url, 'browser-navigate'));
+  loginWin.webContents.on('will-redirect', (event, url) => inspectNavigation(event, url, 'browser-redirect'));
   loginWin.webContents.on('did-redirect-navigation', (_event, url) => inspectUrl(url, 'browser-redirect'));
   loginWin.webContents.on('did-navigate', (_event, url) => inspectUrl(url, 'browser-navigate'));
   loginWin.webContents.on('did-navigate-in-page', (_event, url) => inspectUrl(url, 'browser-navigate'));
@@ -894,6 +902,7 @@ createMainIpcHandlers({
   telemetryBus,
   emitDesktopHealth,
   getAuthSessionView: () => getSafeAccountSession(),
+  getDeviceToken,
   refreshAuthSession: async () => toSafeSessionView(await refreshSessionIfNeeded({ reason: 'ipc-refresh' })),
   signOutAccountSession: async (meta) => signOutAccountSession(meta),
   getAccountProfile: async () => getAccountProfile(),
