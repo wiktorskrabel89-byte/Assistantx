@@ -66,6 +66,7 @@ export async function updateSession(request: NextRequest) {
   crypto.getRandomValues(nonceBytes)
   const nonce = btoa(String.fromCharCode(...nonceBytes))
   const csp = buildCsp(nonce)
+  const pathname = request.nextUrl.pathname
 
   // Propagate the nonce to server components via a request header
   const requestHeaders = new Headers(request.headers)
@@ -166,4 +167,3 @@ export async function updateSession(request: NextRequest) {
 
   return supabaseResponse
 }
-  const pathname = request.nextUrl.pathname
