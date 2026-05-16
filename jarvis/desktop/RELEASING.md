@@ -27,6 +27,7 @@ Configured updater feed:
 For each release, publish these files to the same feed directory:
 
 - `latest.yml`
+- `release-notes.json`
 - `JarvisSetup-x64.exe`
 - `JarvisSetup-x64.exe.blockmap`
 - `JarvisSetup-arm64.exe`
@@ -62,14 +63,27 @@ Post-publish CI must verify:
 - `latest.yml` is parseable and includes `version` + artifact refs
 - every artifact referenced by `latest.yml` is publicly reachable via the same
   feed directory
+- `release-notes.json` is reachable and includes non-empty `version` + `highlights`
 
 ## Pre-ship updater verification checklist
 
 - [ ] Packaged app (not dev mode) shows real app version.
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
+- [ ] Startup check is silent (no native updater popups when already up to date).
 - [ ] Startup updater self-test checks `latest.yml` fetch + validation and logs explicit error class (`offline`, DNS, `404`, invalid YAML, auth/permission).
 - [ ] On feed errors (auth/network/metadata), UI shows actionable degraded/unavailable reason.
 - [ ] `latest.yml` exists and parses cleanly.
+- [ ] `release-notes.json` exists and has human-readable highlights.
 - [ ] Every file referenced in `latest.yml` exists in the same feed directory.
-- [ ] Download path works (`update-available` -> `downloading` -> `ready-to-install`).
+- [ ] Download path works (`available` -> `downloading` -> `install-ready`).
 - [ ] Install path works on restart (`quitAndInstall` / install-on-quit).
+
+## Channel-ready feed contract (future-safe)
+
+The updater runtime is channel-aware and expects this structure when channels are enabled:
+
+- `/stable/latest.yml`
+- `/beta/latest.yml`
+- `/nightly/latest.yml`
+
+Current production default remains `stable`.

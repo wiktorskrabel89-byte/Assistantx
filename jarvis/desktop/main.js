@@ -19,6 +19,7 @@ const { createEventBus } = require('./telemetry/event-bus');
 const { getLocalTelemetrySnapshot, wireLocalTelemetry } = require('./telemetry/local-telemetry');
 const { buildSecureWebPreferences } = require('./electron/main/window-security');
 const { createMainIpcHandlers } = require('./electron/ipc/register-main-handlers');
+const { createUpdateCoordinator } = require('./electron/updater/coordinator');
 const { createPermissionPolicy } = require('./electron/permissions/policy');
 const { assertNoDynamicCodeExecution, sanitizeAuditValue } = require('./electron/security/guardrails');
 const { emitSessionChanged } = require('./electron/auth/events');
@@ -206,6 +207,13 @@ let updateState = {
   detail: 'Waiting to check for updates.',
   downloaded: false,
   downloadUrl: null,
+  version: null,
+  releaseNotes: {
+    source: 'none',
+    highlights: [],
+    details: '',
+    hasNotes: false,
+  },
 };
 let pendingAuthFlow = null;
 let silentRefreshTimer = null;
@@ -232,9 +240,11 @@ function emitUpdateStatus(status, detail, extra = {}) {
   };
   sendToRenderer('auto-update-status', updateState);
   if (tray && !tray.isDestroyed()) {
-    if (status === 'update-available' && extra?.version) {
-      tray.setToolTip(`Jarvis Desktop — Update ${extra.version} available ⬆️`);
-    } else if (status !== 'update-available') {
+    if (status === 'available') {
+      tray.setToolTip('AssistantX — Update available ⬆️');
+    } else if (status === 'install-ready') {
+      tray.setToolTip('AssistantX — Restart to install update');
+    } else {
       tray.setToolTip('Jarvis Desktop');
     }
   }
@@ -395,582 +405,49 @@ function stopSilentRefreshLoop() {
   }
 }
 
-// ── electron-updater integration ─────────────────────────────────────────────
-// autoUpdater reads publish config from package.json (generic/public feed in
-// production) and handles detection, download, and install.
-let _autoUpdater = null;
-let _updaterPublishConfig = null;
-const UPDATER_FEED_SELF_TEST_TIMEOUT_MS = 8000;
+// ── updater coordinator integration ───────────────────────────────────────────
+let updateCoordinator = null;
 
-function logUpdaterEvent(event, payload = {}) {
-  try {
-    console.info(`[updater] ${event}`, JSON.stringify(payload));
-  } catch {
-    console.info(`[updater] ${event}`);
-  }
-}
-
-function getUpdaterPublishConfig() {
-  if (_updaterPublishConfig) return _updaterPublishConfig;
-  try {
-    const pkg = require('./package.json');
-    const publish = Array.isArray(pkg?.build?.publish) ? pkg.build.publish : [];
-    const first = publish[0] || {};
-    _updaterPublishConfig = {
-      provider: String(first.provider || 'unknown'),
-      url: typeof first.url === 'string' ? first.url : '',
-      owner: typeof first.owner === 'string' ? first.owner : '',
-      repo: typeof first.repo === 'string' ? first.repo : '',
-      releaseType: typeof first.releaseType === 'string' ? first.releaseType : '',
-    };
-  } catch {
-    _updaterPublishConfig = {
-      provider: 'unknown',
-      url: '',
-      owner: '',
-      repo: '',
-      releaseType: '',
-    };
-  }
-  return _updaterPublishConfig;
-}
-
-function toFeedMetadataUrl(publish) {
-  if (!publish || publish.provider !== 'generic' || !publish.url) return null;
-  const base = String(publish.url).trim().replace(/\/+$/, '');
-  return `${base}/latest.yml`;
-}
-
-function buildUpdaterContext(updater) {
-  const publish = getUpdaterPublishConfig();
-  return {
-    appVersion: app.getVersion(),
-    packaged: app.isPackaged,
-    arch: process.arch,
-    platform: process.platform,
-    channel: String(updater?.channel || 'latest'),
-    provider: publish.provider,
-    feedUrl: publish.url || null,
-    metadataUrl: toFeedMetadataUrl(publish),
-    githubOwner: publish.owner || null,
-    githubRepo: publish.repo || null,
-    githubReleaseType: publish.releaseType || null,
-  };
-}
-
-function toUpdaterErrorMetadata(err) {
-  const message = String(err?.message || err || 'Unknown updater error');
-  const code = typeof err?.code === 'string' || typeof err?.code === 'number'
-    ? String(err.code)
-    : null;
-  const statusCodeRaw = err?.statusCode ?? err?.status ?? err?.response?.status;
-  const statusCode = Number.isFinite(Number(statusCodeRaw)) ? Number(statusCodeRaw) : null;
-  const lower = `${message} ${code || ''}`.toLowerCase();
-  return {
-    message,
-    code,
-    statusCode,
-    isNetwork: /network|fetch|econnrefused|enotfound|ehostunreach|timeout|eai_again|socket hang up|etimedout|err_name_not_resolved|name_not_resolved|dns/.test(lower),
-    isAuth: /401|403|unauthorized|forbidden|bad credentials|token|authentication/.test(lower) || statusCode === 401 || statusCode === 403,
-    isNoRelease: /no published versions? on github|no published releases? on github/.test(lower),
-    isMetadataIssue: /latest\.yml|yaml|cannot parse|invalid update info|blockmap|sha512|checksum/.test(lower),
-  };
-}
-
-function classifyUpdaterFailure(errorMeta, updaterContext) {
-  if (errorMeta.isNoRelease) {
-    return {
-      status: 'up-to-date',
-      health: 'healthy',
-      severity: 'info',
-      reason: 'no-published-release',
-      detail: 'No published update release was found yet.',
-    };
-  }
-  if (errorMeta.isNetwork) {
-    return {
-      status: 'unavailable',
-      health: 'degraded',
-      severity: 'warn',
-      reason: 'network-unavailable',
-      detail: 'Update check is temporarily unavailable (network).',
-    };
-  }
-  if (errorMeta.isAuth || (updaterContext.provider === 'github' && errorMeta.statusCode === 404)) {
-    return {
-      status: 'error',
-      health: 'unavailable',
-      severity: 'error',
-      reason: 'feed-auth-or-permission',
-      detail: 'Update feed authentication/permission failed. Verify feed visibility and credentials.',
-    };
-  }
-  if (errorMeta.isMetadataIssue || errorMeta.statusCode === 404) {
-    return {
-      status: 'error',
-      health: 'unavailable',
-      severity: 'error',
-      reason: 'feed-metadata-invalid-or-missing',
-      detail: 'Update metadata is missing or invalid (latest.yml / artifact mismatch).',
-    };
-  }
-  return {
-    status: 'error',
-    health: 'unavailable',
-    severity: 'error',
-    reason: 'updater-error',
-    detail: `Update error: ${errorMeta.message}`,
-  };
-}
-
-function classifyFeedSelfTestFailure({ statusCode = null, message = '', code = null } = {}) {
-  const lower = `${message} ${code || ''}`.toLowerCase();
-  if (statusCode === 404) {
-    return {
-      health: 'unavailable',
-      severity: 'error',
-      reason: 'feed-metadata-missing',
-      detail: 'Updater feed is reachable but latest.yml is missing (404).',
-    };
-  }
-  if (statusCode === 401 || statusCode === 403) {
-    return {
-      health: 'unavailable',
-      severity: 'error',
-      reason: 'feed-auth-or-permission',
-      detail: 'Updater feed returned an authentication/permission error.',
-    };
-  }
-  if (statusCode !== null && statusCode >= 400) {
-    return {
-      health: 'unavailable',
-      severity: 'error',
-      reason: 'feed-http-error',
-      detail: `Updater feed returned HTTP ${statusCode}.`,
-    };
-  }
-  if (/err_name_not_resolved|name_not_resolved|enotfound|dns|eai_again/.test(lower)) {
-    return {
-      health: 'degraded',
-      severity: 'warn',
-      reason: 'feed-dns-failure',
-      detail: 'Updater feed DNS lookup failed.',
-    };
-  }
-  if (/offline|network|fetch|econnrefused|ehostunreach|socket hang up|etimedout|timeout/.test(lower)) {
-    return {
-      health: 'degraded',
-      severity: 'warn',
-      reason: 'feed-offline',
-      detail: 'Updater feed is temporarily unreachable (offline/network).',
-    };
-  }
-  if (/yaml|latest\.yml|invalid update info|cannot parse/.test(lower)) {
-    return {
-      health: 'unavailable',
-      severity: 'error',
-      reason: 'feed-invalid-yaml',
-      detail: 'Updater metadata is invalid (latest.yml parsing/format error).',
-    };
-  }
-  return {
-    health: 'unavailable',
-    severity: 'error',
-    reason: 'feed-self-test-failed',
-    detail: `Updater feed self-test failed: ${message || 'Unknown error'}`,
-  };
-}
-
-async function runUpdaterFeedSelfTest() {
-  const publish = getUpdaterPublishConfig();
-  const context = {
-    ...buildUpdaterContext(null),
-    phase: 'startup-self-test',
-  };
-  if (!app.isPackaged) {
-    startupDiagnostics.pushEvent('updater', 'info', 'Updater feed self-test skipped in development mode.', context);
-    logUpdaterEvent('feed-self-test:skipped-dev', context);
-    return;
-  }
-  if (publish.provider !== 'generic') {
-    const detail = `Updater provider is '${publish.provider}', expected 'generic'.`;
-    startupDiagnostics.setComponent('updater', 'unavailable', detail);
-    startupDiagnostics.pushEvent('updater', 'error', 'Updater feed self-test failed.', {
-      ...context,
-      classification: 'feed-provider-mismatch',
-      detail,
-    });
-    telemetryBus.publish('startup.unavailable');
-    emitDesktopHealth();
-    logUpdaterEvent('feed-self-test:provider-mismatch', {
-      ...context,
-      expectedProvider: 'generic',
-    });
-    return;
-  }
-
-  const metadataUrl = toFeedMetadataUrl(publish);
-  if (!metadataUrl) {
-    const detail = 'Updater feed URL is empty or invalid.';
-    startupDiagnostics.setComponent('updater', 'unavailable', detail);
-    startupDiagnostics.pushEvent('updater', 'error', 'Updater feed self-test failed.', {
-      ...context,
-      classification: 'feed-url-missing',
-      detail,
-    });
-    telemetryBus.publish('startup.unavailable');
-    emitDesktopHealth();
-    logUpdaterEvent('feed-self-test:url-missing', context);
-    return;
-  }
-
-  startupDiagnostics.pushEvent('updater', 'info', 'Updater feed self-test started.', {
-    ...context,
-    metadataUrl,
+function ensureUpdateCoordinator() {
+  if (updateCoordinator) return updateCoordinator;
+  updateCoordinator = createUpdateCoordinator({
+    app,
+    startupDiagnostics,
+    telemetryBus,
+    onHealth: emitDesktopHealth,
+    onState(nextState) {
+      emitUpdateStatus(nextState.status, nextState.detail, nextState);
+    },
   });
-  logUpdaterEvent('feed-self-test:start', { ...context, metadataUrl });
-
-  try {
-    const res = await fetch(metadataUrl, {
-      cache: 'no-store',
-      redirect: 'follow',
-      headers: { Accept: 'application/octet-stream,text/yaml,text/plain,*/*' },
-      signal: AbortSignal.timeout(UPDATER_FEED_SELF_TEST_TIMEOUT_MS),
-    });
-    const contentType = String(res.headers.get('content-type') || '').toLowerCase();
-    const raw = await res.text();
-    const hasVersion = /^\s*version\s*:/m.test(raw);
-    const hasArtifactRef = /^\s*(path|url)\s*:/m.test(raw) || /^\s*files\s*:/m.test(raw);
-
-    if (!res.ok) {
-      const classification = classifyFeedSelfTestFailure({
-        statusCode: res.status,
-        message: `HTTP ${res.status} ${res.statusText}`.trim(),
-      });
-      startupDiagnostics.setComponent('updater', classification.health, classification.detail);
-      startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
-        ...context,
-        metadataUrl,
-        statusCode: res.status,
-        statusText: res.statusText,
-        classification: classification.reason,
-      });
-      telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : 'startup.unavailable');
-      emitDesktopHealth();
-      logUpdaterEvent('feed-self-test:failed-http', {
-        ...context,
-        metadataUrl,
-        statusCode: res.status,
-        classification: classification.reason,
-      });
-      return;
-    }
-
-    if (!raw.trim() || !hasVersion || !hasArtifactRef) {
-      const classification = classifyFeedSelfTestFailure({ message: 'Invalid latest.yml payload.' });
-      startupDiagnostics.setComponent('updater', classification.health, classification.detail);
-      startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
-        ...context,
-        metadataUrl,
-        classification: classification.reason,
-        contentType,
-      });
-      telemetryBus.publish('startup.unavailable');
-      emitDesktopHealth();
-      logUpdaterEvent('feed-self-test:invalid-yaml', {
-        ...context,
-        metadataUrl,
-        contentType,
-      });
-      return;
-    }
-
-    const allowedContentType = !contentType
-      || contentType.includes('yaml')
-      || contentType.includes('text/plain')
-      || contentType.includes('application/octet-stream');
-    const health = allowedContentType ? 'healthy' : 'degraded';
-    const detail = allowedContentType
-      ? 'Updater feed self-test passed.'
-      : `Updater metadata loaded but returned unexpected content-type: ${contentType}`;
-    startupDiagnostics.setComponent('updater', health, detail);
-    startupDiagnostics.pushEvent('updater', allowedContentType ? 'info' : 'warn', 'Updater feed self-test passed.', {
-      ...context,
-      metadataUrl,
-      contentType: contentType || null,
-      bytes: raw.length,
-    });
-    telemetryBus.publish(health === 'healthy' ? 'startup.healthy' : 'startup.degraded');
-    emitDesktopHealth();
-    logUpdaterEvent('feed-self-test:passed', {
-      ...context,
-      metadataUrl,
-      contentType: contentType || null,
-      bytes: raw.length,
-      health,
-    });
-  } catch (err) {
-    const classification = classifyFeedSelfTestFailure({
-      message: String(err?.message || err || 'Unknown feed self-test error'),
-      code: err?.code || err?.cause?.code || null,
-    });
-    startupDiagnostics.setComponent('updater', classification.health, classification.detail);
-    startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
-      ...context,
-      metadataUrl,
-      errorMessage: String(err?.message || err || 'Unknown feed self-test error'),
-      errorCode: err?.code || err?.cause?.code || null,
-      classification: classification.reason,
-    });
-    telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : 'startup.unavailable');
-    emitDesktopHealth();
-    logUpdaterEvent('feed-self-test:failed-exception', {
-      ...context,
-      metadataUrl,
-      errorMessage: String(err?.message || err || 'Unknown feed self-test error'),
-      errorCode: err?.code || err?.cause?.code || null,
-      classification: classification.reason,
-    });
-  }
+  return updateCoordinator;
 }
 
 function getAutoUpdater() {
-  if (_autoUpdater) return _autoUpdater;
-  try {
-    const { autoUpdater } = require('electron-updater');
-    autoUpdater.autoDownload = false; // ask first, download on demand
-    autoUpdater.autoInstallOnAppQuit = true;
-
-    // Optional auth for GitHub provider only.
-    const publish = getUpdaterPublishConfig();
-    const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
-    if (publish.provider === 'github' && ghToken) {
-      autoUpdater.requestHeaders = { Authorization: `token ${ghToken}` };
-    }
-
-    startupDiagnostics.setComponent('updater', 'healthy', 'Updater initialized.');
-    startupDiagnostics.pushEvent('updater', 'info', 'Updater initialized.', {
-      ...buildUpdaterContext(autoUpdater),
-      hasGithubToken: Boolean(ghToken),
-    });
-    logUpdaterEvent('init', {
-      ...buildUpdaterContext(autoUpdater),
-      hasGithubToken: Boolean(ghToken),
-      autoDownload: autoUpdater.autoDownload,
-      autoInstallOnAppQuit: autoUpdater.autoInstallOnAppQuit,
-    });
-    telemetryBus.publish('startup.healthy');
-    emitDesktopHealth();
-
-    autoUpdater.on('checking-for-update', () => {
-      const context = buildUpdaterContext(autoUpdater);
-      logUpdaterEvent('checking-for-update', context);
-      startupDiagnostics.pushEvent('updater', 'info', 'Checking for update.', context);
-      emitUpdateStatus('checking', 'Checking for updates…', { downloaded: false, diagnostics: context });
-    });
-
-    autoUpdater.on('update-available', (info) => {
-      const context = buildUpdaterContext(autoUpdater);
-      logUpdaterEvent('update-available', {
-        ...context,
-        availableVersion: String(info?.version || ''),
-      });
-      startupDiagnostics.setComponent('updater', 'healthy', `Update ${info.version} is available.`);
-      startupDiagnostics.pushEvent('updater', 'info', 'Update available.', {
-        ...context,
-        availableVersion: String(info.version || ''),
-      });
-      emitDesktopHealth();
-      emitUpdateStatus('update-available', `Update ${info.version} available.`, {
-        downloaded: false,
-        version: info.version,
-        releaseNotes: String(info.releaseNotes || info.releaseName || ''),
-        diagnostics: context,
-      });
-      const notes = String(info.releaseNotes || '').trim().slice(0, 1500);
-      dialog.showMessageBox(win ?? null, {
-        type: 'info',
-        title: 'Jarvis Update Available',
-        message: `Jarvis ${info.version} is ready to download.`,
-        detail: notes ? `What's new:\n\n${notes}` : 'No release notes available for this build.',
-        buttons: ['Download update', 'Later'],
-        defaultId: 0,
-        cancelId: 1,
-      }).then(({ response }) => {
-        if (response === 0) {
-          emitUpdateStatus('downloading', 'Downloading update…', { downloaded: false });
-          autoUpdater.downloadUpdate().catch((err) => {
-            console.warn('[updater] Download failed:', err.message);
-            emitUpdateStatus('error', `Download failed: ${err.message}`, { downloaded: false });
-          });
-        } else {
-          emitUpdateStatus('update-skipped', `Update to ${info.version} postponed.`, {
-            downloaded: false,
-            version: info.version,
-          });
-        }
-      }).catch(() => {
-        emitUpdateStatus('update-skipped', `Update to ${info.version} postponed.`, { downloaded: false });
-      });
-    });
-
-    autoUpdater.on('update-not-available', () => {
-      const context = buildUpdaterContext(autoUpdater);
-      logUpdaterEvent('update-not-available', context);
-      startupDiagnostics.setComponent('updater', 'healthy', 'No update available.');
-      startupDiagnostics.pushEvent('updater', 'info', 'No update available.', context);
-      telemetryBus.publish('startup.healthy');
-      emitDesktopHealth();
-      emitUpdateStatus('up-to-date', 'Jarvis is already up to date.', {
-        downloaded: false,
-        reason: 'up-to-date',
-        diagnostics: context,
-      });
-    });
-
-    autoUpdater.on('download-progress', (progress) => {
-      const pct = Math.round(progress.percent || 0);
-      logUpdaterEvent('download-progress', {
-        ...buildUpdaterContext(autoUpdater),
-        percent: pct,
-        transferred: Number(progress.transferred || 0),
-        total: Number(progress.total || 0),
-      });
-      emitUpdateStatus('downloading', `Downloading update… ${pct}%`, { downloaded: false });
-    });
-
-    autoUpdater.on('update-downloaded', (info) => {
-      logUpdaterEvent('update-downloaded', {
-        ...buildUpdaterContext(autoUpdater),
-        downloadedVersion: String(info?.version || ''),
-      });
-      emitUpdateStatus('ready-to-install', `Update ${info.version} downloaded — will install on next restart.`, {
-        downloaded: true,
-        version: info.version,
-      });
-    });
-
-    autoUpdater.on('error', (err) => {
-      const errorMeta = toUpdaterErrorMetadata(err);
-      const context = buildUpdaterContext(autoUpdater);
-      const classification = classifyUpdaterFailure(errorMeta, context);
-      console.warn('[updater] autoUpdater error:', errorMeta.message);
-      logUpdaterEvent('error', {
-        ...context,
-        ...errorMeta,
-        classification: classification.reason,
-      });
-      startupDiagnostics.setComponent('updater', classification.health, classification.detail);
-      startupDiagnostics.pushEvent('updater', classification.severity, 'Updater emitted error event.', {
-        ...context,
-        ...errorMeta,
-        classification: classification.reason,
-      });
-      telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : classification.health === 'healthy' ? 'startup.healthy' : 'startup.unavailable');
-      emitDesktopHealth();
-      emitUpdateStatus(classification.status, classification.detail, {
-        downloaded: false,
-        reason: classification.reason,
-        diagnostics: context,
-      });
-    });
-
-    _autoUpdater = autoUpdater;
-    return autoUpdater;
-  } catch (err) {
-    console.warn('[updater] electron-updater not available:', err.message);
-    startupDiagnostics.setComponent('updater', 'unavailable', `Updater unavailable: ${err.message}`);
-    startupDiagnostics.pushEvent('updater', 'warn', 'Updater module unavailable.', { message: err.message });
-    telemetryBus.publish('startup.unavailable');
-    emitDesktopHealth();
-    return null;
-  }
+  return ensureUpdateCoordinator().getAutoUpdater();
 }
 
-function checkForUpdates() {
-  if (!app.isPackaged) {
-    logUpdaterEvent('check-for-updates:skipped-dev', buildUpdaterContext(null));
-    startupDiagnostics.setComponent('updater', 'degraded', 'Updater disabled in development mode.');
-    startupDiagnostics.pushEvent('updater', 'info', 'Update check skipped in development mode.');
-    telemetryBus.publish('startup.degraded');
-    emitDesktopHealth();
-    emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
-    return Promise.resolve({ ok: false, reason: 'not-packaged' });
-  }
-  const updater = getAutoUpdater();
-  if (!updater) {
-    return Promise.resolve({ ok: false, reason: 'updater-unavailable' });
-  }
-  try {
-    const context = buildUpdaterContext(updater);
-    logUpdaterEvent('check-for-updates:requested', context);
-    startupDiagnostics.pushEvent('updater', 'info', 'Manual update check requested.', context);
-    updater.checkForUpdates().catch((err) => {
-      const errorMeta = toUpdaterErrorMetadata(err);
-      const classification = classifyUpdaterFailure(errorMeta, context);
-      console.warn('[updater] checkForUpdates failed:', errorMeta.message);
-      logUpdaterEvent('check-for-updates:failed', {
-        ...context,
-        ...errorMeta,
-        classification: classification.reason,
-      });
-      startupDiagnostics.setComponent('updater', classification.health, `Check for updates failed: ${classification.detail}`);
-      startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates failed.', {
-        ...context,
-        ...errorMeta,
-        classification: classification.reason,
-      });
-      telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : classification.health === 'healthy' ? 'startup.healthy' : 'startup.unavailable');
-      emitDesktopHealth();
-      emitUpdateStatus(classification.status, classification.detail, {
-        downloaded: false,
-        reason: classification.reason,
-        diagnostics: context,
-      });
-    });
-    return Promise.resolve({ ok: true });
-  } catch (err) {
-    const errorMeta = toUpdaterErrorMetadata(err);
-    const context = buildUpdaterContext(updater);
-    const classification = classifyUpdaterFailure(errorMeta, context);
-    console.warn('[updater] checkForUpdates threw:', errorMeta.message);
-    logUpdaterEvent('check-for-updates:threw', {
-      ...context,
-      ...errorMeta,
-      classification: classification.reason,
-    });
-    startupDiagnostics.setComponent('updater', classification.health, `Update check threw: ${classification.detail}`);
-    startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates threw.', {
-      ...context,
-      ...errorMeta,
-      classification: classification.reason,
-    });
-    telemetryBus.publish('startup.unavailable');
-    emitDesktopHealth();
-    emitUpdateStatus(classification.status, classification.detail, {
-      downloaded: false,
-      reason: classification.reason,
-      diagnostics: context,
-    });
-    return Promise.resolve({ ok: false, reason: errorMeta.message });
-  }
+function checkForUpdates(source = 'manual') {
+  return ensureUpdateCoordinator().check({ source });
+}
+
+function downloadUpdate(source = 'user') {
+  return ensureUpdateCoordinator().download({ source });
+}
+
+function installUpdate(source = 'user') {
+  return ensureUpdateCoordinator().install({ source });
+}
+
+function deferUpdate(reason = 'later', source = 'user') {
+  return ensureUpdateCoordinator().defer({ reason, source });
+}
+
+function getUpdateState() {
+  return updateState;
 }
 
 function setupAutoUpdater() {
-  if (!app.isPackaged) {
-    logUpdaterEvent('setup:skipped-dev', buildUpdaterContext(null));
-    startupDiagnostics.setComponent('updater', 'degraded', 'Updater disabled in development mode.');
-    startupDiagnostics.pushEvent('updater', 'info', 'Updater setup skipped in development mode.');
-    telemetryBus.publish('startup.degraded');
-    emitDesktopHealth();
-    emitUpdateStatus('disabled', 'Running in dev mode. Install the EXE build to enable auto-updates.');
-    return;
-  }
-  void runUpdaterFeedSelfTest();
-  getAutoUpdater(); // wire up event listeners
-  setTimeout(() => {
-    void checkForUpdates();
-  }, 15000);
+  ensureUpdateCoordinator().setup();
 }
 
 function getTrayIcon() {
@@ -1118,7 +595,7 @@ function createTray() {
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Jarvis', click: () => win.show() },
     { label: 'Open Launcher', click: () => toggleLauncherOverlay() },
-    { label: 'Check for updates', click: () => void checkForUpdates() },
+    { label: 'Check for updates', click: () => void checkForUpdates('tray-manual') },
     { type: 'separator' },
     {
       label: 'Quit',
@@ -1162,11 +639,12 @@ createMainIpcHandlers({
   startupDiagnostics,
   getLocalTelemetrySnapshot,
   checkForUpdates,
+  downloadUpdate,
+  installUpdate,
+  deferUpdate,
+  getUpdateState,
   getJarvisWebUrl,
   setJarvisWebUrl,
-  getAutoUpdater,
-  updateState,
-  emitUpdateStatus,
   telemetryBus,
   emitDesktopHealth,
   getAuthSessionView: () => getSafeAccountSession(),
@@ -1182,6 +660,17 @@ createMainIpcHandlers({
   permissions,
   securityAudit,
 });
+
+module.exports = {
+  checkForUpdates,
+  downloadUpdate,
+  installUpdate,
+  deferUpdate,
+  getUpdateState,
+  getAutoUpdater,
+  setupAutoUpdater,
+  emitUpdateStatus,
+};
 
 app.on('open-url', (event, url) => {
   event.preventDefault();
@@ -1263,5 +752,5 @@ app.on('activate', () => {
   } else {
     win.show();
   }
-  void checkForUpdates();
+  void checkForUpdates('activate-manual');
 });

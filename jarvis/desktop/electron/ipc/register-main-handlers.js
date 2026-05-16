@@ -31,13 +31,12 @@ function createMainIpcHandlers(deps) {
     startupDiagnostics,
     getLocalTelemetrySnapshot,
     checkForUpdates,
+    downloadUpdate,
+    installUpdate,
+    deferUpdate,
+    getUpdateState,
     getJarvisWebUrl,
     setJarvisWebUrl,
-    getAutoUpdater,
-    updateState,
-    emitUpdateStatus,
-    telemetryBus,
-    emitDesktopHealth,
     getAuthSessionView,
     getDeviceToken,
     refreshAuthSession,
@@ -251,6 +250,7 @@ function createMainIpcHandlers(deps) {
     },
 
     'check-for-updates': () => checkForUpdates(),
+    'get-update-state': () => getUpdateState(),
     'get-jarvis-web-url': () => getJarvisWebUrl(),
 
     'set-jarvis-web-url': (_event, url) => {
@@ -263,35 +263,15 @@ function createMainIpcHandlers(deps) {
     },
 
     'download-update': async () => {
-      if (!app.isPackaged) return { ok: false, reason: 'not-packaged' };
-      const updater = getAutoUpdater();
-      if (!updater) return { ok: false, reason: 'updater-unavailable' };
-      try {
-        emitUpdateStatus('downloading', 'Downloading update…', { downloaded: false });
-        await updater.downloadUpdate();
-        startupDiagnostics.setComponent('updater', 'healthy', 'Update downloaded successfully.');
-        startupDiagnostics.pushEvent('updater', 'info', 'Update download completed.');
-        telemetryBus.publish('startup.healthy');
-        emitDesktopHealth();
-        return { ok: true };
-      } catch (error) {
-        startupDiagnostics.setComponent('updater', 'degraded', `Update download failed: ${error.message}`);
-        startupDiagnostics.pushEvent('updater', 'warn', 'Update download failed.', { message: error.message });
-        telemetryBus.publish('startup.degraded');
-        emitDesktopHealth();
-        emitUpdateStatus('error', `Download failed: ${error.message}`, { downloaded: false });
-        return { ok: false, reason: error.message };
-      }
+      return downloadUpdate('renderer-update-now');
     },
 
-    'install-update': () => {
-      if (!app.isPackaged) return { ok: false, reason: 'not-packaged' };
-      const updater = getAutoUpdater();
-      if (!updater || !updateState.downloaded) {
-        return { ok: false, reason: 'no-update-downloaded' };
-      }
-      updater.quitAndInstall();
-      return { ok: true };
+    'install-update': () => installUpdate('renderer-restart-now'),
+    'defer-update': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const reason = validateString(body.reason, { allowEmpty: false, maxLen: 80 }) || 'later';
+      const source = validateString(body.source, { allowEmpty: false, maxLen: 80 }) || 'renderer';
+      return deferUpdate(reason, source);
     },
 
     'open-account-login': async () => {

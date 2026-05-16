@@ -50,11 +50,21 @@ Jarvis Desktop uses `electron-updater` in `main.js` with a generic public feed
 configured in desktop `package.json` (`https://updates.assistantx.pl/stable`).
 
 - Dev mode: updates are disabled.
-- Packaged mode: updater checks, prompts, downloads, and installs.
-- Manual UI actions:
-  - `check-for-updates`
-  - `download-update`
-  - `install-update`
+- Packaged mode: updater does a silent startup check and uses custom in-app update modals (no native updater dialogs).
+- Manual `Check now` remains available as a secondary troubleshooting action in desktop settings/tray.
+- Download behavior is explicit user consent (`autoDownload=false`): update download starts only after user confirmation.
+- Release notes source of truth is `release-notes.json` (fed into renderer-friendly changelog cards, with updater metadata fallback).
+- Supported updater state model:
+  - `idle`
+  - `checking`
+  - `available`
+  - `deferred`
+  - `downloading`
+  - `install-ready`
+  - `installing`
+  - `up-to-date`
+  - `error`
+  - `unavailable`
 
 Release assets are published via:
 - `.github/workflows/build-jarvis.yml`
