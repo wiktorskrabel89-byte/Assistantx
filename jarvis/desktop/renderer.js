@@ -814,8 +814,17 @@ window.addEventListener('DOMContentLoaded', () => {
 			);
 		});
 
-		sidecar.connect();
-		voiceGateway?.connect();
+		function syncSidecarConnection(status) {
+			const normalizedStatus = String(status || 'unknown').toLowerCase();
+			if (normalizedStatus === 'running') {
+				sidecar.connect();
+				voiceGateway?.connect();
+				return;
+			}
+			sidecar.disconnect?.();
+			sidecarConnected = false;
+		}
+
 		voiceGateway?.on('stt_result', ({ text, isFinal }) => {
 			if (!text) return;
 			input.value = text;
@@ -835,6 +844,18 @@ window.addEventListener('DOMContentLoaded', () => {
 		voiceGateway?.on('fallback_required', () => {
 			appendMessage(log, 'Voice gateway', 'Falling back to browser speech APIs.', 'system');
 		});
+		if (ipcRenderer?.invoke) {
+			ipcRenderer.invoke('get-sidecar-status')
+				.then((payload) => {
+					syncSidecarConnection(payload?.status);
+				})
+				.catch(() => null);
+		}
+		if (ipcRenderer?.on) {
+			ipcRenderer.on('sidecar-status', (payload) => {
+				syncSidecarConnection(payload?.status);
+			});
+		}
 	}
 	setupSidecar();
 
