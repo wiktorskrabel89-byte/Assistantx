@@ -22,7 +22,6 @@ export async function GET(request: Request) {
   const client = requestUrl.searchParams.get("client");
   const next = requestUrl.searchParams.get("next") ?? "/";
   const state = requestUrl.searchParams.get("state") ?? "";
-  const redirectTo = requestUrl.searchParams.get("redirect_to") ?? "";
 
   if (!code) {
     const url = new URL("/auth/login", publicOrigin);
@@ -53,49 +52,53 @@ export async function GET(request: Request) {
   }
 
   const redirectPath = next.startsWith("/") && !next.startsWith("//") ? next : "/";
-  const isDesktop = client === "jarvis-desktop" || redirectTo.startsWith("assistantx://");
-  const desktopCallbackUrl = redirectTo.startsWith("assistantx://") ? new URL(redirectTo) : new URL("assistantx://auth/callback");
-  if (isDesktop && data.session?.access_token) {
-    const sessionUser = data.session.user;
-    const hashParams = new URLSearchParams({
-      access_token: data.session.access_token,
-      refresh_token: data.session.refresh_token ?? "",
-      token_type: "bearer",
-      email: sessionUser?.email ?? "",
-      user_id: sessionUser?.id ?? "",
-      signed_in_at: sessionUser?.last_sign_in_at ?? new Date().toISOString(),
-    });
-    if (state) hashParams.set("state", state);
-    desktopCallbackUrl.hash = hashParams.toString();
-  }
-  const response = NextResponse.redirect(
-    isDesktop && data.session?.access_token
-      ? desktopCallbackUrl
-      : new URL(redirectPath, publicOrigin)
-  );
+
   const providerValue = data.user?.app_metadata?.provider;
   const provider = isOAuthProvider(typeof providerValue === "string" ? providerValue : null) ? providerValue : null;
 
-  for (const candidate of ["google", "github"] as const) {
-    const cookieName = getProviderTokenCookieName(candidate);
-    const providerToken = candidate === provider ? data.session?.provider_token : null;
+  function applyProviderCookies(response: NextResponse) {
+    for (const candidate of ["google", "github"] as const) {
+      const cookieName = getProviderTokenCookieName(candidate);
+      const providerToken = candidate === provider ? data.session?.provider_token : null;
 
-    if (providerToken) {
-      response.cookies.set(cookieName, providerToken, {
-        httpOnly: true,
-        secure: isSecureRequest,
-        sameSite: "lax",
-        path: "/",
-        maxAge: Math.max(data.session?.expires_in ?? 3600, 300),
-      });
-    } else {
-      response.cookies.set(cookieName, "", {
-        maxAge: 0,
-        path: "/",
-        sameSite: "lax",
-      });
+      if (providerToken) {
+        response.cookies.set(cookieName, providerToken, {
+          httpOnly: true,
+          secure: isSecureRequest,
+          sameSite: "lax",
+          path: "/",
+          maxAge: Math.max(data.session?.expires_in ?? 3600, 300),
+        });
+      } else {
+        response.cookies.set(cookieName, "", {
+          maxAge: 0,
+          path: "/",
+          sameSite: "lax",
+        });
+      }
     }
   }
 
+  const isDesktop = client === "jarvis-desktop" && Boolean(data.session?.access_token);
+
+  if (isDesktop) {
+    const hashParams = new URLSearchParams({
+      access_token: data.session!.access_token,
+      refresh_token: data.session!.refresh_token ?? "",
+      token_type: "bearer",
+      email: data.user?.email ?? "",
+      user_id: data.user?.id ?? "",
+      signed_in_at: data.user?.last_sign_in_at ?? new Date().toISOString(),
+    });
+    if (state) hashParams.set("state", state);
+    const response = NextResponse.redirect(
+      `assistantx://auth/callback#${hashParams.toString()}`
+    );
+    applyProviderCookies(response);
+    return response;
+  }
+
+  const response = NextResponse.redirect(new URL(redirectPath, publicOrigin));
+  applyProviderCookies(response);
   return response;
 }
