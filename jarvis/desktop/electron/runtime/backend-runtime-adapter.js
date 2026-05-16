@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('crypto');
+
 const { runOrchestration } = require('../ai/orchestrator/orchestrator');
 const { recoverFailure } = require('../recovery/failure-recovery');
 const { createToolRegistry } = require('../tools/registry');
@@ -72,7 +74,7 @@ function createBackendRuntimeAdapter({
     rememberPrompt(normalizedPrompt);
     const plan = planPrompt(normalizedPrompt, { favoriteApp: getFavoriteApp() });
 
-    const workflowId = `rtwf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const workflowId = `rtwf-${crypto.randomUUID().slice(0, 12)}`;
     runtime.automationPersistence.update((current) => ({
       ...current,
       workflows: [
@@ -108,7 +110,7 @@ function createBackendRuntimeAdapter({
     }
 
     const task = {
-      id: `rt-task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: `rt-task-${crypto.randomUUID().slice(0, 12)}`,
       prompt: normalizedPrompt,
       source: meta.source || 'local',
       origin: meta.origin || 'desktop',

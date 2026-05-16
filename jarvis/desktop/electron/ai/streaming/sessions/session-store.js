@@ -1,10 +1,12 @@
 'use strict';
 
+const crypto = require('crypto');
+
 function createStreamingSessionStore() {
   const sessions = new Map();
 
   function create(input = {}) {
-    const id = input.id || `stream-session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = input.id || `stream-session-${crypto.randomUUID().slice(0, 12)}`;
     const session = {
       id,
       ownerId: input.ownerId || null,

@@ -1,12 +1,14 @@
 'use strict';
 
+const crypto = require('crypto');
+
 const STAGES = new Set(['queued', 'planning', 'executing', 'verifying', 'retrying', 'completed', 'failed', 'cancelled']);
 
 function createTaskManager({ bus, cancellation } = {}) {
   const tasks = new Map();
 
   function createTask(input = {}) {
-    const id = input.id || `rt-task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = input.id || `rt-task-${crypto.randomUUID().slice(0, 12)}`;
     const task = {
       id,
       parentId: input.parentId || null,

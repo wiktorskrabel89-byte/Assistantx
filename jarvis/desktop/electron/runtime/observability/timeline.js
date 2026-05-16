@@ -1,11 +1,13 @@
 'use strict';
 
+const crypto = require('crypto');
+
 function createExecutionTimeline({ maxEntries = 2000, bus } = {}) {
   const entries = [];
 
   function add(entry = {}) {
     const next = {
-      id: entry.id || `timeline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: entry.id || `timeline-${crypto.randomUUID().slice(0, 12)}`,
       at: entry.at || new Date().toISOString(),
       ...entry,
     };

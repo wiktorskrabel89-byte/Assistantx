@@ -1,14 +1,16 @@
 'use strict';
 
+const crypto = require('crypto');
+
 function createRuntimeSessions({ bus } = {}) {
   const sessions = new Map();
 
   function createSession(input = {}) {
-    const id = input.id || `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = input.id || `session-${crypto.randomUUID().slice(0, 12)}`;
     const session = {
       id,
       owner: input.owner || 'local',
-      correlationId: input.correlationId || `corr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      correlationId: input.correlationId || `corr-${crypto.randomUUID().slice(0, 12)}`,
       modelRoute: input.modelRoute || null,
       memoryContext: input.memoryContext || null,
       permissionScope: input.permissionScope || 'default',

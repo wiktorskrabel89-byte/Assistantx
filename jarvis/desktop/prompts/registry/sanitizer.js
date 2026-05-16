@@ -1,10 +1,16 @@
 'use strict';
 
 function sanitizeMemoryInput(value) {
-  return String(value || '')
-    .replace(/<\/?script[^>]*>/gi, '')
+  const withoutCodeBlocks = String(value || '')
     .replace(/```[\s\S]*?```/g, '[code-block-removed]')
     .trim();
+
+  return withoutCodeBlocks
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 module.exports = {

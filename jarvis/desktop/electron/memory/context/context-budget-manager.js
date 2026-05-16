@@ -31,7 +31,7 @@ function createContextBudgetManager({ maxTokens = 8000, providerCapabilities = n
         const tokenEstimate = Number(chunk.estimatedTokens || estimateTokens(chunk.text || ''));
         if (tokenEstimate > budget) continue;
         if (used + tokenEstimate > budget) continue;
-        if (chunk.scope === 'full-repo') continue;
+        if (chunk.scope === 'full-repo' || chunk.kind === 'full-repo') continue;
         selected.push(chunk);
         used += tokenEstimate;
       }
