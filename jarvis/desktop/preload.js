@@ -11,7 +11,32 @@
 'use strict';
 
 const { contextBridge, ipcRenderer } = require('electron');
-const { buildJarvisApiV2 } = require('./electron/preload/capabilities');
+
+function buildJarvisApiV2(deps) {
+  const {
+    getToken,
+    backend,
+    localState,
+    scheduler,
+    accounts,
+    runtime,
+    sidecar,
+    voiceGateway,
+  } = deps;
+
+  return {
+    auth: { getToken },
+    backend,
+    localState,
+    scheduler,
+    accounts,
+    runtime,
+    voice: {
+      sidecar,
+      gateway: voiceGateway,
+    },
+  };
+}
 
 // ── IPC channel allow-lists ───────────────────────────────────────────────────
 const ALLOWED_INVOKE = new Set([
