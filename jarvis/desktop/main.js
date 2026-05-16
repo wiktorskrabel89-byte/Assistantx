@@ -435,7 +435,7 @@ function toUpdaterErrorMetadata(err) {
     message,
     code,
     statusCode,
-    isNetwork: /network|fetch|econnrefused|enotfound|ehostunreach|timeout|eai_again|socket hang up|etimedout/.test(lower),
+    isNetwork: /network|fetch|econnrefused|enotfound|ehostunreach|timeout|eai_again|socket hang up|etimedout|err_name_not_resolved|name_not_resolved|dns/.test(lower),
     isAuth: /401|403|unauthorized|forbidden|bad credentials|token|authentication/.test(lower) || statusCode === 401 || statusCode === 403,
     isNoRelease: /no published versions? on github|no published releases? on github/.test(lower),
     isMetadataIssue: /latest\.yml|yaml|cannot parse|invalid update info|blockmap|sha512|checksum/.test(lower),
