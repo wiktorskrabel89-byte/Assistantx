@@ -66,6 +66,9 @@ secrets are missing. Required repository secrets:
 - `UPDATE_FEED_METADATA_PRIVATE_KEY`
 - `UPDATE_FEED_METADATA_PUBLIC_KEY`
 
+The updater metadata key secrets may be stored as PEM text, PEM with escaped
+`\n`, base64-encoded PEM, or base64-encoded DER.
+
 Post-publish CI must verify:
 
 - `latest.yml` is reachable at `https://updates.assistantx.pl/stable/latest.yml`

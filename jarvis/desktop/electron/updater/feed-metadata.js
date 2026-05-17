@@ -237,11 +237,118 @@ function classifyUpdateVersionSanity({
   return { ok: true };
 }
 
+function looksLikePemKey(value) {
+  return /-----BEGIN [A-Z0-9 ]+-----/.test(String(value || ''));
+}
+
+function normalizeKeyMaterial(value) {
+  let normalized = String(value || '').replace(/\r/g, '').trim();
+  if (normalized.includes('\\n') && !normalized.includes('\n')) {
+    normalized = normalized.replace(/\\n/g, '\n');
+  }
+  return normalized.trim();
+}
+
+function tryDecodeBase64KeyMaterial(value) {
+  const normalized = normalizeKeyMaterial(value).replace(/\s+/g, '');
+  if (!normalized || looksLikePemKey(normalized) || !/^[A-Za-z0-9+/=]+$/.test(normalized)) {
+    return null;
+  }
+  try {
+    const decoded = Buffer.from(normalized, 'base64');
+    return decoded.length > 0 ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildKeyMaterialCandidates(value) {
+  const normalized = normalizeKeyMaterial(value);
+  const candidates = [];
+  const seen = new Set();
+
+  function addCandidate(candidate) {
+    if (!candidate) return;
+    const key = Buffer.isBuffer(candidate)
+      ? `buffer:${candidate.toString('base64')}`
+      : `text:${String(candidate)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push(candidate);
+  }
+
+  addCandidate(normalized);
+
+  const decoded = tryDecodeBase64KeyMaterial(normalized);
+  if (!decoded) return candidates;
+
+  const decodedText = normalizeKeyMaterial(decoded.toString('utf8'));
+  if (looksLikePemKey(decodedText)) {
+    addCandidate(decodedText);
+  }
+  addCandidate(decoded);
+  return candidates;
+}
+
+function createKeyObjectFromCandidate(candidate, kind) {
+  const create = kind === 'private' ? crypto.createPrivateKey : crypto.createPublicKey;
+  const derTypes = kind === 'private' ? ['pkcs8', 'pkcs1', 'sec1'] : ['spki', 'pkcs1'];
+
+  if (candidate && typeof candidate === 'object' && typeof candidate.export === 'function' && candidate.type) {
+    return candidate;
+  }
+
+  if (Buffer.isBuffer(candidate)) {
+    for (const type of derTypes) {
+      try {
+        return create({ key: candidate, format: 'der', type });
+      } catch {}
+    }
+  }
+
+  return create(candidate);
+}
+
+function resolveUpdaterKeyObject(kind, value) {
+  const errors = [];
+  for (const candidate of buildKeyMaterialCandidates(value)) {
+    try {
+      return createKeyObjectFromCandidate(candidate, kind);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+
+  const lastError = errors[errors.length - 1];
+  throw new Error(
+    lastError?.message
+      ? `Unsupported updater metadata ${kind} key format: ${lastError.message}`
+      : `Unsupported updater metadata ${kind} key format.`,
+  );
+}
+
+function exportPublicKeyPem(value) {
+  const publicKey = resolveUpdaterKeyObject('public', value);
+  return `${String(publicKey.export({ type: 'spki', format: 'pem' })).trim()}\n`;
+}
+
+function signDetachedMetadata({ payload, privateKey }) {
+  const normalizedPayload = String(payload || '');
+  const normalizedKey = String(privateKey || '').trim();
+  if (!normalizedPayload || !normalizedKey) {
+    throw new Error('Missing updater metadata payload or private key.');
+  }
+  return crypto.sign(
+    'sha256',
+    Buffer.from(normalizedPayload, 'utf8'),
+    resolveUpdaterKeyObject('private', privateKey),
+  ).toString('base64');
+}
+
 function verifyDetachedMetadataSignature({ payload, signature, publicKey }) {
   const normalizedPayload = String(payload || '');
   const normalizedSignature = String(signature || '').replace(/\s+/g, '');
-  const normalizedKey = String(publicKey || '').trim();
-  if (!normalizedPayload || !normalizedSignature || !normalizedKey) {
+  if (!normalizedPayload || !normalizedSignature || !String(publicKey || '').trim()) {
     return {
       ok: false,
       reason: 'signature-validation-failed',
@@ -252,7 +359,7 @@ function verifyDetachedMetadataSignature({ payload, signature, publicKey }) {
     const verified = crypto.verify(
       'sha256',
       Buffer.from(normalizedPayload, 'utf8'),
-      normalizedKey,
+      resolveUpdaterKeyObject('public', publicKey),
       Buffer.from(normalizedSignature, 'base64'),
     );
     return verified
@@ -338,12 +445,14 @@ module.exports = {
   collectArtifactReferences,
   compareSemver,
   computeRolloutBucket,
+  exportPublicKeyPem,
   extractLatestFeedMetadata,
   isStableChannel,
   isUserWithinStagedRollout,
   normalizeStagingPercentage,
   normalizeUpdaterChannel,
   parseSemver,
+  signDetachedMetadata,
   validateLatestFeedMetadata,
   verifyDetachedMetadataSignature,
 };

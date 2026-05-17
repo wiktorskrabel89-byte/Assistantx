@@ -6,8 +6,10 @@ const {
   classifySignatureDiagnostic,
   classifyUpdateVersionSanity,
   compareSemver,
+  exportPublicKeyPem,
   extractLatestFeedMetadata,
   isUserWithinStagedRollout,
+  signDetachedMetadata,
   validateLatestFeedMetadata,
   verifyDetachedMetadataSignature,
 } = require('../../jarvis/desktop/electron/updater/feed-metadata');
@@ -73,7 +75,10 @@ describe('jarvis updater feed metadata helpers', () => {
   it('verifies detached metadata signatures', () => {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
     const payload = 'version: 1.2.3\npath: JarvisSetup-x64.exe\n';
-    const signature = crypto.sign('sha256', Buffer.from(payload, 'utf8'), privateKey).toString('base64');
+    const signature = signDetachedMetadata({
+      payload,
+      privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    });
 
     expect(verifyDetachedMetadataSignature({
       payload,
@@ -89,6 +94,32 @@ describe('jarvis updater feed metadata helpers', () => {
       ok: false,
       reason: 'signature-validation-failed',
     }));
+  });
+
+  it('accepts escaped, base64 PEM, and DER-encoded key secrets', () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const payload = 'version: 2.0.0\npath: JarvisSetup-arm64.exe\n';
+    const escapedPrivatePem = privateKey.export({ type: 'pkcs8', format: 'pem' }).replace(/\n/g, '\\n');
+    const base64PublicPem = Buffer.from(publicKey.export({ type: 'spki', format: 'pem' }), 'utf8').toString('base64');
+    const base64PrivateDer = privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
+    const base64PublicDer = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+
+    const escapedSignature = signDetachedMetadata({ payload, privateKey: escapedPrivatePem });
+    const derSignature = signDetachedMetadata({ payload, privateKey: base64PrivateDer });
+
+    expect(verifyDetachedMetadataSignature({
+      payload,
+      signature: escapedSignature,
+      publicKey: base64PublicPem,
+    })).toEqual({ ok: true });
+
+    expect(verifyDetachedMetadataSignature({
+      payload,
+      signature: derSignature,
+      publicKey: base64PublicDer,
+    })).toEqual({ ok: true });
+
+    expect(exportPublicKeyPem(base64PublicDer)).toContain('BEGIN PUBLIC KEY');
   });
 
   it('computes deterministic staged rollout eligibility from a stable id', () => {
