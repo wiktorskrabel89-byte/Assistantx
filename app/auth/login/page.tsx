@@ -153,6 +153,8 @@ export default function LoginPage() {
     });
     if (redirectContext.state) queryParams.set("state", redirectContext.state);
     callbackUrl.search = queryParams.toString();
+    console.log("[desktop-auth] launching desktop callback");
+    console.log("[desktop-auth] redirect target:", callbackUrl.toString());
     window.location.href = callbackUrl.toString();
     return true;
   }
