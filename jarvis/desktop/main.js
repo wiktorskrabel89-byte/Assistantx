@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
 const { getToken: getDeviceToken } = require('./auth');
 const {
@@ -25,6 +25,16 @@ const { emitSessionChanged } = require('./electron/auth/events');
 const { redactUrl } = require('./electron/auth/redaction');
 const { bindAuthEvents } = require('./electron/auth/sync');
 const { generateOAuthState, parseAuthCallback, toSafeSessionView } = require('./electron/auth/validators');
+const {
+  buildMetadataSignatureUrl,
+  classifyInstallerBlocker,
+  classifySignatureDiagnostic,
+  classifyUpdateVersionSanity,
+  extractLatestFeedMetadata,
+  isUserWithinStagedRollout,
+  validateLatestFeedMetadata,
+  verifyDetachedMetadataSignature,
+} = require('./electron/updater/feed-metadata');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
 // Ensures the launcher SQLite database is initialised before any IPC handler
@@ -201,6 +211,7 @@ let win;
 let overlayWin;
 let tray;
 const pendingLauncherConfirmations = new Map();
+let appIsInstallingUpdate = false;
 let updateState = {
   status: 'idle',
   detail: 'Waiting to check for updates.',
@@ -221,6 +232,20 @@ function sendToRenderer(channel, payload) {
 
 function emitDesktopHealth() {
   sendToRenderer('desktop-health', startupDiagnostics.snapshot());
+}
+
+function allowWindowCloseForQuit() {
+  return Boolean(app.isQuitting || appIsInstallingUpdate);
+}
+
+function prepareForQuitAndInstall(version = null) {
+  appIsInstallingUpdate = true;
+  app.isQuitting = true;
+  telemetryBus.publish('updater.install.started', { version: version || updateState.version || null });
+}
+
+function resetQuitAndInstallPreparation() {
+  appIsInstallingUpdate = false;
 }
 
 function emitUpdateStatus(status, detail, extra = {}) {
@@ -400,118 +425,10 @@ function stopSilentRefreshLoop() {
 // production) and handles detection, download, and install.
 let _autoUpdater = null;
 let _updaterPublishConfig = null;
+let _updaterMetadataPublicKey = undefined;
+let _validatedFeedMetadata = null;
 const UPDATER_FEED_SELF_TEST_TIMEOUT_MS = 8000;
-const SEMVER_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-.]+))?(?:\+[0-9A-Za-z-.]+)?$/;
-
-function parseSemver(value) {
-  const raw = String(value || '').trim();
-  const match = raw.match(SEMVER_PATTERN);
-  if (!match) return null;
-  return {
-    raw,
-    major: Number(match[1]),
-    minor: Number(match[2]),
-    patch: Number(match[3]),
-    prerelease: match[4] || '',
-  };
-}
-
-function compareSemverIdentifiers(left, right) {
-  const leftNumeric = /^\d+$/.test(left);
-  const rightNumeric = /^\d+$/.test(right);
-  if (leftNumeric && rightNumeric) {
-    const leftNum = Number(left);
-    const rightNum = Number(right);
-    if (leftNum > rightNum) return 1;
-    if (leftNum < rightNum) return -1;
-    return 0;
-  }
-  if (leftNumeric) return -1;
-  if (rightNumeric) return 1;
-  if (left > right) return 1;
-  if (left < right) return -1;
-  return 0;
-}
-
-function compareSemver(left, right) {
-  const a = parseSemver(left);
-  const b = parseSemver(right);
-  if (!a || !b) return null;
-  if (a.major !== b.major) return a.major > b.major ? 1 : -1;
-  if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
-  if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
-  if (!a.prerelease && !b.prerelease) return 0;
-  if (!a.prerelease) return 1;
-  if (!b.prerelease) return -1;
-  const aIds = a.prerelease.split('.');
-  const bIds = b.prerelease.split('.');
-  const maxLen = Math.max(aIds.length, bIds.length);
-  for (let i = 0; i < maxLen; i += 1) {
-    const aId = aIds[i];
-    const bId = bIds[i];
-    if (aId === undefined) return -1;
-    if (bId === undefined) return 1;
-    const cmp = compareSemverIdentifiers(aId, bId);
-    if (cmp !== 0) return cmp;
-  }
-  return 0;
-}
-
-function normalizeUpdaterChannel(value) {
-  const raw = String(value || '').trim().toLowerCase();
-  if (!raw || raw === 'latest' || raw === 'stable') return 'stable';
-  if (raw.includes('beta') || raw === 'prerelease') return 'beta';
-  return raw;
-}
-
-function isStableChannel(channel) {
-  return normalizeUpdaterChannel(channel) === 'stable';
-}
-
-function classifyUpdateVersionSanity({ availableVersion, currentVersion, runtimeChannel, metadataChannel }) {
-  if (!parseSemver(availableVersion)) {
-    return {
-      ok: false,
-      reason: 'feed-version-invalid',
-      detail: `Updater metadata version '${availableVersion}' is not valid semver.`,
-    };
-  }
-  if (!parseSemver(currentVersion)) {
-    return {
-      ok: false,
-      reason: 'current-version-invalid',
-      detail: `Current app version '${currentVersion}' is not valid semver.`,
-    };
-  }
-  const cmp = compareSemver(availableVersion, currentVersion);
-  if (cmp === null) {
-    return {
-      ok: false,
-      reason: 'feed-version-compare-failed',
-      detail: 'Failed to compare updater version metadata.',
-    };
-  }
-  if (cmp <= 0) {
-    return {
-      ok: false,
-      reason: 'feed-version-not-newer',
-      detail: `Updater metadata version (${availableVersion}) is not newer than current app version (${currentVersion}).`,
-    };
-  }
-
-  const stableRuntime = isStableChannel(runtimeChannel);
-  const normalizedMetadataChannel = normalizeUpdaterChannel(metadataChannel);
-  const metadataExplicitlyBeta = normalizedMetadataChannel === 'beta';
-  const isPrereleaseVersion = String(availableVersion).includes('-');
-  if (stableRuntime && (metadataExplicitlyBeta || isPrereleaseVersion)) {
-    return {
-      ok: false,
-      reason: 'feed-channel-version-mismatch',
-      detail: 'Stable updater channel received beta/prerelease metadata.',
-    };
-  }
-  return { ok: true };
-}
+const UPDATER_METADATA_PUBLIC_KEY_PATH = path.join(__dirname, 'electron', 'updater', 'feed-public-key.pem');
 
 function logUpdaterEvent(event, payload = {}) {
   try {
@@ -552,6 +469,26 @@ function toFeedMetadataUrl(publish) {
   return `${base}/latest.yml`;
 }
 
+function toFeedSignatureUrl(publish) {
+  return buildMetadataSignatureUrl(toFeedMetadataUrl(publish));
+}
+
+function getUpdaterMetadataPublicKey() {
+  if (_updaterMetadataPublicKey !== undefined) return _updaterMetadataPublicKey;
+  const envKey = String(process.env.JARVIS_UPDATER_METADATA_PUBLIC_KEY || '').trim();
+  if (envKey) {
+    _updaterMetadataPublicKey = envKey;
+    return _updaterMetadataPublicKey;
+  }
+  try {
+    const bundledKey = fs.readFileSync(UPDATER_METADATA_PUBLIC_KEY_PATH, 'utf8').trim();
+    _updaterMetadataPublicKey = bundledKey || null;
+  } catch {
+    _updaterMetadataPublicKey = null;
+  }
+  return _updaterMetadataPublicKey;
+}
+
 function buildUpdaterContext(updater) {
   const publish = getUpdaterPublishConfig();
   return {
@@ -563,9 +500,11 @@ function buildUpdaterContext(updater) {
     provider: publish.provider,
     feedUrl: publish.url || null,
     metadataUrl: toFeedMetadataUrl(publish),
+    signatureUrl: toFeedSignatureUrl(publish),
     githubOwner: publish.owner || null,
     githubRepo: publish.repo || null,
     githubReleaseType: publish.releaseType || null,
+    metadataSignatureConfigured: Boolean(getUpdaterMetadataPublicKey()),
   };
 }
 
@@ -577,6 +516,9 @@ function toUpdaterErrorMetadata(err) {
   const statusCodeRaw = err?.statusCode ?? err?.status ?? err?.response?.status;
   const statusCode = Number.isFinite(Number(statusCodeRaw)) ? Number(statusCodeRaw) : null;
   const lower = `${message} ${code || ''}`.toLowerCase();
+  const signatureDiagnostic = classifySignatureDiagnostic(lower);
+  const installerBlocker = classifyInstallerBlocker(lower);
+  const exitCodeMatch = lower.match(/exit code[:=\s]+(-?\d+)/);
   return {
     message,
     code,
@@ -588,17 +530,48 @@ function toUpdaterErrorMetadata(err) {
     isSignatureIssue: /signature|code sign|publisher name|certificate|trust chain|unable to verify|digital signature|authenticode/.test(lower),
     isInstallerExecutionIssue: /quitandinstall|installer|elevat|spawn|access is denied|eperm|execution failed|windows cannot access/.test(lower),
     isDownloadIssue: /download|differential/i.test(lower),
+    signatureDiagnostic,
+    installerBlocker,
+    installerExitCode: exitCodeMatch ? Number(exitCodeMatch[1]) : null,
   };
 }
 
 function classifyUpdaterFailure(errorMeta, updaterContext) {
   if (errorMeta.isSignatureIssue) {
     return {
+        status: 'error',
+        health: 'unavailable',
+        severity: 'error',
+        reason: 'signature-validation-failed',
+        detail: errorMeta.signatureDiagnostic === 'unsigned-installer'
+          ? 'Downloaded installer is unsigned. Verify release signing before publishing.'
+          : errorMeta.signatureDiagnostic === 'certificate-expired'
+            ? 'Installer certificate is expired. Renew the signing certificate or timestamp chain.'
+            : errorMeta.signatureDiagnostic === 'certificate-revoked'
+              ? 'Installer certificate appears revoked. Re-sign the release with a valid certificate.'
+              : errorMeta.signatureDiagnostic === 'timestamp-invalid'
+                ? 'Installer timestamp validation failed. Verify the timestamp service and signing pipeline.'
+                : errorMeta.signatureDiagnostic === 'smartscreen-reputation'
+                  ? 'Windows SmartScreen blocked the installer. Verify signing reputation and distribution policy.'
+                  : 'Update signature verification failed. Verify Windows code signing certificate and release metadata parity.',
+      };
+  }
+  if (errorMeta.installerBlocker === 'file-lock-detected') {
+    return {
       status: 'error',
       health: 'unavailable',
       severity: 'error',
-      reason: 'signature-validation-failed',
-      detail: 'Update signature verification failed. Verify Windows code signing certificate and release metadata parity.',
+      reason: 'installer-lock-detected',
+      detail: 'Installer launch was blocked by a file lock or another running process.',
+    };
+  }
+  if (errorMeta.installerBlocker === 'security-software-block') {
+    return {
+      status: 'error',
+      health: 'unavailable',
+      severity: 'error',
+      reason: 'installer-blocked-by-security-software',
+      detail: 'Installer launch was blocked by antivirus or endpoint security software.',
     };
   }
   if (errorMeta.isInstallerExecutionIssue && updateState.status === 'installing') {
@@ -607,7 +580,9 @@ function classifyUpdaterFailure(errorMeta, updaterContext) {
       health: 'unavailable',
       severity: 'error',
       reason: 'installer-execution-failed',
-      detail: 'Update installer execution failed after download.',
+      detail: errorMeta.installerBlocker === 'app-still-running'
+        ? 'Update installer execution failed because the app is still running.'
+        : 'Update installer execution failed after download.',
     };
   }
   if (errorMeta.isDownloadIssue || updateState.status === 'downloading') {
@@ -722,6 +697,215 @@ function classifyFeedSelfTestFailure({ statusCode = null, message = '', code = n
   };
 }
 
+function applyValidatedFeedFailure({ context, classification, metadataUrl, extra = {} }) {
+  startupDiagnostics.setComponent('updater', classification.health, classification.detail);
+  startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed validation failed.', {
+    ...context,
+    metadataUrl,
+    classification: classification.reason,
+    ...extra,
+  });
+  telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : 'startup.unavailable');
+  emitDesktopHealth();
+}
+
+async function fetchValidatedFeedMetadata({ updater = null, phase = 'runtime-check' } = {}) {
+  const publish = getUpdaterPublishConfig();
+  const context = {
+    ...buildUpdaterContext(updater),
+    phase,
+  };
+  const metadataUrl = toFeedMetadataUrl(publish);
+  if (!metadataUrl) {
+    return {
+      ok: false,
+      context,
+      metadataUrl,
+      classification: {
+        health: 'unavailable',
+        severity: 'error',
+        reason: 'feed-url-missing',
+        detail: 'Updater feed URL is empty or invalid.',
+      },
+    };
+  }
+
+  try {
+    const res = await fetch(metadataUrl, {
+      cache: 'no-store',
+      redirect: 'follow',
+      headers: { Accept: 'application/octet-stream,text/yaml,text/plain,*/*' },
+      signal: AbortSignal.timeout(UPDATER_FEED_SELF_TEST_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      return {
+        ok: false,
+        context,
+        metadataUrl,
+        classification: classifyFeedSelfTestFailure({
+          statusCode: res.status,
+          message: `HTTP ${res.status} ${res.statusText}`.trim(),
+        }),
+        extra: {
+          statusCode: res.status,
+          statusText: res.statusText,
+        },
+      };
+    }
+
+    const cacheControl = String(res.headers.get('cache-control') || '');
+    const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+    const raw = await res.text();
+    const metadata = extractLatestFeedMetadata(raw);
+    const structural = validateLatestFeedMetadata({ metadata, runtimeChannel: context.channel });
+    if (!structural.ok) {
+      return {
+        ok: false,
+        context,
+        metadataUrl,
+        classification: {
+          health: 'unavailable',
+          severity: 'error',
+          reason: structural.reason,
+          detail: structural.detail,
+        },
+        extra: {
+          contentType,
+        },
+      };
+    }
+
+    if (!cacheControl || !/no-cache/i.test(cacheControl)) {
+      return {
+        ok: false,
+        context,
+        metadataUrl,
+        classification: {
+          health: 'unavailable',
+          severity: 'error',
+          reason: 'feed-cache-control-invalid',
+          detail: `Updater metadata must return Cache-Control containing no-cache. Got '${cacheControl || '(missing)'}'.`,
+        },
+        extra: {
+          cacheControl: cacheControl || null,
+        },
+      };
+    }
+
+    const publicKey = getUpdaterMetadataPublicKey();
+    let signatureVerified = false;
+    let signatureVerificationMode = publicKey ? 'verified' : 'disabled';
+    if (publicKey) {
+      const signatureUrl = toFeedSignatureUrl(publish);
+      try {
+        const signatureRes = await fetch(signatureUrl, {
+          cache: 'no-store',
+          redirect: 'follow',
+          headers: { Accept: 'text/plain,application/octet-stream,*/*' },
+          signal: AbortSignal.timeout(UPDATER_FEED_SELF_TEST_TIMEOUT_MS),
+        });
+        if (!signatureRes.ok) {
+          return {
+            ok: false,
+            context,
+            metadataUrl,
+            classification: {
+              health: 'unavailable',
+              severity: 'error',
+              reason: 'feed-signature-missing',
+              detail: `Updater metadata signature is missing or unreachable (${signatureRes.status}).`,
+            },
+            extra: {
+              signatureUrl,
+              signatureStatusCode: signatureRes.status,
+            },
+          };
+        }
+        const signatureRaw = await signatureRes.text();
+        const signatureValidation = verifyDetachedMetadataSignature({
+          payload: raw,
+          signature: signatureRaw,
+          publicKey,
+        });
+        if (!signatureValidation.ok) {
+          return {
+            ok: false,
+            context,
+            metadataUrl,
+            classification: {
+              health: 'unavailable',
+              severity: 'error',
+              reason: 'feed-signature-invalid',
+              detail: signatureValidation.detail,
+            },
+            extra: {
+              signatureUrl,
+            },
+          };
+        }
+        signatureVerified = true;
+        telemetryBus.publish('updater.metadata.signature-verified', { version: metadata.version });
+      } catch (error) {
+        return {
+          ok: false,
+          context,
+          metadataUrl,
+          classification: {
+            health: 'unavailable',
+            severity: 'error',
+            reason: 'feed-signature-invalid',
+            detail: `Updater metadata signature fetch/verify failed: ${error?.message || error}`,
+          },
+          extra: {
+            signatureUrl,
+          },
+        };
+      }
+    }
+
+    let rollout = null;
+    if (metadata.stagingPercentage !== null) {
+      const stableId = await getDeviceToken().catch(() => null);
+      rollout = isUserWithinStagedRollout({
+        stagingPercentage: metadata.stagingPercentage,
+        stableId,
+        version: metadata.version,
+      });
+    }
+
+    _validatedFeedMetadata = {
+      ...metadata,
+      metadataUrl,
+      signatureUrl: toFeedSignatureUrl(publish),
+      cacheControl,
+      contentType,
+      signatureVerified,
+      signatureVerificationMode,
+      rollout,
+    };
+    return {
+      ok: true,
+      context,
+      metadata: _validatedFeedMetadata,
+      metadataUrl,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      context,
+      metadataUrl,
+      classification: classifyFeedSelfTestFailure({
+        message: String(err?.message || err || 'Unknown feed self-test error'),
+        code: err?.code || err?.cause?.code || null,
+      }),
+      extra: {
+        errorMessage: String(err?.message || err || 'Unknown feed self-test error'),
+        errorCode: err?.code || err?.cause?.code || null,
+      },
+    };
+  }
+}
+
 async function runUpdaterFeedSelfTest() {
   const publish = getUpdaterPublishConfig();
   const context = {
@@ -771,155 +955,103 @@ async function runUpdaterFeedSelfTest() {
   });
   logUpdaterEvent('feed-self-test:start', { ...context, metadataUrl });
 
-  try {
-    const res = await fetch(metadataUrl, {
-      cache: 'no-store',
-      redirect: 'follow',
-      headers: { Accept: 'application/octet-stream,text/yaml,text/plain,*/*' },
-      signal: AbortSignal.timeout(UPDATER_FEED_SELF_TEST_TIMEOUT_MS),
+  const validation = await fetchValidatedFeedMetadata({ updater: null, phase: 'startup-self-test' });
+  if (!validation.ok) {
+    applyValidatedFeedFailure({
+      context,
+      metadataUrl,
+      classification: validation.classification,
+      extra: validation.extra,
     });
-    const contentType = String(res.headers.get('content-type') || '').toLowerCase();
-    const raw = await res.text();
-    const hasVersion = /^\s*version\s*:/m.test(raw);
-    const hasArtifactRef = /^\s*(path|url)\s*:/m.test(raw) || /^\s*files\s*:/m.test(raw);
-    const versionMatch = raw.match(/^\s*version\s*:\s*["']?([^"'\r\n]+)["']?\s*$/m);
-    const latestVersion = versionMatch ? versionMatch[1].trim() : '';
-    const channelMatch = raw.match(/^\s*channel\s*:\s*["']?([^"'\r\n]+)["']?\s*$/m);
-    const metadataChannel = channelMatch ? channelMatch[1].trim() : 'stable';
-
-    if (!res.ok) {
-      const classification = classifyFeedSelfTestFailure({
-        statusCode: res.status,
-        message: `HTTP ${res.status} ${res.statusText}`.trim(),
-      });
-      startupDiagnostics.setComponent('updater', classification.health, classification.detail);
-      startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
-        ...context,
-        metadataUrl,
-        statusCode: res.status,
-        statusText: res.statusText,
-        classification: classification.reason,
-      });
-      telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : 'startup.unavailable');
-      emitDesktopHealth();
-      logUpdaterEvent('feed-self-test:failed-http', {
-        ...context,
-        metadataUrl,
-        statusCode: res.status,
-        classification: classification.reason,
-      });
-      return;
+    if (validation.classification.reason === 'feed-signature-invalid'
+      || validation.classification.reason === 'feed-signature-missing') {
+      telemetryBus.publish('updater.metadata.signature-failed', { metadataUrl });
     }
+    logUpdaterEvent('feed-self-test:failed', {
+      ...context,
+      metadataUrl,
+      classification: validation.classification.reason,
+      ...(validation.extra || {}),
+    });
+    return;
+  }
 
-    if (!raw.trim() || !hasVersion || !hasArtifactRef) {
-      const classification = classifyFeedSelfTestFailure({ message: 'Invalid latest.yml payload.' });
-      startupDiagnostics.setComponent('updater', classification.health, classification.detail);
-      startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
-        ...context,
-        metadataUrl,
-        classification: classification.reason,
-        contentType,
-      });
-      telemetryBus.publish('startup.unavailable');
-      emitDesktopHealth();
-      logUpdaterEvent('feed-self-test:invalid-yaml', {
-        ...context,
-        metadataUrl,
-        contentType,
-      });
-      return;
-    }
-
-    if (!parseSemver(latestVersion)) {
-      const detail = `Updater metadata has invalid semver version: '${latestVersion || '(missing)'}'.`;
-      startupDiagnostics.setComponent('updater', 'unavailable', detail);
-      startupDiagnostics.pushEvent('updater', 'error', 'Updater feed self-test failed.', {
-        ...context,
-        metadataUrl,
-        classification: 'feed-version-invalid',
-        latestVersion: latestVersion || null,
-      });
-      telemetryBus.publish('startup.unavailable');
-      emitDesktopHealth();
-      logUpdaterEvent('feed-self-test:invalid-version', {
-        ...context,
-        metadataUrl,
-        latestVersion: latestVersion || null,
-      });
-      return;
-    }
-
-    if (isStableChannel(context.channel) && !isStableChannel(metadataChannel)) {
-      const detail = `Updater metadata channel mismatch: runtime='${context.channel}', metadata='${metadataChannel}'.`;
-      startupDiagnostics.setComponent('updater', 'unavailable', detail);
-      startupDiagnostics.pushEvent('updater', 'error', 'Updater feed self-test failed.', {
-        ...context,
-        metadataUrl,
-        classification: 'feed-channel-mismatch',
-        latestVersion,
-        metadataChannel,
-      });
-      telemetryBus.publish('startup.unavailable');
-      emitDesktopHealth();
-      logUpdaterEvent('feed-self-test:channel-mismatch', {
-        ...context,
-        metadataUrl,
-        latestVersion,
-        metadataChannel,
-      });
-      return;
-    }
-
-    const allowedContentType = !contentType
-      || contentType.includes('yaml')
-      || contentType.includes('text/plain')
-      || contentType.includes('application/octet-stream');
-    const health = allowedContentType ? 'healthy' : 'degraded';
-    const detail = allowedContentType
+  const { metadata } = validation;
+  const allowedContentType = !metadata.contentType
+    || metadata.contentType.includes('yaml')
+    || metadata.contentType.includes('text/plain')
+    || metadata.contentType.includes('application/octet-stream');
+  const signatureMissing = metadata.signatureVerificationMode === 'disabled';
+  const health = allowedContentType && !signatureMissing ? 'healthy' : 'degraded';
+  const detail = signatureMissing
+    ? 'Updater feed self-test passed, but detached metadata signature verification is disabled for this build.'
+    : allowedContentType
       ? 'Updater feed self-test passed.'
-      : `Updater metadata loaded but returned unexpected content-type: ${contentType}`;
-    startupDiagnostics.setComponent('updater', health, detail);
-    startupDiagnostics.pushEvent('updater', allowedContentType ? 'info' : 'warn', 'Updater feed self-test passed.', {
-      ...context,
-      metadataUrl,
-      contentType: contentType || null,
-      bytes: raw.length,
-      latestVersion,
-      metadataChannel,
-    });
-    telemetryBus.publish(health === 'healthy' ? 'startup.healthy' : 'startup.degraded');
-    emitDesktopHealth();
-    logUpdaterEvent('feed-self-test:passed', {
-      ...context,
-      metadataUrl,
-      contentType: contentType || null,
-      bytes: raw.length,
-      health,
-      latestVersion,
-      metadataChannel,
-    });
-  } catch (err) {
-    const classification = classifyFeedSelfTestFailure({
-      message: String(err?.message || err || 'Unknown feed self-test error'),
-      code: err?.code || err?.cause?.code || null,
-    });
-    startupDiagnostics.setComponent('updater', classification.health, classification.detail);
-    startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test failed.', {
-      ...context,
-      metadataUrl,
-      errorMessage: String(err?.message || err || 'Unknown feed self-test error'),
-      errorCode: err?.code || err?.cause?.code || null,
-      classification: classification.reason,
-    });
-    telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : 'startup.unavailable');
-    emitDesktopHealth();
-    logUpdaterEvent('feed-self-test:failed-exception', {
-      ...context,
-      metadataUrl,
-      errorMessage: String(err?.message || err || 'Unknown feed self-test error'),
-      errorCode: err?.code || err?.cause?.code || null,
-      classification: classification.reason,
-    });
+      : `Updater metadata loaded but returned unexpected content-type: ${metadata.contentType}`;
+  startupDiagnostics.setComponent('updater', health, detail);
+  startupDiagnostics.pushEvent('updater', health === 'healthy' ? 'info' : 'warn', 'Updater feed self-test passed.', {
+    ...context,
+    metadataUrl,
+    contentType: metadata.contentType || null,
+    cacheControl: metadata.cacheControl || null,
+    latestVersion: metadata.version,
+    metadataChannel: metadata.channel,
+    minimumAllowedVersion: metadata.minimumAllowedVersion || null,
+    stagingPercentage: metadata.stagingPercentage,
+    signatureVerified: metadata.signatureVerified,
+  });
+  telemetryBus.publish(health === 'healthy' ? 'startup.healthy' : 'startup.degraded');
+  emitDesktopHealth();
+  logUpdaterEvent('feed-self-test:passed', {
+    ...context,
+    metadataUrl,
+    contentType: metadata.contentType || null,
+    cacheControl: metadata.cacheControl || null,
+    health,
+    latestVersion: metadata.version,
+    metadataChannel: metadata.channel,
+    minimumAllowedVersion: metadata.minimumAllowedVersion || null,
+    stagingPercentage: metadata.stagingPercentage,
+    signatureVerified: metadata.signatureVerified,
+    rolloutEligible: metadata.rollout?.eligible ?? null,
+  });
+}
+
+function shouldRetryFullInstallerDownload(errorMeta) {
+  const lower = String(errorMeta?.message || '').toLowerCase();
+  return /differential|blockmap|checksum|sha512|range|content-length|unexpected end|corrupt/.test(lower);
+}
+
+async function downloadUpdateWithFallback(updater, { version = null } = {}) {
+  const context = buildUpdaterContext(updater);
+  telemetryBus.publish('updater.download.started', { version: version || updateState.version || null });
+  updater.disableDifferentialDownload = false;
+  try {
+    return await updater.downloadUpdate();
+  } catch (error) {
+    const errorMeta = toUpdaterErrorMetadata(error);
+    if (!updater.disableDifferentialDownload && shouldRetryFullInstallerDownload(errorMeta)) {
+      telemetryBus.publish('updater.download.full-fallback', { version: version || updateState.version || null });
+      logUpdaterEvent('download:fallback-full-installer', {
+        ...context,
+        version: version || updateState.version || null,
+        message: errorMeta.message,
+      });
+      emitUpdateStatus('downloading', 'Differential update failed — retrying full installer…', {
+        downloaded: false,
+        version: version || updateState.version || null,
+        diagnostics: context,
+      });
+      updater.disableDifferentialDownload = true;
+      try {
+        return await updater.downloadUpdate();
+      } finally {
+        updater.disableDifferentialDownload = false;
+      }
+    }
+    throw error;
+  } finally {
+    updater.disableDifferentialDownload = false;
   }
 }
 
@@ -929,6 +1061,34 @@ function getAutoUpdater() {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.autoDownload = false; // ask first, download on demand
     autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.allowPrerelease = false;
+    autoUpdater.disableWebInstaller = true;
+    autoUpdater.isUserWithinRollout = async (updateInfo) => {
+      const stagingPercentage = Number.isFinite(Number(updateInfo?.stagingPercentage))
+        ? Number(updateInfo.stagingPercentage)
+        : null;
+      const rollout = isUserWithinStagedRollout({
+        stagingPercentage,
+        stableId: await getDeviceToken().catch(() => null),
+        version: String(updateInfo?.version || app.getVersion()),
+      });
+      logUpdaterEvent('rollout:decision', {
+        ...buildUpdaterContext(autoUpdater),
+        version: String(updateInfo?.version || ''),
+        stagingPercentage: rollout.percentage,
+        bucket: rollout.bucket,
+        eligible: rollout.eligible,
+        reason: rollout.reason,
+      });
+      if (!rollout.eligible) {
+        telemetryBus.publish('updater.rollout.deferred', {
+          version: String(updateInfo?.version || ''),
+          stagingPercentage: rollout.percentage,
+        });
+      }
+      return rollout.eligible;
+    };
 
     // Optional auth for GitHub provider only.
     const publish = getUpdaterPublishConfig();
@@ -947,6 +1107,9 @@ function getAutoUpdater() {
       hasGithubToken: Boolean(ghToken),
       autoDownload: autoUpdater.autoDownload,
       autoInstallOnAppQuit: autoUpdater.autoInstallOnAppQuit,
+      allowDowngrade: autoUpdater.allowDowngrade,
+      allowPrerelease: autoUpdater.allowPrerelease,
+      disableWebInstaller: autoUpdater.disableWebInstaller,
     });
     telemetryBus.publish('startup.healthy');
     emitDesktopHealth();
@@ -961,11 +1124,36 @@ function getAutoUpdater() {
     autoUpdater.on('update-available', (info) => {
       const context = buildUpdaterContext(autoUpdater);
       const availableVersion = String(info?.version || '');
+      if (_validatedFeedMetadata?.version && _validatedFeedMetadata.version !== availableVersion) {
+        const detail = `Validated feed version (${_validatedFeedMetadata.version}) does not match updater runtime metadata (${availableVersion}).`;
+        logUpdaterEvent('update-available:rejected', {
+          ...context,
+          availableVersion,
+          expectedVersion: _validatedFeedMetadata.version,
+          classification: 'feed-runtime-version-mismatch',
+        });
+        startupDiagnostics.setComponent('updater', 'unavailable', detail);
+        startupDiagnostics.pushEvent('updater', 'error', 'Update metadata validation failed.', {
+          ...context,
+          availableVersion,
+          expectedVersion: _validatedFeedMetadata.version,
+          classification: 'feed-runtime-version-mismatch',
+        });
+        telemetryBus.publish('startup.unavailable');
+        emitDesktopHealth();
+        emitUpdateStatus('error', detail, {
+          downloaded: false,
+          reason: 'feed-runtime-version-mismatch',
+          diagnostics: context,
+        });
+        return;
+      }
       const sanity = classifyUpdateVersionSanity({
         availableVersion,
         currentVersion: context.appVersion,
         runtimeChannel: context.channel,
-        metadataChannel: info?.channel || info?.releaseChannel || context.channel,
+        metadataChannel: _validatedFeedMetadata?.channel || info?.channel || info?.releaseChannel || context.channel,
+        minimumAllowedVersion: _validatedFeedMetadata?.minimumAllowedVersion || '',
       });
       if (!sanity.ok) {
         logUpdaterEvent('update-available:rejected', {
@@ -992,6 +1180,10 @@ function getAutoUpdater() {
         ...context,
         availableVersion,
       });
+      telemetryBus.publish('updater.offered', {
+        version: availableVersion,
+        minimumAllowedVersion: _validatedFeedMetadata?.minimumAllowedVersion || null,
+      });
       startupDiagnostics.setComponent('updater', 'healthy', `Update ${info.version} is available.`);
       startupDiagnostics.pushEvent('updater', 'info', 'Update available.', {
         ...context,
@@ -1015,18 +1207,26 @@ function getAutoUpdater() {
         cancelId: 1,
       }).then(({ response }) => {
         if (response === 0) {
+          telemetryBus.publish('updater.accepted', { version: availableVersion });
           emitUpdateStatus('downloading', 'Downloading update…', { downloaded: false });
-          autoUpdater.downloadUpdate().catch((err) => {
-            console.warn('[updater] Download failed:', err.message);
-            emitUpdateStatus('error', `Download failed: ${err.message}`, { downloaded: false });
+          downloadUpdateWithFallback(autoUpdater, { version: availableVersion }).catch((err) => {
+            const errorMeta = toUpdaterErrorMetadata(err);
+            console.warn('[updater] Download failed:', errorMeta.message);
+            telemetryBus.publish('updater.download.failed', {
+              version: availableVersion,
+              message: errorMeta.message,
+            });
+            emitUpdateStatus('error', `Download failed: ${errorMeta.message}`, { downloaded: false });
           });
         } else {
+          telemetryBus.publish('updater.deferred', { version: availableVersion });
           emitUpdateStatus('update-skipped', `Update to ${info.version} postponed.`, {
             downloaded: false,
             version: info.version,
           });
         }
       }).catch(() => {
+        telemetryBus.publish('updater.deferred', { version: availableVersion });
         emitUpdateStatus('update-skipped', `Update to ${info.version} postponed.`, { downloaded: false });
       });
     });
@@ -1061,6 +1261,7 @@ function getAutoUpdater() {
         ...buildUpdaterContext(autoUpdater),
         downloadedVersion: String(info?.version || ''),
       });
+      telemetryBus.publish('updater.downloaded', { version: String(info?.version || '') });
       emitUpdateStatus('ready-to-install', `Update ${info.version} downloaded — will install on next restart.`, {
         downloaded: true,
         version: info.version,
@@ -1083,6 +1284,21 @@ function getAutoUpdater() {
         ...errorMeta,
         classification: classification.reason,
       });
+      if (classification.reason === 'feed-signature-invalid' || classification.reason === 'signature-validation-failed') {
+        telemetryBus.publish('updater.metadata.signature-failed', {
+          version: _validatedFeedMetadata?.version || null,
+          message: errorMeta.message,
+        });
+      }
+      if (classification.reason === 'installer-execution-failed'
+        || classification.reason === 'installer-lock-detected'
+        || classification.reason === 'installer-blocked-by-security-software') {
+        telemetryBus.publish('updater.install.failed', {
+          version: updateState.version || _validatedFeedMetadata?.version || null,
+          exitCode: errorMeta.installerExitCode,
+          reason: classification.reason,
+        });
+      }
       telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : classification.health === 'healthy' ? 'startup.healthy' : 'startup.unavailable');
       emitDesktopHealth();
       emitUpdateStatus(classification.status, classification.detail, {
@@ -1118,59 +1334,132 @@ function checkForUpdates() {
   if (!updater) {
     return Promise.resolve({ ok: false, reason: 'updater-unavailable' });
   }
-  try {
-    const context = buildUpdaterContext(updater);
-    logUpdaterEvent('check-for-updates:requested', context);
-    startupDiagnostics.pushEvent('updater', 'info', 'Manual update check requested.', context);
-    updater.checkForUpdates().catch((err) => {
+  const context = buildUpdaterContext(updater);
+  logUpdaterEvent('check-for-updates:requested', context);
+  startupDiagnostics.pushEvent('updater', 'info', 'Manual update check requested.', context);
+  return fetchValidatedFeedMetadata({ updater, phase: 'manual-check' })
+    .then((validation) => {
+      if (!validation.ok) {
+        applyValidatedFeedFailure({
+          context,
+          metadataUrl: validation.metadataUrl,
+          classification: validation.classification,
+          extra: validation.extra,
+        });
+        if (validation.classification.reason === 'feed-signature-invalid'
+          || validation.classification.reason === 'feed-signature-missing') {
+          telemetryBus.publish('updater.metadata.signature-failed', { metadataUrl: validation.metadataUrl });
+        }
+        emitUpdateStatus('error', validation.classification.detail, {
+          downloaded: false,
+          reason: validation.classification.reason,
+          diagnostics: context,
+        });
+        return { ok: false, reason: validation.classification.reason };
+      }
+
+      const { metadata } = validation;
+      const preflight = classifyUpdateVersionSanity({
+        availableVersion: metadata.version,
+        currentVersion: context.appVersion,
+        runtimeChannel: context.channel,
+        metadataChannel: metadata.channel,
+        minimumAllowedVersion: metadata.minimumAllowedVersion || '',
+      });
+      if (!preflight.ok) {
+        const healthyNoUpdate = preflight.reason === 'feed-version-not-newer';
+        startupDiagnostics.setComponent('updater', healthyNoUpdate ? 'healthy' : 'unavailable', preflight.detail);
+        startupDiagnostics.pushEvent('updater', healthyNoUpdate ? 'info' : 'error', healthyNoUpdate ? 'No update available after feed validation.' : 'Updater feed validation rejected metadata.', {
+          ...context,
+          classification: preflight.reason,
+          availableVersion: metadata.version,
+          minimumAllowedVersion: metadata.minimumAllowedVersion || null,
+        });
+        telemetryBus.publish(healthyNoUpdate ? 'startup.healthy' : 'startup.unavailable');
+        emitDesktopHealth();
+        emitUpdateStatus(healthyNoUpdate ? 'up-to-date' : 'error', healthyNoUpdate ? 'Jarvis is already up to date.' : preflight.detail, {
+          downloaded: false,
+          reason: preflight.reason,
+          diagnostics: context,
+        });
+        return { ok: healthyNoUpdate, reason: preflight.reason };
+      }
+
+      if (metadata.rollout && !metadata.rollout.eligible) {
+        telemetryBus.publish('updater.rollout.deferred', {
+          version: metadata.version,
+          stagingPercentage: metadata.stagingPercentage,
+        });
+        startupDiagnostics.setComponent('updater', 'healthy', `Update ${metadata.version} is staged and not yet assigned to this device.`);
+        startupDiagnostics.pushEvent('updater', 'info', 'Update deferred by staged rollout policy.', {
+          ...context,
+          availableVersion: metadata.version,
+          stagingPercentage: metadata.stagingPercentage,
+          rolloutBucket: metadata.rollout.bucket,
+          classification: metadata.rollout.reason,
+        });
+        telemetryBus.publish('startup.healthy');
+        emitDesktopHealth();
+        emitUpdateStatus('up-to-date', `Update ${metadata.version} is being rolled out gradually and is not available on this device yet.`, {
+          downloaded: false,
+          reason: metadata.rollout.reason,
+          version: metadata.version,
+          diagnostics: context,
+        });
+        return { ok: false, reason: metadata.rollout.reason };
+      }
+
+      return updater.checkForUpdates()
+        .then(() => ({ ok: true }))
+        .catch((err) => {
+          const errorMeta = toUpdaterErrorMetadata(err);
+          const classification = classifyUpdaterFailure(errorMeta, context);
+          console.warn('[updater] checkForUpdates failed:', errorMeta.message);
+          logUpdaterEvent('check-for-updates:failed', {
+            ...context,
+            ...errorMeta,
+            classification: classification.reason,
+          });
+          startupDiagnostics.setComponent('updater', classification.health, `Check for updates failed: ${classification.detail}`);
+          startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates failed.', {
+            ...context,
+            ...errorMeta,
+            classification: classification.reason,
+          });
+          telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : classification.health === 'healthy' ? 'startup.healthy' : 'startup.unavailable');
+          emitDesktopHealth();
+          emitUpdateStatus(classification.status, classification.detail, {
+            downloaded: false,
+            reason: classification.reason,
+            diagnostics: context,
+          });
+          return { ok: false, reason: classification.reason };
+        });
+    })
+    .catch((err) => {
       const errorMeta = toUpdaterErrorMetadata(err);
       const classification = classifyUpdaterFailure(errorMeta, context);
-      console.warn('[updater] checkForUpdates failed:', errorMeta.message);
-      logUpdaterEvent('check-for-updates:failed', {
+      console.warn('[updater] checkForUpdates threw:', errorMeta.message);
+      logUpdaterEvent('check-for-updates:threw', {
         ...context,
         ...errorMeta,
         classification: classification.reason,
       });
-      startupDiagnostics.setComponent('updater', classification.health, `Check for updates failed: ${classification.detail}`);
-      startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates failed.', {
+      startupDiagnostics.setComponent('updater', classification.health, `Update check threw: ${classification.detail}`);
+      startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates threw.', {
         ...context,
         ...errorMeta,
         classification: classification.reason,
       });
-      telemetryBus.publish(classification.health === 'degraded' ? 'startup.degraded' : classification.health === 'healthy' ? 'startup.healthy' : 'startup.unavailable');
+      telemetryBus.publish('startup.unavailable');
       emitDesktopHealth();
       emitUpdateStatus(classification.status, classification.detail, {
         downloaded: false,
         reason: classification.reason,
         diagnostics: context,
       });
+      return { ok: false, reason: classification.reason };
     });
-    return Promise.resolve({ ok: true });
-  } catch (err) {
-    const errorMeta = toUpdaterErrorMetadata(err);
-    const context = buildUpdaterContext(updater);
-    const classification = classifyUpdaterFailure(errorMeta, context);
-    console.warn('[updater] checkForUpdates threw:', errorMeta.message);
-    logUpdaterEvent('check-for-updates:threw', {
-      ...context,
-      ...errorMeta,
-      classification: classification.reason,
-    });
-    startupDiagnostics.setComponent('updater', classification.health, `Update check threw: ${classification.detail}`);
-    startupDiagnostics.pushEvent('updater', classification.severity, 'checkForUpdates threw.', {
-      ...context,
-      ...errorMeta,
-      classification: classification.reason,
-    });
-    telemetryBus.publish('startup.unavailable');
-    emitDesktopHealth();
-    emitUpdateStatus(classification.status, classification.detail, {
-      downloaded: false,
-      reason: classification.reason,
-      diagnostics: context,
-    });
-    return Promise.resolve({ ok: false, reason: errorMeta.message });
-  }
 }
 
 function setupAutoUpdater() {
@@ -1228,7 +1517,7 @@ function createWindow() {
   });
 
   win.on('close', (event) => {
-    if (!app.isQuitting) {
+    if (!allowWindowCloseForQuit()) {
       event.preventDefault();
       win.hide();
     }
@@ -1261,7 +1550,7 @@ function createLauncherOverlayWindow() {
     }
   });
   overlayWin.on('close', (event) => {
-    if (!app.isQuitting) {
+    if (!allowWindowCloseForQuit()) {
       event.preventDefault();
       overlayWin.hide();
     }
@@ -1379,6 +1668,7 @@ createMainIpcHandlers({
   startupDiagnostics,
   getLocalTelemetrySnapshot,
   checkForUpdates,
+  downloadUpdateWithFallback,
   getJarvisWebUrl,
   setJarvisWebUrl,
   getAutoUpdater,
@@ -1395,6 +1685,8 @@ createMainIpcHandlers({
   getMainWindow: () => win,
   getOverlayWindow: () => overlayWin,
   createLauncherOverlayWindow,
+  prepareForQuitAndInstall,
+  resetQuitAndInstallPreparation,
   pendingLauncherConfirmations,
   permissions,
   securityAudit,
@@ -1417,7 +1709,16 @@ app.on('second-instance', (_event, argv) => {
   }
 });
 
+app.on('before-quit', () => {
+  app.isQuitting = true;
+});
+
+nativeAutoUpdater?.on?.('before-quit-for-update', () => {
+  prepareForQuitAndInstall(updateState.version || _validatedFeedMetadata?.version || null);
+});
+
 app.whenReady().then(async () => {
+  telemetryBus.publish('updater.session.started', { currentVersion: app.getVersion() });
   const startupProtocolUrl = extractProtocolUrl(process.argv);
   if (startupProtocolUrl) {
     void handleProtocolCallback(startupProtocolUrl, 'startup-argv');

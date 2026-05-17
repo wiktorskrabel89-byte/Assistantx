@@ -27,6 +27,7 @@ Configured updater feed:
 For each release, publish these files to the same feed directory:
 
 - `latest.yml`
+- `latest.yml.sig`
 - `JarvisSetup-x64.exe`
 - `JarvisSetup-x64.exe.blockmap`
 - `JarvisSetup-arm64.exe`
@@ -34,6 +35,13 @@ For each release, publish these files to the same feed directory:
 
 `latest.yml` must reference exact filenames that actually exist in that folder.
 Do not reference subfolders in `latest.yml` paths for production feed assets.
+`latest.yml` must also carry:
+
+- `minimumAllowedVersion` for rollback protection
+- `stagingPercentage` for staged rollout policy
+
+`latest.yml.sig` must be a detached signature generated from the final `latest.yml`
+payload after those fields are appended.
 
 ## Build and publish
 
@@ -55,13 +63,20 @@ secrets are missing. Required repository secrets:
 - `UPDATE_FEED_SSH_PATH`
 - `UPDATE_FEED_SSH_KEY`
 - `UPDATE_FEED_SSH_KNOWN_HOSTS`
+- `UPDATE_FEED_METADATA_PRIVATE_KEY`
+- `UPDATE_FEED_METADATA_PUBLIC_KEY`
 
 Post-publish CI must verify:
 
 - `latest.yml` is reachable at `https://updates.assistantx.pl/stable/latest.yml`
+- `latest.yml.sig` is reachable at `https://updates.assistantx.pl/stable/latest.yml.sig`
 - `latest.yml` is parseable and includes `version` + artifact refs
 - `latest.yml` `version` is valid semver, matches the release build version, and
   is stable-channel compatible (no beta/prerelease drift on stable feed)
+- `minimumAllowedVersion` is valid semver and does not exceed `version`
+- `stagingPercentage` is an integer between `0` and `100`
+- detached signature verification for `latest.yml` succeeds with the bundled
+  updater public key
 - `latest.yml` must return `Cache-Control` with `no-cache`
 - every artifact referenced by `latest.yml` is publicly reachable via the same
   feed directory
@@ -73,10 +88,14 @@ Post-publish CI must verify:
 - [ ] Packaged app (not dev mode) shows real app version.
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
 - [ ] Startup updater self-test checks `latest.yml` fetch + validation and logs explicit error class (`offline`, DNS, `404`, invalid YAML, auth/permission).
-- [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection).
+- [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection, rollback floor).
+- [ ] Detached `latest.yml` signature is verified before updater execution.
+- [ ] `minimumAllowedVersion` / `stagingPercentage` are present and correct for the release policy.
 - [ ] On feed errors (auth/network/metadata), UI shows actionable degraded/unavailable reason.
 - [ ] Signature validation failures are explicitly classified separately from download/metadata/install execution failures.
+- [ ] Differential/blockmap failures retry once with a full installer download.
 - [ ] `latest.yml` exists and parses cleanly.
+- [ ] `latest.yml.sig` exists and verifies against the bundled public key.
 - [ ] Every file referenced in `latest.yml` exists in the same feed directory.
 - [ ] Download path works (`update-available` -> `downloading` -> `ready-to-install`).
 - [ ] Install path works on restart (`quitAndInstall` / install-on-quit).
