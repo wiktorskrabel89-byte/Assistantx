@@ -95,6 +95,10 @@ Packaged desktop runtime now checks embedded Python candidates first:
 
 before falling back to local `venv` or system `python`.
 
+For `resources/python/python.exe`, put the bundled runtime under:
+
+- `jarvis/desktop/python/python.exe`
+
 ## Related docs
 
 - Architecture audit: `ARCHITECTURE_AUDIT.md`
