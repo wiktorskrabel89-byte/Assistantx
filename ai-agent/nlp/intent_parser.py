@@ -75,6 +75,30 @@ _FALLBACK_PATTERNS: list[tuple] = [
         lambda m, text: {"query": m.group(1).strip(), "transcript": text},
     ),
     (
+        re.compile(
+            r"(?:remind me|set reminder|create reminder|przypomnij mi|ustaw przypomnienie)\s+(.+)",
+            re.I,
+        ),
+        "add_reminder",
+        lambda m, text: {
+            "reminder_text": m.group(1).strip(),
+            "time_phrase": m.group(1).strip(),
+            "transcript": text,
+        },
+    ),
+    (
+        re.compile(
+            r"(?:in\s+\d+\s+(?:hours?|minutes?)|tonight|tomorrow(?: morning)?|next\s+\w+|this weekend|jutro|wieczorem|rano|nast[eę]pny\s+\w+)",
+            re.I,
+        ),
+        "add_reminder",
+        lambda m, text: {
+            "reminder_text": text.strip(),
+            "time_phrase": m.group(0).strip(),
+            "transcript": text,
+        },
+    ),
+    (
         re.compile(r"(?:play|music|play music)", re.I),
         "open_app",
         lambda _m, text: _launcher_entities("music", text),

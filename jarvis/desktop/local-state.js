@@ -6,12 +6,14 @@ const BASE_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), '.conf
 const STATE_PATH = path.join(BASE_DIR, 'state.json');
 const MAX_HISTORY = 120;
 const MAX_TASKS = 40;
+const MAX_REMINDERS = 200;
 
 const DEFAULT_STATE = {
   schemaVersion: 2,
   history: [],
   tasks: [],
   schedules: [],
+  reminders: [],
   preferences: {
     appLaunchCount: {},
     recentApps: [],
@@ -93,6 +95,7 @@ function normalizeState(raw) {
     history: Array.isArray(raw?.history) ? raw.history : [],
     tasks: Array.isArray(raw?.tasks) ? raw.tasks : [],
     schedules: Array.isArray(raw?.schedules) ? raw.schedules : [],
+    reminders: Array.isArray(raw?.reminders) ? raw.reminders : [],
     preferences: {
       ...DEFAULT_STATE.preferences,
       ...(raw?.preferences && typeof raw.preferences === 'object' ? raw.preferences : {}),
@@ -314,6 +317,60 @@ function saveTask(task) {
   }));
 }
 
+function saveReminder(reminder) {
+  const triggerAt = reminder?.triggerAt ? new Date(reminder.triggerAt) : null;
+  const normalizedTrigger = triggerAt && !Number.isNaN(triggerAt.getTime())
+    ? triggerAt.toISOString()
+    : null;
+  if (!normalizedTrigger) {
+    throw new Error('Invalid reminder triggerAt value.');
+  }
+  const nowIso = new Date().toISOString();
+  const normalized = {
+    id: reminder.id || `rem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: String(reminder.label || reminder.text || 'Reminder').slice(0, 300),
+    text: String(reminder.text || reminder.label || '').slice(0, 1000),
+    triggerAt: normalizedTrigger,
+    createdAt: reminder.createdAt || nowIso,
+    completed: Boolean(reminder.completed),
+    priority: Number.isFinite(Number(reminder.priority)) ? Number(reminder.priority) : 1,
+    voiceEnabled: reminder.voiceEnabled !== false,
+    source: String(reminder.source || 'manual').slice(0, 80),
+    firedAt: reminder.firedAt || null,
+    updatedAt: nowIso,
+  };
+  return updateState((current) => ({
+    ...current,
+    reminders: [normalized, ...current.reminders.filter((item) => item.id !== normalized.id)].slice(0, MAX_REMINDERS),
+  }));
+}
+
+function getReminders() {
+  return readState().reminders;
+}
+
+function markReminderCompleted(id, completed = true) {
+  return updateState((current) => ({
+    ...current,
+    reminders: current.reminders.map((item) => (
+      item.id === id
+        ? { ...item, completed: Boolean(completed), updatedAt: new Date().toISOString() }
+        : item
+    )),
+  }));
+}
+
+function markReminderFired(id, firedAt = new Date().toISOString()) {
+  return updateState((current) => ({
+    ...current,
+    reminders: current.reminders.map((item) => (
+      item.id === id
+        ? { ...item, firedAt, updatedAt: new Date().toISOString() }
+        : item
+    )),
+  }));
+}
+
 function getTelemetrySnapshot() {
   return { ...(readState().preferences.telemetry || DEFAULT_STATE.preferences.telemetry) };
 }
@@ -446,6 +503,7 @@ async function syncToCloud(apiUrl, token, options = {}) {
       history: state.history.slice(0, 50),
       tasks: state.tasks.slice(0, MAX_TASKS),
       schedules: state.schedules.slice(0, MAX_TASKS),
+      reminders: options.syncReminders ? state.reminders.slice(0, MAX_REMINDERS) : [],
       voiceSettings: options.voiceSettings || {},
       syncOptions,
       syncMetadata: {
@@ -479,6 +537,7 @@ async function loadFromCloud(apiUrl, token) {
     if (remote?.preferences) {
       const remoteTasks = Array.isArray(remote.tasks) ? remote.tasks : [];
       const remoteSchedules = Array.isArray(remote.schedules) ? remote.schedules : [];
+      const remoteReminders = Array.isArray(remote.reminders) ? remote.reminders : [];
       const mergeByIdNewest = (localItems, incomingItems) => {
         const map = new Map();
         [...localItems, ...incomingItems].forEach((item) => {
@@ -503,6 +562,7 @@ async function loadFromCloud(apiUrl, token) {
           : current.history,
         tasks: mergeByIdNewest(current.tasks, remoteTasks).slice(0, MAX_TASKS),
         schedules: mergeByIdNewest(current.schedules, remoteSchedules).slice(0, MAX_TASKS),
+        reminders: mergeByIdNewest(current.reminders || [], remoteReminders).slice(0, MAX_REMINDERS),
       }));
     }
     return { ok: true, voiceSettings: remote?.voiceSettings || null };
@@ -517,6 +577,7 @@ module.exports = {
   getAppAliases,
   getDiscoveredApps,
   getFavoriteApp,
+  getReminders,
   getSchedules,
   loadFromCloud,
   parseNextRun,
@@ -530,9 +591,12 @@ module.exports = {
   getTelemetrySnapshot,
   saveDiscoveredApps,
   saveTask,
+  saveReminder,
   setAppAlias,
   statePath: STATE_PATH,
   syncToCloud,
   updateTelemetry,
   updateScheduleRun,
+  markReminderCompleted,
+  markReminderFired,
 };

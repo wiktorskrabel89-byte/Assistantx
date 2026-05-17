@@ -54,8 +54,15 @@ const {
 } = require('./backend');
 
 const localStateModule = require('./local-state');
-const { addSchedule, getSchedules } = localStateModule;
+const {
+  addSchedule,
+  getSchedules,
+  saveReminder,
+  getReminders,
+  markReminderCompleted,
+} = localStateModule;
 const { startScheduler } = require('./scheduler');
+const { startReminderScheduler } = require('./reminder-scheduler');
 
 const {
   getAccountSession,
@@ -69,6 +76,11 @@ const {
 } = require('./runtime-config');
 
 const { VoiceGateway } = require('./voice-gateway');
+const { buildTemporalContext } = require('./electron/temporal/context');
+const { buildContextualGreeting } = require('./electron/temporal/greetings');
+const { parseRelativeTime } = require('./electron/temporal/parse-relative-time');
+const { enhanceSpeechText, formatReminderSpeech } = require('./electron/temporal/enhancer');
+const { buildDailySummary } = require('./electron/temporal/daily-summary');
 
 function invokeAllowed(channel, ...args) {
   if (!ALLOWED_INVOKE.has(channel)) {
@@ -98,6 +110,9 @@ const authApi = {
 const localState = {
   addSchedule,
   getSchedules,
+  saveReminder,
+  getReminders,
+  markReminderCompleted,
   syncToCloud: (apiUrl, options) => {
     const accessToken = getAccountSession()?.accessToken || null;
     return localStateModule.syncToCloud(apiUrl, accessToken, options);
@@ -180,6 +195,7 @@ function buildJarvisApiV2() {
     localState,
     scheduler: {
       startScheduler,
+      startReminderScheduler,
     },
     accounts: {
       getLinkedAccounts,
@@ -192,6 +208,14 @@ function buildJarvisApiV2() {
     voice: {
       sidecar: buildSidecarApi(),
       gateway: buildVoiceGatewayApi(),
+    },
+    temporal: {
+      getContext: (options) => buildTemporalContext(options),
+      getGreeting: (options) => buildContextualGreeting(options),
+      parseRelativeTime: (input, options) => parseRelativeTime(input, options),
+      enhanceSpeechText: (text, options) => enhanceSpeechText(text, options),
+      formatReminderSpeech: (reminder, options) => formatReminderSpeech(reminder, options),
+      buildDailySummary: (payload) => buildDailySummary(payload),
     },
   };
 }
@@ -211,9 +235,13 @@ contextBridge.exposeInMainWorld('jarvisApi', {
   queuePromptExecution,
   addSchedule,
   getSchedules,
+  saveReminder,
+  getReminders,
+  markReminderCompleted,
   syncToCloud: localState.syncToCloud,
   loadFromCloud: localState.loadFromCloud,
   startScheduler,
+  startReminderScheduler,
   getLinkedAccounts,
   getAccountSession: authApi.getSession,
   refreshSessionIfNeeded: authApi.refresh,
@@ -226,6 +254,14 @@ contextBridge.exposeInMainWorld('jarvisApi', {
   },
   sidecar: buildSidecarApi(),
   voiceGateway: buildVoiceGatewayApi(),
+  temporal: {
+    getContext: (options) => buildTemporalContext(options),
+    getGreeting: (options) => buildContextualGreeting(options),
+    parseRelativeTime: (input, options) => parseRelativeTime(input, options),
+    enhanceSpeechText: (text, options) => enhanceSpeechText(text, options),
+    formatReminderSpeech: (reminder, options) => formatReminderSpeech(reminder, options),
+    buildDailySummary: (payload) => buildDailySummary(payload),
+  },
 });
 
 contextBridge.exposeInMainWorld('jarvisApiV2', buildJarvisApiV2());

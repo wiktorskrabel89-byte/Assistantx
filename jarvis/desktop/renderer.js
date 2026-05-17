@@ -12,9 +12,13 @@ const {
 	queuePromptExecution,
 	addSchedule,
 	getSchedules,
+	saveReminder,
+	getReminders,
+	markReminderCompleted,
 	syncToCloud,
 	loadFromCloud,
 	startScheduler,
+	startReminderScheduler,
 	getLinkedAccounts,
 	getJarvisApiUrl,
 	getJarvisWebUrl,
@@ -31,6 +35,7 @@ const {
 } = authApi;
 
 const ipcRenderer = window.jarvisIpc || null;
+const temporalApi = window.jarvisApi.temporal || null;
 
 // ── Python AI-Agent sidecar bridge ──────────────────────────────────────────
 // The SidecarBridge instance is created in preload.js (which runs with Node
@@ -171,6 +176,14 @@ window.addEventListener('DOMContentLoaded', () => {
 	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
 	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
 	const saveVoiceSettingsButton = document.getElementById('save-voice-settings');
+	const temporalAwarenessToggle = document.getElementById('temporal-awareness');
+	const proactiveRemindersToggle = document.getElementById('proactive-reminders');
+	const ambientAnnouncementsToggle = document.getElementById('ambient-announcements');
+	const dailySummaryToggle = document.getElementById('daily-summary');
+	const reminderVoiceStyleSelect = document.getElementById('reminder-voice-style');
+	const reminderInput = document.getElementById('reminder-input');
+	const reminderAddButton = document.getElementById('reminder-add');
+	const remindersList = document.getElementById('reminders-list');
 	const serverUrlInput = document.getElementById('jarvis-server-url');
 	const saveServerUrlButton = document.getElementById('save-server-url');
 	let apiBaseUrl = getJarvisApiUrl();
@@ -206,6 +219,11 @@ window.addEventListener('DOMContentLoaded', () => {
 		voiceLanguage: voiceLanguageSelect?.value || 'en-US',
 		autoTts: true,
 		providerMode: 'assistantx-server',
+		temporalAwareness: true,
+		proactiveReminders: true,
+		ambientAnnouncements: false,
+		dailySummary: false,
+		reminderVoiceStyle: 'neutral',
 	};
 
 	function readVoiceSettings() {
@@ -227,6 +245,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	let speechToTextActive = false;
+	let speechPlaybackActive = false;
 	let voiceSettings = readVoiceSettings();
 
 	function applyVoiceSettings(nextSettings, { persist = true } = {}) {
@@ -242,6 +261,11 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
 		if (voiceProviderModeSelect && voiceSettings.providerMode) voiceProviderModeSelect.value = voiceSettings.providerMode;
 		if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
+		if (temporalAwarenessToggle) temporalAwarenessToggle.checked = Boolean(voiceSettings.temporalAwareness);
+		if (proactiveRemindersToggle) proactiveRemindersToggle.checked = Boolean(voiceSettings.proactiveReminders);
+		if (ambientAnnouncementsToggle) ambientAnnouncementsToggle.checked = Boolean(voiceSettings.ambientAnnouncements);
+		if (dailySummaryToggle) dailySummaryToggle.checked = Boolean(voiceSettings.dailySummary);
+		if (reminderVoiceStyleSelect && voiceSettings.reminderVoiceStyle) reminderVoiceStyleSelect.value = voiceSettings.reminderVoiceStyle;
 		if (voiceInputButton) {
 			voiceInputButton.disabled = !voiceSettings.sttEnabled;
 			if (!speechToTextActive) {
@@ -350,15 +374,21 @@ window.addEventListener('DOMContentLoaded', () => {
 			const availableVoices = await waitForSpeechVoices();
 			const matchedVoice = resolveSpeechVoice(availableVoices, voiceSettings.ttsVoiceId, utterance.lang);
 			if (matchedVoice) utterance.voice = matchedVoice;
+			speechPlaybackActive = true;
 			setVoiceVisualizer('speaking');
-			utterance.onend = () => setVoiceVisualizer('idle');
+			utterance.onend = () => {
+				speechPlaybackActive = false;
+				setVoiceVisualizer('idle');
+			};
 			utterance.onerror = (errorEvent) => {
+				speechPlaybackActive = false;
 				setVoiceVisualizer('idle');
 				if (isBenignSpeechError(errorEvent)) return;
 				appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
 			};
 			window.speechSynthesis.speak(utterance);
 		} catch {
+			speechPlaybackActive = false;
 			setVoiceVisualizer('idle');
 			appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
 		}
@@ -640,6 +670,11 @@ window.addEventListener('DOMContentLoaded', () => {
 				voiceLanguage: voiceLanguageSelect?.value || 'en-US',
 				autoTts: Boolean(autoTtsToggle?.checked),
 				providerMode: voiceProviderModeSelect?.value || 'assistantx-server',
+				temporalAwareness: Boolean(temporalAwarenessToggle?.checked),
+				proactiveReminders: Boolean(proactiveRemindersToggle?.checked),
+				ambientAnnouncements: Boolean(ambientAnnouncementsToggle?.checked),
+				dailySummary: Boolean(dailySummaryToggle?.checked),
+				reminderVoiceStyle: reminderVoiceStyleSelect?.value || 'neutral',
 			});
 			appendMessage(log, 'Settings', 'Voice settings saved.');
 		});
@@ -687,6 +722,24 @@ window.addEventListener('DOMContentLoaded', () => {
 		voiceProviderModeSelect.addEventListener('change', () => {
 			applyVoiceSettings({ ...voiceSettings, providerMode: voiceProviderModeSelect.value || 'assistantx-server' });
 			syncSidecarVoiceSettings();
+		});
+	}
+
+	[temporalAwarenessToggle, proactiveRemindersToggle, ambientAnnouncementsToggle, dailySummaryToggle].forEach((toggle) => {
+		toggle?.addEventListener('change', () => {
+			applyVoiceSettings({
+				...voiceSettings,
+				temporalAwareness: Boolean(temporalAwarenessToggle?.checked),
+				proactiveReminders: Boolean(proactiveRemindersToggle?.checked),
+				ambientAnnouncements: Boolean(ambientAnnouncementsToggle?.checked),
+				dailySummary: Boolean(dailySummaryToggle?.checked),
+			});
+		});
+	});
+
+	if (reminderVoiceStyleSelect) {
+		reminderVoiceStyleSelect.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, reminderVoiceStyle: reminderVoiceStyleSelect.value || 'neutral' });
 		});
 	}
 
@@ -850,16 +903,20 @@ window.addEventListener('DOMContentLoaded', () => {
 					const source = actx.createBufferSource();
 					source.buffer = decoded;
 					source.connect(actx.destination);
+					speechPlaybackActive = true;
 					setVoiceVisualizer('speaking');
 					source.onended = () => {
+						speechPlaybackActive = false;
 						setVoiceVisualizer('idle');
 						actx.close().catch(() => null);
 					};
 					source.start(0);
 				}, () => {
+					speechPlaybackActive = false;
 					actx.close().catch(() => null);
 				});
 			} catch {
+				speechPlaybackActive = false;
 				// fall through to browser TTS
 			}
 		});
@@ -889,15 +946,31 @@ window.addEventListener('DOMContentLoaded', () => {
 				sleep: 'sleep',
 				lock_screen: 'lockScreen',
 				start_mode: 'startMode',
+				add_reminder: 'addReminder',
 			};
 			const command = INTENT_TO_COMMAND[intent];
 			if (!command) {
 				if (entities?.transcript) fallbackVoicePrompt(entities.transcript);
 				return;
 			}
+			let payload = { command, ...entities, admin: Boolean(entities?.admin || entities?.qualifiers?.admin) };
+			if (command === 'addReminder') {
+				const phrase = String(entities?.time_phrase || entities?.reminder_text || entities?.transcript || '').trim();
+				const parsed = temporalApi?.parseRelativeTime ? temporalApi.parseRelativeTime(phrase) : null;
+				if (!parsed?.triggerAt) {
+					appendMessage(log, 'Reminder', 'I heard a reminder, but could not parse the time.', 'error');
+					if (entities?.transcript) fallbackVoicePrompt(entities.transcript);
+					return;
+				}
+				payload = {
+					...payload,
+					text: String(entities?.reminder_text || phrase || 'Reminder'),
+					temporal: parsed,
+				};
+			}
 			input.value = '';
 			void executeStructuredCommand(
-				{ command, ...entities, admin: Boolean(entities?.admin || entities?.qualifiers?.admin) },
+				payload,
 				{ source: 'local', origin: 'sidecar' },
 			);
 		});
@@ -1004,8 +1077,13 @@ window.addEventListener('DOMContentLoaded', () => {
 	// Speak via Piper TTS when sidecar is connected, or via browser otherwise.
 	// Used by onMessage command_result handler below.
 	async function speakWithSidecar(text) {
+		const enhanced = temporalApi?.enhanceSpeechText
+			? temporalApi.enhanceSpeechText(text, {
+				temporalAwareness: Boolean(voiceSettings.temporalAwareness),
+			})
+			: text;
 		if (sidecarConnected && voiceSettings.autoTts && voiceGateway) {
-			const tts = await voiceGateway.synthesize(text, {
+			const tts = await voiceGateway.synthesize(enhanced, {
 				persona: voiceSettings.ttsVoiceId,
 				language: getVoiceLanguage(),
 			});
@@ -1021,8 +1099,10 @@ window.addEventListener('DOMContentLoaded', () => {
 							const source = actx.createBufferSource();
 							source.buffer = decoded;
 							source.connect(actx.destination);
+							speechPlaybackActive = true;
 							setVoiceVisualizer('speaking');
 							source.onended = () => {
+								speechPlaybackActive = false;
 								setVoiceVisualizer('idle');
 								actx.close().catch(() => null);
 							};
@@ -1039,10 +1119,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 		if (sidecarConnected && sidecar && voiceSettings.autoTts) {
 			const requestId = `tts-${Date.now()}`;
-			sidecar.requestTts(text, requestId);
+			sidecar.requestTts(enhanced, requestId);
 			return;
 		}
-		await speakResponse(text);
+		await speakResponse(enhanced);
 	}
 
 	if (ipcRenderer) {
@@ -1459,7 +1539,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				return;
 			}
 			accountSyncButton.disabled = true;
-			const res = await syncToCloud(apiBaseUrl, { voiceSettings });
+			const res = await syncToCloud(apiBaseUrl, { voiceSettings, syncReminders: false });
 			accountSyncButton.disabled = false;
 			appendMessage(log, 'Cloud sync', res.ok ? '✅ Memory and Jarvis voice settings synced to cloud.' : `Sync failed: ${res.reason || res.status}`, res.ok ? 'system' : 'error');
 		});
@@ -1491,6 +1571,116 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 	refreshSchedulesUI();
 
+	function refreshRemindersUI() {
+		if (!remindersList) return;
+		const reminders = getReminders()
+			.slice()
+			.sort((a, b) => new Date(a.triggerAt).getTime() - new Date(b.triggerAt).getTime());
+		if (!reminders.length) {
+			remindersList.textContent = 'No reminders yet';
+			return;
+		}
+		remindersList.innerHTML = reminders.map((item) => {
+			const when = item.triggerAt ? new Date(item.triggerAt).toLocaleString() : 'n/a';
+			const done = item.completed ? '✅' : '🕒';
+			const priority = Number(item.priority || 1);
+			return `<span>${done} <strong>${item.label || item.text || 'Reminder'}</strong> · ${when} · p${priority}</span>`;
+		}).join('<br>');
+	}
+	refreshRemindersUI();
+
+	reminderAddButton?.addEventListener('click', () => {
+		const text = reminderInput?.value?.trim();
+		if (!text) return;
+		const parsed = temporalApi?.parseRelativeTime
+			? temporalApi.parseRelativeTime(text)
+			: null;
+		if (!parsed?.triggerAt) {
+			appendMessage(log, 'Reminder', 'Could not parse reminder time. Try e.g. "tomorrow morning at 8".', 'error');
+			return;
+		}
+		try {
+			saveReminder({
+				label: text,
+				text,
+				triggerAt: parsed.triggerAt,
+				priority: 1,
+				voiceEnabled: true,
+				source: 'manual',
+			});
+			refreshRemindersUI();
+			appendMessage(log, 'Reminder', `Added reminder for ${new Date(parsed.triggerAt).toLocaleString()}`);
+			if (reminderInput) reminderInput.value = '';
+		} catch (error) {
+			appendMessage(log, 'Reminder', error?.message || 'Failed to save reminder.', 'error');
+		}
+	});
+
+	const reminderAnnouncements = [];
+	function toPriorityTier(value) {
+		const numeric = Number(value);
+		if (numeric >= 3) return 'CRITICAL';
+		if (numeric >= 2) return 'IMPORTANT';
+		if (numeric <= 0) return 'LOW';
+		return 'NORMAL';
+	}
+
+	function canSpeakReminder(entry) {
+		if (!voiceSettings.proactiveReminders) return false;
+		const busy = speechToTextActive || sidecarManualListening || speechPlaybackActive;
+		if (!busy) return true;
+		return entry.priorityTier === 'CRITICAL';
+	}
+
+	function showReminderToast(entry) {
+		if (typeof Notification === 'undefined') return;
+		if (Notification.permission === 'granted') {
+			new Notification('AssistantX reminder', {
+				body: entry.text,
+			});
+			return;
+		}
+		if (Notification.permission !== 'denied') {
+			void Notification.requestPermission();
+		}
+	}
+
+	async function processReminderAnnouncements() {
+		if (!reminderAnnouncements.length) return;
+		const next = reminderAnnouncements[0];
+		const focused = document.hasFocus();
+		const fullscreen = Boolean(document.fullscreenElement);
+		const shouldDefer = (!focused || fullscreen) && next.priorityTier !== 'CRITICAL';
+		if (shouldDefer || !canSpeakReminder(next)) {
+			next.deferCount = (next.deferCount || 0) + 1;
+			if (next.deferCount > 20) reminderAnnouncements.shift();
+			return;
+		}
+		reminderAnnouncements.shift();
+		showReminderToast(next);
+		if (next.voiceEnabled && (next.priorityTier === 'CRITICAL' || voiceSettings.proactiveReminders)) {
+			const spoken = temporalApi?.formatReminderSpeech
+				? temporalApi.formatReminderSpeech(
+					{ label: next.label, text: next.text, triggerAt: next.triggerAt },
+					{ persona: voiceSettings.reminderVoiceStyle || 'neutral' },
+				)
+				: `Reminder: ${next.text}`;
+			await speakWithSidecar(spoken);
+		}
+	}
+
+	setInterval(() => {
+		void processReminderAnnouncements();
+	}, 5000);
+
+	setInterval(() => {
+		if (!voiceSettings.ambientAnnouncements) return;
+		const hour = new Date().getHours();
+		if (hour === 0 && !speechPlaybackActive && !speechToTextActive) {
+			appendMessage(log, 'Ambient', 'It is midnight.', 'system');
+		}
+	}, 60_000);
+
 	if (scheduleAddButton) {
 		scheduleAddButton.addEventListener('click', () => {
 			const label = scheduleLabel?.value.trim();
@@ -1518,10 +1708,27 @@ window.addEventListener('DOMContentLoaded', () => {
 		);
 	});
 
+	startReminderScheduler((reminder) => {
+		const priorityTier = toPriorityTier(reminder.priority);
+		const body = reminder.label || reminder.text || 'Reminder due';
+		appendMessage(log, 'Reminder', `⏰ ${body} (${priorityTier})`, priorityTier === 'CRITICAL' ? 'error' : 'system');
+		reminderAnnouncements.push({
+			id: reminder.id,
+			text: body,
+			label: reminder.label || body,
+			triggerAt: reminder.triggerAt,
+			voiceEnabled: reminder.voiceEnabled !== false,
+			priorityTier,
+			deferCount: 0,
+		});
+		markReminderCompleted(reminder.id, false);
+		refreshRemindersUI();
+	});
+
 	// Periodic cloud sync (every 5 minutes) if signed in
 	setInterval(async () => {
 		if ((currentSession?.userId || currentSession?.email) && apiBaseUrl) {
-			await syncToCloud(apiBaseUrl, { voiceSettings }).catch(() => null);
+			await syncToCloud(apiBaseUrl, { voiceSettings, syncReminders: false }).catch(() => null);
 		}
 	}, 5 * 60_000);
 
@@ -1529,6 +1736,17 @@ window.addEventListener('DOMContentLoaded', () => {
 		connectToBackend({ token });
 		updateStatus('ready');
 		appendMessage(log, 'Jarvis Desktop', 'Shell initialized. Connecting to backend…');
+		if (voiceSettings.temporalAwareness && temporalApi?.getGreeting) {
+			appendMessage(log, 'JARVIS', temporalApi.getGreeting({ persona: voiceSettings.reminderVoiceStyle || 'neutral' }), 'system');
+		}
+		if (voiceSettings.dailySummary && temporalApi?.buildDailySummary) {
+			const summary = temporalApi.buildDailySummary({
+				reminders: getReminders(),
+				tasks: getLocalStateSnapshot()?.tasks || [],
+				schedules: getSchedules(),
+			});
+			appendMessage(log, 'Daily summary', summary, 'system');
+		}
 	});
 
 	// Silently refresh the session if the stored access token is near expiry.
