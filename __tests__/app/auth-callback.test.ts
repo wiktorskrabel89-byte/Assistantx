@@ -45,9 +45,9 @@ function makeReq(params: Record<string, string> = {}, headers: Record<string, st
   return new Request(url.toString(), { headers });
 }
 
-function parseRedirectHash(location: string): URLSearchParams {
-  const [, hash = ""] = location.split("#");
-  return new URLSearchParams(hash);
+function parseRedirectQuery(location: string): URLSearchParams {
+  const url = new URL(location);
+  return url.searchParams;
 }
 
 beforeEach(() => {
@@ -186,17 +186,17 @@ describe("GET /auth/callback", () => {
     const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop" }));
     expect(res.status).toBe(307);
     const location = res.headers.get("location") ?? "";
-    expect(location).toContain("assistantx://auth/callback#");
-    const hashParams = parseRedirectHash(location);
-    expect(hashParams.get("access_token")).toBe("session-token-123");
-    expect(hashParams.get("refresh_token")).toBe("refresh-token-123");
-    expect(hashParams.get("token_type")).toBe("bearer");
-    expect(hashParams.get("email")).toBe("jarvis@example.com");
-    expect(hashParams.get("user_id")).toBe("user-123");
-    expect(hashParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
+    expect(location).toContain("assistantx://auth/callback?");
+    const queryParams = parseRedirectQuery(location);
+    expect(queryParams.get("access_token")).toBe("session-token-123");
+    expect(queryParams.get("refresh_token")).toBe("refresh-token-123");
+    expect(queryParams.get("token_type")).toBe("bearer");
+    expect(queryParams.get("email")).toBe("jarvis@example.com");
+    expect(queryParams.get("user_id")).toBe("user-123");
+    expect(queryParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
   });
 
-  it("passes OAuth state through jarvis-desktop callback hash", async () => {
+  it("passes OAuth state through jarvis-desktop callback query params", async () => {
     mockCreateClient.mockResolvedValue(
       makeMockSupabase({
         user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
@@ -215,12 +215,12 @@ describe("GET /auth/callback", () => {
     );
     const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop", state: "desktop-state-abc" }));
     const location = res.headers.get("location") ?? "";
-    expect(location).toContain("assistantx://auth/callback#");
-    const hashParams = parseRedirectHash(location);
-    expect(hashParams.get("state")).toBe("desktop-state-abc");
-    expect(hashParams.get("email")).toBe("jarvis@example.com");
-    expect(hashParams.get("user_id")).toBe("user-123");
-    expect(hashParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
+    expect(location).toContain("assistantx://auth/callback?");
+    const queryParams = parseRedirectQuery(location);
+    expect(queryParams.get("state")).toBe("desktop-state-abc");
+    expect(queryParams.get("email")).toBe("jarvis@example.com");
+    expect(queryParams.get("user_id")).toBe("user-123");
+    expect(queryParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
   });
 
   it("does not redirect immediately after successful callback exchange when middleware sees fresh user session", async () => {
@@ -281,13 +281,13 @@ describe("GET /auth/callback", () => {
       redirect_to: "assistantx://auth/callback",
     }));
     const location = res.headers.get("location") ?? "";
-    expect(location).toContain("assistantx://auth/callback#");
-    const hashParams = parseRedirectHash(location);
-    expect(hashParams.get("access_token")).toBe("session-token-123");
-    expect(hashParams.get("refresh_token")).toBe("refresh-token-123");
-    expect(hashParams.get("token_type")).toBe("bearer");
-    expect(hashParams.get("email")).toBe("jarvis@example.com");
-    expect(hashParams.get("user_id")).toBe("user-123");
-    expect(hashParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
+    expect(location).toContain("assistantx://auth/callback?");
+    const queryParams = parseRedirectQuery(location);
+    expect(queryParams.get("access_token")).toBe("session-token-123");
+    expect(queryParams.get("refresh_token")).toBe("refresh-token-123");
+    expect(queryParams.get("token_type")).toBe("bearer");
+    expect(queryParams.get("email")).toBe("jarvis@example.com");
+    expect(queryParams.get("user_id")).toBe("user-123");
+    expect(queryParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
   });
 });
