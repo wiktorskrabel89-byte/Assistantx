@@ -12,6 +12,9 @@ function normalizeWindows(target) {
 function send(channel, payload, target) {
   for (const win of normalizeWindows(target)) {
     if (win && !win.isDestroyed()) {
+      if (channel === 'auth:session-changed') {
+        console.log('[auth] NOTIFYING RENDERER');
+      }
       win.webContents.send(channel, payload);
     }
   }

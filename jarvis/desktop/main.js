@@ -507,13 +507,27 @@ function failPendingAuth(error) {
 }
 
 async function consumeAuthCallback(url, source = 'browser', { expectedState = null, settlePending = false } = {}) {
+  try {
+    const deepLink = new URL(url);
+    const hashParams = new URLSearchParams(deepLink.hash.slice(1));
+    const accessToken = deepLink.searchParams.get('access_token') || hashParams.get('access_token');
+    const refreshToken = deepLink.searchParams.get('refresh_token') || hashParams.get('refresh_token');
+    console.log('[auth] ACCESS TOKEN PARSED:', Boolean(accessToken));
+    console.log('[auth] REFRESH TOKEN PARSED:', Boolean(refreshToken));
+  } catch {
+    // ignore parser diagnostics for malformed URLs
+  }
   const parsed = parseAuthCallback(url, expectedState ? { expectedState } : {});
-  if (!parsed) return false;
+  if (!parsed) {
+    console.warn(`[auth] OAuth callback not consumed from ${source}:`, redactUrl(url));
+    return false;
+  }
   if (parsed.error) {
     console.warn(`[auth] Ignoring invalid OAuth callback from ${source}:`, redactUrl(url));
     return true;
   }
   const savedSession = await setAccountSession(parsed.session, { reason: `login-${source}` });
+  console.log('[auth] SESSION SAVED');
   if (settlePending) settlePendingAuth(toSafeSessionView(savedSession));
   return true;
 }
@@ -563,10 +577,17 @@ async function handleProtocolCallback(url, source = 'protocol') {
     console.log('[auth-debug] RAW URL:', url);
   }
   console.info('[auth] callback received', { source, url: redactUrl(url) });
-  const consumed = await consumeAuthCallback(url, source, {
-    expectedState: pendingAuthFlow?.state || null,
-    settlePending: Boolean(pendingAuthFlow),
-  });
+  let consumed = false;
+  try {
+    consumed = await consumeAuthCallback(url, source, {
+      expectedState: pendingAuthFlow?.state || null,
+      settlePending: Boolean(pendingAuthFlow),
+    });
+  } catch (error) {
+    console.error(`[auth] Failed to handle OAuth callback from ${source}:`, error?.message || error);
+    failPendingAuth(error);
+    return false;
+  }
   if (consumed && win && !win.isDestroyed()) {
     if (win.isMinimized()) win.restore();
     win.show();

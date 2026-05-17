@@ -123,6 +123,7 @@ function isWebAuthCallbackPath(pathname) {
 function parseAuthCallback(url, { expectedState = null } = {}) {
   try {
     const parsed = new URL(url);
+    const normalizedPathname = normalizeCallbackPathname(parsed.pathname);
     const hashParams = new URLSearchParams(parsed.hash.slice(1));
     const allParams = new URLSearchParams(parsed.search);
     for (const [key, value] of hashParams.entries()) {
@@ -134,7 +135,7 @@ function parseAuthCallback(url, { expectedState = null } = {}) {
 
     const isAssistantxCallback = parsed.protocol === 'assistantx:'
       && parsed.hostname === 'auth'
-      && parsed.pathname === '/callback';
+      && normalizedPathname === '/callback';
     const isWebCallback = isWebAuthCallbackPath(parsed.pathname);
     if (!isAssistantxCallback && !isWebCallback) return null;
 
