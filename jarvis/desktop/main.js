@@ -121,12 +121,16 @@ function resolvePythonExecutable() {
   for (const entry of candidateDetails) {
     console.log('[sidecar] Python path candidate:', entry.candidate, 'exists:', entry.exists);
     if (entry.exists === false) continue;
+    console.log('[sidecar] Resolved python path:', entry.candidate);
+    console.log('[sidecar] Exists:', entry.exists);
     return {
       python: entry.candidate,
       candidates,
       candidateDetails,
     };
   }
+  console.log('[sidecar] Resolved python path:', null);
+  console.log('[sidecar] Exists:', false);
   return { python: null, candidates, candidateDetails };
 }
 
