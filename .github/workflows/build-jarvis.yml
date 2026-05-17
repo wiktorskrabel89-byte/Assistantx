@@ -151,27 +151,21 @@ jobs:
             exit 1
           }
 
-          function Normalize-PemSecret([string]$rawSecret) {
-            $normalized = [string]$rawSecret
-            $normalized = $normalized -replace "`r", ""
-            $normalized = $normalized.Trim()
-            if ($normalized -match '\\n' -and $normalized -notmatch "`n") {
-              $normalized = $normalized -replace '\\n', "`n"
-            }
-            if ($normalized -notmatch '-----BEGIN [A-Z0-9 ]+-----') {
-              try {
-                $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($normalized)).Trim()
-                if ($decoded -match '-----BEGIN [A-Z0-9 ]+-----') {
-                  $normalized = $decoded
-                }
-              } catch {}
-            }
-            return $normalized.Trim() + "`n"
-          }
-
           $publicKeyPath = Join-Path (Get-Location) "jarvis/desktop/electron/updater/feed-public-key.pem"
           New-Item -ItemType Directory -Force -Path (Split-Path $publicKeyPath -Parent) | Out-Null
-          Normalize-PemSecret $env:UPDATE_FEED_METADATA_PUBLIC_KEY | Set-Content -Path $publicKeyPath -Encoding ASCII
+          $scriptPath = Join-Path $env:RUNNER_TEMP "export-updater-public-key.js"
+          @'
+          const fs = require("fs");
+          const { exportPublicKeyPem } = require("./jarvis/desktop/electron/updater/feed-metadata");
+
+          fs.writeFileSync(process.argv[2], exportPublicKeyPem(process.env.UPDATE_FEED_METADATA_PUBLIC_KEY), "utf8");
+          '@ | Set-Content -Path $scriptPath -Encoding UTF8
+
+          node $scriptPath $publicKeyPath
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to normalize updater metadata public key."
+            exit 1
+          }
           Write-Host "Bundled updater metadata verification key at $publicKeyPath"
 
       - name: Validate desktop updater topology (generic feed)
@@ -267,43 +261,25 @@ jobs:
 
           $tempDir = Join-Path $env:RUNNER_TEMP "jarvis-feed-signing"
           New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-          $privateKeyPath = Join-Path $tempDir "metadata-private.pem"
-          function Normalize-PemSecret([string]$rawSecret) {
-            $normalized = [string]$rawSecret
-            $normalized = $normalized -replace "`r", ""
-            $normalized = $normalized.Trim()
-            if ($normalized -match '\\n' -and $normalized -notmatch "`n") {
-              $normalized = $normalized -replace '\\n', "`n"
-            }
-            if ($normalized -notmatch '-----BEGIN [A-Z0-9 ]+-----') {
-              try {
-                $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($normalized)).Trim()
-                if ($decoded -match '-----BEGIN [A-Z0-9 ]+-----') {
-                  $normalized = $decoded
-                }
-              } catch {}
-            }
-            return $normalized.Trim() + "`n"
-          }
-          Normalize-PemSecret $env:UPDATE_FEED_METADATA_PRIVATE_KEY | Set-Content -Path $privateKeyPath -Encoding ASCII
           $signaturePath = Join-Path (Get-Location) "dist/latest.yml.sig"
 
           $scriptPath = Join-Path $tempDir "sign-latest-yml.js"
           @'
-          const crypto = require("crypto");
           const fs = require("fs");
+          const { signDetachedMetadata } = require("./electron/updater/feed-metadata");
 
           const latestPath = process.argv[2];
-          const privateKeyPath = process.argv[3];
-          const signaturePath = process.argv[4];
+          const signaturePath = process.argv[3];
 
           const payload = fs.readFileSync(latestPath, "utf8");
-          const privateKey = fs.readFileSync(privateKeyPath, "utf8");
-          const signature = crypto.sign("sha256", Buffer.from(payload, "utf8"), privateKey).toString("base64");
+          const signature = signDetachedMetadata({
+            payload,
+            privateKey: process.env.UPDATE_FEED_METADATA_PRIVATE_KEY,
+          });
           fs.writeFileSync(signaturePath, `${signature}\n`, "utf8");
           '@ | Set-Content -Path $scriptPath -Encoding UTF8
 
-          node $scriptPath $latestPath $privateKeyPath $signaturePath
+          node $scriptPath $latestPath $signaturePath
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to generate detached updater metadata signature."
             exit 1
@@ -792,49 +768,32 @@ jobs:
 
           $tempDir = Join-Path $env:RUNNER_TEMP "jarvis-feed-public-verify"
           New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-          $publicKeyPath = Join-Path $tempDir "metadata-public.pem"
-          function Normalize-PemSecret([string]$rawSecret) {
-            $normalized = [string]$rawSecret
-            $normalized = $normalized -replace "`r", ""
-            $normalized = $normalized.Trim()
-            if ($normalized -match '\\n' -and $normalized -notmatch "`n") {
-              $normalized = $normalized -replace '\\n', "`n"
-            }
-            if ($normalized -notmatch '-----BEGIN [A-Z0-9 ]+-----') {
-              try {
-                $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($normalized)).Trim()
-                if ($decoded -match '-----BEGIN [A-Z0-9 ]+-----') {
-                  $normalized = $decoded
-                }
-              } catch {}
-            }
-            return $normalized.Trim() + "`n"
-          }
-          Normalize-PemSecret $env:UPDATE_FEED_METADATA_PUBLIC_KEY | Set-Content -Path $publicKeyPath -Encoding ASCII
           $latestTempPath = Join-Path $tempDir "latest.yml"
           $signatureTempPath = Join-Path $tempDir "latest.yml.sig"
           $latestRaw | Set-Content -Path $latestTempPath -Encoding UTF8
           ([string]$signatureRes.Content).Trim() | Set-Content -Path $signatureTempPath -Encoding UTF8
           $verifyScriptPath = Join-Path $tempDir "verify-public-latest-yml.js"
           @'
-          const crypto = require("crypto");
           const fs = require("fs");
+          const { verifyDetachedMetadataSignature } = require("./jarvis/desktop/electron/updater/feed-metadata");
 
           const latestPath = process.argv[2];
           const signaturePath = process.argv[3];
-          const publicKeyPath = process.argv[4];
 
           const payload = fs.readFileSync(latestPath, "utf8");
           const signature = fs.readFileSync(signaturePath, "utf8").trim();
-          const publicKey = fs.readFileSync(publicKeyPath, "utf8");
-          const ok = crypto.verify("sha256", Buffer.from(payload, "utf8"), publicKey, Buffer.from(signature, "base64"));
-          if (!ok) {
-            console.error("Public detached latest.yml signature verification failed.");
+          const result = verifyDetachedMetadataSignature({
+            payload,
+            signature,
+            publicKey: process.env.UPDATE_FEED_METADATA_PUBLIC_KEY,
+          });
+          if (!result.ok) {
+            console.error(result.detail || "Public detached latest.yml signature verification failed.");
             process.exit(1);
           }
           '@ | Set-Content -Path $verifyScriptPath -Encoding UTF8
 
-          node $verifyScriptPath $latestTempPath $signatureTempPath $publicKeyPath
+          node $verifyScriptPath $latestTempPath $signatureTempPath
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Public updater metadata signature verification failed."
             exit 1
