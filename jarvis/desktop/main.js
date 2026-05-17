@@ -96,22 +96,27 @@ function getSidecarMainPath() {
   return path.join(__dirname, '..', '..', 'ai-agent', 'main.py');
 }
 
-function getPythonExecutable() {
+function resolvePythonExecutable() {
   const sidecarDir = path.dirname(getSidecarMainPath());
-  const candidates = [
+  const packagedCandidates = [
     // Embedded runtime candidates for packaged Windows builds.
     path.join(process.resourcesPath || '', 'ai-agent', 'runtime', 'python', 'python.exe'),
     path.join(process.resourcesPath || '', 'python', 'python.exe'),
     path.join(sidecarDir, 'venv', 'Scripts', 'python.exe'),
     path.join(sidecarDir, 'venv', 'bin', 'python'),
-    'python3',
-    'python',
   ];
+  const candidates = app.isPackaged
+    ? packagedCandidates
+    : [
+      ...packagedCandidates,
+      'python3',
+      'python',
+    ];
   for (const candidate of candidates) {
     if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
-    return candidate;
+    return { python: candidate, candidates };
   }
-  return 'python';
+  return { python: null, candidates };
 }
 
 function setLauncherPhase(phase, detail, details = {}) {
@@ -244,7 +249,31 @@ function startSidecar() {
     return;
   }
 
-  const python = getPythonExecutable();
+  const { python, candidates: pythonCandidates } = resolvePythonExecutable();
+  if (!python) {
+    sidecarStatus = 'unavailable';
+    startupDiagnostics.setComponent('sidecar', 'unavailable', {
+      detail: 'AI runtime Python executable not found.',
+      reason: 'python_missing',
+      details: { mainPy, pythonCandidates },
+      phase: 'validating-runtime',
+    });
+    startupDiagnostics.setComponent('launcher', 'degraded', {
+      detail: 'Launcher cannot locate AI runtime Python executable.',
+      reason: 'python_missing',
+      details: { mainPy, pythonCandidates },
+      phase: 'validating-runtime',
+    });
+    startupDiagnostics.pushEvent('sidecar', 'warn', 'Sidecar unavailable: Python runtime missing.', {
+      mainPy,
+      pythonCandidates,
+    });
+    telemetryBus.publish('sidecar.unavailable');
+    telemetryBus.publish('startup.unavailable');
+    emitDesktopHealth();
+    return;
+  }
+
   setLauncherPhase('creating-venv', 'Detecting Python runtime environment.', { python });
   setLauncherPhase('loading-models', 'Loading AI runtime models.');
   telemetryBus.publish('sidecar.started');
@@ -258,11 +287,16 @@ function startSidecar() {
   telemetryBus.publish('startup.starting');
   emitDesktopHealth();
   sidecarHeartbeatInFlight = false;
-  sidecarProcess = spawn(python, [mainPy], {
+  const sidecarArgs = [mainPy];
+  console.log('[sidecar] Launching sidecar:', python);
+  console.log('[sidecar] Args:', sidecarArgs);
+  sidecarProcess = spawn(python, sidecarArgs, {
+    cwd: path.dirname(mainPy),
     env: {
       ...process.env,
       JARVIS_SIDECAR_PORT: SIDECAR_PORT,
     },
+    windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
