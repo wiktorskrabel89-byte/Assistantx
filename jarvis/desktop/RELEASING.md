@@ -21,6 +21,21 @@ without requiring end-user credentials.
 - **Authentication**: `GH_TOKEN` Fine-Grained PAT in CI for publishing, never
   hardcoded in the app.
 
+## Installer identity + NSIS requirements (must stay stable)
+
+To keep in-place auto-updates working (no manual setup wizard flow), keep these
+values stable across releases:
+
+- `build.appId`
+- `build.productName`
+- `build.win.executableName`
+
+NSIS must remain configured for silent one-click updates:
+
+- `build.nsis.oneClick = true`
+- `build.nsis.perMachine = false`
+- `build.nsis.allowToChangeInstallationDirectory = false`
+
 ## Required secrets and tokens
 
 ### CI repository secret

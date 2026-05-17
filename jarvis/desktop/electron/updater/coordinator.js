@@ -19,8 +19,10 @@ function safeJsonParse(raw, fallback = null) {
 
 function sanitizeText(value, maxLen = 1500) {
   return String(value || '')
+    .normalize('NFC')
     .replace(/\r/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
+    .replace(/\uFFFD/g, '')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
     .trim()
     .slice(0, maxLen);
