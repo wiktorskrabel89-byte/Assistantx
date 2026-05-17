@@ -177,7 +177,10 @@ ipc.on('sidecar-status', (payload) => {
 
 ipc.on('desktop-health', (payload) => {
   const overall = payload?.overall || 'unknown';
-  footerStatusNode.textContent = `Desktop health: ${overall}`;
+  const sidecarDetail = payload?.components?.sidecar?.detail || '';
+  footerStatusNode.textContent = sidecarDetail
+    ? `Desktop health: ${overall} • ${sidecarDetail}`
+    : `Desktop health: ${overall}`;
 });
 
 void ipc.invoke('launcher-recent', { limit: 8 }).then((payload) => {
