@@ -205,12 +205,12 @@ jobs:
             exit 1
           }
 
-          if ($publish.private -ne $true) {
-            Write-Error "Updater publish config must declare 'private: true' for authenticated GitHub release access."
+          if ($publish.private -ne $false) {
+            Write-Error "Updater publish config must declare 'private: false' for public GitHub release access."
             exit 1
           }
 
-          Write-Host "Desktop publish config validated: GitHub provider => $actualOwner/$actualRepo (private)"
+          Write-Host "Desktop publish config validated: GitHub provider => $actualOwner/$actualRepo (public)"
 
       - name: Build installers (x64 + ARM64)
         working-directory: jarvis/desktop

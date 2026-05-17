@@ -48,7 +48,10 @@ function ensureDbReady() {
 // ── Python AI-Agent sidecar process management ───────────────────────────────
 let sidecarProcess = null;
 let sidecarStatus = 'idle';
+let sidecarHeartbeatInFlight = false;
 const SIDECAR_PORT = process.env.JARVIS_SIDECAR_PORT || '8765';
+const SIDECAR_HEALTH_TIMEOUT_MS = Number(process.env.JARVIS_SIDECAR_HEALTH_TIMEOUT_MS || 5000);
+const SIDECAR_HEALTH_RETRIES = Math.max(1, Number(process.env.JARVIS_SIDECAR_HEALTH_RETRIES || 3));
 const startupDiagnostics = createStartupDiagnostics();
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
@@ -72,6 +75,7 @@ assertNoDynamicCodeExecution('main-process-guardrails', 'main.js bootstrap');
 const AUTH_PROTOCOL = 'assistantx';
 const AUTH_CALLBACK_URL = `${AUTH_PROTOCOL}://auth/callback`;
 const SILENT_REFRESH_INTERVAL_MS = 5 * 60_000;
+const AUTH_LOGIN_TIMEOUT_MS = 5 * 60_000;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -110,11 +114,129 @@ function getPythonExecutable() {
   return 'python';
 }
 
+function setLauncherPhase(phase, detail, details = {}) {
+  startupDiagnostics.setPhase('launcher', phase, detail, details);
+}
+
+async function fetchSidecarHealth(timeoutMs = SIDECAR_HEALTH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`http://127.0.0.1:${SIDECAR_PORT}/health`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new Error(`Health endpoint returned ${response.status}`);
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function waitForSidecarHeartbeat() {
+  const startedAt = Date.now();
+  let lastError = null;
+  for (let attempt = 1; attempt <= SIDECAR_HEALTH_RETRIES; attempt += 1) {
+    try {
+      const payload = await fetchSidecarHealth();
+      return {
+        ok: true,
+        payload,
+        startupTimeMs: Date.now() - startedAt,
+      };
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
+  return {
+    ok: false,
+    reason: lastError?.name === 'AbortError' ? 'health_timeout' : 'health_unreachable',
+    error: String(lastError?.message || lastError || 'unknown_error'),
+    startupTimeMs: Date.now() - startedAt,
+  };
+}
+
+function markSidecarListeningForHeartbeat() {
+  if (sidecarHeartbeatInFlight) return;
+  sidecarHeartbeatInFlight = true;
+  setLauncherPhase('starting-api', 'AI runtime API started. Waiting for heartbeat.');
+  startupDiagnostics.setComponent('sidecar', 'starting', {
+    detail: 'AI runtime started. Waiting for heartbeat.',
+    reason: 'waiting_for_heartbeat',
+    phase: 'waiting-for-heartbeat',
+  });
+  void waitForSidecarHeartbeat().then((health) => {
+    sidecarHeartbeatInFlight = false;
+    if (!sidecarProcess) return;
+    if (health.ok) {
+      startupDiagnostics.setComponent('sidecar', 'healthy', {
+        detail: 'AI runtime healthy and ready.',
+        reason: 'heartbeat_ok',
+        details: { startupTimeMs: health.startupTimeMs, ...(health.payload || {}) },
+        phase: 'healthy',
+      });
+      startupDiagnostics.setComponent('launcher', 'healthy', {
+        detail: 'Launcher initialized AI runtime successfully.',
+        reason: 'sidecar_healthy',
+        details: { startupTimeMs: health.startupTimeMs },
+        phase: 'healthy',
+      });
+      startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar heartbeat is healthy.', {
+        startupTimeMs: health.startupTimeMs,
+      });
+      telemetryBus.publish('sidecar.running');
+      telemetryBus.publish('startup.healthy');
+    } else {
+      startupDiagnostics.setComponent('sidecar', 'degraded', {
+        detail: 'AI runtime heartbeat failed.',
+        reason: health.reason,
+        details: {
+          startupTimeMs: health.startupTimeMs,
+          error: health.error,
+        },
+        phase: 'waiting-for-heartbeat',
+      });
+      startupDiagnostics.setComponent('launcher', 'degraded', {
+        detail: 'Launcher started sidecar but heartbeat failed.',
+        reason: health.reason,
+        details: {
+          startupTimeMs: health.startupTimeMs,
+          error: health.error,
+        },
+        phase: 'waiting-for-heartbeat',
+      });
+      startupDiagnostics.pushEvent('sidecar', 'warn', 'Sidecar heartbeat degraded.', {
+        reason: health.reason,
+        error: health.error,
+        startupTimeMs: health.startupTimeMs,
+      });
+      telemetryBus.publish('startup.degraded');
+    }
+    emitDesktopHealth();
+  });
+}
+
 function startSidecar() {
   const mainPy = getSidecarMainPath();
+  setLauncherPhase('validating-runtime', 'Validating AI runtime paths.');
   if (!fs.existsSync(mainPy)) {
     sidecarStatus = 'unavailable';
-    startupDiagnostics.setComponent('sidecar', 'unavailable', 'Sidecar main.py not found.');
+    startupDiagnostics.setComponent('sidecar', 'unavailable', {
+      detail: 'AI runtime executable not found.',
+      reason: 'main_py_missing',
+      details: { mainPy },
+    });
+    startupDiagnostics.setComponent('launcher', 'degraded', {
+      detail: 'Launcher cannot locate sidecar runtime.',
+      reason: 'runtime_path_missing',
+      details: { mainPy },
+      phase: 'validating-runtime',
+    });
     startupDiagnostics.pushEvent('sidecar', 'warn', 'Sidecar unavailable: main.py missing.');
     telemetryBus.publish('sidecar.unavailable');
     telemetryBus.publish('startup.unavailable');
@@ -123,11 +245,19 @@ function startSidecar() {
   }
 
   const python = getPythonExecutable();
+  setLauncherPhase('creating-venv', 'Detecting Python runtime environment.', { python });
+  setLauncherPhase('loading-models', 'Loading AI runtime models.');
   telemetryBus.publish('sidecar.started');
-  startupDiagnostics.setComponent('sidecar', 'degraded', `Starting sidecar using ${python}.`);
+  startupDiagnostics.setComponent('sidecar', 'starting', {
+    detail: 'Starting AI runtime process.',
+    reason: 'process_starting',
+    details: { python },
+    phase: 'starting-api',
+  });
   startupDiagnostics.pushEvent('sidecar', 'info', 'Starting sidecar process.', { python });
-  telemetryBus.publish('startup.degraded');
+  telemetryBus.publish('startup.starting');
   emitDesktopHealth();
+  sidecarHeartbeatInFlight = false;
   sidecarProcess = spawn(python, [mainPy], {
     env: {
       ...process.env,
@@ -143,11 +273,7 @@ function startSidecar() {
     if (line) console.log(`[sidecar] ${line}`);
     if (line.includes('listening on')) {
       sidecarStatus = 'running';
-      startupDiagnostics.setComponent('sidecar', 'healthy', 'Sidecar listening for connections.');
-      startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar is running.');
-      telemetryBus.publish('sidecar.running');
-      telemetryBus.publish('startup.healthy');
-      emitDesktopHealth();
+      markSidecarListeningForHeartbeat();
     }
     sendToRenderer('sidecar-status', { status: sidecarStatus });
   });
@@ -157,11 +283,7 @@ function startSidecar() {
     if (line) console.error(`[sidecar:err] ${line}`);
     if (line.includes('listening on')) {
       sidecarStatus = 'running';
-      startupDiagnostics.setComponent('sidecar', 'healthy', 'Sidecar listening for connections.');
-      startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar is running.');
-      telemetryBus.publish('sidecar.running');
-      telemetryBus.publish('startup.healthy');
-      emitDesktopHealth();
+      markSidecarListeningForHeartbeat();
     }
     if (/reconnect|retry|re-?connect/i.test(line)) {
       telemetryBus.publish('sidecar.reconnect');
@@ -172,8 +294,20 @@ function startSidecar() {
   sidecarProcess.on('exit', (code, signal) => {
     console.log(`[sidecar] process exited: code=${code} signal=${signal}`);
     sidecarProcess = null;
+    sidecarHeartbeatInFlight = false;
     sidecarStatus = 'stopped';
-    startupDiagnostics.setComponent('sidecar', 'degraded', `Sidecar stopped (code=${code} signal=${signal}).`);
+    startupDiagnostics.setComponent('sidecar', code && code !== 0 ? 'crashed' : 'stopped', {
+      detail: `AI runtime stopped (code=${code} signal=${signal}).`,
+      reason: code && code !== 0 ? 'sidecar_crash' : 'sidecar_stopped',
+      details: { code, signal },
+      phase: 'stopped',
+    });
+    startupDiagnostics.setComponent('launcher', 'degraded', {
+      detail: 'Launcher detected sidecar stop.',
+      reason: 'sidecar_stopped',
+      details: { code, signal },
+      phase: 'waiting-for-heartbeat',
+    });
     startupDiagnostics.pushEvent('sidecar', 'warn', 'Sidecar process exited.', { code, signal });
     telemetryBus.publish('sidecar.exit');
     telemetryBus.publish('startup.degraded');
@@ -184,7 +318,19 @@ function startSidecar() {
   sidecarProcess.on('error', (err) => {
     console.error('[sidecar] spawn error:', err.message);
     sidecarStatus = 'error';
-    startupDiagnostics.setComponent('sidecar', 'unavailable', `Sidecar spawn error: ${err.message}`);
+    sidecarHeartbeatInFlight = false;
+    startupDiagnostics.setComponent('sidecar', 'unavailable', {
+      detail: `AI runtime spawn error: ${err.message}`,
+      reason: 'spawn_error',
+      details: { error: err.message },
+      phase: 'starting-api',
+    });
+    startupDiagnostics.setComponent('launcher', 'degraded', {
+      detail: 'Launcher failed to spawn AI runtime.',
+      reason: 'spawn_error',
+      details: { error: err.message },
+      phase: 'starting-api',
+    });
     startupDiagnostics.pushEvent('sidecar', 'error', 'Sidecar spawn error.', { message: err.message });
     telemetryBus.publish('sidecar.error');
     telemetryBus.publish('startup.unavailable');
@@ -203,7 +349,12 @@ function stopSidecar() {
     sidecarProcess = null;
   }
   sidecarStatus = 'stopped';
-  startupDiagnostics.setComponent('sidecar', 'degraded', 'Sidecar stopped by desktop runtime.');
+  sidecarHeartbeatInFlight = false;
+  startupDiagnostics.setComponent('sidecar', 'stopped', {
+    detail: 'AI runtime stopped by desktop runtime.',
+    reason: 'manual_stop',
+    phase: 'stopped',
+  });
   startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar stop requested.');
   emitDesktopHealth();
 }
@@ -302,10 +453,23 @@ function settlePendingAuth(result) {
   const flow = pendingAuthFlow;
   pendingAuthFlow = null;
   flow.settled = true;
-  flow.resolve(result);
-  if (flow.loginWin && !flow.loginWin.isDestroyed()) {
-    flow.loginWin.close();
+   if (flow.timeoutId) {
+    clearTimeout(flow.timeoutId);
+    flow.timeoutId = null;
   }
+  flow.resolve(result);
+}
+
+function failPendingAuth(error) {
+  if (!pendingAuthFlow || pendingAuthFlow.settled) return;
+  const flow = pendingAuthFlow;
+  pendingAuthFlow = null;
+  flow.settled = true;
+  if (flow.timeoutId) {
+    clearTimeout(flow.timeoutId);
+    flow.timeoutId = null;
+  }
+  flow.reject(error);
 }
 
 async function consumeAuthCallback(url, source = 'browser', { expectedState = null, settlePending = false } = {}) {
@@ -320,75 +484,48 @@ async function consumeAuthCallback(url, source = 'browser', { expectedState = nu
   return true;
 }
 
-function watchLoginWindow(loginWin, expectedState = null) {
-  const inspectUrl = (url, source = 'browser') => {
-    console.log('[auth] inspecting callback candidate:', redactUrl(url));
-    void consumeAuthCallback(url, source, {
-      expectedState,
-      settlePending: true,
-    }).catch((error) => {
-      console.warn('[auth] Failed to process OAuth callback:', error?.message || error);
-    });
-  };
-  const inspectNavigation = (event, url, source) => {
-    if (typeof url === 'string' && url.startsWith(`${AUTH_CALLBACK_URL}#`)) {
-      event.preventDefault();
-    }
-    inspectUrl(url, source);
-  };
-  loginWin.webContents.on('will-navigate', (event, url) => inspectNavigation(event, url, 'browser-navigate'));
-  loginWin.webContents.on('will-redirect', (event, url) => inspectNavigation(event, url, 'browser-redirect'));
-  loginWin.webContents.on('did-redirect-navigation', (_event, url) => inspectUrl(url, 'browser-redirect'));
-  loginWin.webContents.on('did-navigate', (_event, url) => inspectUrl(url, 'browser-navigate'));
-  loginWin.webContents.on('did-navigate-in-page', (_event, url) => inspectUrl(url, 'browser-navigate'));
-  loginWin.webContents.on('did-finish-load', () => {
-    try {
-      inspectUrl(loginWin.webContents.getURL(), 'browser-finish-load');
-    } catch {
-      // ignore transient navigation state errors
-    }
-  });
-}
-
-function beginDesktopLogin({ parentWindow } = {}) {
+function beginDesktopLogin() {
   if (pendingAuthFlow?.promise) {
-    if (pendingAuthFlow.loginWin && !pendingAuthFlow.loginWin.isDestroyed()) {
-      pendingAuthFlow.loginWin.show();
-      pendingAuthFlow.loginWin.focus();
+    if (pendingAuthFlow.loginUrl) {
+      void shell.openExternal(pendingAuthFlow.loginUrl).catch((error) => {
+        console.warn('[auth] Failed to reopen OAuth browser URL:', error?.message || error);
+      });
     }
     return pendingAuthFlow.promise;
   }
 
   const state = generateOAuthState();
   const loginUrl = getDesktopLoginUrl(state);
-  const loginWin = new BrowserWindow({
-    width: 480,
-    height: 680,
-    title: 'Sign in to AssistantX',
-    parent: parentWindow || undefined,
-    modal: true,
-    webPreferences: buildSecureWebPreferences(),
-  });
-
-  const promise = new Promise((resolve) => {
+  const promise = new Promise((resolve, reject) => {
     pendingAuthFlow = {
       state,
       resolve,
+      reject,
       promise: null,
-      loginWin,
+      loginUrl,
       settled: false,
+      timeoutId: null,
     };
   });
   pendingAuthFlow.promise = promise;
-
-  loginWin.on('closed', () => settlePendingAuth(null));
-  watchLoginWindow(loginWin, state);
-  loginWin.loadURL(loginUrl);
+  pendingAuthFlow.timeoutId = setTimeout(() => {
+    console.warn('[auth] Login flow timed out waiting for callback.');
+    settlePendingAuth(null);
+  }, AUTH_LOGIN_TIMEOUT_MS);
+  console.info('[auth] login started');
+  shell.openExternal(loginUrl)
+    .then(() => {
+      console.info('[auth] oauth browser opened');
+    })
+    .catch((error) => {
+      failPendingAuth(error);
+    });
   return promise;
 }
 
 async function handleProtocolCallback(url, source = 'protocol') {
   if (!url) return false;
+  console.info('[auth] callback received', { source, url: redactUrl(url) });
   const consumed = await consumeAuthCallback(url, source, {
     expectedState: pendingAuthFlow?.state || null,
     settlePending: Boolean(pendingAuthFlow),
@@ -726,6 +863,7 @@ nativeAutoUpdater?.on?.('before-quit-for-update', () => {
 
 app.whenReady().then(async () => {
   telemetryBus.publish('updater.session.started', { currentVersion: app.getVersion() });
+  setLauncherPhase('validating-runtime', 'Validating launcher runtime.');
   const startupProtocolUrl = extractProtocolUrl(process.argv);
   if (startupProtocolUrl) {
     void handleProtocolCallback(startupProtocolUrl, 'startup-argv');
@@ -734,12 +872,21 @@ app.whenReady().then(async () => {
   // before any launcher or IPC code touches it.
   try {
     await require('./launcher/db').init();
-    startupDiagnostics.setComponent('db', 'healthy', 'Launcher DB initialized.');
+    startupDiagnostics.setComponent('db', 'healthy', {
+      detail: 'Database initialized successfully.',
+      reason: 'db_ready',
+      phase: 'healthy',
+    });
     startupDiagnostics.pushEvent('startup', 'info', 'Launcher DB initialization completed.');
     telemetryBus.publish('startup.healthy');
   } catch (err) {
     console.error('[db] Failed to initialise database:', err.message);
-    startupDiagnostics.setComponent('db', 'unavailable', `Launcher DB init failed: ${err.message}`);
+    startupDiagnostics.setComponent('db', 'unavailable', {
+      detail: `Database initialization failed: ${err.message}`,
+      reason: 'db_init_failed',
+      details: { error: err.message },
+      phase: 'validating-runtime',
+    });
     startupDiagnostics.pushEvent('startup', 'error', 'Launcher DB initialization failed.', { message: err.message });
     telemetryBus.publish('startup.unavailable');
   }
@@ -752,9 +899,14 @@ app.whenReady().then(async () => {
   createTray();
   registerLauncherShortcut();
   setupAutoUpdater();
+  setLauncherPhase('loading-models', 'Loading AI runtime models.');
   launcherService.refreshCatalog({ reason: 'app-ready' })
     .then(() => {
-      startupDiagnostics.setComponent('launcher', 'healthy', 'Launcher catalog refreshed.');
+      startupDiagnostics.setComponent('launcher', 'healthy', {
+        detail: 'Launcher catalog refreshed.',
+        reason: 'catalog_ready',
+        phase: 'healthy',
+      });
       startupDiagnostics.pushEvent('launcher', 'info', 'Launcher catalog refresh completed.');
       telemetryBus.publish('startup.healthy');
       emitDesktopHealth();
@@ -762,7 +914,12 @@ app.whenReady().then(async () => {
     })
     .catch((error) => {
       console.warn('[launcher] startup refresh failed:', error.message);
-      startupDiagnostics.setComponent('launcher', 'degraded', `Launcher refresh failed: ${error.message}`);
+      startupDiagnostics.setComponent('launcher', 'degraded', {
+        detail: `Launcher catalog refresh failed: ${error.message}`,
+        reason: 'catalog_refresh_failed',
+        details: { error: error.message },
+        phase: 'loading-models',
+      });
       startupDiagnostics.pushEvent('launcher', 'warn', 'Launcher refresh failed.', { message: error.message });
       telemetryBus.publish('startup.degraded');
       emitDesktopHealth();

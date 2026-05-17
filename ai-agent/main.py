@@ -32,6 +32,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from typing import Any
 
 import websockets
@@ -45,6 +46,7 @@ logger = logging.getLogger("jarvis-sidecar")
 
 HOST = os.environ.get("JARVIS_SIDECAR_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JARVIS_SIDECAR_PORT", "8765"))
+STARTED_AT = time.monotonic()
 
 # ── Lazy-loaded pipeline singletons ──────────────────────────────────────────
 _wake_detector: Any = None
@@ -92,6 +94,20 @@ def _get_vad_engine():
         from speech.vad import SileroVAD
         _vad_engine = SileroVAD()
     return _vad_engine
+
+
+def _health_snapshot() -> dict[str, Any]:
+    whisper_ready = _stt_engine is not None
+    tts_ready = _tts_engine is not None
+    models_loaded = whisper_ready and tts_ready
+    status = "healthy" if models_loaded else "starting"
+    return {
+        "status": status,
+        "modelsLoaded": models_loaded,
+        "whisper": whisper_ready,
+        "tts": tts_ready,
+        "uptime": int(time.monotonic() - STARTED_AT),
+    }
 
 
 # ── Per-connection audio pipeline state ──────────────────────────────────────
@@ -347,6 +363,17 @@ async def handle_connection(ws: WebSocketServerProtocol) -> None:
         logger.info("Client disconnected: %s", addr)
 
 
+async def _process_request(path: str, _request_headers):
+    if path != "/health":
+        return None
+    payload = json.dumps(_health_snapshot()).encode("utf-8")
+    headers = [
+        ("Content-Type", "application/json; charset=utf-8"),
+        ("Cache-Control", "no-store"),
+    ]
+    return 200, headers, payload
+
+
 async def main_async() -> None:
     logger.info("Starting Jarvis AI-Agent sidecar on %s:%d", HOST, PORT)
 
@@ -360,8 +387,9 @@ async def main_async() -> None:
         loop.add_signal_handler(signal.SIGTERM, _handle_signal)
         loop.add_signal_handler(signal.SIGINT, _handle_signal)
 
-    async with websockets.serve(handle_connection, HOST, PORT):
+    async with websockets.serve(handle_connection, HOST, PORT, process_request=_process_request):
         logger.info("Sidecar WebSocket server listening on ws://%s:%d", HOST, PORT)
+        logger.info("Sidecar health endpoint listening on http://%s:%d/health", HOST, PORT)
         await stop_event.wait()
 
     logger.info("Sidecar shutting down.")

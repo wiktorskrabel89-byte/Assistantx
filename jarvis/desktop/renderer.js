@@ -1163,7 +1163,11 @@ window.addEventListener('DOMContentLoaded', () => {
 		ipcRenderer.on('desktop-health', (payload) => {
 			const overall = String(payload?.overall || 'unknown');
 			const componentList = Object.entries(payload?.components || {})
-				.map(([name, component]) => `${name}:${component?.status || 'unknown'}`)
+				.map(([name, component]) => {
+					const status = component?.status || 'unknown';
+					const detail = component?.detail ? ` — ${component.detail}` : '';
+					return `${name}:${status}${detail}`;
+				})
 				.join(', ');
 			appendMessage(log, 'Desktop health', `${overall} (${componentList || 'no component data'})`, overall === 'unavailable' ? 'error' : 'system');
 		});

@@ -16,7 +16,8 @@ function getDesktopRedirectTarget(value: string | null) {
   if (!value) return null;
   try {
     const url = new URL(value);
-    if (url.protocol === "assistantx:" && url.hostname === "auth" && url.pathname === "/callback") {
+    const normalizedPath = url.pathname.replace(/\/+$/, "") || "/";
+    if (url.protocol === "assistantx:" && url.hostname === "auth" && normalizedPath === "/callback") {
       return url;
     }
   } catch {
