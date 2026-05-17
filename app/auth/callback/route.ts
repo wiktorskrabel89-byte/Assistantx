@@ -132,6 +132,7 @@ export async function GET(request: Request) {
     });
     if (state) queryParams.set("state", state);
     target.search = queryParams.toString();
+    console.log("[desktop-auth] redirect target:", target.toString());
     const response = NextResponse.redirect(target.toString());
     applyProviderCookies(response);
     return response;
