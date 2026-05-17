@@ -76,6 +76,33 @@ const AUTH_PROTOCOL = 'assistantx';
 const AUTH_CALLBACK_URL = `${AUTH_PROTOCOL}://auth/callback`;
 const SILENT_REFRESH_INTERVAL_MS = 5 * 60_000;
 const AUTH_LOGIN_TIMEOUT_MS = 5 * 60_000;
+const AUTH_LOG_FILE_NAME = 'auth.log';
+
+function formatLogArg(arg) {
+  if (typeof arg === 'string') return arg;
+  if (arg instanceof Error) return arg.stack || arg.message;
+  try {
+    return JSON.stringify(arg);
+  } catch {
+    return String(arg);
+  }
+}
+
+function appendAuthLog(level, args) {
+  try {
+    const userDataPath = app.getPath('userData');
+    fs.mkdirSync(userDataPath, { recursive: true });
+    const line = `[${new Date().toISOString()}] [${level}] ${args.map(formatLogArg).join(' ')}\n`;
+    fs.appendFileSync(path.join(userDataPath, AUTH_LOG_FILE_NAME), line);
+  } catch {
+    // never crash app on logging failure
+  }
+}
+
+function log(...args) {
+  console.log(...args);
+  appendAuthLog('info', args);
+}
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -119,7 +146,7 @@ function resolvePythonExecutable() {
     return { candidate, exists };
   });
   for (const entry of candidateDetails) {
-    console.log('[sidecar] Python path candidate:', entry.candidate, 'exists:', entry.exists);
+    log('[sidecar] Python path candidate:', entry.candidate, 'exists:', entry.exists);
     if (entry.exists === false) continue;
     console.log('[sidecar] Resolved python path:', entry.candidate);
     console.log('[sidecar] Exists:', entry.exists);
@@ -304,8 +331,8 @@ function startSidecar() {
   emitDesktopHealth();
   sidecarHeartbeatInFlight = false;
   const sidecarArgs = [mainPy];
-  console.log('[sidecar] Launching sidecar:', python);
-  console.log('[sidecar] Args:', sidecarArgs);
+  log('[sidecar] Launching sidecar:', python);
+  log('[sidecar] Args:', sidecarArgs);
   sidecarProcess = spawn(python, sidecarArgs, {
     cwd: path.dirname(mainPy),
     env: {
@@ -320,7 +347,7 @@ function startSidecar() {
 
   sidecarProcess.stdout?.on('data', (data) => {
     const line = data.toString().trim();
-    if (line) console.log(`[sidecar] ${line}`);
+    if (line) log(`[sidecar] ${line}`);
     if (line.includes('listening on')) {
       sidecarStatus = 'running';
       markSidecarListeningForHeartbeat();
@@ -342,7 +369,7 @@ function startSidecar() {
   });
 
   sidecarProcess.on('exit', (code, signal) => {
-    console.log(`[sidecar] process exited: code=${code} signal=${signal}`);
+    log(`[sidecar] process exited: code=${code} signal=${signal}`);
     sidecarProcess = null;
     sidecarHeartbeatInFlight = false;
     sidecarStatus = 'stopped';
@@ -528,8 +555,8 @@ async function consumeAuthCallback(url, source = 'browser', { expectedState = nu
     const hashParams = new URLSearchParams(deepLink.hash.slice(1));
     const accessToken = deepLink.searchParams.get('access_token') || hashParams.get('access_token');
     const refreshToken = deepLink.searchParams.get('refresh_token') || hashParams.get('refresh_token');
-    console.log('[auth] ACCESS TOKEN PARSED:', Boolean(accessToken));
-    console.log('[auth] REFRESH TOKEN PARSED:', Boolean(refreshToken));
+    log('[auth] ACCESS TOKEN PARSED:', Boolean(accessToken));
+    log('[auth] REFRESH TOKEN PARSED:', Boolean(refreshToken));
   } catch {
     // ignore parser diagnostics for malformed URLs
   }
@@ -543,7 +570,7 @@ async function consumeAuthCallback(url, source = 'browser', { expectedState = nu
     return true;
   }
   const savedSession = await setAccountSession(parsed.session, { reason: `login-${source}` });
-  console.log('[auth] SESSION SAVED');
+  log('[auth] SESSION SAVED');
   if (settlePending) settlePendingAuth(toSafeSessionView(savedSession));
   return true;
 }
@@ -590,7 +617,7 @@ function beginDesktopLogin() {
 async function handleProtocolCallback(url, source = 'protocol') {
   if (!url) return false;
   if (process.env.AUTH_DEBUG === 'true') {
-    console.log('[auth-debug] RAW URL:', url);
+    log('[auth-debug] RAW URL:', url);
   }
   console.info('[auth] callback received', { source, url: redactUrl(url) });
   let consumed = false;
@@ -936,6 +963,7 @@ nativeAutoUpdater?.on?.('before-quit-for-update', () => {
 });
 
 app.whenReady().then(async () => {
+  log('AUTH_DEBUG:', process.env.AUTH_DEBUG);
   telemetryBus.publish('updater.session.started', { currentVersion: app.getVersion() });
   setLauncherPhase('validating-runtime', 'Validating launcher runtime.');
   const startupProtocolUrl = extractProtocolUrl(process.argv);
