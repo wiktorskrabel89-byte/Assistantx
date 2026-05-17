@@ -122,7 +122,7 @@ export async function GET(request: Request) {
 
   if (isDesktop) {
     const target = desktopRedirectTarget ?? new URL("assistantx://auth/callback");
-    const hashParams = new URLSearchParams({
+    const queryParams = new URLSearchParams({
       access_token: data.session!.access_token,
       refresh_token: data.session!.refresh_token ?? "",
       token_type: "bearer",
@@ -130,8 +130,8 @@ export async function GET(request: Request) {
       user_id: data.user?.id ?? "",
       signed_in_at: data.user?.last_sign_in_at ?? data.session?.user?.last_sign_in_at ?? new Date().toISOString(),
     });
-    if (state) hashParams.set("state", state);
-    target.hash = hashParams.toString();
+    if (state) queryParams.set("state", state);
+    target.search = queryParams.toString();
     const response = NextResponse.redirect(target.toString());
     applyProviderCookies(response);
     return response;

@@ -143,7 +143,7 @@ export default function LoginPage() {
     const callbackUrl = redirectContext.redirectTo
       ? new URL(redirectContext.redirectTo)
       : new URL("/jarvis/callback", window.location.origin);
-    const hashParams = new URLSearchParams({
+    const queryParams = new URLSearchParams({
       access_token: accessToken,
       refresh_token: session.refresh_token ?? "",
       token_type: "bearer",
@@ -151,8 +151,8 @@ export default function LoginPage() {
       user_id: session.user?.id ?? "",
       signed_in_at: new Date().toISOString(),
     });
-    if (redirectContext.state) hashParams.set("state", redirectContext.state);
-    callbackUrl.hash = hashParams.toString();
+    if (redirectContext.state) queryParams.set("state", redirectContext.state);
+    callbackUrl.search = queryParams.toString();
     window.location.href = callbackUrl.toString();
     return true;
   }

@@ -525,6 +525,9 @@ function beginDesktopLogin() {
 
 async function handleProtocolCallback(url, source = 'protocol') {
   if (!url) return false;
+  if (process.env.AUTH_DEBUG === 'true') {
+    console.log('[auth-debug] RAW URL:', url);
+  }
   console.info('[auth] callback received', { source, url: redactUrl(url) });
   const consumed = await consumeAuthCallback(url, source, {
     expectedState: pendingAuthFlow?.state || null,
