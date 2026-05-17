@@ -12,6 +12,7 @@ const {
   readState,
   rememberFile,
   rememberPrompt,
+  saveReminder,
   saveTask,
 } = require('./local-state');
 const { planPrompt } = require('./task-planner');
@@ -25,6 +26,7 @@ const { createBackendRuntimeAdapter } = require('./electron/runtime/backend-runt
 const { createExecutionSandbox } = require('./electron/sandbox/execution-sandbox');
 const { createPromptRegistry } = require('./prompts/registry');
 const { createModelCapabilityRegistry } = require('./electron/ai/models/registry');
+const { buildTemporalContext } = require('./electron/temporal/context');
 
 let ipcRenderer;
 let clipboard;
@@ -476,6 +478,7 @@ async function runAiPrompt(prompt, meta = {}) {
   const composedPrompt = promptRegistry.composer.compose({
     taskPrompt: String(prompt || ''),
     memoryContext: history.map((item) => `${item.role}: ${item.content}`).join('\n'),
+    temporalContext: buildTemporalContext(),
   });
 
   // Signal to the UI that a response is in flight.
@@ -1140,6 +1143,23 @@ async function executeStructuredCommand(msg, context = {}) {
             ? `${mode.charAt(0).toUpperCase() + mode.slice(1)} mode started. ${modeResults.join('; ')}`
             : 'Unknown mode.',
         };
+        break;
+      }
+      case 'addReminder': {
+        const temporal = msg.temporal && typeof msg.temporal === 'object' ? msg.temporal : null;
+        const triggerAt = temporal?.triggerAt || msg.triggerAt || null;
+        if (!triggerAt) throw new Error('Reminder requires triggerAt.');
+        const saved = saveReminder({
+          label: msg.label || msg.text || 'Reminder',
+          text: msg.text || msg.label || '',
+          triggerAt,
+          priority: msg.priority,
+          voiceEnabled: msg.voiceEnabled !== false,
+          source: context.origin || context.source || 'desktop',
+        });
+        const latest = Array.isArray(saved.reminders) ? saved.reminders.find((item) => item.triggerAt === triggerAt) : null;
+        const when = latest?.triggerAt ? new Date(latest.triggerAt).toLocaleString() : triggerAt;
+        result = { summary: `Reminder saved for ${when}.` };
         break;
       }
       default: {

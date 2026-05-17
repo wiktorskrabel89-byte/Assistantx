@@ -39,6 +39,7 @@ type JarvisCloudState = {
   history: JsonRecord[];
   tasks: JsonRecord[];
   schedules: JsonRecord[];
+  reminders: JsonRecord[];
   voiceSettings: JsonRecord;
   syncOptions: JarvisSyncOptions;
   syncMetadata: JsonRecord;
@@ -149,6 +150,7 @@ export function normalizeJarvisCloudPayload(raw: unknown): JarvisCloudState {
   const history = asArrayRecords(payload.history, MAX_SYNC_HISTORY);
   const tasks = asArrayRecords(payload.tasks, MAX_SYNC_TASKS);
   const schedules = asArrayRecords(payload.schedules, MAX_SYNC_SCHEDULES);
+  const reminders = asArrayRecords(payload.reminders, MAX_SYNC_SCHEDULES);
   const voiceSettings = asRecord(payload.voiceSettings ?? preferences.voiceSettings);
   const syncOptions = sanitizeSyncOptions(payload.syncOptions ?? preferences.syncOptions);
   const syncMetadata = {
@@ -163,6 +165,7 @@ export function normalizeJarvisCloudPayload(raw: unknown): JarvisCloudState {
     history,
     tasks,
     schedules,
+    reminders,
     voiceSettings,
     syncOptions,
     syncMetadata,
@@ -231,12 +234,14 @@ export function mergeJarvisIntoWorkspaceState(
   const jarvisSync = asRecord(state.jarvisSync);
   const currentTasks = asArrayRecords(jarvisSync.tasks, MAX_SYNC_TASKS);
   const currentSchedules = asArrayRecords(jarvisSync.schedules, MAX_SYNC_SCHEDULES);
+  const currentReminders = asArrayRecords(jarvisSync.reminders, MAX_SYNC_SCHEDULES);
   const mergedTasks = jarvis.syncOptions.syncTasksReminders
     ? mergeByNewest(currentTasks, jarvis.tasks).slice(0, MAX_SYNC_TASKS)
     : currentTasks;
   const mergedSchedules = jarvis.syncOptions.syncAutomations
     ? mergeByNewest(currentSchedules, jarvis.schedules).slice(0, MAX_SYNC_SCHEDULES)
     : currentSchedules;
+  const mergedReminders = mergeByNewest(currentReminders, jarvis.reminders).slice(0, MAX_SYNC_SCHEDULES);
 
   workspaces[idx] = {
     ...currentWorkspace,
@@ -252,6 +257,7 @@ export function mergeJarvisIntoWorkspaceState(
       ...jarvisSync,
       tasks: mergedTasks,
       schedules: mergedSchedules,
+      reminders: mergedReminders,
       syncOptions: jarvis.syncOptions,
       syncMetadata: jarvis.syncMetadata,
       updatedAt: new Date().toISOString(),
@@ -285,6 +291,7 @@ export function projectWorkspaceStateToJarvisCloud(workspaceState: unknown): Jar
   const syncOptions = sanitizeSyncOptions(jarvisSync.syncOptions);
   const tasks = asArrayRecords(jarvisSync.tasks, MAX_SYNC_TASKS);
   const schedules = asArrayRecords(jarvisSync.schedules, MAX_SYNC_SCHEDULES);
+  const reminders = asArrayRecords(jarvisSync.reminders, MAX_SYNC_SCHEDULES);
 
   return {
     preferences: {
@@ -301,6 +308,7 @@ export function projectWorkspaceStateToJarvisCloud(workspaceState: unknown): Jar
     history,
     tasks,
     schedules,
+    reminders,
     voiceSettings: {
       wakeWordEnabled: Boolean(settings.wakeWordEnabled),
       wakeWordPhrase: normalizeText(settings.wakeWordPhrase, 120),

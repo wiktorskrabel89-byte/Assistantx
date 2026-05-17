@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   let { data, error } = await supabase
     .from('jarvis_cloud_memory')
-    .select('preferences, history, tasks, schedules, voice_settings, sync_metadata, updated_at')
+    .select('preferences, history, tasks, schedules, reminders, voice_settings, sync_metadata, updated_at')
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
     history: data?.history ?? [],
     tasks: (data as Record<string, unknown> | null)?.tasks ?? [],
     schedules: (data as Record<string, unknown> | null)?.schedules ?? [],
+    reminders: (data as Record<string, unknown> | null)?.reminders ?? [],
     voiceSettings: (data as Record<string, unknown> | null)?.voice_settings ?? {},
     syncMetadata: (data as Record<string, unknown> | null)?.sync_metadata ?? {},
   });
@@ -71,12 +72,16 @@ export async function GET(req: NextRequest) {
   const mergedSchedules = Array.from(
     new Map([...projected.schedules, ...normalizedCloud.schedules].map((item) => [String((item as Record<string, unknown>).id ?? JSON.stringify(item)), item])).values(),
   );
+  const mergedReminders = Array.from(
+    new Map([...projected.reminders, ...normalizedCloud.reminders].map((item) => [String((item as Record<string, unknown>).id ?? JSON.stringify(item)), item])).values(),
+  );
 
   return NextResponse.json({
     preferences: { ...projected.preferences, ...normalizedCloud.preferences },
     history: dedupedHistory,
     tasks: mergedTasks,
     schedules: mergedSchedules,
+    reminders: mergedReminders,
     voiceSettings: { ...projected.voiceSettings, ...normalizedCloud.voiceSettings },
     syncOptions: normalizedCloud.syncOptions,
     syncMetadata: normalizedCloud.syncMetadata,
@@ -107,6 +112,7 @@ export async function PUT(req: NextRequest) {
         history: normalized.history,
         tasks: normalized.tasks,
         schedules: normalized.schedules,
+        reminders: normalized.reminders,
         voice_settings: normalized.voiceSettings,
         sync_metadata: normalized.syncMetadata,
         schema_version: 1,

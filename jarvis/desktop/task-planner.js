@@ -1,3 +1,5 @@
+const { parseRelativeTime } = require('./electron/temporal/parse-relative-time');
+
 function normalizeText(text) {
   return String(text || '').trim();
 }
@@ -10,6 +12,7 @@ function createStep(command, payload = {}, label) {
     searchYouTube: 'search_youtube',
     setAppAlias: 'set_app_alias',
     refreshAppCatalog: 'refresh_app_catalog',
+    addReminder: 'add_reminder',
   };
   return {
     command,
@@ -107,6 +110,16 @@ function planSegment(segment, options = {}) {
   if (/(?:scan|refresh|rescan|rebuild|update)\s+(?:(?:app\s+)?catalog|apps|applications|start menu|app list)/i.test(favoriteAwareText)
     || /(?:przeskanuj|od[śs]wie[zż]|zaktualizuj)\s+(?:aplikacje|menu start|katalog aplikacji)/i.test(favoriteAwareText)) {
     return createStep('refreshAppCatalog', {}, 'Refresh app catalog');
+  }
+
+  match = favoriteAwareText.match(/(?:remind me|set reminder|create reminder|przypomnij mi|ustaw przypomnienie)\s+(.+)/i);
+  if (match) {
+    const reminderInput = match[1].trim();
+    const parsed = parseRelativeTime(reminderInput);
+    return createStep('addReminder', {
+      text: reminderInput,
+      temporal: parsed || null,
+    }, `Create reminder: ${reminderInput}`);
   }
 
   return null;

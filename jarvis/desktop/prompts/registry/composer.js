@@ -8,6 +8,7 @@ function createPromptComposer({ loader }) {
       include = ['system', 'routing', 'persona', 'coding', 'tools'],
       taskPrompt = '',
       memoryContext = '',
+      temporalContext = null,
     } = {}) {
       const segments = [];
       for (const key of include) {
@@ -18,6 +19,17 @@ function createPromptComposer({ loader }) {
 
       if (memoryContext) {
         segments.push(`[MEMORY]\n${sanitizeMemoryInput(memoryContext)}`);
+      }
+      if (temporalContext && typeof temporalContext === 'object') {
+        const ctx = temporalContext;
+        const lines = [
+          `Current datetime: ${ctx.iso || 'unknown'}`,
+          `Timezone: ${ctx.timezone || 'unknown'}`,
+          `Day of week: ${ctx.weekday || 'unknown'}`,
+          `Current hour: ${Number.isFinite(ctx.hour) ? ctx.hour : 'unknown'}`,
+          `Time period: ${ctx.period || 'unknown'}`,
+        ];
+        segments.push(`[TEMPORAL_CONTEXT]\n${lines.join('\n')}`);
       }
       if (taskPrompt) {
         segments.push(`[TASK]\n${String(taskPrompt || '').trim()}`);

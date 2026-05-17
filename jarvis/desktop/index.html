@@ -682,6 +682,16 @@
           <button type="button" id="schedule-add" class="secondary sm">+ Add schedule</button>
         </div>
       </div>
+
+      <hr>
+      <div class="stack">
+        <div class="section-label">Reminders</div>
+        <div id="reminders-list" style="font-size:12px;color:#64748b;line-height:1.8;">No reminders yet</div>
+        <div style="display:grid;gap:6px;">
+          <input id="reminder-input" type="text" placeholder="e.g. remind me tomorrow morning at 8" />
+          <button type="button" id="reminder-add" class="secondary sm">+ Add reminder</button>
+        </div>
+      </div>
     </aside>
 
     <!-- Main panel -->
@@ -813,6 +823,37 @@
                   Keep wake listener active while app is hidden/minimized
                 </label>
                 <button id="save-voice-settings" type="button" class="secondary field-full">Save voice settings</button>
+              </div>
+            </div>
+
+            <div class="stack">
+              <div class="section-label">Temporal Intelligence</div>
+              <div class="settings-grid">
+                <label class="toggle field-full" for="temporal-awareness">
+                  <input id="temporal-awareness" type="checkbox" checked />
+                  Temporal awareness in responses
+                </label>
+                <label class="toggle field-full" for="proactive-reminders">
+                  <input id="proactive-reminders" type="checkbox" checked />
+                  Proactive reminder announcements
+                </label>
+                <label class="toggle field-full" for="ambient-announcements">
+                  <input id="ambient-announcements" type="checkbox" />
+                  Ambient announcements (experimental)
+                </label>
+                <label class="toggle field-full" for="daily-summary">
+                  <input id="daily-summary" type="checkbox" />
+                  Daily summary on startup
+                </label>
+                <label class="field field-full">
+                  <span>Reminder voice style</span>
+                  <select id="reminder-voice-style">
+                    <option value="neutral">Neutral</option>
+                    <option value="jarvis">JARVIS</option>
+                    <option value="nova">Nova</option>
+                    <option value="minimal">Minimal</option>
+                  </select>
+                </label>
               </div>
             </div>
           </div>
