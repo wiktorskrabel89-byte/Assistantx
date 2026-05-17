@@ -332,16 +332,26 @@ function exportPublicKeyPem(value) {
   return `${String(publicKey.export({ type: 'spki', format: 'pem' })).trim()}\n`;
 }
 
+function resolveSigningDigestForKey(keyObject) {
+  const keyType = String(keyObject?.asymmetricKeyType || '').toLowerCase();
+  if (keyType === 'ed25519' || keyType === 'ed448') {
+    return null;
+  }
+  return 'sha256';
+}
+
 function signDetachedMetadata({ payload, privateKey }) {
   const normalizedPayload = String(payload || '');
   const normalizedKey = String(privateKey || '').trim();
   if (!normalizedPayload || !normalizedKey) {
     throw new Error('Missing updater metadata payload or private key.');
   }
+  const keyObject = resolveUpdaterKeyObject('private', privateKey);
+  const digest = resolveSigningDigestForKey(keyObject);
   return crypto.sign(
-    'sha256',
+    digest,
     Buffer.from(normalizedPayload, 'utf8'),
-    resolveUpdaterKeyObject('private', privateKey),
+    keyObject,
   ).toString('base64');
 }
 
@@ -356,10 +366,12 @@ function verifyDetachedMetadataSignature({ payload, signature, publicKey }) {
     };
   }
   try {
+    const keyObject = resolveUpdaterKeyObject('public', publicKey);
+    const digest = resolveSigningDigestForKey(keyObject);
     const verified = crypto.verify(
-      'sha256',
+      digest,
       Buffer.from(normalizedPayload, 'utf8'),
-      resolveUpdaterKeyObject('public', publicKey),
+      keyObject,
       Buffer.from(normalizedSignature, 'base64'),
     );
     return verified

@@ -122,6 +122,22 @@ describe('jarvis updater feed metadata helpers', () => {
     expect(exportPublicKeyPem(base64PublicDer)).toContain('BEGIN PUBLIC KEY');
   });
 
+  it('signs and verifies detached metadata with Ed25519 keys', () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+    const payload = 'version: 2.1.0\npath: JarvisSetup-x64.exe\n';
+
+    const signature = signDetachedMetadata({
+      payload,
+      privateKey: privateKey.export({ format: 'pem', type: 'pkcs8' }),
+    });
+
+    expect(verifyDetachedMetadataSignature({
+      payload,
+      signature,
+      publicKey: publicKey.export({ format: 'pem', type: 'spki' }),
+    })).toEqual({ ok: true });
+  });
+
   it('computes deterministic staged rollout eligibility from a stable id', () => {
     const first = isUserWithinStagedRollout({
       stagingPercentage: 50,
