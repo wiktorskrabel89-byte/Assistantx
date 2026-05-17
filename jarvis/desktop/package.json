@@ -76,6 +76,14 @@
       ],
       "artifactName": "JarvisSetup-${arch}.${ext}"
     },
+    "protocols": [
+      {
+        "name": "AssistantX",
+        "schemes": [
+          "assistantx"
+        ]
+      }
+    ],
     "nsis": {
       "oneClick": false,
       "perMachine": true,
@@ -90,7 +98,7 @@
         "provider": "github",
         "owner": "wiktorskrabel89-byte",
         "repo": "Assistantx",
-        "private": true
+        "private": false
       }
     ]
   },

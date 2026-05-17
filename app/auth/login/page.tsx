@@ -26,7 +26,8 @@ function sanitizeDesktopRedirect(value: string | null | undefined) {
   const redirectTo = String(value ?? "").trim();
   try {
     const url = new URL(redirectTo);
-    return url.protocol === "assistantx:" && url.hostname === "auth" && url.pathname === "/callback"
+    const normalizedPath = url.pathname.replace(/\/+$/, "") || "/";
+    return url.protocol === "assistantx:" && url.hostname === "auth" && normalizedPath === "/callback"
       ? url.toString()
       : "";
   } catch {
