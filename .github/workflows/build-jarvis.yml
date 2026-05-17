@@ -156,7 +156,7 @@ jobs:
           $scriptPath = Join-Path $env:RUNNER_TEMP "export-updater-public-key.js"
           @'
           const fs = require("fs");
-          const { exportPublicKeyPem } = require("./jarvis/desktop/electron/updater/feed-metadata");
+          const { exportPublicKeyPem } = require(require("path").join(process.cwd(), "jarvis/desktop/electron/updater/feed-metadata"));
 
           fs.writeFileSync(process.argv[2], exportPublicKeyPem(process.env.UPDATE_FEED_METADATA_PUBLIC_KEY), "utf8");
           '@ | Set-Content -Path $scriptPath -Encoding UTF8
@@ -266,7 +266,7 @@ jobs:
           $scriptPath = Join-Path $tempDir "sign-latest-yml.js"
           @'
           const fs = require("fs");
-          const { signDetachedMetadata } = require("./electron/updater/feed-metadata");
+          const { signDetachedMetadata } = require(require("path").join(process.cwd(), "electron/updater/feed-metadata"));
 
           const latestPath = process.argv[2];
           const signaturePath = process.argv[3];
@@ -775,7 +775,7 @@ jobs:
           $verifyScriptPath = Join-Path $tempDir "verify-public-latest-yml.js"
           @'
           const fs = require("fs");
-          const { verifyDetachedMetadataSignature } = require("./jarvis/desktop/electron/updater/feed-metadata");
+          const { verifyDetachedMetadataSignature } = require(require("path").join(process.cwd(), "jarvis/desktop/electron/updater/feed-metadata"));
 
           const latestPath = process.argv[2];
           const signaturePath = process.argv[3];
