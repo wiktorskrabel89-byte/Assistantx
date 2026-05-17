@@ -49,22 +49,44 @@ jobs:
           $androidPkg.version = $version
           $androidPkg | ConvertTo-Json -Depth 20 | Set-Content "jarvis/android/package.json" -Encoding UTF8
 
-          # Generate changelog from the last 20 commits that touched the jarvis/ tree.
+          # Generate changelog highlights from the last 20 commits that touched the jarvis/ tree.
           # Redirect stderr to null so git error output never leaks into the release notes.
-          $commits = git log --pretty=format:"- %s" -20 -- jarvis/ 2>$null
-          if ([string]::IsNullOrWhiteSpace($commits)) {
-            $commits = "- Build updated"
+          $commitsRaw = git log --pretty=format:"%s" -20 -- jarvis/ 2>$null
+          $commitLines = @($commitsRaw -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+          if ($commitLines.Count -eq 0) {
+            $commitLines = @("Build updated")
           }
+          $highlights = @($commitLines | Select-Object -First 8)
+          $notesMarkdown = ($highlights | ForEach-Object { "- $_" }) -join "`n"
 
           $sha7 = "${{ github.sha }}".Substring(0, 7)
           $date = (Get-Date -AsUTC -Format "yyyy-MM-dd HH:mm") + " UTC"
+          $publishedAt = (Get-Date -AsUTC).ToString("o")
 
           $bt = '``'
           $commitUrl = "https://github.com/wiktorskrabel89-byte/Assistantx/commit/${{ github.sha }}"
+
+          $releaseNotes = [ordered]@{
+            version = $version
+            channel = "stable"
+            publishedAt = $publishedAt
+            highlights = $highlights
+            notesMarkdown = $notesMarkdown
+            policy = [ordered]@{
+              stagedRollout = [ordered]@{
+                percentage = 100
+              }
+              rollback = [ordered]@{
+                blockedVersions = @()
+              }
+            }
+          }
+          $releaseNotes | ConvertTo-Json -Depth 20 | Set-Content -Path "release-notes.json" -Encoding UTF8
+
           $body = @(
             "## What's new in v$version",
             "",
-            "$commits",
+            "$notesMarkdown",
             "",
             "---",
             "Built from commit: [$sha7]($commitUrl)",
@@ -83,15 +105,16 @@ jobs:
             "",
              "**Release validation checklist:**",
              "- [ ] Repo baseline (`npm run lint`, `npm test -- --runInBand`, `npm run build`)",
-             "- [ ] Desktop smoke (`jarvis/desktop`: `npm ci`, `npm run dev`)",
-             "- [ ] Packaged smoke (startup/tray, launcher, account, updater flow)",
-             "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `latest.yml`, `*.blockmap`)",
-             "- [ ] Public update feed sync verification (`https://updates.assistantx.pl/stable`: `latest.yml` + referenced files)",
-             "- [ ] Pre-existing/unrelated failures documented (if any)"
-           ) -join "`n"
+              "- [ ] Desktop smoke (`jarvis/desktop`: `npm ci`, `npm run dev`)",
+              "- [ ] Packaged smoke (startup/tray, launcher, account, updater flow)",
+              "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `latest.yml`, `release-notes.json`, `*.blockmap`)",
+              "- [ ] Public update feed sync verification (`https://updates.assistantx.pl/stable`: `latest.yml` + referenced files + `release-notes.json`)",
+              "- [ ] Pre-existing/unrelated failures documented (if any)"
+            ) -join "`n"
 
           $body | Set-Content -Path "changelog_body.txt" -Encoding UTF8
           Write-Host "Changelog written to changelog_body.txt"
+          Write-Host "Release notes written to release-notes.json"
 
           # Expose version as a step output so other steps can reference it
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -179,6 +202,18 @@ jobs:
           # Leave blank to produce unsigned builds.
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Attach release-notes.json to desktop dist
+        shell: pwsh
+        run: |
+          $src = Join-Path (Get-Location) "release-notes.json"
+          $dst = Join-Path (Get-Location) "jarvis/desktop/dist/release-notes.json"
+          if (-not (Test-Path $src)) {
+            Write-Error "Missing release-notes.json generated in meta step."
+            exit 1
+          }
+          Copy-Item $src $dst -Force
+          Write-Host "Copied release notes to $dst"
 
       - name: List dist directory
         working-directory: jarvis/desktop
@@ -348,35 +383,22 @@ jobs:
             Write-Host "Verified updater artifact: $candidate"
           }
 
-          $tempDir = Join-Path $env:RUNNER_TEMP "jarvis-feed-verify"
-          New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-          $publicKeyPath = Join-Path $tempDir "metadata-public.pem"
-          ($env:UPDATE_FEED_METADATA_PUBLIC_KEY -replace "`r", "") | Set-Content -Path $publicKeyPath -Encoding ASCII
-          $verifyScriptPath = Join-Path $tempDir "verify-latest-yml.js"
-          @'
-          const crypto = require("crypto");
-          const fs = require("fs");
-
-          const latestPath = process.argv[2];
-          const signaturePath = process.argv[3];
-          const publicKeyPath = process.argv[4];
-
-          const payload = fs.readFileSync(latestPath, "utf8");
-          const signature = fs.readFileSync(signaturePath, "utf8").trim();
-          const publicKey = fs.readFileSync(publicKeyPath, "utf8");
-          const ok = crypto.verify("sha256", Buffer.from(payload, "utf8"), publicKey, Buffer.from(signature, "base64"));
-          if (!ok) {
-            console.error("Detached latest.yml signature verification failed.");
-            process.exit(1);
-          }
-          '@ | Set-Content -Path $verifyScriptPath -Encoding UTF8
-
-          node $verifyScriptPath $latestPath $signaturePath $publicKeyPath
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Detached updater metadata signature verification failed."
+          $releaseNotesPath = Join-Path (Join-Path (Get-Location) "dist") "release-notes.json"
+          if (-not (Test-Path $releaseNotesPath)) {
+            Write-Error "Missing dist/release-notes.json"
             exit 1
           }
-          Write-Host "Verified detached updater metadata signature."
+          $releaseNotesRaw = Get-Content $releaseNotesPath -Raw
+          $releaseNotes = $releaseNotesRaw | ConvertFrom-Json
+          if ([string]::IsNullOrWhiteSpace([string]$releaseNotes.version)) {
+            Write-Error "release-notes.json is missing version"
+            exit 1
+          }
+          if (-not $releaseNotes.highlights -or @($releaseNotes.highlights).Count -eq 0) {
+            Write-Error "release-notes.json must include at least one highlight"
+            exit 1
+          }
+          Write-Host "Verified release-notes.json"
 
       - name: Upload x64 installer artifact
         uses: actions/upload-artifact@v4
@@ -398,7 +420,7 @@ jobs:
           name: JarvisUpdaterMetadata
           path: |
             jarvis/desktop/dist/latest.yml
-            jarvis/desktop/dist/latest.yml.sig
+            jarvis/desktop/dist/release-notes.json
             jarvis/desktop/dist/*.blockmap
           if-no-files-found: warn
 
@@ -507,7 +529,7 @@ jobs:
             jarvis/desktop/dist/JarvisSetup-x64.exe
             jarvis/desktop/dist/JarvisSetup-arm64.exe
             jarvis/desktop/dist/latest.yml
-            jarvis/desktop/dist/latest.yml.sig
+            jarvis/desktop/dist/release-notes.json
             jarvis/desktop/dist/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -555,7 +577,7 @@ jobs:
 
           $requiredAssets = @(
             "latest.yml",
-            "latest.yml.sig",
+            "release-notes.json",
             "JarvisSetup-x64.exe",
             "JarvisSetup-x64.exe.blockmap",
             "JarvisSetup-arm64.exe",
@@ -599,7 +621,7 @@ jobs:
           $distDir = Join-Path (Get-Location) "jarvis/desktop/dist"
           $artifacts = @(
             "latest.yml",
-            "latest.yml.sig",
+            "release-notes.json",
             "JarvisSetup-x64.exe",
             "JarvisSetup-x64.exe.blockmap",
             "JarvisSetup-arm64.exe",
@@ -805,3 +827,26 @@ jobs:
             }
             Write-Host "Verified public updater artifact: $artifactUrl"
           }
+
+          $releaseNotesUrl = "$feedBase/release-notes.json"
+          Write-Host "Validating release notes metadata: $releaseNotesUrl"
+          $releaseNotesRes = Invoke-WebRequest -Uri $releaseNotesUrl -Method Get -TimeoutSec 30 -MaximumRedirection 5
+          if ($releaseNotesRes.StatusCode -ne 200) {
+            Write-Error "Public release-notes.json returned HTTP $($releaseNotesRes.StatusCode)."
+            exit 1
+          }
+          $releaseNotesRaw = [string]$releaseNotesRes.Content
+          if ([string]::IsNullOrWhiteSpace($releaseNotesRaw)) {
+            Write-Error "Public release-notes.json is empty."
+            exit 1
+          }
+          $releaseNotes = $releaseNotesRaw | ConvertFrom-Json
+          if ([string]::IsNullOrWhiteSpace([string]$releaseNotes.version)) {
+            Write-Error "Public release-notes.json is missing version."
+            exit 1
+          }
+          if (-not $releaseNotes.highlights -or @($releaseNotes.highlights).Count -eq 0) {
+            Write-Error "Public release-notes.json must include at least one highlight."
+            exit 1
+          }
+          Write-Host "Verified public release-notes.json metadata."

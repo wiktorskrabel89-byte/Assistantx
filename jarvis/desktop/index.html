@@ -184,6 +184,62 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
+    .update-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.68);
+      display: grid;
+      place-items: center;
+      z-index: 1000;
+      padding: 18px;
+    }
+
+    .update-modal {
+      width: min(560px, 100%);
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(15, 23, 42, 0.95);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .update-modal h3 {
+      font-size: 18px;
+      letter-spacing: -0.2px;
+    }
+
+    .update-modal p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .update-highlights {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 4px;
+      color: #dbeafe;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .update-modal .actions-row {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .update-version-details {
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
+      padding-top: 10px;
+    }
+
     [hidden] {
       display: none !important;
     }
@@ -763,6 +819,21 @@
         </div>
       </div>
     </main>
+  </div>
+  <div id="update-modal-backdrop" class="update-modal-backdrop" hidden>
+    <section id="update-modal" class="update-modal" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
+      <h3 id="update-modal-title">AssistantX update available</h3>
+      <p id="update-modal-subtitle">A new AssistantX update is ready.</p>
+      <ul id="update-modal-highlights" class="update-highlights"></ul>
+      <details id="update-modal-details" class="update-version-details">
+        <summary>Details</summary>
+        <div id="update-modal-version"></div>
+      </details>
+      <div class="actions-row">
+        <button id="update-modal-secondary" type="button" class="secondary">Later</button>
+        <button id="update-modal-primary" type="button">Update now</button>
+      </div>
+    </section>
   </div>
   <script src="renderer.js"></script>
   <script src="log-empty-state.js"></script>

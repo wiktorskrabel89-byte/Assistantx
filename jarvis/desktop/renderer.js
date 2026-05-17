@@ -132,6 +132,14 @@ window.addEventListener('DOMContentLoaded', () => {
 	const updateStatusNode = document.getElementById('update-status');
 	const checkUpdatesButton = document.getElementById('check-updates');
 	const installUpdateButton = document.getElementById('install-update');
+	const updateModalBackdrop = document.getElementById('update-modal-backdrop');
+	const updateModalTitle = document.getElementById('update-modal-title');
+	const updateModalSubtitle = document.getElementById('update-modal-subtitle');
+	const updateModalHighlights = document.getElementById('update-modal-highlights');
+	const updateModalVersion = document.getElementById('update-modal-version');
+	const updateModalDetails = document.getElementById('update-modal-details');
+	const updateModalPrimaryButton = document.getElementById('update-modal-primary');
+	const updateModalSecondaryButton = document.getElementById('update-modal-secondary');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
 	const openBrowserTabButton = document.getElementById('open-browser-tab');
 	const commandTabButton = document.getElementById('command-tab-button');
@@ -409,12 +417,12 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 
 		// Show "Download update" button if update is available but not yet
-		// downloaded (user chose "Later" in the native dialog).
+		// downloaded (secondary fallback path in settings panel).
 		const downloadUpdateButton = document.getElementById('download-update');
 		if (downloadUpdateButton) {
 			const showDownload = (
-				payload?.status === 'update-available' ||
-				payload?.status === 'update-skipped'
+				payload?.status === 'available' ||
+				payload?.status === 'deferred'
 			);
 			downloadUpdateButton.hidden = !showDownload;
 		}
@@ -422,6 +430,83 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (checkUpdatesButton) {
 			checkUpdatesButton.disabled = payload?.status === 'checking' || payload?.status === 'downloading';
 		}
+
+		if (payload?.status === 'available') {
+			showUpdateModal({
+				mode: 'available',
+				payload,
+			});
+		} else if (payload?.status === 'install-ready') {
+			showUpdateModal({
+				mode: 'install-ready',
+				payload,
+			});
+		}
+	}
+
+	function renderUpdateHighlights(payload) {
+		if (!updateModalHighlights) return;
+		updateModalHighlights.innerHTML = '';
+		const highlights = Array.isArray(payload?.releaseNotes?.highlights)
+			? payload.releaseNotes.highlights
+			: [];
+		const normalized = highlights
+			.map((item) => String(item || '').trim())
+			.filter(Boolean)
+			.slice(0, 6);
+
+		if (normalized.length === 0) {
+			const fallback = document.createElement('li');
+			fallback.textContent = 'Performance and stability improvements.';
+			updateModalHighlights.appendChild(fallback);
+			return;
+		}
+
+		normalized.forEach((item) => {
+			const li = document.createElement('li');
+			li.textContent = item;
+			updateModalHighlights.appendChild(li);
+		});
+	}
+
+	function setUpdateModalVersion(payload) {
+		if (!updateModalVersion) return;
+		const version = String(payload?.version || '').trim();
+		if (version) {
+			updateModalVersion.textContent = `Version ${version}`;
+			if (updateModalDetails) updateModalDetails.hidden = false;
+			return;
+		}
+		updateModalVersion.textContent = 'Version details unavailable';
+		if (updateModalDetails) updateModalDetails.hidden = true;
+	}
+
+	function closeUpdateModal() {
+		if (!updateModalBackdrop) return;
+		updateModalBackdrop.hidden = true;
+		updateModalBackdrop.dataset.mode = '';
+	}
+
+	function showUpdateModal({ mode, payload }) {
+		if (!updateModalBackdrop || !updateModalTitle || !updateModalSubtitle || !updateModalPrimaryButton || !updateModalSecondaryButton) return;
+
+		updateModalBackdrop.hidden = false;
+		updateModalBackdrop.dataset.mode = mode;
+		renderUpdateHighlights(payload);
+		setUpdateModalVersion(payload);
+
+		if (mode === 'install-ready') {
+			updateModalTitle.textContent = 'Restart AssistantX to update';
+			updateModalSubtitle.textContent = 'The update has been downloaded and is ready to install.';
+			updateModalPrimaryButton.textContent = 'Restart now';
+			updateModalSecondaryButton.textContent = 'Later';
+			return;
+		}
+
+		updateModalTitle.textContent = 'AssistantX update available';
+		updateModalSubtitle.textContent = 'What’s new in this update:';
+		updateModalPrimaryButton.textContent = 'Update now';
+		updateModalSecondaryButton.textContent = 'Later';
 	}
 
 	// ── Prompt submission ────────────────────────────────────────────────────
@@ -984,10 +1069,16 @@ window.addEventListener('DOMContentLoaded', () => {
 		ipcRenderer.on('auto-update-status', (payload) => {
 			updateAutoUpdateStatus(payload);
 
-			if (['checking', 'up-to-date', 'ready-to-install', 'error', 'unavailable'].includes(payload?.status)) {
+			if (['error', 'unavailable', 'install-ready'].includes(payload?.status)) {
 				appendMessage(log, 'Updater', payload.detail || payload.status, payload?.status === 'error' ? 'error' : 'system');
 			}
 		});
+
+		ipcRenderer.invoke('get-update-state').then((payload) => {
+			if (payload && typeof payload === 'object') {
+				updateAutoUpdateStatus(payload);
+			}
+		}).catch(() => null);
 
 		ipcRenderer.on('desktop-health', (payload) => {
 			const overall = String(payload?.overall || 'unknown');
@@ -1046,6 +1137,46 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (!result?.ok) {
 				appendMessage(log, 'Updater', `Download failed: ${result?.reason || 'unknown error'}`, 'error');
 				downloadUpdateButton.disabled = false;
+			}
+		});
+	}
+
+	if (updateModalPrimaryButton && updateModalSecondaryButton && ipcRenderer) {
+		updateModalPrimaryButton.addEventListener('click', async () => {
+			const mode = updateModalBackdrop?.dataset?.mode;
+			if (mode === 'install-ready') {
+				const result = await ipcRenderer.invoke('install-update');
+				if (!result?.ok) {
+					appendMessage(log, 'Updater', 'No downloaded update is ready yet.', 'error');
+				}
+				return;
+			}
+
+			updateModalPrimaryButton.disabled = true;
+			const result = await ipcRenderer.invoke('download-update');
+			updateModalPrimaryButton.disabled = false;
+			if (!result?.ok) {
+				appendMessage(log, 'Updater', `Download failed: ${result?.reason || 'unknown error'}`, 'error');
+				return;
+			}
+			closeUpdateModal();
+		});
+
+		updateModalSecondaryButton.addEventListener('click', async () => {
+			const mode = updateModalBackdrop?.dataset?.mode || 'available';
+			const reason = mode === 'install-ready' ? 'restart-later' : 'later';
+			await ipcRenderer.invoke('defer-update', {
+				reason,
+				source: 'renderer-modal',
+			});
+			closeUpdateModal();
+		});
+	}
+
+	if (updateModalBackdrop) {
+		updateModalBackdrop.addEventListener('click', (event) => {
+			if (event.target === updateModalBackdrop) {
+				closeUpdateModal();
 			}
 		});
 	}

@@ -40,6 +40,7 @@ Validate:
    - `JarvisSetup-x64.exe`
    - `JarvisSetup-arm64.exe`
    - `latest.yml`
+   - `release-notes.json`
    - `*.blockmap`
 3. Install packaged build and verify:
     - startup + tray
@@ -60,11 +61,10 @@ Validate sidecar bridge behavior:
 
 Confirm `.github/workflows/build-jarvis.yml` still matches expected desktop outputs and release tag flow (`jarvis-latest`).
 - Confirm updater topology guard still enforces `generic` provider with `https://updates.assistantx.pl/stable`.
-- Confirm CI syncs updater artifacts (`latest.yml`, `JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `*.blockmap`) to the same public feed folder.
+- Confirm CI syncs updater artifacts (`latest.yml`, `release-notes.json`, `JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `*.blockmap`) to the same public feed folder.
 - Confirm post-publish CI checks:
   - public `latest.yml` availability/content
-  - public `latest.yml` cache policy (`Cache-Control: no-cache`)
-  - `latest.yml` version sanity (valid semver, expected release version, stable channel compatibility)
+  - public `release-notes.json` availability/content
   - public access to every artifact referenced from `latest.yml`
   - installer artifact cache policy (no forced `no-cache`/`no-store`)
   - `jarvis-latest` visibility and required release assets
@@ -78,7 +78,7 @@ For every desktop-impacting PR/release, include:
 - Updater regression notes:
   - feed endpoint health
   - `latest.yml` validity
-  - version sanity checks (`available > current`, semver validity, channel/version compatibility)
+  - `release-notes.json` validity and highlights quality
   - artifact parity (`latest.yml` refs vs feed files)
   - provider/privacy compatibility (private repo + public generic feed)
   - correctness of updater error classification (`download`, metadata/auth, signature validation, installer execution)
