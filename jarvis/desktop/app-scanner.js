@@ -1,3 +1,7 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
 function normalizeName(value) {
   return String(value || '')
     .replace(/\.(lnk|exe)$/i, '')
@@ -145,12 +149,25 @@ async function scanWindowsApps(execFilePromise) {
     '  }',
     '}',
     '$results | ConvertTo-Json -Compress',
-  ].join('; ');
+  ].join('\n');
 
-  const stdout = await execFilePromise('powershell.exe', ['-NoProfile', '-Command', psScript]);
-  const parsed = JSON.parse(stdout || '[]');
-  const list = Array.isArray(parsed) ? parsed : [parsed];
-  return dedupeApps(list);
+  const scriptPath = path.join(os.tmpdir(), `assistantx-launcher-scan-${process.pid}-${Date.now()}.ps1`);
+  await fs.promises.writeFile(scriptPath, psScript, 'utf8');
+
+  try {
+    const stdout = await execFilePromise('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      scriptPath,
+    ]);
+    const parsed = JSON.parse(stdout || '[]');
+    const list = Array.isArray(parsed) ? parsed : [parsed];
+    return dedupeApps(list);
+  } finally {
+    await fs.promises.unlink(scriptPath).catch(() => null);
+  }
 }
 
 module.exports = {
