@@ -8,18 +8,25 @@ function createAnnouncementQueue({ canSpeak = () => true, onSpeak = async () => 
     if (running) return;
     running = true;
     while (queue.length > 0) {
+      let processedInPass = false;
+      const passCount = queue.length;
+      for (let i = 0; i < passCount; i += 1) {
       const item = queue.shift();
       const allowed = canSpeak(item);
       if (!allowed) {
         if (item.priority === 'CRITICAL') {
           await onSpeak(item);
+          processedInPass = true;
           continue;
         }
         if (item.deferCount >= 10) continue;
         queue.push({ ...item, deferCount: (item.deferCount || 0) + 1 });
-        break;
+        continue;
       }
       await onSpeak(item);
+      processedInPass = true;
+      }
+      if (!processedInPass) break;
     }
     running = false;
   }
@@ -39,4 +46,3 @@ function createAnnouncementQueue({ canSpeak = () => true, onSpeak = async () => 
 module.exports = {
   createAnnouncementQueue,
 };
-

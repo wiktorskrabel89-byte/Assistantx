@@ -35,7 +35,7 @@ function tick() {
     try {
       onReminder({ ...reminder });
       if (reminder.autoComplete) markReminderCompleted(reminder.id, true);
-    } catch (error) {
+    } catch {
       // no-op
     }
   }
@@ -45,4 +45,3 @@ module.exports = {
   startReminderScheduler,
   stopReminderScheduler,
 };
-
