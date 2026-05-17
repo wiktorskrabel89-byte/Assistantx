@@ -205,12 +205,21 @@ jobs:
             exit 1
           }
 
-          Write-Host "Desktop publish config validated: GitHub provider => $actualOwner/$actualRepo"
+          if ($publish.private -ne $true) {
+            Write-Error "Updater publish config must declare 'private: true' for authenticated GitHub release access."
+            exit 1
+          }
+
+          Write-Host "Desktop publish config validated: GitHub provider => $actualOwner/$actualRepo (private)"
 
       - name: Build installers (x64 + ARM64)
         working-directory: jarvis/desktop
         run: npm run dist:win:all
         env:
+          # electron-builder recognises GH_TOKEN for authenticated GitHub release publishing.
+          # Use GH_TOKEN (not GITHUB_TOKEN) because GitHub Actions blocks custom secrets
+          # in the GITHUB_ namespace.
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           # electron-builder can sign the app if a certificate is available.
           # Leave blank to produce unsigned builds.
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}

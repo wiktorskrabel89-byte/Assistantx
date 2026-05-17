@@ -89,7 +89,8 @@
       {
         "provider": "github",
         "owner": "wiktorskrabel89-byte",
-        "repo": "Assistantx"
+        "repo": "Assistantx",
+        "private": true
       }
     ]
   },
