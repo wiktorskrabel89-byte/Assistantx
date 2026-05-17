@@ -124,7 +124,6 @@ function getSidecarMainPath() {
 }
 
 function resolvePythonExecutable() {
-  const projectRoot = path.resolve(__dirname, '..', '..');
   const sidecarDir = path.dirname(getSidecarMainPath());
   const packagedCandidates = [
     // Embedded runtime candidates for packaged Windows builds.
@@ -134,10 +133,10 @@ function resolvePythonExecutable() {
     path.join(sidecarDir, 'venv', 'bin', 'python'),
   ];
   const devCandidates = [
-    path.join(projectRoot, 'python', 'python.exe'),
+    path.join(__dirname, 'python', 'python.exe'),
     ...packagedCandidates,
-    'python3',
     'python',
+    'python3',
   ];
   const candidates = app.isPackaged ? packagedCandidates : devCandidates;
   const candidateDetails = candidates.map((candidate) => {
