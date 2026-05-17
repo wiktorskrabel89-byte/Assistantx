@@ -97,26 +97,37 @@ function getSidecarMainPath() {
 }
 
 function resolvePythonExecutable() {
+  const projectRoot = path.resolve(__dirname, '..', '..');
   const sidecarDir = path.dirname(getSidecarMainPath());
   const packagedCandidates = [
     // Embedded runtime candidates for packaged Windows builds.
-    path.join(process.resourcesPath || '', 'ai-agent', 'runtime', 'python', 'python.exe'),
     path.join(process.resourcesPath || '', 'python', 'python.exe'),
+    path.join(process.resourcesPath || '', 'ai-agent', 'runtime', 'python', 'python.exe'),
     path.join(sidecarDir, 'venv', 'Scripts', 'python.exe'),
     path.join(sidecarDir, 'venv', 'bin', 'python'),
   ];
-  const candidates = app.isPackaged
-    ? packagedCandidates
-    : [
-      ...packagedCandidates,
-      'python3',
-      'python',
-    ];
-  for (const candidate of candidates) {
-    if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
-    return { python: candidate, candidates };
+  const devCandidates = [
+    path.join(projectRoot, 'python', 'python.exe'),
+    ...packagedCandidates,
+    'python3',
+    'python',
+  ];
+  const candidates = app.isPackaged ? packagedCandidates : devCandidates;
+  const candidateDetails = candidates.map((candidate) => {
+    const isPath = candidate.includes(path.sep);
+    const exists = isPath ? fs.existsSync(candidate) : null;
+    return { candidate, exists };
+  });
+  for (const entry of candidateDetails) {
+    console.log('[sidecar] Python path candidate:', entry.candidate, 'exists:', entry.exists);
+    if (entry.exists === false) continue;
+    return {
+      python: entry.candidate,
+      candidates,
+      candidateDetails,
+    };
   }
-  return { python: null, candidates };
+  return { python: null, candidates, candidateDetails };
 }
 
 function setLauncherPhase(phase, detail, details = {}) {
@@ -249,24 +260,25 @@ function startSidecar() {
     return;
   }
 
-  const { python, candidates: pythonCandidates } = resolvePythonExecutable();
+  const { python, candidates: pythonCandidates, candidateDetails: pythonCandidateDetails } = resolvePythonExecutable();
   if (!python) {
     sidecarStatus = 'unavailable';
     startupDiagnostics.setComponent('sidecar', 'unavailable', {
       detail: 'AI runtime Python executable not found.',
       reason: 'python_missing',
-      details: { mainPy, pythonCandidates },
+      details: { mainPy, pythonCandidates, pythonCandidateDetails },
       phase: 'validating-runtime',
     });
     startupDiagnostics.setComponent('launcher', 'degraded', {
       detail: 'Launcher cannot locate AI runtime Python executable.',
       reason: 'python_missing',
-      details: { mainPy, pythonCandidates },
+      details: { mainPy, pythonCandidates, pythonCandidateDetails },
       phase: 'validating-runtime',
     });
     startupDiagnostics.pushEvent('sidecar', 'warn', 'Sidecar unavailable: Python runtime missing.', {
       mainPy,
       pythonCandidates,
+      pythonCandidateDetails,
     });
     telemetryBus.publish('sidecar.unavailable');
     telemetryBus.publish('startup.unavailable');

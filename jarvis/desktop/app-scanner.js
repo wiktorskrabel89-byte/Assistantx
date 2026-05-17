@@ -99,7 +99,7 @@ async function scanWindowsApps(execFilePromise) {
     'foreach ($root in $uninstallRoots) {',
     '  Get-ItemProperty -Path $root | ForEach-Object {',
     '    $name = $_.DisplayName',
-    '    $icon = if ($_.DisplayIcon) { ($_.DisplayIcon -split ",")[0].Trim("\"") } else { $null }',
+    '    $icon = if ($_.DisplayIcon) { ($_.DisplayIcon -split ",")[0].Trim(\'"\') } else { $null }',
     '    $target = $icon',
     '    if ((-not $target -or -not (Test-Path $target)) -and $_.InstallLocation -and (Test-Path $_.InstallLocation)) {',
     '      $candidate = Get-ChildItem -Path $_.InstallLocation -File -Filter *.exe | Select-Object -First 1',

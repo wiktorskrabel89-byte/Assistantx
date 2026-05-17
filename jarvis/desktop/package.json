@@ -55,6 +55,10 @@
         ]
       },
       {
+        "from": "python",
+        "to": "python"
+      },
+      {
         "from": "scripts/post-install.ps1",
         "to": "post-install.ps1"
       },
