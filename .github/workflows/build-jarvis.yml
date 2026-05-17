@@ -151,9 +151,27 @@ jobs:
             exit 1
           }
 
+          function Normalize-PemSecret([string]$rawSecret) {
+            $normalized = [string]$rawSecret
+            $normalized = $normalized -replace "`r", ""
+            $normalized = $normalized.Trim()
+            if ($normalized -match '\\n' -and $normalized -notmatch "`n") {
+              $normalized = $normalized -replace '\\n', "`n"
+            }
+            if ($normalized -notmatch '-----BEGIN [A-Z0-9 ]+-----') {
+              try {
+                $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($normalized)).Trim()
+                if ($decoded -match '-----BEGIN [A-Z0-9 ]+-----') {
+                  $normalized = $decoded
+                }
+              } catch {}
+            }
+            return $normalized.Trim() + "`n"
+          }
+
           $publicKeyPath = Join-Path (Get-Location) "jarvis/desktop/electron/updater/feed-public-key.pem"
           New-Item -ItemType Directory -Force -Path (Split-Path $publicKeyPath -Parent) | Out-Null
-          ($env:UPDATE_FEED_METADATA_PUBLIC_KEY -replace "`r", "") | Set-Content -Path $publicKeyPath -Encoding ASCII
+          Normalize-PemSecret $env:UPDATE_FEED_METADATA_PUBLIC_KEY | Set-Content -Path $publicKeyPath -Encoding ASCII
           Write-Host "Bundled updater metadata verification key at $publicKeyPath"
 
       - name: Validate desktop updater topology (generic feed)
@@ -250,7 +268,24 @@ jobs:
           $tempDir = Join-Path $env:RUNNER_TEMP "jarvis-feed-signing"
           New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
           $privateKeyPath = Join-Path $tempDir "metadata-private.pem"
-          ($env:UPDATE_FEED_METADATA_PRIVATE_KEY -replace "`r", "") | Set-Content -Path $privateKeyPath -Encoding ASCII
+          function Normalize-PemSecret([string]$rawSecret) {
+            $normalized = [string]$rawSecret
+            $normalized = $normalized -replace "`r", ""
+            $normalized = $normalized.Trim()
+            if ($normalized -match '\\n' -and $normalized -notmatch "`n") {
+              $normalized = $normalized -replace '\\n', "`n"
+            }
+            if ($normalized -notmatch '-----BEGIN [A-Z0-9 ]+-----') {
+              try {
+                $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($normalized)).Trim()
+                if ($decoded -match '-----BEGIN [A-Z0-9 ]+-----') {
+                  $normalized = $decoded
+                }
+              } catch {}
+            }
+            return $normalized.Trim() + "`n"
+          }
+          Normalize-PemSecret $env:UPDATE_FEED_METADATA_PRIVATE_KEY | Set-Content -Path $privateKeyPath -Encoding ASCII
           $signaturePath = Join-Path (Get-Location) "dist/latest.yml.sig"
 
           $scriptPath = Join-Path $tempDir "sign-latest-yml.js"
@@ -758,7 +793,24 @@ jobs:
           $tempDir = Join-Path $env:RUNNER_TEMP "jarvis-feed-public-verify"
           New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
           $publicKeyPath = Join-Path $tempDir "metadata-public.pem"
-          ($env:UPDATE_FEED_METADATA_PUBLIC_KEY -replace "`r", "") | Set-Content -Path $publicKeyPath -Encoding ASCII
+          function Normalize-PemSecret([string]$rawSecret) {
+            $normalized = [string]$rawSecret
+            $normalized = $normalized -replace "`r", ""
+            $normalized = $normalized.Trim()
+            if ($normalized -match '\\n' -and $normalized -notmatch "`n") {
+              $normalized = $normalized -replace '\\n', "`n"
+            }
+            if ($normalized -notmatch '-----BEGIN [A-Z0-9 ]+-----') {
+              try {
+                $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($normalized)).Trim()
+                if ($decoded -match '-----BEGIN [A-Z0-9 ]+-----') {
+                  $normalized = $decoded
+                }
+              } catch {}
+            }
+            return $normalized.Trim() + "`n"
+          }
+          Normalize-PemSecret $env:UPDATE_FEED_METADATA_PUBLIC_KEY | Set-Content -Path $publicKeyPath -Encoding ASCII
           $latestTempPath = Join-Path $tempDir "latest.yml"
           $signatureTempPath = Join-Path $tempDir "latest.yml.sig"
           $latestRaw | Set-Content -Path $latestTempPath -Encoding UTF8
