@@ -22,6 +22,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       UPDATER_FEED_URL: https://updates.assistantx.pl/stable
+      UPDATE_ROLLOUT_PERCENTAGE: '100'
 
     steps:
       - name: Checkout repository
@@ -135,6 +136,26 @@ jobs:
         working-directory: jarvis/desktop
         run: npm ci
 
+      - name: Provision updater metadata verification key
+        shell: pwsh
+        env:
+          UPDATE_FEED_METADATA_PUBLIC_KEY: ${{ secrets.UPDATE_FEED_METADATA_PUBLIC_KEY }}
+          UPDATE_FEED_METADATA_PRIVATE_KEY: ${{ secrets.UPDATE_FEED_METADATA_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_FEED_METADATA_PUBLIC_KEY)) {
+            Write-Error "Missing required secret: UPDATE_FEED_METADATA_PUBLIC_KEY"
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_FEED_METADATA_PRIVATE_KEY)) {
+            Write-Error "Missing required secret: UPDATE_FEED_METADATA_PRIVATE_KEY"
+            exit 1
+          }
+
+          $publicKeyPath = Join-Path (Get-Location) "jarvis/desktop/electron/updater/feed-public-key.pem"
+          New-Item -ItemType Directory -Force -Path (Split-Path $publicKeyPath -Parent) | Out-Null
+          ($env:UPDATE_FEED_METADATA_PUBLIC_KEY -replace "`r", "") | Set-Content -Path $publicKeyPath -Encoding ASCII
+          Write-Host "Bundled updater metadata verification key at $publicKeyPath"
+
       - name: Validate desktop updater topology (generic feed)
         shell: pwsh
         run: |
@@ -198,19 +219,140 @@ jobs:
         working-directory: jarvis/desktop
         run: dir dist
 
-      - name: Validate updater metadata and referenced artifacts
+      - name: Harden updater metadata (rollback, rollout, signature)
         shell: pwsh
         working-directory: jarvis/desktop
+        env:
+          UPDATE_FEED_METADATA_PRIVATE_KEY: ${{ secrets.UPDATE_FEED_METADATA_PRIVATE_KEY }}
         run: |
+          $expectedVersion = "${{ steps.meta.outputs.version }}"
+          $minimumAllowedVersion = if ([string]::IsNullOrWhiteSpace($env:UPDATE_MINIMUM_ALLOWED_VERSION)) { $expectedVersion } else { $env:UPDATE_MINIMUM_ALLOWED_VERSION }
+          $stagingPercentage = if ([string]::IsNullOrWhiteSpace($env:UPDATE_ROLLOUT_PERCENTAGE)) { "100" } else { $env:UPDATE_ROLLOUT_PERCENTAGE }
           $latestPath = Join-Path (Get-Location) "dist/latest.yml"
           if (-not (Test-Path $latestPath)) {
             Write-Error "Missing updater metadata: $latestPath"
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_FEED_METADATA_PRIVATE_KEY)) {
+            Write-Error "Missing required secret: UPDATE_FEED_METADATA_PRIVATE_KEY"
+            exit 1
+          }
+
+          $latestRaw = Get-Content $latestPath -Raw
+          $latestRaw = $latestRaw.TrimEnd("`r", "`n")
+          $metadataLines = @(
+            $latestRaw,
+            "minimumAllowedVersion: $minimumAllowedVersion",
+            "stagingPercentage: $stagingPercentage"
+          )
+          ($metadataLines -join "`n") + "`n" | Set-Content -Path $latestPath -Encoding UTF8
+
+          $tempDir = Join-Path $env:RUNNER_TEMP "jarvis-feed-signing"
+          New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+          $privateKeyPath = Join-Path $tempDir "metadata-private.pem"
+          ($env:UPDATE_FEED_METADATA_PRIVATE_KEY -replace "`r", "") | Set-Content -Path $privateKeyPath -Encoding ASCII
+          $signaturePath = Join-Path (Get-Location) "dist/latest.yml.sig"
+
+          $scriptPath = Join-Path $tempDir "sign-latest-yml.js"
+          @'
+          const crypto = require("crypto");
+          const fs = require("fs");
+
+          const latestPath = process.argv[2];
+          const privateKeyPath = process.argv[3];
+          const signaturePath = process.argv[4];
+
+          const payload = fs.readFileSync(latestPath, "utf8");
+          const privateKey = fs.readFileSync(privateKeyPath, "utf8");
+          const signature = crypto.sign("sha256", Buffer.from(payload, "utf8"), privateKey).toString("base64");
+          fs.writeFileSync(signaturePath, `${signature}\n`, "utf8");
+          '@ | Set-Content -Path $scriptPath -Encoding UTF8
+
+          node $scriptPath $latestPath $privateKeyPath $signaturePath
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to generate detached updater metadata signature."
+            exit 1
+          }
+
+          Write-Host "Updater metadata hardened with minimumAllowedVersion=$minimumAllowedVersion stagingPercentage=$stagingPercentage"
+
+      - name: Validate updater metadata and referenced artifacts
+        shell: pwsh
+        working-directory: jarvis/desktop
+        env:
+          UPDATE_FEED_METADATA_PUBLIC_KEY: ${{ secrets.UPDATE_FEED_METADATA_PUBLIC_KEY }}
+        run: |
+          $expectedVersion = "${{ steps.meta.outputs.version }}"
+          $semverRegex = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$'
+          $latestPath = Join-Path (Get-Location) "dist/latest.yml"
+          $signaturePath = Join-Path (Get-Location) "dist/latest.yml.sig"
+          if (-not (Test-Path $latestPath)) {
+            Write-Error "Missing updater metadata: $latestPath"
+            exit 1
+          }
+          if (-not (Test-Path $signaturePath)) {
+            Write-Error "Missing updater metadata signature: $signaturePath"
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_FEED_METADATA_PUBLIC_KEY)) {
+            Write-Error "Missing required secret: UPDATE_FEED_METADATA_PUBLIC_KEY"
             exit 1
           }
 
           $latestRaw = Get-Content $latestPath -Raw
           if ([string]::IsNullOrWhiteSpace($latestRaw)) {
             Write-Error "Unable to parse latest.yml"
+            exit 1
+          }
+
+          $versionMatch = [regex]::Match($latestRaw, '(?m)^\s*version\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          if (-not $versionMatch.Success) {
+            Write-Error "latest.yml is missing version."
+            exit 1
+          }
+          $latestVersion = $versionMatch.Groups['value'].Value.Trim()
+          if ($latestVersion -notmatch $semverRegex) {
+            Write-Error "latest.yml version is not valid semver: $latestVersion"
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($expectedVersion) -or $latestVersion -ne $expectedVersion) {
+            Write-Error "latest.yml version mismatch. Expected $expectedVersion, got $latestVersion"
+            exit 1
+          }
+
+          $channelMatch = [regex]::Match($latestRaw, '(?m)^\s*channel\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          if ($channelMatch.Success) {
+            $channel = $channelMatch.Groups['value'].Value.Trim().ToLowerInvariant()
+            if ($channel -ne 'latest' -and $channel -ne 'stable') {
+              Write-Error "Stable feed must not publish non-stable channel metadata. Found channel: $channel"
+              exit 1
+            }
+          }
+
+          if ($latestVersion.Contains('-')) {
+            Write-Error "Stable feed must not publish prerelease versions. Found: $latestVersion"
+            exit 1
+          }
+
+          $minimumMatch = [regex]::Match($latestRaw, '(?m)^\s*minimumAllowedVersion\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          if (-not $minimumMatch.Success) {
+            Write-Error "latest.yml is missing minimumAllowedVersion."
+            exit 1
+          }
+          $minimumAllowedVersion = $minimumMatch.Groups['value'].Value.Trim()
+          if ($minimumAllowedVersion -notmatch $semverRegex) {
+            Write-Error "minimumAllowedVersion is not valid semver: $minimumAllowedVersion"
+            exit 1
+          }
+
+          $rolloutMatch = [regex]::Match($latestRaw, '(?m)^\s*stagingPercentage\s*:\s*["'']?(?<value>\d{1,3})["'']?\s*$')
+          if (-not $rolloutMatch.Success) {
+            Write-Error "latest.yml is missing stagingPercentage."
+            exit 1
+          }
+          $rolloutPercentage = [int]$rolloutMatch.Groups['value'].Value
+          if ($rolloutPercentage -lt 0 -or $rolloutPercentage -gt 100) {
+            Write-Error "stagingPercentage must be between 0 and 100. Found: $rolloutPercentage"
             exit 1
           }
 
@@ -519,7 +661,11 @@ jobs:
 
       - name: Verify public generic feed metadata and artifact parity
         shell: pwsh
+        env:
+          UPDATE_FEED_METADATA_PUBLIC_KEY: ${{ secrets.UPDATE_FEED_METADATA_PUBLIC_KEY }}
         run: |
+          $expectedVersion = "${{ steps.meta.outputs.version }}"
+          $semverRegex = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$'
           $feedBase = $env:UPDATER_FEED_URL.TrimEnd("/")
           if ([string]::IsNullOrWhiteSpace($feedBase)) {
             Write-Error "UPDATER_FEED_URL is empty."
@@ -528,9 +674,14 @@ jobs:
 
           $latestUrl = "$feedBase/latest.yml"
           Write-Host "Validating public updater metadata: $latestUrl"
-          $latestRes = Invoke-WebRequest -Uri $latestUrl -Method Get -TimeoutSec 30 -MaximumRedirection 5
+          $latestRes = Invoke-WebRequest -Uri $latestUrl -Method Get -TimeoutSec 30 -MaximumRedirection 5 -Headers @{ "Cache-Control" = "no-cache" }
           if ($latestRes.StatusCode -ne 200) {
             Write-Error "Public feed latest.yml returned HTTP $($latestRes.StatusCode)."
+            exit 1
+          }
+          $latestCacheControl = [string]$latestRes.Headers["Cache-Control"]
+          if ([string]::IsNullOrWhiteSpace($latestCacheControl) -or $latestCacheControl -notmatch '(?i)no-cache') {
+            Write-Error "Public latest.yml must return Cache-Control containing no-cache. Got: '$latestCacheControl'"
             exit 1
           }
           $contentType = [string]$latestRes.Headers["Content-Type"]
@@ -548,6 +699,95 @@ jobs:
             Write-Error "Public feed latest.yml is missing version."
             exit 1
           }
+          $versionMatch = [regex]::Match($latestRaw, '(?m)^\s*version\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          $latestVersion = $versionMatch.Groups['value'].Value.Trim()
+          if ($latestVersion -notmatch $semverRegex) {
+            Write-Error "Public feed latest.yml has invalid semver version: $latestVersion"
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($expectedVersion) -or $latestVersion -ne $expectedVersion) {
+            Write-Error "Public feed latest.yml version mismatch. Expected $expectedVersion, got $latestVersion"
+            exit 1
+          }
+          if ($latestVersion.Contains('-')) {
+            Write-Error "Stable public feed must not expose prerelease versions. Found: $latestVersion"
+            exit 1
+          }
+          $channelMatch = [regex]::Match($latestRaw, '(?m)^\s*channel\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          if ($channelMatch.Success) {
+            $channel = $channelMatch.Groups['value'].Value.Trim().ToLowerInvariant()
+            if ($channel -ne 'latest' -and $channel -ne 'stable') {
+              Write-Error "Stable public feed channel mismatch. Found channel: $channel"
+              exit 1
+            }
+          }
+
+          $minimumMatch = [regex]::Match($latestRaw, '(?m)^\s*minimumAllowedVersion\s*:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
+          if (-not $minimumMatch.Success) {
+            Write-Error "Public feed latest.yml is missing minimumAllowedVersion."
+            exit 1
+          }
+          $minimumAllowedVersion = $minimumMatch.Groups['value'].Value.Trim()
+          if ($minimumAllowedVersion -notmatch $semverRegex) {
+            Write-Error "Public feed minimumAllowedVersion is invalid: $minimumAllowedVersion"
+            exit 1
+          }
+
+          $rolloutMatch = [regex]::Match($latestRaw, '(?m)^\s*stagingPercentage\s*:\s*["'']?(?<value>\d{1,3})["'']?\s*$')
+          if (-not $rolloutMatch.Success) {
+            Write-Error "Public feed latest.yml is missing stagingPercentage."
+            exit 1
+          }
+          $rolloutPercentage = [int]$rolloutMatch.Groups['value'].Value
+          if ($rolloutPercentage -lt 0 -or $rolloutPercentage -gt 100) {
+            Write-Error "Public feed stagingPercentage must be between 0 and 100. Found: $rolloutPercentage"
+            exit 1
+          }
+
+          $signatureUrl = "$latestUrl.sig"
+          $signatureRes = Invoke-WebRequest -Uri $signatureUrl -Method Get -TimeoutSec 30 -MaximumRedirection 5 -Headers @{ "Cache-Control" = "no-cache" }
+          if ($signatureRes.StatusCode -ne 200) {
+            Write-Error "Public feed latest.yml.sig returned HTTP $($signatureRes.StatusCode)."
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_FEED_METADATA_PUBLIC_KEY)) {
+            Write-Error "Missing required secret: UPDATE_FEED_METADATA_PUBLIC_KEY"
+            exit 1
+          }
+
+          $tempDir = Join-Path $env:RUNNER_TEMP "jarvis-feed-public-verify"
+          New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+          $publicKeyPath = Join-Path $tempDir "metadata-public.pem"
+          ($env:UPDATE_FEED_METADATA_PUBLIC_KEY -replace "`r", "") | Set-Content -Path $publicKeyPath -Encoding ASCII
+          $latestTempPath = Join-Path $tempDir "latest.yml"
+          $signatureTempPath = Join-Path $tempDir "latest.yml.sig"
+          $latestRaw | Set-Content -Path $latestTempPath -Encoding UTF8
+          ([string]$signatureRes.Content).Trim() | Set-Content -Path $signatureTempPath -Encoding UTF8
+          $verifyScriptPath = Join-Path $tempDir "verify-public-latest-yml.js"
+          @'
+          const crypto = require("crypto");
+          const fs = require("fs");
+
+          const latestPath = process.argv[2];
+          const signaturePath = process.argv[3];
+          const publicKeyPath = process.argv[4];
+
+          const payload = fs.readFileSync(latestPath, "utf8");
+          const signature = fs.readFileSync(signaturePath, "utf8").trim();
+          const publicKey = fs.readFileSync(publicKeyPath, "utf8");
+          const ok = crypto.verify("sha256", Buffer.from(payload, "utf8"), publicKey, Buffer.from(signature, "base64"));
+          if (!ok) {
+            console.error("Public detached latest.yml signature verification failed.");
+            process.exit(1);
+          }
+          '@ | Set-Content -Path $verifyScriptPath -Encoding UTF8
+
+          node $verifyScriptPath $latestTempPath $signatureTempPath $publicKeyPath
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Public updater metadata signature verification failed."
+            exit 1
+          }
+          Write-Host "Verified public updater metadata signature."
 
           $candidateFiles = @()
           $pathMatches = [regex]::Matches($latestRaw, '(?m)^\s*path:\s*["'']?(?<value>[^"''\r\n#]+)["'']?\s*$')
@@ -578,6 +818,11 @@ jobs:
             }
             if ($assetHead.StatusCode -lt 200 -or $assetHead.StatusCode -ge 400) {
               Write-Error "Updater artifact not publicly accessible: $artifactUrl (HTTP $($assetHead.StatusCode))"
+              exit 1
+            }
+            $artifactCacheControl = [string]$assetHead.Headers["Cache-Control"]
+            if ($candidate -match '\.(exe|blockmap)$' -and $artifactCacheControl -match '(?i)no-cache|no-store') {
+              Write-Error "Installer artifacts should remain cacheable; got Cache-Control '$artifactCacheControl' for $candidate"
               exit 1
             }
             Write-Host "Verified public updater artifact: $artifactUrl"

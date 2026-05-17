@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
 const { getToken: getDeviceToken } = require('./auth');
 const {
@@ -26,6 +26,16 @@ const { emitSessionChanged } = require('./electron/auth/events');
 const { redactUrl } = require('./electron/auth/redaction');
 const { bindAuthEvents } = require('./electron/auth/sync');
 const { generateOAuthState, parseAuthCallback, toSafeSessionView } = require('./electron/auth/validators');
+const {
+  buildMetadataSignatureUrl,
+  classifyInstallerBlocker,
+  classifySignatureDiagnostic,
+  classifyUpdateVersionSanity,
+  extractLatestFeedMetadata,
+  isUserWithinStagedRollout,
+  validateLatestFeedMetadata,
+  verifyDetachedMetadataSignature,
+} = require('./electron/updater/feed-metadata');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
 // Ensures the launcher SQLite database is initialised before any IPC handler
@@ -202,6 +212,7 @@ let win;
 let overlayWin;
 let tray;
 const pendingLauncherConfirmations = new Map();
+let appIsInstallingUpdate = false;
 let updateState = {
   status: 'idle',
   detail: 'Waiting to check for updates.',
@@ -229,6 +240,20 @@ function sendToRenderer(channel, payload) {
 
 function emitDesktopHealth() {
   sendToRenderer('desktop-health', startupDiagnostics.snapshot());
+}
+
+function allowWindowCloseForQuit() {
+  return Boolean(app.isQuitting || appIsInstallingUpdate);
+}
+
+function prepareForQuitAndInstall(version = null) {
+  appIsInstallingUpdate = true;
+  app.isQuitting = true;
+  telemetryBus.publish('updater.install.started', { version: version || updateState.version || null });
+}
+
+function resetQuitAndInstallPreparation() {
+  appIsInstallingUpdate = false;
 }
 
 function emitUpdateStatus(status, detail, extra = {}) {
@@ -488,7 +513,7 @@ function createWindow() {
   });
 
   win.on('close', (event) => {
-    if (!app.isQuitting) {
+    if (!allowWindowCloseForQuit()) {
       event.preventDefault();
       win.hide();
     }
@@ -521,7 +546,7 @@ function createLauncherOverlayWindow() {
     }
   });
   overlayWin.on('close', (event) => {
-    if (!app.isQuitting) {
+    if (!allowWindowCloseForQuit()) {
       event.preventDefault();
       overlayWin.hide();
     }
@@ -656,6 +681,8 @@ createMainIpcHandlers({
   getMainWindow: () => win,
   getOverlayWindow: () => overlayWin,
   createLauncherOverlayWindow,
+  prepareForQuitAndInstall,
+  resetQuitAndInstallPreparation,
   pendingLauncherConfirmations,
   permissions,
   securityAudit,
@@ -689,7 +716,16 @@ app.on('second-instance', (_event, argv) => {
   }
 });
 
+app.on('before-quit', () => {
+  app.isQuitting = true;
+});
+
+nativeAutoUpdater?.on?.('before-quit-for-update', () => {
+  prepareForQuitAndInstall(updateState.version || _validatedFeedMetadata?.version || null);
+});
+
 app.whenReady().then(async () => {
+  telemetryBus.publish('updater.session.started', { currentVersion: app.getVersion() });
   const startupProtocolUrl = extractProtocolUrl(process.argv);
   if (startupProtocolUrl) {
     void handleProtocolCallback(startupProtocolUrl, 'startup-argv');

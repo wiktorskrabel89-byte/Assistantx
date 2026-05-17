@@ -66,6 +66,7 @@ Confirm `.github/workflows/build-jarvis.yml` still matches expected desktop outp
   - public `latest.yml` availability/content
   - public `release-notes.json` availability/content
   - public access to every artifact referenced from `latest.yml`
+  - installer artifact cache policy (no forced `no-cache`/`no-store`)
   - `jarvis-latest` visibility and required release assets
 
 ## F) Release notes / PR checklist block
@@ -80,5 +81,5 @@ For every desktop-impacting PR/release, include:
   - `release-notes.json` validity and highlights quality
   - artifact parity (`latest.yml` refs vs feed files)
   - provider/privacy compatibility (private repo + public generic feed)
-  - correctness of updater error classification (`network unavailable` vs metadata/auth)
+  - correctness of updater error classification (`download`, metadata/auth, signature validation, installer execution)
 - Architecture alignment note against `FINAL_AI_VOICE_ARCHITECTURE_PLAN.md` (if scope touched AI/voice routing or sidecar behavior)

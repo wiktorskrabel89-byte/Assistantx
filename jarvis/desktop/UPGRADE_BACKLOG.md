@@ -88,6 +88,11 @@ Use multiple small PRs per module/service (no giant refactor):
 - Show release notes and updater source status in a dedicated settings section.
 - Add one-click “download and install on restart” flow in desktop settings.
 
+5. **[future/experimental] Generic feed staged rollout + rollback controls**
+- Add channel-aware feed controls (stable/beta) with explicit rollback pointer support.
+- Enable rapid rollback of broken updater metadata/releases without waiting for client patching.
+- Reserve architecture slot for percentage-based rollout once telemetry confidence gates are defined.
+
 ## Suggested sequencing
 
 1) Critical IPC + reliability hardening  

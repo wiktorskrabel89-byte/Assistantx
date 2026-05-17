@@ -1111,7 +1111,10 @@ window.addEventListener('DOMContentLoaded', () => {
 				`running ${telemetry.sidecar.running || 0}`,
 				`errors ${telemetry.sidecar.errors || 0}`,
 				`restarts ${telemetry.sidecar.restarts || 0}`,
-			].join(' · ');
+				telemetry.updater
+					? `updates offered ${telemetry.updater.offered || 0} / installed ${telemetry.updater.installSucceeded || 0}`
+					: null,
+			].filter(Boolean).join(' · ');
 			appendMessage(log, 'Local telemetry', summary, 'system');
 		}).catch(() => null);
 	}
