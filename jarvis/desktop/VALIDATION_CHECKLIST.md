@@ -80,6 +80,6 @@ For every desktop-impacting PR/release, include:
   - `latest.yml` validity
   - `release-notes.json` validity and highlights quality
   - artifact parity (`latest.yml` refs vs feed files)
-  - provider/privacy compatibility (private repo + public generic feed)
+  - provider/privacy compatibility (public GitHub releases visibility and updater config)
   - correctness of updater error classification (`download`, metadata/auth, signature validation, installer execution)
 - Architecture alignment note against `FINAL_AI_VOICE_ARCHITECTURE_PLAN.md` (if scope touched AI/voice routing or sidecar behavior)

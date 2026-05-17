@@ -2,24 +2,24 @@
 
 ## Prerequisites
 
-The source repository is private, and production desktop updates are served
-from GitHub Releases metadata/assets using authenticated API access:
+The source repository is public, and production desktop updates are served
+from GitHub Releases metadata/assets:
 
 ```
-Private GitHub repo (CI/CD) -> GitHub Releases (authenticated) -> electron-updater clients
+Public GitHub repo (CI/CD) -> GitHub Releases -> electron-updater clients
 ```
 
-electron-updater is configured with `"private": true` in `build.publish`, which
-tells it to use authenticated GitHub API requests for all metadata and asset
-downloads.
+electron-updater is configured with `"private": false` in `build.publish`, so
+runtime update checks can read release metadata/assets from the public repo
+without requiring end-user credentials.
 
 ## Source of truth (updater topology)
 
 - **Permanent production updater source**: GitHub Releases (`jarvis-latest`)
 - **Desktop updater provider**: `github` with `owner=wiktorskrabel89-byte`,
-  `repo=Assistantx`, and `private=true`.
-- **Authentication**: `GH_TOKEN` Fine-Grained PAT (CI env) or OS keytar vault
-  (end-user machine), never hardcoded.
+  `repo=Assistantx`, and `private=false`.
+- **Authentication**: `GH_TOKEN` Fine-Grained PAT in CI for publishing, never
+  hardcoded in the app.
 
 ## Required secrets and tokens
 
@@ -44,18 +44,11 @@ Create at: <https://github.com/settings/personal-access-tokens>
 Keys may be stored as PEM text, PEM with escaped `\n`, base64-encoded PEM, or
 base64-encoded DER.
 
-### End-user machines (keytar vault)
+### End-user machines (keytar vault, optional/private repos only)
 
-During a privileged first-run or admin setup flow, the updater token can be
-stored in the OS credential vault:
-
-```js
-const keytar = require('keytar');
-await keytar.setPassword('AssistantX', 'github-updater-token', ghPat);
-```
-
-The updater reads it from `AssistantX / github-updater-token` before the first
-update check. The `GH_TOKEN` environment variable takes precedence.
+For this public-repo topology, end-user updater tokens are not required.
+Keytar token storage (`AssistantX / github-updater-token`) is only relevant if
+you intentionally switch updater visibility back to a private GitHub repo.
 
 ## Required artifacts in the GitHub release
 
@@ -105,7 +98,7 @@ Post-publish CI verifies `jarvis-latest` contains all required updater assets
 - [ ] Packaged app (not dev mode) shows real app version.
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
 - [ ] Startup check is silent (no native updater popups when already up to date).
-- [ ] GitHub API authentication succeeds (no 401/403 on update check).
+- [ ] Public GitHub release metadata/assets are reachable on update check.
 - [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection, rollback floor).
 - [ ] Detached `latest.yml` signature is verified before updater execution.
 - [ ] `minimumAllowedVersion` / `stagingPercentage` are present and correct for the release policy.
