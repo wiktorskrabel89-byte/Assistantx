@@ -607,10 +607,10 @@ jobs:
       - name: Sync updater artifacts to public generic feed
         shell: pwsh
         env:
-          UPDATE_FEED_SSH_HOST: ${{ secrets.UPDATE_FEED_SSH_HOST }}
-          UPDATE_FEED_SSH_PORT: ${{ secrets.UPDATE_FEED_SSH_PORT }}
-          UPDATE_FEED_SSH_USER: ${{ secrets.UPDATE_FEED_SSH_USER }}
-          UPDATE_FEED_SSH_PATH: ${{ secrets.UPDATE_FEED_SSH_PATH }}
+          UPDATE_FEED_SSH_HOST: ${{ secrets.UPDATE_FEED_SSH_HOST || vars.UPDATE_FEED_SSH_HOST }}
+          UPDATE_FEED_SSH_PORT: ${{ secrets.UPDATE_FEED_SSH_PORT || vars.UPDATE_FEED_SSH_PORT }}
+          UPDATE_FEED_SSH_USER: ${{ secrets.UPDATE_FEED_SSH_USER || vars.UPDATE_FEED_SSH_USER }}
+          UPDATE_FEED_SSH_PATH: ${{ secrets.UPDATE_FEED_SSH_PATH || vars.UPDATE_FEED_SSH_PATH }}
           UPDATE_FEED_SSH_KEY: ${{ secrets.UPDATE_FEED_SSH_KEY }}
           UPDATE_FEED_SSH_KNOWN_HOSTS: ${{ secrets.UPDATE_FEED_SSH_KNOWN_HOSTS }}
         run: |
@@ -623,7 +623,7 @@ jobs:
           )
           foreach ($secretName in $requiredSecrets) {
             if ([string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$secretName").Value)) {
-              Write-Error "Missing required secret: $secretName. Generic feed publishing is mandatory."
+              Write-Error "Missing required feed configuration: $secretName. Configure it as a repository secret or variable. Generic feed publishing is mandatory."
               exit 1
             }
           }
