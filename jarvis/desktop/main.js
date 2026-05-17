@@ -72,6 +72,7 @@ assertNoDynamicCodeExecution('main-process-guardrails', 'main.js bootstrap');
 const AUTH_PROTOCOL = 'assistantx';
 const AUTH_CALLBACK_URL = `${AUTH_PROTOCOL}://auth/callback`;
 const SILENT_REFRESH_INTERVAL_MS = 5 * 60_000;
+const AUTH_LOGIN_TIMEOUT_MS = 5 * 60_000;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -302,10 +303,23 @@ function settlePendingAuth(result) {
   const flow = pendingAuthFlow;
   pendingAuthFlow = null;
   flow.settled = true;
-  flow.resolve(result);
-  if (flow.loginWin && !flow.loginWin.isDestroyed()) {
-    flow.loginWin.close();
+   if (flow.timeoutId) {
+    clearTimeout(flow.timeoutId);
+    flow.timeoutId = null;
   }
+  flow.resolve(result);
+}
+
+function failPendingAuth(error) {
+  if (!pendingAuthFlow || pendingAuthFlow.settled) return;
+  const flow = pendingAuthFlow;
+  pendingAuthFlow = null;
+  flow.settled = true;
+  if (flow.timeoutId) {
+    clearTimeout(flow.timeoutId);
+    flow.timeoutId = null;
+  }
+  flow.reject(error);
 }
 
 async function consumeAuthCallback(url, source = 'browser', { expectedState = null, settlePending = false } = {}) {
@@ -320,75 +334,48 @@ async function consumeAuthCallback(url, source = 'browser', { expectedState = nu
   return true;
 }
 
-function watchLoginWindow(loginWin, expectedState = null) {
-  const inspectUrl = (url, source = 'browser') => {
-    console.log('[auth] inspecting callback candidate:', redactUrl(url));
-    void consumeAuthCallback(url, source, {
-      expectedState,
-      settlePending: true,
-    }).catch((error) => {
-      console.warn('[auth] Failed to process OAuth callback:', error?.message || error);
-    });
-  };
-  const inspectNavigation = (event, url, source) => {
-    if (typeof url === 'string' && url.startsWith(`${AUTH_CALLBACK_URL}#`)) {
-      event.preventDefault();
-    }
-    inspectUrl(url, source);
-  };
-  loginWin.webContents.on('will-navigate', (event, url) => inspectNavigation(event, url, 'browser-navigate'));
-  loginWin.webContents.on('will-redirect', (event, url) => inspectNavigation(event, url, 'browser-redirect'));
-  loginWin.webContents.on('did-redirect-navigation', (_event, url) => inspectUrl(url, 'browser-redirect'));
-  loginWin.webContents.on('did-navigate', (_event, url) => inspectUrl(url, 'browser-navigate'));
-  loginWin.webContents.on('did-navigate-in-page', (_event, url) => inspectUrl(url, 'browser-navigate'));
-  loginWin.webContents.on('did-finish-load', () => {
-    try {
-      inspectUrl(loginWin.webContents.getURL(), 'browser-finish-load');
-    } catch {
-      // ignore transient navigation state errors
-    }
-  });
-}
-
-function beginDesktopLogin({ parentWindow } = {}) {
+function beginDesktopLogin() {
   if (pendingAuthFlow?.promise) {
-    if (pendingAuthFlow.loginWin && !pendingAuthFlow.loginWin.isDestroyed()) {
-      pendingAuthFlow.loginWin.show();
-      pendingAuthFlow.loginWin.focus();
+    if (pendingAuthFlow.loginUrl) {
+      void shell.openExternal(pendingAuthFlow.loginUrl).catch((error) => {
+        console.warn('[auth] Failed to reopen OAuth browser URL:', error?.message || error);
+      });
     }
     return pendingAuthFlow.promise;
   }
 
   const state = generateOAuthState();
   const loginUrl = getDesktopLoginUrl(state);
-  const loginWin = new BrowserWindow({
-    width: 480,
-    height: 680,
-    title: 'Sign in to AssistantX',
-    parent: parentWindow || undefined,
-    modal: true,
-    webPreferences: buildSecureWebPreferences(),
-  });
-
-  const promise = new Promise((resolve) => {
+  const promise = new Promise((resolve, reject) => {
     pendingAuthFlow = {
       state,
       resolve,
+      reject,
       promise: null,
-      loginWin,
+      loginUrl,
       settled: false,
+      timeoutId: null,
     };
   });
   pendingAuthFlow.promise = promise;
-
-  loginWin.on('closed', () => settlePendingAuth(null));
-  watchLoginWindow(loginWin, state);
-  loginWin.loadURL(loginUrl);
+  pendingAuthFlow.timeoutId = setTimeout(() => {
+    console.warn('[auth] Login flow timed out waiting for callback.');
+    settlePendingAuth(null);
+  }, AUTH_LOGIN_TIMEOUT_MS);
+  console.info('[auth] login started');
+  shell.openExternal(loginUrl)
+    .then(() => {
+      console.info('[auth] oauth browser opened');
+    })
+    .catch((error) => {
+      failPendingAuth(error);
+    });
   return promise;
 }
 
 async function handleProtocolCallback(url, source = 'protocol') {
   if (!url) return false;
+  console.info('[auth] callback received', { source, url: redactUrl(url) });
   const consumed = await consumeAuthCallback(url, source, {
     expectedState: pendingAuthFlow?.state || null,
     settlePending: Boolean(pendingAuthFlow),
