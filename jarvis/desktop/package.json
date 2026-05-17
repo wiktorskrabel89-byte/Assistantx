@@ -10,6 +10,10 @@
   },
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
+    "prepack": "node scripts/verify-python-runtime.js",
+    "predist": "node scripts/verify-python-runtime.js",
+    "predist:win": "node scripts/verify-python-runtime.js",
+    "predist:win:arm64": "node scripts/verify-python-runtime.js",
     "_dev:native": "electron .",
     "dev": "node scripts/run-electron-dev.js",
     "start": "electron .",

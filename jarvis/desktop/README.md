@@ -99,6 +99,16 @@ For `resources/python/python.exe`, put the bundled runtime under:
 
 - `jarvis/desktop/python/python.exe`
 
+`.gitkeep` is not enough — the folder must contain a real runtime bundle (`python.exe` and required DLLs/libs).
+
+Desktop packaging now enforces this with preflight:
+
+- `npm run dist`
+- `npm run dist:win`
+- `npm run dist:win:arm64`
+
+If runtime is missing, build fails early with a clear error.
+
 ## Related docs
 
 - Architecture audit: `ARCHITECTURE_AUDIT.md`
