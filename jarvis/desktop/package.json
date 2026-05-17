@@ -76,6 +76,14 @@
       ],
       "artifactName": "JarvisSetup-${arch}.${ext}"
     },
+    "protocols": [
+      {
+        "name": "AssistantX",
+        "schemes": [
+          "assistantx"
+        ]
+      }
+    ],
     "nsis": {
       "oneClick": false,
       "perMachine": true,
