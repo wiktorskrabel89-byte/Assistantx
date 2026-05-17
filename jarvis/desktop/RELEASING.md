@@ -55,12 +55,12 @@ payload after those fields are appended.
 ### CI-managed feed publishing requirements
 
 The release workflow should fully manage feed publishing and fail when feed
-secrets are missing. Required repository secrets:
+configuration is missing. Required repository configuration:
 
-- `UPDATE_FEED_SSH_HOST`
-- `UPDATE_FEED_SSH_PORT` (optional, defaults to `22`)
-- `UPDATE_FEED_SSH_USER`
-- `UPDATE_FEED_SSH_PATH`
+- `UPDATE_FEED_SSH_HOST` (secret or variable)
+- `UPDATE_FEED_SSH_PORT` (optional, defaults to `22`; secret or variable)
+- `UPDATE_FEED_SSH_USER` (secret or variable)
+- `UPDATE_FEED_SSH_PATH` (secret or variable)
 - `UPDATE_FEED_SSH_KEY`
 - `UPDATE_FEED_SSH_KNOWN_HOSTS`
 - `UPDATE_FEED_METADATA_PRIVATE_KEY`
