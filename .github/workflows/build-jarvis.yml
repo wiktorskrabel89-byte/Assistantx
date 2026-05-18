@@ -539,7 +539,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish to GitHub Release (jarvis-latest)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: jarvis-latest
           name: "Jarvis Desktop — v${{ steps.meta.outputs.version }}"
@@ -558,7 +558,7 @@ jobs:
 
       - name: Publish Android APK to GitHub Release (jarvis-latest)
         if: steps.android_apk.outputs.found == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: jarvis-latest
           files: |
