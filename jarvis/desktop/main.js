@@ -11,7 +11,7 @@ const {
   setAccountSession,
   signOutAccountSession,
 } = require('./accounts');
-const { spawn } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const launcherService = require('./launcher/launch-service');
 const launcherDb = require('./launcher/db');
 const { createStartupDiagnostics } = require('./services/startup-diagnostics');
@@ -36,6 +36,7 @@ const {
   validateLatestFeedMetadata,
   verifyDetachedMetadataSignature,
 } = require('./electron/updater/feed-metadata');
+const { AIRouter } = require('./electron/ai/router');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
 // Ensures the launcher SQLite database is initialised before any IPC handler
@@ -53,6 +54,7 @@ const SIDECAR_PORT = process.env.JARVIS_SIDECAR_PORT || '8765';
 const SIDECAR_HEALTH_TIMEOUT_MS = Number(process.env.JARVIS_SIDECAR_HEALTH_TIMEOUT_MS || 5000);
 const SIDECAR_HEALTH_RETRIES = Math.max(1, Number(process.env.JARVIS_SIDECAR_HEALTH_RETRIES || 3));
 const startupDiagnostics = createStartupDiagnostics();
+const aiRouter = new AIRouter();
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
 
@@ -121,6 +123,10 @@ function getSidecarMainPath() {
     return path.join(process.resourcesPath, 'ai-agent', 'main.py');
   }
   return path.join(__dirname, '..', '..', 'ai-agent', 'main.py');
+}
+
+function getSetupScriptPath() {
+  return path.join(__dirname, 'scripts', 'setup-env.ps1');
 }
 
 function resolvePythonExecutable() {
@@ -467,6 +473,79 @@ function sendToRenderer(channel, payload) {
 
 function emitDesktopHealth() {
   sendToRenderer('desktop-health', startupDiagnostics.snapshot());
+}
+
+async function probeOllamaAvailability(source = 'startup') {
+  try {
+    const availability = await aiRouter.getAvailability();
+    const status = availability.ollama_available ? 'healthy' : 'unavailable';
+    startupDiagnostics.setComponent('ollama', status, {
+      detail: availability.ollama_available
+        ? 'Ollama server is reachable.'
+        : 'Ollama server is not reachable. Cloud fallback remains active.',
+      reason: availability.ollama_available ? 'reachable' : 'unreachable',
+      phase: 'probed',
+      details: { source, mode: availability.mode },
+    });
+    startupDiagnostics.pushEvent(
+      'ollama',
+      availability.ollama_available ? 'info' : 'warn',
+      availability.ollama_available
+        ? 'Local Ollama runtime detected.'
+        : 'Local Ollama runtime unavailable; using cloud fallback.',
+      { source, mode: availability.mode },
+    );
+    emitDesktopHealth();
+    return availability;
+  } catch (error) {
+    startupDiagnostics.setComponent('ollama', 'unavailable', {
+      detail: `Ollama probe failed: ${String(error?.message || error)}`,
+      reason: 'probe_failed',
+      phase: 'probed',
+      details: { source },
+    });
+    startupDiagnostics.pushEvent('ollama', 'warn', 'Ollama probe failed.', {
+      source,
+      error: String(error?.message || error),
+    });
+    emitDesktopHealth();
+    return { ollama_available: false, mode: 'cloud-fallback' };
+  }
+}
+
+async function installLocalAiEngine() {
+  const scriptPath = getSetupScriptPath();
+  if (!fs.existsSync(scriptPath)) {
+    return { success: false, error: `Setup script missing: ${scriptPath}` };
+  }
+  return new Promise((resolve) => {
+    execFile(
+      'powershell.exe',
+      ['-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+      { windowsHide: true },
+      async (error, stdout, stderr) => {
+        if (error) {
+          startupDiagnostics.pushEvent('ollama', 'error', 'Local AI setup script failed.', {
+            message: String(error?.message || error),
+            stderr: String(stderr || ''),
+          });
+          emitDesktopHealth();
+          resolve({
+            success: false,
+            error: String(stderr || error?.message || 'setup-failed'),
+            stdout: String(stdout || ''),
+          });
+          return;
+        }
+        const availability = await probeOllamaAvailability('post-install');
+        resolve({
+          success: true,
+          stdout: String(stdout || ''),
+          availability,
+        });
+      },
+    );
+  });
 }
 
 function allowWindowCloseForQuit() {
@@ -897,6 +976,8 @@ createMainIpcHandlers({
   launcherService,
   ensureDbReady,
   getSidecarStatus,
+  checkLocalAiAvailability: () => probeOllamaAvailability('ipc-check'),
+  installLocalAiEngine,
   restartSidecar: restartSidecarNow,
   startupDiagnostics,
   getLocalTelemetrySnapshot,
@@ -994,6 +1075,7 @@ app.whenReady().then(async () => {
   emitDesktopHealth();
   await restoreAuthSession();
   startSilentRefreshLoop();
+  await probeOllamaAvailability('startup');
   startSidecar();
   createWindow();
   createLauncherOverlayWindow();
