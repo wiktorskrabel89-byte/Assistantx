@@ -422,21 +422,21 @@ jobs:
           Write-Host "Verified release-notes.json"
 
       - name: Upload x64 installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: JarvisSetup-x64
           path: jarvis/desktop/dist/JarvisSetup-x64.exe
           if-no-files-found: warn
 
       - name: Upload arm64 installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: JarvisSetup-arm64
           path: jarvis/desktop/dist/JarvisSetup-arm64.exe
           if-no-files-found: warn
 
       - name: Upload updater metadata artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: JarvisUpdaterMetadata
           path: |
@@ -524,7 +524,7 @@ jobs:
 
       - name: Upload Android installer artifact
         if: steps.android_apk.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Jarvis-android
           path: jarvis/android/dist/Jarvis-android.apk
@@ -532,7 +532,7 @@ jobs:
 
       - name: Upload Android Gradle log artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Jarvis-android-gradle-log
           path: jarvis/android/dist/gradle-build.log
