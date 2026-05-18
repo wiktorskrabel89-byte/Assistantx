@@ -24,6 +24,8 @@ const ALLOWED_INVOKE = new Set([
   'open-url',
   'open-path',
   'jarvis-ai-request',
+  'setup:check-local-ai',
+  'setup:install-local',
   'get-displays',
   'get-desktop-diagnostics',
   'get-local-telemetry',
@@ -156,6 +158,9 @@ function buildSidecarApi() {
     disconnect: () => sidecarBridge.disconnect(),
     requestIntentParse: (text, requestId) => sidecarBridge.requestIntentParse(text, requestId),
     requestTts: (text, requestId) => sidecarBridge.requestTts(text, requestId),
+    requestMemorySearch: (query, requestId, topK) => sidecarBridge.requestMemorySearch(query, requestId, topK),
+    requestMemoryUpsert: (text, metadata, requestId) => sidecarBridge.requestMemoryUpsert(text, metadata, requestId),
+    requestToolCall: (tool, query, requestId) => sidecarBridge.requestToolCall(tool, query, requestId),
     connect: () => sidecarBridge.connect(),
     isCapturing: () => Boolean(sidecarBridge._capturing),
   };
@@ -248,6 +253,8 @@ contextBridge.exposeInMainWorld('jarvisApi', {
   getJarvisApiUrl,
   getJarvisWebUrl,
   setJarvisWebUrl,
+  checkLocalAiSetup: () => invokeAllowed('setup:check-local-ai'),
+  installLocalAiEngine: () => invokeAllowed('setup:install-local'),
   auth: {
     ...authApi,
     getLinkedAccounts,

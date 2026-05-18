@@ -1188,6 +1188,21 @@ window.addEventListener('DOMContentLoaded', () => {
 			appendMessage(log, 'Desktop diagnostics', `Startup status: ${snapshot.overall || 'unknown'}`, snapshot.overall === 'unavailable' ? 'error' : 'system');
 		}).catch(() => null);
 
+		if (typeof window.jarvisApi?.checkLocalAiSetup === 'function') {
+			window.jarvisApi.checkLocalAiSetup().then((state) => {
+				if (state?.ollama_available) {
+					appendMessage(log, 'Local AI', 'Ollama is ready. GPU-local routing enabled.', 'system');
+					return;
+				}
+				appendMessage(
+					log,
+					'Local AI',
+					'Ollama not detected. Cloud fallback is active. Run "npm run setup:local-ai" in jarvis/desktop or use setup:install-local IPC.',
+					'system',
+				);
+			}).catch(() => null);
+		}
+
 		ipcRenderer.invoke('get-local-telemetry').then((telemetry) => {
 			if (!telemetry?.sidecar) return;
 			const summary = [

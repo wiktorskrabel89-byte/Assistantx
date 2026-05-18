@@ -27,6 +27,8 @@ function createMainIpcHandlers(deps) {
     launcherService,
     ensureDbReady,
     getSidecarStatus,
+    checkLocalAiAvailability,
+    installLocalAiEngine,
     restartSidecar,
     startupDiagnostics,
     getLocalTelemetrySnapshot,
@@ -57,6 +59,14 @@ function createMainIpcHandlers(deps) {
       status: getSidecarStatus(),
       port: Number(process.env.JARVIS_SIDECAR_PORT || '8765'),
     }),
+
+    'setup:check-local-ai': async () => checkLocalAiAvailability(),
+
+    'setup:install-local': async () => {
+      const auth = await permissions.authorize('setup:install-local');
+      if (!auth.allowed) return denied('setup:install-local', auth.reason);
+      return installLocalAiEngine();
+    },
 
     'restart-sidecar': async () => {
       const auth = await permissions.authorize('restart-sidecar');

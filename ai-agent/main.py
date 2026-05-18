@@ -11,6 +11,9 @@ Message protocol (JSON lines sent by client → handled here):
   { "type": "audio_chunk",  "data": "<base64 PCM int16 LE>" }
   { "type": "tts_speak",    "text": "...", "requestId": "..." }
   { "type": "parse_intent", "text": "...", "requestId": "..." }
+  { "type": "memory_upsert", "text": "...", "metadata": {...}, "requestId": "..." }
+  { "type": "memory_search", "query": "...", "topK": 5, "requestId": "..." }
+  { "type": "tool_call", "tool": "web_search", "query": "...", "requestId": "..." }
 
 Events emitted to client:
   { "type": "status",           "phase": "...", "message": "..." }
@@ -20,6 +23,9 @@ Events emitted to client:
   { "type": "stt_result",       "text": "...", "isFinal": bool }
   { "type": "tts_audio",        "requestId": "...", "data": "<base64 WAV>", "format": "wav" }
   { "type": "intent_parsed",    "requestId": "...", "intent": "...", "entities": {...}, "confidence": float }
+  { "type": "memory_upsert_result", "requestId": "...", "ok": bool, "id": "..." }
+  { "type": "memory_search_result", "requestId": "...", "results": [...] }
+  { "type": "tool_result", "requestId": "...", "tool": "web_search", "ok": bool, "results": [...] }
   { "type": "error",            "message": "..." }
 """
 
@@ -54,6 +60,7 @@ _stt_engine: Any = None
 _tts_engine: Any = None
 _nlp_engine: Any = None
 _vad_engine: Any = None
+_memory_store: Any = None
 
 
 def _get_wake_detector():
@@ -67,16 +74,16 @@ def _get_wake_detector():
 def _get_stt_engine():
     global _stt_engine
     if _stt_engine is None:
-        from speech.stt import WhisperSTT
-        _stt_engine = WhisperSTT()
+        from speech.parakeet_stt import ParakeetSTT
+        _stt_engine = ParakeetSTT()
     return _stt_engine
 
 
 def _get_tts_engine():
     global _tts_engine
     if _tts_engine is None:
-        from tts.piper_tts import PiperTTS
-        _tts_engine = PiperTTS()
+        from tts.kokoro_tts import KokoroTTS
+        _tts_engine = KokoroTTS()
     return _tts_engine
 
 
@@ -96,16 +103,25 @@ def _get_vad_engine():
     return _vad_engine
 
 
+def _get_memory_store():
+    global _memory_store
+    if _memory_store is None:
+        from memory.store import MemoryStore
+        _memory_store = MemoryStore()
+    return _memory_store
+
+
 def _health_snapshot() -> dict[str, Any]:
-    whisper_ready = _stt_engine is not None
+    stt_ready = _stt_engine is not None
     tts_ready = _tts_engine is not None
-    models_loaded = whisper_ready and tts_ready
+    models_loaded = stt_ready and tts_ready
     status = "healthy" if models_loaded else "starting"
     return {
         "status": status,
         "modelsLoaded": models_loaded,
-        "whisper": whisper_ready,
+        "stt": stt_ready,
         "tts": tts_ready,
+        "memory": _memory_store is not None,
         "uptime": int(time.monotonic() - STARTED_AT),
     }
 
@@ -117,7 +133,7 @@ class ConnectionState:
         self.language: str = "en"
         self.wake_word_enabled: bool = True
         self.stt_enabled: bool = False
-        self.tts_enabled: bool = False
+        self.tts_enabled: bool = True
         self.nlp_enabled: bool = False
         self.vad_enabled: bool = True
         self.listening_for_command: bool = False
@@ -323,11 +339,101 @@ async def _handle_parse_intent(ws: WebSocketServerProtocol, state: ConnectionSta
         })
 
 
+async def _handle_memory_upsert(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
+    text = str(msg.get("text", "")).strip()
+    request_id = str(msg.get("requestId", ""))
+    metadata = msg.get("metadata", {})
+    if not text:
+        return
+    loop = asyncio.get_event_loop()
+    try:
+        store = _get_memory_store()
+        result = await loop.run_in_executor(None, store.upsert, text, metadata if isinstance(metadata, dict) else {})
+        await _send(ws, {
+            "type": "memory_upsert_result",
+            "requestId": request_id,
+            "ok": bool(result.get("ok")),
+            "id": result.get("id", ""),
+        })
+    except Exception as exc:
+        logger.warning("Memory upsert error: %s", exc)
+        await _send(ws, {
+            "type": "error",
+            "message": f"Memory upsert failed: {exc}",
+            "requestId": request_id,
+        })
+
+
+async def _handle_memory_search(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
+    query = str(msg.get("query", "")).strip()
+    request_id = str(msg.get("requestId", ""))
+    top_k = int(msg.get("topK", 5) or 5)
+    if not query:
+        return
+    loop = asyncio.get_event_loop()
+    try:
+        store = _get_memory_store()
+        results = await loop.run_in_executor(None, store.search, query, top_k)
+        await _send(ws, {
+            "type": "memory_search_result",
+            "requestId": request_id,
+            "results": results,
+        })
+    except Exception as exc:
+        logger.warning("Memory search error: %s", exc)
+        await _send(ws, {
+            "type": "error",
+            "message": f"Memory search failed: {exc}",
+            "requestId": request_id,
+        })
+
+
+async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
+    tool = str(msg.get("tool", "")).strip().lower()
+    request_id = str(msg.get("requestId", ""))
+    query = str(msg.get("query", "")).strip()
+    if not tool:
+        return
+    if tool != "web_search":
+        await _send(ws, {
+            "type": "tool_result",
+            "requestId": request_id,
+            "tool": tool,
+            "ok": False,
+            "results": [],
+        })
+        return
+    loop = asyncio.get_event_loop()
+    try:
+        from tools.web_search import search_web
+        results = await loop.run_in_executor(None, search_web, query, 5)
+        await _send(ws, {
+            "type": "tool_result",
+            "requestId": request_id,
+            "tool": "web_search",
+            "ok": True,
+            "results": results,
+        })
+    except Exception as exc:
+        logger.warning("Tool call error: %s", exc)
+        await _send(ws, {
+            "type": "tool_result",
+            "requestId": request_id,
+            "tool": "web_search",
+            "ok": False,
+            "results": [],
+            "error": str(exc),
+        })
+
+
 HANDLERS = {
     "configure": _handle_configure,
     "audio_chunk": _handle_audio_chunk,
     "tts_speak": _handle_tts_speak,
     "parse_intent": _handle_parse_intent,
+    "memory_upsert": _handle_memory_upsert,
+    "memory_search": _handle_memory_search,
+    "tool_call": _handle_tool_call,
 }
 
 

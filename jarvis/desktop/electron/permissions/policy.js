@@ -7,6 +7,7 @@ const RISK_BY_ACTION = {
   'jarvis-ai-request': 'medium',
   'open-account-login': 'medium',
   'install-everything-search': 'low',
+  'setup:install-local': 'medium',
 };
 
 function createPermissionPolicy({ onAudit } = {}) {

@@ -190,6 +190,26 @@ class SidecarBridge extends EventEmitter {
           confidence: Number(rest.confidence) || 0,
         });
         break;
+      case 'memory_search_result':
+        this.emit('memory_search_result', {
+          requestId: rest.requestId || '',
+          results: Array.isArray(rest.results) ? rest.results : [],
+        });
+        break;
+      case 'memory_upsert_result':
+        this.emit('memory_upsert_result', {
+          requestId: rest.requestId || '',
+          ok: Boolean(rest.ok),
+        });
+        break;
+      case 'tool_result':
+        this.emit('tool_result', {
+          requestId: rest.requestId || '',
+          tool: rest.tool || '',
+          results: Array.isArray(rest.results) ? rest.results : [],
+          ok: rest.ok !== false,
+        });
+        break;
       case 'error':
         this.emit('error', new Error(rest.message || 'Sidecar error'));
         break;
@@ -214,6 +234,18 @@ class SidecarBridge extends EventEmitter {
 
   requestIntentParse(text, requestId = '') {
     return this._send({ type: 'parse_intent', text, requestId });
+  }
+
+  requestMemorySearch(query, requestId = '', topK = 5) {
+    return this._send({ type: 'memory_search', query, requestId, topK });
+  }
+
+  requestMemoryUpsert(text, metadata = {}, requestId = '') {
+    return this._send({ type: 'memory_upsert', text, metadata, requestId });
+  }
+
+  requestToolCall(tool, query, requestId = '') {
+    return this._send({ type: 'tool_call', tool, query, requestId });
   }
 
   setListeningForCommand(listening) {
