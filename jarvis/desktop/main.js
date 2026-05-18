@@ -787,6 +787,18 @@ function getUpdateState() {
   return updateState;
 }
 
+function getUpdaterAuthStatus() {
+  return ensureUpdateCoordinator().getPrivateTokenStatus();
+}
+
+function setUpdaterPrivateToken(token) {
+  return ensureUpdateCoordinator().setPrivateToken(token);
+}
+
+function clearUpdaterPrivateToken() {
+  return ensureUpdateCoordinator().clearPrivateToken();
+}
+
 function setupAutoUpdater() {
   ensureUpdateCoordinator().setup();
 }
@@ -986,6 +998,9 @@ createMainIpcHandlers({
   installUpdate,
   deferUpdate,
   getUpdateState,
+  getUpdaterAuthStatus,
+  setUpdaterPrivateToken,
+  clearUpdaterPrivateToken,
   getJarvisWebUrl,
   setJarvisWebUrl,
   telemetryBus,
@@ -1012,6 +1027,9 @@ module.exports = {
   installUpdate,
   deferUpdate,
   getUpdateState,
+  getUpdaterAuthStatus,
+  setUpdaterPrivateToken,
+  clearUpdaterPrivateToken,
   getAutoUpdater,
   setupAutoUpdater,
   emitUpdateStatus,

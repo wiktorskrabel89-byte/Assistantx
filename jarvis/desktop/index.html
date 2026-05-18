@@ -187,7 +187,8 @@
     .update-modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(2, 6, 23, 0.68);
+      background: rgba(10, 10, 12, 0.85);
+      backdrop-filter: blur(8px);
       display: grid;
       place-items: center;
       z-index: 1000;
@@ -195,25 +196,66 @@
     }
 
     .update-modal {
-      width: min(560px, 100%);
-      border-radius: 16px;
-      border: 1px solid rgba(148, 163, 184, 0.28);
-      background: rgba(15, 23, 42, 0.95);
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-      padding: 18px;
+      width: min(480px, 100%);
+      border-radius: 12px;
+      border: 1px solid #24242b;
+      background: #111114;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+      color: #f4f4f6;
+      padding: 24px;
       display: grid;
-      gap: 12px;
+      gap: 14px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .update-modal-header {
+      display: grid;
+      gap: 8px;
     }
 
     .update-modal h3 {
       font-size: 18px;
+      margin: 0;
+      font-weight: 500;
       letter-spacing: -0.2px;
+      color: #f4f4f6;
     }
 
     .update-modal p {
-      color: var(--muted);
+      color: #a1a1aa;
       font-size: 13px;
       line-height: 1.6;
+      margin: 0;
+    }
+
+    .update-modal-badge {
+      width: fit-content;
+      background: rgba(211, 47, 47, 0.15);
+      color: #d32f2f;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(211, 47, 47, 0.3);
+      letter-spacing: 0.04em;
+    }
+
+    .update-section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #8e8e9a;
+      margin: 0;
+      letter-spacing: 0.08em;
+    }
+
+    .update-highlights,
+    .update-markdown {
+      background: #0a0a0c;
+      border: 1px solid #1a1a20;
+      border-radius: 6px;
+      padding: 12px;
+      max-height: 160px;
+      overflow-y: auto;
     }
 
     .update-highlights {
@@ -221,9 +263,29 @@
       padding-left: 18px;
       display: grid;
       gap: 4px;
-      color: #dbeafe;
+      color: #d4d4d8;
       font-size: 13px;
       line-height: 1.5;
+    }
+
+    .update-markdown {
+      white-space: pre-wrap;
+      margin: 0;
+      font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+      font-size: 12px;
+      color: #a1a1aa;
+      line-height: 1.6;
+    }
+
+    .update-highlights::-webkit-scrollbar,
+    .update-markdown::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .update-highlights::-webkit-scrollbar-thumb,
+    .update-markdown::-webkit-scrollbar-thumb {
+      background: #2a2a32;
+      border-radius: 4px;
     }
 
     .update-modal .actions-row {
@@ -231,13 +293,86 @@
       gap: 8px;
       justify-content: flex-end;
       flex-wrap: wrap;
+      margin-top: 4px;
     }
 
     .update-version-details {
-      color: var(--muted);
+      color: #8e8e9a;
       font-size: 12px;
-      border-top: 1px solid rgba(148, 163, 184, 0.2);
+      border-top: 1px solid #24242b;
       padding-top: 10px;
+    }
+
+    .update-progress {
+      display: grid;
+      gap: 8px;
+    }
+
+    .update-progress-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #8e8e9a;
+    }
+
+    .update-progress-track {
+      width: 100%;
+      height: 4px;
+      background: #24242b;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .update-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #d32f2f;
+      transition: width 0.12s linear;
+    }
+
+    .update-error {
+      background: rgba(127, 29, 29, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fecaca;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .update-token-form {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      background: #0a0a0c;
+      border: 1px solid #1a1a20;
+      border-radius: 8px;
+    }
+
+    .update-token-form label {
+      font-size: 12px;
+      color: #a1a1aa;
+    }
+
+    .update-token-form input {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 6px;
+      border: 1px solid #2a2a32;
+      background: #111114;
+      color: #f4f4f6;
+      outline: none;
+    }
+
+    .update-token-hint {
+      font-size: 11px;
+      color: #8e8e9a;
+      line-height: 1.5;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     [hidden] {
@@ -863,16 +998,39 @@
   </div>
   <div id="update-modal-backdrop" class="update-modal-backdrop" hidden>
     <section id="update-modal" class="update-modal" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
-      <h3 id="update-modal-title">AssistantX update available</h3>
-      <p id="update-modal-subtitle">A new AssistantX update is ready.</p>
+      <div class="update-modal-header">
+        <span id="update-modal-badge" class="update-modal-badge">NEW</span>
+        <h3 id="update-modal-title">AssistantX update available</h3>
+        <p id="update-modal-subtitle">A new AssistantX update is ready.</p>
+      </div>
+      <p class="update-section-title">Release notes</p>
       <ul id="update-modal-highlights" class="update-highlights"></ul>
+      <pre id="update-modal-markdown" class="update-markdown" hidden></pre>
       <details id="update-modal-details" class="update-version-details">
         <summary>Details</summary>
         <div id="update-modal-version"></div>
       </details>
+      <div id="update-modal-progress" class="update-progress" hidden>
+        <div class="update-progress-row">
+          <span id="update-progress-label">Downloading…</span>
+          <span id="update-progress-percent">0%</span>
+        </div>
+        <div class="update-progress-track">
+          <div id="update-progress-fill" class="update-progress-fill"></div>
+        </div>
+      </div>
+      <div id="update-modal-error" class="update-error" hidden></div>
+      <div id="update-token-form" class="update-token-form" hidden>
+        <label for="update-token-input">GitHub Personal Access Token</label>
+        <input id="update-token-input" type="password" autocomplete="off" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+        <div class="update-token-hint">
+          Needed only for secure access to private AssistantX update releases.
+        </div>
+      </div>
       <div class="actions-row">
         <button id="update-modal-secondary" type="button" class="secondary">Later</button>
-        <button id="update-modal-primary" type="button">Update now</button>
+        <button id="update-modal-clear-token" type="button" class="secondary" hidden>Clear token</button>
+        <button id="update-modal-primary" type="button" class="danger">Update now</button>
       </div>
     </section>
   </div>

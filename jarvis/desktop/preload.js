@@ -18,6 +18,9 @@ const ALLOWED_INVOKE = new Set([
   'download-update',
   'install-update',
   'defer-update',
+  'updater:get-auth-status',
+  'updater:set-token',
+  'updater:clear-token',
   'get-jarvis-web-url',
   'set-jarvis-web-url',
   'open-account-login',
@@ -228,6 +231,35 @@ function buildJarvisApiV2() {
 contextBridge.exposeInMainWorld('jarvisIpc', {
   invoke: invokeAllowed,
   on: subscribeAllowed,
+});
+
+contextBridge.exposeInMainWorld('updaterX', {
+  onStatus: (listener) => subscribeAllowed('auto-update-status', listener),
+  onAvailable: (listener) => subscribeAllowed('auto-update-status', (payload) => {
+    if (payload?.status === 'available') listener(payload);
+  }),
+  onProgress: (listener) => subscribeAllowed('auto-update-status', (payload) => {
+    if (payload?.status === 'downloading') {
+      listener({
+        percent: Number(payload?.downloadProgress || 0),
+        detail: payload?.detail || '',
+      });
+    }
+  }),
+  onDownloaded: (listener) => subscribeAllowed('auto-update-status', (payload) => {
+    if (payload?.status === 'install-ready') listener(payload);
+  }),
+  onError: (listener) => subscribeAllowed('auto-update-status', (payload) => {
+    if (payload?.status === 'error' || payload?.status === 'unavailable') listener(payload);
+  }),
+  check: () => invokeAllowed('check-for-updates'),
+  getState: () => invokeAllowed('get-update-state'),
+  download: () => invokeAllowed('download-update'),
+  install: () => invokeAllowed('install-update'),
+  defer: (reason = 'later', source = 'updaterX') => invokeAllowed('defer-update', { reason, source }),
+  getAuthStatus: () => invokeAllowed('updater:get-auth-status'),
+  setToken: (token) => invokeAllowed('updater:set-token', token),
+  clearToken: () => invokeAllowed('updater:clear-token'),
 });
 
 contextBridge.exposeInMainWorld('jarvisApi', {

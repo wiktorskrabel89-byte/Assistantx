@@ -138,13 +138,23 @@ window.addEventListener('DOMContentLoaded', () => {
 	const checkUpdatesButton = document.getElementById('check-updates');
 	const installUpdateButton = document.getElementById('install-update');
 	const updateModalBackdrop = document.getElementById('update-modal-backdrop');
+	const updateModalBadge = document.getElementById('update-modal-badge');
 	const updateModalTitle = document.getElementById('update-modal-title');
 	const updateModalSubtitle = document.getElementById('update-modal-subtitle');
 	const updateModalHighlights = document.getElementById('update-modal-highlights');
+	const updateModalMarkdown = document.getElementById('update-modal-markdown');
 	const updateModalVersion = document.getElementById('update-modal-version');
 	const updateModalDetails = document.getElementById('update-modal-details');
+	const updateModalProgress = document.getElementById('update-modal-progress');
+	const updateProgressLabel = document.getElementById('update-progress-label');
+	const updateProgressPercent = document.getElementById('update-progress-percent');
+	const updateProgressFill = document.getElementById('update-progress-fill');
+	const updateModalError = document.getElementById('update-modal-error');
+	const updateTokenForm = document.getElementById('update-token-form');
+	const updateTokenInput = document.getElementById('update-token-input');
 	const updateModalPrimaryButton = document.getElementById('update-modal-primary');
 	const updateModalSecondaryButton = document.getElementById('update-modal-secondary');
+	const updateModalClearTokenButton = document.getElementById('update-modal-clear-token');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
 	const openBrowserTabButton = document.getElementById('open-browser-tab');
 	const commandTabButton = document.getElementById('command-tab-button');
@@ -466,9 +476,19 @@ window.addEventListener('DOMContentLoaded', () => {
 				mode: 'available',
 				payload,
 			});
+		} else if (payload?.status === 'downloading') {
+			showUpdateModal({
+				mode: 'downloading',
+				payload,
+			});
 		} else if (payload?.status === 'install-ready') {
 			showUpdateModal({
 				mode: 'install-ready',
+				payload,
+			});
+		} else if (payload?.status === 'error' || payload?.status === 'unavailable') {
+			showUpdateModal({
+				mode: payload?.requiresTokenSetup ? 'auth-required' : 'error',
 				payload,
 			});
 		}
@@ -511,6 +531,18 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (updateModalDetails) updateModalDetails.hidden = true;
 	}
 
+	function renderUpdateMarkdown(payload) {
+		if (!updateModalMarkdown) return;
+		const markdown = String(payload?.releaseNotes?.markdown || '').trim();
+		if (!markdown) {
+			updateModalMarkdown.hidden = true;
+			updateModalMarkdown.textContent = '';
+			return;
+		}
+		updateModalMarkdown.hidden = false;
+		updateModalMarkdown.textContent = markdown;
+	}
+
 	function closeUpdateModal() {
 		if (!updateModalBackdrop) return;
 		updateModalBackdrop.hidden = true;
@@ -522,14 +554,67 @@ window.addEventListener('DOMContentLoaded', () => {
 
 		updateModalBackdrop.hidden = false;
 		updateModalBackdrop.dataset.mode = mode;
+		if (updateModalBadge) {
+			updateModalBadge.textContent = mode === 'auth-required' ? 'SECURE' : 'NEW';
+		}
 		renderUpdateHighlights(payload);
+		renderUpdateMarkdown(payload);
 		setUpdateModalVersion(payload);
+		if (updateModalProgress) updateModalProgress.hidden = true;
+		if (updateModalError) {
+			updateModalError.hidden = true;
+			updateModalError.textContent = '';
+		}
+		if (updateTokenForm) updateTokenForm.hidden = true;
+		if (updateModalClearTokenButton) updateModalClearTokenButton.hidden = true;
+		updateModalSecondaryButton.hidden = false;
+		updateModalPrimaryButton.disabled = false;
 
 		if (mode === 'install-ready') {
 			updateModalTitle.textContent = 'Restart AssistantX to update';
 			updateModalSubtitle.textContent = 'The update has been downloaded and is ready to install.';
 			updateModalPrimaryButton.textContent = 'Restart now';
 			updateModalSecondaryButton.textContent = 'Later';
+			return;
+		}
+
+		if (mode === 'downloading') {
+			const progress = Math.max(0, Math.min(100, Number(payload?.downloadProgress || 0)));
+			updateModalTitle.textContent = 'Downloading AssistantX update';
+			updateModalSubtitle.textContent = 'Please keep AssistantX open while the update downloads.';
+			updateModalPrimaryButton.textContent = 'Downloading…';
+			updateModalPrimaryButton.disabled = true;
+			updateModalSecondaryButton.textContent = 'Hide';
+			if (updateModalProgress) updateModalProgress.hidden = false;
+			if (updateProgressLabel) updateProgressLabel.textContent = 'Downloading…';
+			if (updateProgressPercent) updateProgressPercent.textContent = `${Math.round(progress)}%`;
+			if (updateProgressFill) updateProgressFill.style.width = `${Math.round(progress)}%`;
+			return;
+		}
+
+		if (mode === 'error') {
+			updateModalTitle.textContent = 'AssistantX update error';
+			updateModalSubtitle.textContent = 'The updater could not complete this action.';
+			updateModalPrimaryButton.textContent = 'Try again';
+			updateModalSecondaryButton.textContent = 'Later';
+			if (updateModalError) {
+				updateModalError.hidden = false;
+				updateModalError.textContent = payload?.detail || 'Unknown update error.';
+			}
+			return;
+		}
+
+		if (mode === 'auth-required') {
+			updateModalTitle.textContent = 'Integrate Private Updates';
+			updateModalSubtitle.textContent = 'Set your GitHub token to securely access private AssistantX releases.';
+			updateModalPrimaryButton.textContent = 'Save token';
+			updateModalSecondaryButton.textContent = 'Later';
+			if (updateTokenForm) updateTokenForm.hidden = false;
+			if (updateModalError) {
+				updateModalError.hidden = false;
+				updateModalError.textContent = payload?.detail || 'Private update token is required.';
+			}
+			if (updateModalClearTokenButton) updateModalClearTokenButton.hidden = false;
 			return;
 		}
 
@@ -1160,6 +1245,20 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 		}).catch(() => null);
 
+		ipcRenderer.invoke('updater:get-auth-status').then((authState) => {
+			if (authState?.required && !authState?.available) {
+				showUpdateModal({
+					mode: 'auth-required',
+					payload: {
+						status: 'error',
+						detail: 'Private update token is required before checking for updates.',
+						releaseNotes: {},
+						requiresTokenSetup: true,
+					},
+				});
+			}
+		}).catch(() => null);
+
 		ipcRenderer.on('desktop-health', (payload) => {
 			const overall = String(payload?.overall || 'unknown');
 			const componentList = Object.entries(payload?.components || {})
@@ -1178,6 +1277,18 @@ window.addEventListener('DOMContentLoaded', () => {
 			const result = await ipcRenderer.invoke('check-for-updates');
 			if (result?.ok === false && result.reason === 'not-packaged') {
 				appendMessage(log, 'Updater', 'Running in dev mode — download and install the EXE to get automatic updates.', 'system');
+				return;
+			}
+			if (result?.ok === false && (result.reason === 'updater-token-missing' || result.reason === 'updater-token-error')) {
+				showUpdateModal({
+					mode: 'auth-required',
+					payload: {
+						status: 'error',
+						detail: 'Configure your private update token to continue.',
+						releaseNotes: {},
+						requiresTokenSetup: true,
+					},
+				});
 			}
 		});
 	}
@@ -1251,6 +1362,31 @@ window.addEventListener('DOMContentLoaded', () => {
 				return;
 			}
 
+			if (mode === 'auth-required') {
+				const token = String(updateTokenInput?.value || '').trim();
+				if (!token) {
+					appendMessage(log, 'Updater', 'Token is required to access private updates.', 'error');
+					return;
+				}
+				updateModalPrimaryButton.disabled = true;
+				const result = await ipcRenderer.invoke('updater:set-token', token);
+				updateModalPrimaryButton.disabled = false;
+				if (!result?.ok) {
+					appendMessage(log, 'Updater', `Token save failed: ${result?.reason || 'unknown error'}`, 'error');
+					return;
+				}
+				if (updateTokenInput) updateTokenInput.value = '';
+				appendMessage(log, 'Updater', 'Private update token saved securely.', 'system');
+				closeUpdateModal();
+				await ipcRenderer.invoke('check-for-updates');
+				return;
+			}
+
+			if (mode === 'error') {
+				await ipcRenderer.invoke('check-for-updates');
+				return;
+			}
+
 			updateModalPrimaryButton.disabled = true;
 			const result = await ipcRenderer.invoke('download-update');
 			updateModalPrimaryButton.disabled = false;
@@ -1263,12 +1399,26 @@ window.addEventListener('DOMContentLoaded', () => {
 
 		updateModalSecondaryButton.addEventListener('click', async () => {
 			const mode = updateModalBackdrop?.dataset?.mode || 'available';
-			const reason = mode === 'install-ready' ? 'restart-later' : 'later';
-			await ipcRenderer.invoke('defer-update', {
-				reason,
-				source: 'renderer-modal',
-			});
+			if (mode === 'available' || mode === 'install-ready' || mode === 'deferred') {
+				const reason = mode === 'install-ready' ? 'restart-later' : 'later';
+				await ipcRenderer.invoke('defer-update', {
+					reason,
+					source: 'renderer-modal',
+				});
+			}
 			closeUpdateModal();
+		});
+	}
+
+	if (updateModalClearTokenButton && ipcRenderer) {
+		updateModalClearTokenButton.addEventListener('click', async () => {
+			const result = await ipcRenderer.invoke('updater:clear-token');
+			if (!result?.ok) {
+				appendMessage(log, 'Updater', `Token clear failed: ${result?.reason || 'unknown error'}`, 'error');
+				return;
+			}
+			if (updateTokenInput) updateTokenInput.value = '';
+			appendMessage(log, 'Updater', 'Private update token removed.', 'system');
 		});
 	}
 
