@@ -3,25 +3,24 @@
 ## Prerequisites
 
 The source repository is private, and production desktop updates are served
-from authenticated GitHub Releases metadata/assets:
+from GitHub Releases metadata/assets:
 
-```
-Private GitHub repo (CI/CD) -> GitHub Releases -> authenticated electron-updater clients
+``` 
+Private GitHub repo (CI/CD) -> GitHub Releases -> electron-updater clients
 ```
 
-electron-updater is configured with `"private": true` in `build.publish`, so
-runtime update checks authenticate against GitHub when fetching release
-metadata/assets.
+electron-updater is configured with `"private": true` in `build.publish`.
+Runtime update checks on user machines therefore require authenticated access
+to private GitHub release metadata/assets.
 
 ## Source of truth (updater topology)
 
 - **Permanent production updater source**: GitHub Releases (`jarvis-latest`)
 - **Desktop updater provider**: `github` with `owner=wiktorskrabel89-byte`,
   `repo=Assistantx`, and `private=true`.
-- **Authentication**:
-  - CI publishing uses `GH_TOKEN` Fine-Grained PAT.
-  - Runtime update checks use `GH_TOKEN` (if set) or keytar entry
-    `AssistantX / github-updater-token`.
+- **Authentication**: `GH_TOKEN` Fine-Grained PAT in CI for publishing, never
+  hardcoded in the app; runtime private-feed access token stored locally via
+  Electron `safeStorage` (or `GH_TOKEN` env when set by admin).
 
 ## Installer identity + NSIS requirements (must stay stable)
 
@@ -61,11 +60,11 @@ Create at: <https://github.com/settings/personal-access-tokens>
 Keys may be stored as PEM text, PEM with escaped `\n`, base64-encoded PEM, or
 base64-encoded DER.
 
-### End-user machines (keytar vault for private repo access)
+### End-user machines (private updater auth)
 
-For this private-repo topology, end-user updater authentication is required.
-Store a token in keytar (`AssistantX / github-updater-token`) or provide
-`GH_TOKEN` in the runtime environment.
+For private-repo topology, end-user updater tokens are required unless
+`GH_TOKEN` is provided by environment policy. AssistantX stores the updater PAT
+encrypted with Electron `safeStorage` in userData.
 
 ## Required artifacts in the GitHub release
 
