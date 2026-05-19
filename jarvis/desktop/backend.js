@@ -453,6 +453,17 @@ function buildRouteHint(message) {
   return choice || { provider: 'groq', model: 'qwen-32b' };
 }
 
+function deriveAiProfile(message) {
+  const normalized = String(message || '').toLowerCase();
+  if (/(code|refactor|debug|typescript|javascript|python|sql|architecture|bug|compile|test)/i.test(normalized)) {
+    return 'coding';
+  }
+  if (/(search|web|tool|browser|memory|retrieve|lookup)/i.test(normalized)) {
+    return 'tool';
+  }
+  return 'chat';
+}
+
 async function runAiPrompt(prompt, meta = {}) {
   let lastError = null;
   const session = getAccountSession();
@@ -475,6 +486,7 @@ async function runAiPrompt(prompt, meta = {}) {
   recordConversationTurn('user', prompt);
   const history = getConversationHistory();
   const routeHint = buildRouteHint(prompt);
+  const routeProfile = deriveAiProfile(prompt);
   const composedPrompt = promptRegistry.composer.compose({
     taskPrompt: String(prompt || ''),
     memoryContext: history.map((item) => `${item.role}: ${item.content}`).join('\n'),
@@ -483,6 +495,46 @@ async function runAiPrompt(prompt, meta = {}) {
 
   // Signal to the UI that a response is in flight.
   emitRawMessage({ type: 'ai_thinking', inFlight: true });
+
+  if (ipcRenderer?.invoke) {
+    try {
+      const routed = await ipcRenderer.invoke('jarvis-ai-route', {
+        message: composedPrompt,
+        messages: history,
+        profile: routeProfile,
+        contextType: routeProfile === 'coding' ? 'code' : routeProfile === 'tool' ? 'tool' : 'general',
+      });
+      if (routed?.ok && routed?.text) {
+        const answer = String(routed.text || '').trim();
+        if (answer) {
+          recordConversationTurn('assistant', answer);
+          runtimeV2?.cache?.set(`prompt:${routed.provider || routeHint.provider}:${routed.model || routeHint.model}:${composedPrompt}`, { text: answer }, 45_000);
+          runtimeV2?.metrics?.increment('runtime.tokens.request.count', 1, {
+            provider: routed.provider || routeHint.provider,
+            model: routed.model || routeHint.model,
+          });
+          emitRawMessage({ type: 'ai_thinking', inFlight: false });
+          return publishResult({
+            title: 'Jarvis AI',
+            text: answer,
+            summary: answer,
+            source: meta.source || 'local',
+            origin: meta.origin || 'desktop',
+            taskId: meta.taskId || null,
+            provider: routed.provider || null,
+            model: routed.model || null,
+            routeProfile,
+            routeReason: routed?.route?.reason || null,
+          });
+        }
+      }
+      if (routed?.ok === false) {
+        lastError = new Error(String(routed.error || 'Main-process AI routing failed.'));
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
 
   for (const endpoint of getJarvisAiEndpointCandidates()) {
     try {

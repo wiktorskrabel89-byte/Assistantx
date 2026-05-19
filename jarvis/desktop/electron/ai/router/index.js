@@ -5,31 +5,52 @@ const { decideRoute } = require('./policy');
 const { OllamaProvider } = require('../providers/ollama');
 const { CloudApiProvider } = require('../providers/cloud-api');
 
-const LOCAL_MODELS = {
-  fast: 'gemma4:e4b',
-  coding: 'qwen2.5-coder:14b',
+const ROUTING_PROFILES = {
+  chat: {
+    local: 'gemma4:e4b',
+  },
+  coding: {
+    local: 'qwen2.5-coder:14b',
+  },
+  tool: {
+    local: 'qwen2.5-coder:14b',
+  },
 };
 
-const CLOUD_MODELS = {
-  fast: 'google/gemma-2-9b-it',
-  coding: 'qwen/qwen-2.5-coder-14b-instruct',
-};
+const REQUIRED_LOCAL_MODELS = ['gemma4:e4b', 'qwen2.5-coder:14b'];
+const DEFAULT_CLOUD_PROVIDER_ORDER = ['groq', 'openrouter', 'anthropic'];
 
 class AIRouter {
   constructor(options = {}) {
     this.ollama = options.ollama || new OllamaProvider(options.ollamaConfig || {});
     this.cloud = options.cloud || new CloudApiProvider(options.cloudConfig || {});
+    this.requiredModels = Array.isArray(options.requiredModels) && options.requiredModels.length > 0
+      ? options.requiredModels
+      : REQUIRED_LOCAL_MODELS;
+    this.cloudProviderOrder = normalizeProviderOrder(
+      options.cloudProviderOrder || process.env.JARVIS_CLOUD_PROVIDER_ORDER || DEFAULT_CLOUD_PROVIDER_ORDER,
+    );
   }
 
   async getAvailability() {
-    const ollamaAvailable = await this.ollama.isHealthy();
+    const ollamaHealth = await this.ollama.getHealth(this.requiredModels);
+    const cloudReadiness = await this.cloud.getReadiness();
+    const ollamaAvailable = Boolean(ollamaHealth.healthy && ollamaHealth.requiredModelsPresent);
     return {
       ollama_available: Boolean(ollamaAvailable),
+      ollama_healthy: Boolean(ollamaHealth.healthy),
+      required_models: ollamaHealth.requiredModels,
+      installed_models: ollamaHealth.installedModels,
+      missing_models: ollamaHealth.missingModels,
+      required_models_present: ollamaHealth.requiredModelsPresent,
+      cloud: cloudReadiness,
+      cloud_provider_order: this.cloudProviderOrder,
       mode: ollamaAvailable ? 'local' : 'cloud-fallback',
     };
   }
 
   async routeRequest(request = {}, onChunk = () => {}) {
+    const profile = normalizeProfile(request?.profile || inferProfile(request));
     const analysis = analyzeRequest({
       message: request?.message || extractLastMessage(request?.messages),
       contextSize: request?.contextSize,
@@ -37,12 +58,17 @@ class AIRouter {
       retryCount: request?.retryCount || 0,
       confidence: request?.confidence,
     });
-    const ollamaAvailable = await this.ollama.isHealthy();
-    const route = decideRoute(analysis, { ollamaAvailable });
+    const availability = await this.getAvailability();
+    const route = decideRoute(analysis, {
+      availability,
+      profile,
+      cloudProviderOrder: this.cloudProviderOrder,
+    });
     const resolvedRequest = {
       ...request,
       messages: normalizeMessages(request),
       model: route.model,
+      provider: route.provider,
       options: {
         temperature: route.reason === 'escalation' ? 0.2 : 0.7,
         ...(request.options || {}),
@@ -50,14 +76,27 @@ class AIRouter {
       keepAlive: route.keepAlive,
     };
 
-    if (route.provider === 'ollama' && ollamaAvailable) {
-      return this.ollama.stream(resolvedRequest, onChunk);
+    if (route.provider === 'ollama' && availability.ollama_available) {
+      const response = await this.ollama.stream(resolvedRequest, onChunk);
+      return {
+        ...response,
+        route,
+        profile,
+        availability,
+      };
     }
 
-    return this.cloud.stream({
+    const response = await this.cloud.stream({
       ...resolvedRequest,
-      model: route.reason === 'escalation' ? CLOUD_MODELS.coding : CLOUD_MODELS.fast,
+      provider: route.provider,
+      model: route.model,
     }, onChunk);
+    return {
+      ...response,
+      route,
+      profile,
+      availability,
+    };
   }
 }
 
@@ -77,9 +116,34 @@ function normalizeMessages(request = {}) {
   return [{ role: 'user', content: String(request.message || '') }];
 }
 
+function inferProfile(request = {}) {
+  const explicitContext = String(request?.contextType || '').toLowerCase();
+  if (explicitContext === 'code') return 'coding';
+  if (explicitContext === 'tool') return 'tool';
+  const content = `${request?.message || ''} ${extractLastMessage(request?.messages)}`.toLowerCase();
+  if (/(code|refactor|debug|architecture|typescript|python|javascript|sql)/i.test(content)) return 'coding';
+  if (/(search|tool|web|browser|retrieve|memory)/i.test(content)) return 'tool';
+  return 'chat';
+}
+
+function normalizeProfile(profile) {
+  const normalized = String(profile || '').toLowerCase().trim();
+  if (normalized === 'coding' || normalized === 'tool') return normalized;
+  return 'chat';
+}
+
+function normalizeProviderOrder(input) {
+  const values = Array.isArray(input) ? input : String(input || '').split(',');
+  const normalized = values
+    .map((item) => String(item || '').toLowerCase().trim())
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index);
+  return normalized.length > 0 ? normalized : [...DEFAULT_CLOUD_PROVIDER_ORDER];
+}
+
 module.exports = {
   AIRouter,
-  LOCAL_MODELS,
-  CLOUD_MODELS,
+  ROUTING_PROFILES,
+  REQUIRED_LOCAL_MODELS,
+  DEFAULT_CLOUD_PROVIDER_ORDER,
 };
-

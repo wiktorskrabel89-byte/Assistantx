@@ -1194,10 +1194,23 @@ window.addEventListener('DOMContentLoaded', () => {
 					appendMessage(log, 'Local AI', 'Ollama is ready. GPU-local routing enabled.', 'system');
 					return;
 				}
+				const missingModels = Array.isArray(state?.missing_models) ? state.missing_models : [];
+				const readyProviders = Object.entries(state?.cloud?.providers || {})
+					.filter(([, provider]) => Boolean(provider?.ready))
+					.map(([name]) => name);
+				if (state?.ollama_healthy && missingModels.length > 0) {
+					appendMessage(
+						log,
+						'Local AI',
+						`Ollama is reachable but missing required models: ${missingModels.join(', ')}. Running cloud fallback (${readyProviders.join(', ') || 'no cloud provider keys detected'}).`,
+						'system',
+					);
+					return;
+				}
 				appendMessage(
 					log,
 					'Local AI',
-					'Ollama not detected. Cloud fallback is active. Run "npm run setup:local-ai" in jarvis/desktop or use setup:install-local IPC.',
+					`Ollama not detected. Cloud fallback is active (${readyProviders.join(', ') || 'no cloud provider keys detected'}). Run "npm run setup:local-ai" in jarvis/desktop or use setup:install-local IPC.`,
 					'system',
 				);
 			}).catch(() => null);

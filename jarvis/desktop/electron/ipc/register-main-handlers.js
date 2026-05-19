@@ -28,6 +28,7 @@ function createMainIpcHandlers(deps) {
     ensureDbReady,
     getSidecarStatus,
     checkLocalAiAvailability,
+    routeAiRequest,
     installLocalAiEngine,
     restartSidecar,
     startupDiagnostics,
@@ -237,6 +238,44 @@ function createMainIpcHandlers(deps) {
           headers: {
             'content-type': 'text/plain',
           },
+        };
+      }
+    },
+
+    'jarvis-ai-route': async (_event, payload) => {
+      const auth = await permissions.authorize('jarvis-ai-request');
+      if (!auth.allowed) return denied('jarvis-ai-request', auth.reason);
+      const body = validatePlainObject(payload) || {};
+      const message = validateString(body.message, { allowEmpty: false, maxLen: 30000 });
+      if (!message) {
+        return {
+          ok: false,
+          error: 'message-required',
+        };
+      }
+      const messages = Array.isArray(body.messages)
+        ? body.messages
+          .slice(-20)
+          .map((entry) => ({
+            role: validateString(entry?.role, { allowEmpty: false, maxLen: 20 }) || 'user',
+            content: validateString(entry?.content, { allowEmpty: true, maxLen: 16000 }) || '',
+          }))
+        : undefined;
+      const profile = validateString(body.profile, { allowEmpty: true, maxLen: 20 }) || 'chat';
+      const contextType = validateString(body.contextType, { allowEmpty: true, maxLen: 20 }) || 'general';
+      try {
+        return await routeAiRequest({
+          message,
+          messages,
+          profile,
+          contextType,
+          retryCount: validateInteger(body.retryCount, { min: 0, max: 5, fallback: 0 }),
+          contextSize: validateString(body.contextSize, { allowEmpty: true, maxLen: 20 }) || undefined,
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          error: String(error?.message || error || 'ai-router-failed'),
         };
       }
     },
