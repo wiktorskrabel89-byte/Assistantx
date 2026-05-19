@@ -139,6 +139,19 @@ function HomeContent() {
   const [isAdmin, setIsAdmin] = useState(false);
   const adminCheckedRef = useRef(false);
   const [sandboxInitCode, setSandboxInitCode] = useState<{ html: string; css: string; js: string } | null>(null);
+  const [guestTourOpen, setGuestTourOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const shouldOpenTour = window.sessionStorage.getItem("assistantx.guest-tour") === "1";
+      if (shouldOpenTour) {
+        window.sessionStorage.removeItem("assistantx.guest-tour");
+      }
+      return shouldOpenTour;
+    } catch {
+      return false;
+    }
+  });
+  const [guestTourStep, setGuestTourStep] = useState(1);
 
   const appMode: AppMode = state.appMode ?? "ai-chat";
   const pinnedAddOns: string[] = state.pinnedAddOns ?? [];
@@ -235,6 +248,25 @@ function HomeContent() {
 
   const isChatTab = visibleTab === "chat";
 
+  const goToTourStep = useCallback((step: number) => {
+    setGuestTourStep(step);
+    if (step === 1) {
+      setAppMode("ai-chat");
+      setActiveAppTab("chat");
+      window.dispatchEvent(new CustomEvent("assistantx:open-apps-panel"));
+      return;
+    }
+    if (step === 2) {
+      setAppMode("ai-code");
+      setActiveAppTab("codebase");
+      return;
+    }
+    if (step === 3) {
+      setAppMode("ai-code");
+      setActiveAppTab("codebase");
+    }
+  }, [setAppMode]);
+
   if (!loaded) {
     return <WorkspaceLoadingScreen />;
   }
@@ -274,6 +306,96 @@ function HomeContent() {
           </main>
         )}
       </div>
+      {guestTourOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close guided tour"
+            className="fixed inset-0 z-[70] bg-black/50"
+            onClick={() => setGuestTourOpen(false)}
+          />
+          <section className="fixed left-1/2 top-1/2 z-[80] w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border bg-card p-6 shadow-2xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Guided Tour · Step {guestTourStep}/3</div>
+            {guestTourStep === 1 ? (
+              <>
+                <h2 className="mt-2 text-xl font-semibold">Connect GitHub</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Open Apps panel and connect GitHub to unlock repo browsing and code workflows.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => goToTourStep(1)}
+                  className="mt-4 rounded-xl border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  Open Apps panel
+                </button>
+              </>
+            ) : null}
+            {guestTourStep === 2 ? (
+              <>
+                <h2 className="mt-2 text-xl font-semibold">Open Codebase</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Switch to AI Code mode and open the Codebase tab to load your repository tree.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => goToTourStep(2)}
+                  className="mt-4 rounded-xl border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  Open Codebase
+                </button>
+              </>
+            ) : null}
+            {guestTourStep === 3 ? (
+              <>
+                <h2 className="mt-2 text-xl font-semibold">Analyze code with 120B</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Select a file and click “Ask AI about this file” to run coding analysis with the 120B model profile.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => goToTourStep(3)}
+                  className="mt-4 rounded-xl border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  Keep me on Codebase
+                </button>
+              </>
+            ) : null}
+            <div className="mt-6 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setGuestTourOpen(false)}
+                className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
+              >
+                Close tour
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={guestTourStep === 1}
+                  onClick={() => goToTourStep(Math.max(1, guestTourStep - 1))}
+                  className="rounded-xl border border-border px-4 py-2 text-sm font-medium disabled:opacity-50 hover:bg-accent"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (guestTourStep >= 3) {
+                      setGuestTourOpen(false);
+                      return;
+                    }
+                    goToTourStep(guestTourStep + 1);
+                  }}
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  {guestTourStep >= 3 ? "Finish" : "Next"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }

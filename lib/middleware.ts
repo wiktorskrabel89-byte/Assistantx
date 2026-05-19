@@ -1,5 +1,10 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import {
+  detectPreferredPublicLanguage,
+  normalizePublicLanguage,
+  UI_LANGUAGE_COOKIE_NAME,
+} from '@/app/lib/ui-language'
 
 const PUBLIC_METADATA_PATHS = new Set(['/manifest.json', '/manifest.webmanifest'])
 const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support']
@@ -67,10 +72,17 @@ export async function updateSession(request: NextRequest) {
   const nonce = btoa(String.fromCharCode(...nonceBytes))
   const csp = buildCsp(nonce)
   const pathname = request.nextUrl.pathname
+  const existingLangCookie = request.cookies.get(UI_LANGUAGE_COOKIE_NAME)?.value ?? null
+  const detectedUiLanguage = detectPreferredPublicLanguage({
+    existingCookie: existingLangCookie,
+    countryCode: request.headers.get('x-vercel-ip-country'),
+    acceptLanguage: request.headers.get('accept-language'),
+  })
 
   // Propagate the nonce to server components via a request header
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
+  requestHeaders.set('x-assistantx-ui-language', detectedUiLanguage)
 
   let supabaseResponse = NextResponse.next({
     request: { headers: requestHeaders },
@@ -81,6 +93,16 @@ export async function updateSession(request: NextRequest) {
     || !hasSupabaseConfig()
     || isAuthOptionalPath(pathname)
   ) {
+    if (!existingLangCookie) {
+      supabaseResponse.cookies.set(UI_LANGUAGE_COOKIE_NAME, detectedUiLanguage, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+      })
+    } else if (normalizePublicLanguage(existingLangCookie) !== detectedUiLanguage) {
+      requestHeaders.set('x-assistantx-ui-language', normalizePublicLanguage(existingLangCookie))
+    }
     supabaseResponse.headers.set('Content-Security-Policy', csp)
     supabaseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
     return supabaseResponse
@@ -164,6 +186,14 @@ export async function updateSession(request: NextRequest) {
   // is always present on the actual response that gets returned).
   supabaseResponse.headers.set('Content-Security-Policy', csp)
   supabaseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
+  if (!existingLangCookie) {
+    supabaseResponse.cookies.set(UI_LANGUAGE_COOKIE_NAME, detectedUiLanguage, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    })
+  }
 
   return supabaseResponse
 }
