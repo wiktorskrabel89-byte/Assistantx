@@ -815,10 +815,6 @@ function prepareForQuitAndInstall(version = null) {
   telemetryBus.publish('updater.install.started', { version: version || updateState.version || null });
 }
 
-function resetQuitAndInstallPreparation() {
-  appIsInstallingUpdate = false;
-}
-
 function emitUpdateStatus(status, detail, extra = {}) {
   updateState = {
     ...updateState,

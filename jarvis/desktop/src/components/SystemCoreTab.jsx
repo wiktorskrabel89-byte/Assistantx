@@ -16,7 +16,7 @@ export default function SystemCoreTab() {
 
   useEffect(() => {
     if (!serverApi) return undefined;
-    serverApi.getStatus().then((next) => setStatus(next || status)).catch(() => null);
+    serverApi.getStatus().then((next) => setStatus((prev) => next || prev)).catch(() => null);
 
     const unsubApproval = serverApi.onApprovalRequired((action) => {
       setApprovals((prev) => [action, ...prev]);
@@ -26,7 +26,7 @@ export default function SystemCoreTab() {
     });
     const unsubActivity = serverApi.onActivity((event) => {
       setActivity((prev) => [event, ...prev].slice(0, 100));
-      serverApi.getStatus().then((next) => setStatus(next || status)).catch(() => null);
+      serverApi.getStatus().then((next) => setStatus((prev) => next || prev)).catch(() => null);
     });
 
     return () => {
@@ -42,7 +42,7 @@ export default function SystemCoreTab() {
     if (!paired?.ok) return;
     await serverApi.connect();
     const next = await serverApi.getStatus();
-    setStatus(next || status);
+    setStatus((prev) => next || prev);
   };
 
   const handleAutonomy = async (level) => {
@@ -56,7 +56,7 @@ export default function SystemCoreTab() {
     }
     await serverApi.setAutonomy(level);
     const next = await serverApi.getStatus();
-    setStatus(next || status);
+    setStatus((prev) => next || prev);
   };
 
   return (
