@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
+const crypto = require('crypto');
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater, safeStorage } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
 const { getToken: getDeviceToken } = require('./auth');
 const {
@@ -21,21 +22,13 @@ const { buildSecureWebPreferences } = require('./electron/main/window-security')
 const { createMainIpcHandlers } = require('./electron/ipc/register-main-handlers');
 const { createUpdateCoordinator } = require('./electron/updater/coordinator');
 const { createPermissionPolicy } = require('./electron/permissions/policy');
+const { ServerManager } = require('./electron/server/server-manager');
+const { AppStateMachine } = require('./electron/core/app-state-machine');
 const { assertNoDynamicCodeExecution, sanitizeAuditValue } = require('./electron/security/guardrails');
 const { emitSessionChanged } = require('./electron/auth/events');
 const { redactUrl } = require('./electron/auth/redaction');
 const { bindAuthEvents } = require('./electron/auth/sync');
 const { generateOAuthState, parseAuthCallback, toSafeSessionView } = require('./electron/auth/validators');
-const {
-  buildMetadataSignatureUrl,
-  classifyInstallerBlocker,
-  classifySignatureDiagnostic,
-  classifyUpdateVersionSanity,
-  extractLatestFeedMetadata,
-  isUserWithinStagedRollout,
-  validateLatestFeedMetadata,
-  verifyDetachedMetadataSignature,
-} = require('./electron/updater/feed-metadata');
 const { AIRouter } = require('./electron/ai/router');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
@@ -63,6 +56,7 @@ const permissions = createPermissionPolicy({
     startupDiagnostics.pushEvent('permissions', 'info', 'Permission policy decision.', entry);
   },
 });
+const appStateMachine = new AppStateMachine();
 
 function securityAudit(entry = {}) {
   startupDiagnostics.pushEvent('security', 'info', 'Security audit event.', {
@@ -79,6 +73,10 @@ const AUTH_CALLBACK_URL = `${AUTH_PROTOCOL}://auth/callback`;
 const SILENT_REFRESH_INTERVAL_MS = 5 * 60_000;
 const AUTH_LOGIN_TIMEOUT_MS = 5 * 60_000;
 const AUTH_LOG_FILE_NAME = 'auth.log';
+const SERVER_SYNC_STORE_FILE = 'server-sync.enc';
+const SERVER_FULL_CONTROL_CONSENT_FILE = 'server-full-control-consent.enc';
+const FLOATING_WINDOW_POSITION_FILE = 'floating-window-pos.json';
+const SERVER_TOOL_ALLOW_LIST = ['list_files', 'delete_file', 'manage_service', 'get_metrics', 'exec_safe'];
 
 function formatLogArg(arg) {
   if (typeof arg === 'string') return arg;
@@ -104,6 +102,69 @@ function appendAuthLog(level, args) {
 function log(...args) {
   console.log(...args);
   appendAuthLog('info', args);
+}
+
+function ensureUserDataDir() {
+  const userDataPath = app.getPath('userData');
+  fs.mkdirSync(userDataPath, { recursive: true });
+  return userDataPath;
+}
+
+function getServerSyncStorePath() {
+  return path.join(ensureUserDataDir(), SERVER_SYNC_STORE_FILE);
+}
+
+function getFullControlConsentPath() {
+  return path.join(ensureUserDataDir(), SERVER_FULL_CONTROL_CONSENT_FILE);
+}
+
+function writeEncryptedJson(filePath, payload) {
+  if (!safeStorage || !safeStorage.isEncryptionAvailable()) {
+    return { ok: false, error: 'safeStorage-unavailable' };
+  }
+  try {
+    const encrypted = safeStorage.encryptString(JSON.stringify(payload));
+    fs.writeFileSync(filePath, encrypted);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: `safeStorage-write-failed:${error?.message || 'unknown'}` };
+  }
+}
+
+function readEncryptedJson(filePath) {
+  if (!safeStorage || !safeStorage.isEncryptionAvailable()) {
+    return { ok: false, error: 'safeStorage-unavailable' };
+  }
+  if (!fs.existsSync(filePath)) {
+    return { ok: false, error: 'store-not-found' };
+  }
+  try {
+    const encrypted = fs.readFileSync(filePath);
+    const raw = safeStorage.decryptString(encrypted);
+    return { ok: true, value: JSON.parse(raw) };
+  } catch (error) {
+    return { ok: false, error: `safeStorage-read-failed:${error?.message || 'unknown'}` };
+  }
+}
+
+function toBase64Url(input) {
+  return Buffer.from(input).toString('base64url');
+}
+
+function createServerJwt(syncKey, serverIp) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const payload = {
+    iss: 'jarvis-desktop',
+    sub: `desktop@${serverIp}`,
+    iat: now,
+    exp: now + (60 * 60),
+  };
+  const encodedHeader = toBase64Url(JSON.stringify(header));
+  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const data = `${encodedHeader}.${encodedPayload}`;
+  const signature = crypto.createHmac('sha256', String(syncKey || '')).update(data).digest('base64url');
+  return `${data}.${signature}`;
 }
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -443,6 +504,7 @@ function stopSidecar() {
 
 let win;
 let overlayWin;
+let floatingWin;
 let tray;
 const pendingLauncherConfirmations = new Map();
 let appIsInstallingUpdate = false;
@@ -461,6 +523,34 @@ let updateState = {
 };
 let pendingAuthFlow = null;
 let silentRefreshTimer = null;
+function getFloatingWindowPositionPath() {
+  return path.join(ensureUserDataDir(), FLOATING_WINDOW_POSITION_FILE);
+}
+
+function readFloatingWindowBounds() {
+  try {
+    const filePath = getFloatingWindowPositionPath();
+    if (!fs.existsSync(filePath)) return null;
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (!raw || typeof raw !== 'object') return null;
+    const x = Number(raw.x);
+    const y = Number(raw.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  } catch {
+    return null;
+  }
+}
+
+function saveFloatingWindowBounds() {
+  try {
+    if (!floatingWin || floatingWin.isDestroyed()) return;
+    const bounds = floatingWin.getBounds();
+    fs.writeFileSync(getFloatingWindowPositionPath(), JSON.stringify({ x: bounds.x, y: bounds.y }, null, 2));
+  } catch {
+    // ignore
+  }
+}
 
 function sendToRenderer(channel, payload) {
   if (win && !win.isDestroyed()) {
@@ -469,6 +559,124 @@ function sendToRenderer(channel, payload) {
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.webContents.send(channel, payload);
   }
+  if (floatingWin && !floatingWin.isDestroyed()) {
+    floatingWin.webContents.send(channel, payload);
+  }
+}
+
+function setAppStateHint(state, active = false, source = 'renderer') {
+  const normalizedState = String(state || '').toUpperCase();
+  if (normalizedState === 'LISTENING') appStateMachine.setListening(Boolean(active), source);
+  if (normalizedState === 'SPEAKING') appStateMachine.setSpeaking(Boolean(active), source);
+  if (normalizedState === 'THINKING') appStateMachine.setThinking(Boolean(active), source);
+  if (normalizedState === 'EXECUTING') appStateMachine.setExecuting(Boolean(active), source);
+}
+
+function getServerPairing() {
+  const result = readEncryptedJson(getServerSyncStorePath());
+  if (!result.ok) return null;
+  return result.value && typeof result.value === 'object' ? result.value : null;
+}
+
+function pairServer({ serverIp, syncKey }) {
+  const payload = {
+    serverIp: String(serverIp || '').trim(),
+    syncKey: String(syncKey || '').trim(),
+    pairedAt: new Date().toISOString(),
+  };
+  if (!payload.serverIp || !payload.syncKey) {
+    return { ok: false, error: 'server-ip-and-sync-key-required' };
+  }
+  return writeEncryptedJson(getServerSyncStorePath(), payload);
+}
+
+function getFullControlConsent() {
+  const result = readEncryptedJson(getFullControlConsentPath());
+  if (!result.ok) return { accepted: false };
+  return {
+    accepted: Boolean(result.value?.accepted),
+    acceptedAt: result.value?.acceptedAt || null,
+  };
+}
+
+function acceptFullControlDisclaimer() {
+  const write = writeEncryptedJson(getFullControlConsentPath(), {
+    accepted: true,
+    acceptedAt: new Date().toISOString(),
+  });
+  if (!write.ok) return write;
+  return { ok: true, accepted: true };
+}
+
+const serverManager = new ServerManager({
+  permissions,
+  logger: log,
+  appState: appStateMachine,
+  allowFullControl: () => Boolean(getFullControlConsent().accepted),
+  tokenFactory: async () => {
+    const pairing = getServerPairing();
+    if (!pairing?.syncKey || !pairing?.serverIp) {
+      throw new Error('server-pairing-not-configured');
+    }
+    return createServerJwt(pairing.syncKey, pairing.serverIp);
+  },
+});
+
+serverManager.on('approval-required', (action) => {
+  sendToRenderer('server-approval-required', action);
+});
+
+serverManager.on('activity', (event) => {
+  sendToRenderer('server-activity-log', event);
+});
+
+serverManager.on('status', (status) => {
+  sendToRenderer('server-status', status);
+});
+
+appStateMachine.on('state-changed', ({ state, previous, source, at }) => {
+  sendToRenderer('app-state-changed', { state, previous, source, at });
+  serverManager.sendState(state);
+});
+
+function connectServer() {
+  const pairing = getServerPairing();
+  if (!pairing?.serverIp || !pairing?.syncKey) {
+    return { ok: false, error: 'server-pairing-not-configured' };
+  }
+  return serverManager.connect(pairing.serverIp);
+}
+
+function disconnectServer() {
+  return serverManager.disconnect();
+}
+
+function forceServerDisconnect() {
+  return serverManager.killSwitch();
+}
+
+function getServerStatus() {
+  return serverManager.getStatus();
+}
+
+function setServerAutonomy(level) {
+  return serverManager.setAutonomyLevel(level);
+}
+
+function approveServerAction(id) {
+  const result = serverManager.approveAction(id);
+  if (result.ok) sendToRenderer('server-approval-resolved', { id, approved: true });
+  return result;
+}
+
+function rejectServerAction(id) {
+  const result = serverManager.rejectAction(id);
+  if (result.ok) sendToRenderer('server-approval-resolved', { id, approved: false });
+  return result;
+}
+
+function execServerTool(tool, args = {}) {
+  return serverManager.execTool(tool, args);
 }
 
 function emitDesktopHealth() {
@@ -572,24 +780,29 @@ async function installLocalAiEngine() {
 
 async function routeAiRequest(payload = {}) {
   const request = payload && typeof payload === 'object' ? payload : {};
-  const response = await aiRouter.routeRequest({
-    message: request.message || '',
-    messages: Array.isArray(request.messages) ? request.messages : undefined,
-    profile: request.profile,
-    contextType: request.contextType,
-    contextSize: request.contextSize,
-    retryCount: request.retryCount,
-    options: request.options,
-  });
-  return {
-    ok: true,
-    text: String(response?.text || ''),
-    provider: response?.provider || response?.route?.provider || 'unknown',
-    model: response?.model || response?.route?.model || 'unknown',
-    route: response?.route || null,
-    profile: response?.profile || null,
-    availability: response?.availability || null,
-  };
+  appStateMachine.setThinking(true, 'ai-router');
+  try {
+    const response = await aiRouter.routeRequest({
+      message: request.message || '',
+      messages: Array.isArray(request.messages) ? request.messages : undefined,
+      profile: request.profile,
+      contextType: request.contextType,
+      contextSize: request.contextSize,
+      retryCount: request.retryCount,
+      options: request.options,
+    });
+    return {
+      ok: true,
+      text: String(response?.text || ''),
+      provider: response?.provider || response?.route?.provider || 'unknown',
+      model: response?.model || response?.route?.model || 'unknown',
+      route: response?.route || null,
+      profile: response?.profile || null,
+      availability: response?.availability || null,
+    };
+  } finally {
+    appStateMachine.setThinking(false, 'ai-router');
+  }
 }
 
 function allowWindowCloseForQuit() {
@@ -630,7 +843,7 @@ function getJarvisWebBaseUrl() {
 }
 
 function getDesktopWindows() {
-  return [win, overlayWin].filter((candidate) => candidate && !candidate.isDestroyed());
+  return [win, overlayWin, floatingWin].filter((candidate) => candidate && !candidate.isDestroyed());
 }
 
 bindAuthEvents(() => getDesktopWindows());
@@ -879,6 +1092,8 @@ function createWindow() {
     });
     sendToRenderer('auto-update-status', updateState);
     sendToRenderer('desktop-health', startupDiagnostics.snapshot());
+    sendToRenderer('server-status', getServerStatus());
+    sendToRenderer('app-state-changed', { state: appStateMachine.getState(), previous: null, source: 'window-ready' });
     const safeSession = getSafeAccountSession();
     if (safeSession) {
       sendToRenderer('auth:session-changed', {
@@ -929,6 +1144,37 @@ function createLauncherOverlayWindow() {
   });
 }
 
+function createJarvisFloatingWindow() {
+  const savedBounds = readFloatingWindowBounds();
+  floatingWin = new BrowserWindow({
+    width: 380,
+    height: 700,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    show: false,
+    skipTaskbar: false,
+    backgroundColor: '#00000000',
+    x: savedBounds?.x,
+    y: savedBounds?.y,
+    title: 'Jarvis System Core',
+    webPreferences: buildSecureWebPreferences({ preload: path.join(__dirname, 'preload.js') }),
+  });
+  floatingWin.loadFile('system-core.html');
+  floatingWin.on('move', () => saveFloatingWindowBounds());
+  floatingWin.on('close', (event) => {
+    if (!allowWindowCloseForQuit()) {
+      event.preventDefault();
+      floatingWin.hide();
+    }
+  });
+  floatingWin.webContents.on('did-finish-load', () => {
+    floatingWin.webContents.send('server-activity-log', { type: 'floating-window-ready' });
+    floatingWin.webContents.send('app-state-changed', { state: appStateMachine.getState(), previous: null, source: 'bootstrap' });
+  });
+}
+
 async function showLauncherOverlay() {
   if (!overlayWin || overlayWin.isDestroyed()) createLauncherOverlayWindow();
   const [recent, providerStatus, catalogHealth] = await Promise.all([
@@ -951,9 +1197,19 @@ function toggleLauncherOverlay() {
 
 function registerLauncherShortcut() {
   const accelerator = process.platform === 'darwin' ? 'CommandOrControl+Space' : 'Control+Space';
-  globalShortcut.unregisterAll();
+  globalShortcut.unregister(accelerator);
   globalShortcut.register(accelerator, () => {
     toggleLauncherOverlay();
+  });
+}
+
+function registerFloatingShortcut() {
+  const accelerator = process.env.JARVIS_FLOATING_SHORTCUT || 'Control+Shift+J';
+  globalShortcut.unregister(accelerator);
+  globalShortcut.register(accelerator, () => {
+    if (!floatingWin || floatingWin.isDestroyed()) createJarvisFloatingWindow();
+    if (floatingWin.isVisible()) floatingWin.hide();
+    else floatingWin.show();
   });
 }
 
@@ -996,6 +1252,13 @@ function createTray() {
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Jarvis', click: () => win.show() },
     { label: 'Open Launcher', click: () => toggleLauncherOverlay() },
+    {
+      label: 'Open System Core',
+      click: () => {
+        if (!floatingWin || floatingWin.isDestroyed()) createJarvisFloatingWindow();
+        floatingWin.show();
+      },
+    },
     { label: 'Check for updates', click: () => void checkForUpdates('tray-manual') },
     { type: 'separator' },
     {
@@ -1063,8 +1326,19 @@ createMainIpcHandlers({
   getMainWindow: () => win,
   getOverlayWindow: () => overlayWin,
   createLauncherOverlayWindow,
-  prepareForQuitAndInstall,
-  resetQuitAndInstallPreparation,
+  pairServer,
+  connectServer,
+  disconnectServer,
+  getServerStatus,
+  execServerTool,
+  approveServerAction,
+  rejectServerAction,
+  setServerAutonomy,
+  forceServerDisconnect,
+  getFullControlConsent,
+  acceptFullControlDisclaimer,
+  setAppStateHint,
+  serverToolAllowList: SERVER_TOOL_ALLOW_LIST,
   pendingLauncherConfirmations,
   permissions,
   securityAudit,
@@ -1146,8 +1420,10 @@ app.whenReady().then(async () => {
   startSidecar();
   createWindow();
   createLauncherOverlayWindow();
+  createJarvisFloatingWindow();
   createTray();
   registerLauncherShortcut();
+  registerFloatingShortcut();
   setupAutoUpdater();
   setLauncherPhase('loading-models', 'Loading AI runtime models.');
   launcherService.refreshCatalog({ reason: 'app-ready' })
@@ -1186,12 +1462,15 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   stopSilentRefreshLoop();
+  serverManager.disconnect();
   stopSidecar();
 });
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+    createLauncherOverlayWindow();
+    createJarvisFloatingWindow();
   } else {
     win.show();
   }

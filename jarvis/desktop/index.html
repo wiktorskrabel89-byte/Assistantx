@@ -35,6 +35,25 @@
       padding: 18px;
     }
 
+    @keyframes shimmer {
+      0% { background-position: -220px 0; }
+      100% { background-position: 220px 0; }
+    }
+
+    body.state-thinking::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 6px;
+      height: 100vh;
+      background: linear-gradient(90deg, rgba(56, 189, 248, 0.1), rgba(56, 189, 248, 0.8), rgba(56, 189, 248, 0.1));
+      background-size: 220px 100%;
+      animation: shimmer 1.2s linear infinite;
+      pointer-events: none;
+      z-index: 999;
+    }
+
     /* ── Header ─────────────────────────────────────────────────────────── */
     .app-header {
       max-width: 1200px;

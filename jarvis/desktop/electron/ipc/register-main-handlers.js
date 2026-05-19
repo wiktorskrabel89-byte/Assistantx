@@ -52,8 +52,19 @@ function createMainIpcHandlers(deps) {
     getMainWindow,
     getOverlayWindow,
     createLauncherOverlayWindow,
-    prepareForQuitAndInstall,
-    resetQuitAndInstallPreparation,
+    pairServer,
+    connectServer,
+    disconnectServer,
+    getServerStatus,
+    execServerTool,
+    approveServerAction,
+    rejectServerAction,
+    setServerAutonomy,
+    forceServerDisconnect,
+    getFullControlConsent,
+    acceptFullControlDisclaimer,
+    setAppStateHint,
+    serverToolAllowList,
     permissions,
     securityAudit,
   } = deps;
@@ -339,6 +350,74 @@ function createMainIpcHandlers(deps) {
       const auth = await permissions.authorize('open-account-login');
       if (!auth.allowed) return denied('open-account-login', auth.reason);
       return beginDesktopLogin({ parentWindow: getMainWindow() });
+    },
+
+    'server:pair': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('server:pair', 'payload-must-be-object');
+      const serverIp = validateString(body.serverIp, { allowEmpty: false, maxLen: 200 });
+      const syncKey = validateString(body.syncKey, { allowEmpty: false, maxLen: 1024 });
+      if (!serverIp) return invalidResult('server:pair', 'server-ip-required');
+      if (!syncKey) return invalidResult('server:pair', 'sync-key-required');
+      return pairServer({ serverIp, syncKey });
+    },
+
+    'server:connect': () => connectServer(),
+    'server:disconnect': () => disconnectServer(),
+    'server:status': () => getServerStatus(),
+
+    'server:exec-tool': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('server:exec-tool', 'payload-must-be-object');
+      const tool = validateString(body.tool, { allowEmpty: false, maxLen: 120 });
+      if (!tool) return invalidResult('server:exec-tool', 'tool-required');
+      if (Array.isArray(serverToolAllowList) && !serverToolAllowList.includes(tool)) {
+        return invalidResult('server:exec-tool', 'tool-not-allowed');
+      }
+      const args = validatePlainObject(body.args) || {};
+      try {
+        const result = await execServerTool(tool, args);
+        return { ok: true, result };
+      } catch (error) {
+        return { ok: false, error: String(error?.message || 'server-tool-failed') };
+      }
+    },
+
+    'server:approve': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('server:approve', 'payload-must-be-object');
+      const id = validateString(body.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('server:approve', 'id-required');
+      return approveServerAction(id);
+    },
+
+    'server:reject': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('server:reject', 'payload-must-be-object');
+      const id = validateString(body.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('server:reject', 'id-required');
+      return rejectServerAction(id);
+    },
+
+    'server:set-autonomy': (_event, payload) => {
+      const level = validateString(payload, { allowEmpty: false, maxLen: 20 });
+      if (!level) return invalidResult('server:set-autonomy', 'autonomy-level-required');
+      return setServerAutonomy(level);
+    },
+
+    'server:force-disconnect': () => forceServerDisconnect(),
+    'server:get-full-control-consent': () => getFullControlConsent(),
+    'server:accept-full-control-disclaimer': () => acceptFullControlDisclaimer(),
+
+    'app-state:hint': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('app-state:hint', 'payload-must-be-object');
+      const state = validateString(body.state, { allowEmpty: false, maxLen: 30 });
+      const active = typeof body.active === 'boolean' ? body.active : false;
+      const source = validateString(body.source, { allowEmpty: true, maxLen: 120 }) || 'renderer';
+      if (!state) return invalidResult('app-state:hint', 'state-required');
+      setAppStateHint(state, active, source);
+      return { ok: true };
     },
   };
 

@@ -37,6 +37,15 @@ const {
 const ipcRenderer = window.jarvisIpc || null;
 const temporalApi = window.jarvisApi.temporal || null;
 
+function sendAppStateHint(state, active) {
+	if (!window.jarvisApi?.server?.sendAppStateHint) return;
+	window.jarvisApi.server.sendAppStateHint({
+		state,
+		active: Boolean(active),
+		source: 'renderer-sidecar',
+	}).catch(() => null);
+}
+
 // ── Python AI-Agent sidecar bridge ──────────────────────────────────────────
 // The SidecarBridge instance is created in preload.js (which runs with Node
 // access) and exposed via window.jarvisApi.sidecar.
@@ -972,6 +981,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
 		sidecar.on('connected', () => {
 			sidecarConnected = true;
+			sendAppStateHint('LISTENING', false);
+			sendAppStateHint('SPEAKING', false);
 			appendMessage(log, 'AI Sidecar', '🤖 Python voice sidecar connected (offline mode active).', 'system');
 			const configuration = {
 				wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
@@ -1000,6 +1011,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		sidecar.on('disconnected', () => {
 			sidecarConnected = false;
 			sidecarManualListening = false;
+			sendAppStateHint('LISTENING', false);
+			sendAppStateHint('SPEAKING', false);
 			setVoiceToTextUiActive(false);
 			appendMessage(log, 'AI Sidecar', 'Python voice sidecar disconnected — using browser fallback.', 'system');
 		});
@@ -1029,6 +1042,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (!voiceSettings.allowBackgroundWake && !document.hasFocus()) return;
 			appendMessage(log, 'AI Sidecar', `Wake word detected — listening…`);
 			setVoiceVisualizer('listening');
+			sendAppStateHint('LISTENING', true);
 			(voiceGateway || sidecar).setListeningForCommand(true);
 		});
 
@@ -1051,6 +1065,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (isFinal) {
 				setVoiceVisualizer('idle');
 				sidecar.setListeningForCommand(false);
+				sendAppStateHint('LISTENING', false);
 				if (sidecarManualListening) {
 					sidecarManualListening = false;
 					setVoiceToTextUiActive(false);
@@ -1069,6 +1084,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				}
 			} else {
 				setVoiceVisualizer('listening');
+				sendAppStateHint('LISTENING', true);
 			}
 		});
 
@@ -1090,14 +1106,17 @@ window.addEventListener('DOMContentLoaded', () => {
 					source.connect(actx.destination);
 					speechPlaybackActive = true;
 					setVoiceVisualizer('speaking');
+					sendAppStateHint('SPEAKING', true);
 					source.onended = () => {
 						speechPlaybackActive = false;
 						setVoiceVisualizer('idle');
+						sendAppStateHint('SPEAKING', false);
 						actx.close().catch(() => null);
 					};
 					source.start(0);
 				}, () => {
 					speechPlaybackActive = false;
+					sendAppStateHint('SPEAKING', false);
 					actx.close().catch(() => null);
 				});
 			} catch {
@@ -1225,6 +1244,14 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (ipcRenderer?.on) {
 			ipcRenderer.on('sidecar-status', (payload) => {
 				syncSidecarConnection(payload?.status);
+			});
+			ipcRenderer.on('app-state-changed', (payload) => {
+				const state = String(payload?.state || 'IDLE').toLowerCase();
+				document.body.classList.remove('state-thinking', 'state-listening', 'state-speaking', 'state-executing');
+				if (state === 'thinking') document.body.classList.add('state-thinking');
+				if (state === 'listening') document.body.classList.add('state-listening');
+				if (state === 'speaking') document.body.classList.add('state-speaking');
+				if (state === 'executing') document.body.classList.add('state-executing');
 			});
 		}
 	}

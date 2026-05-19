@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss: http: https:;">
+  <title>Jarvis System Core</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: rgba(11, 15, 25, 0.92);
+      --panel: rgba(18, 23, 34, 0.85);
+      --border: rgba(148, 163, 184, 0.25);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --ok: #22c55e;
+      --danger: #ef4444;
+      --accent: #38bdf8;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+
+    .shell {
+      width: 100%;
+      height: 100%;
+      border-radius: 18px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      padding: 14px;
+      display: grid;
+      grid-template-rows: auto auto auto auto 1fr auto;
+      gap: 10px;
+    }
+
+    .header h2 { margin: 0; font-size: 15px; }
+    .status-badge {
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .status-badge.connected { color: var(--ok); border-color: rgba(34,197,94,0.5); }
+    .status-badge.disconnected { color: var(--danger); border-color: rgba(239,68,68,0.5); }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.6);
+      color: var(--text);
+      padding: 8px;
+      font-size: 12px;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.8);
+      color: var(--text);
+      padding: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .button-group {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .button-group button.active { border-color: var(--accent); color: var(--accent); }
+    .button-group button.active-alert { border-color: var(--danger); color: var(--danger); }
+
+    .metric-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .progress {
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.2);
+      overflow: hidden;
+    }
+    .progress > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #22c55e, #38bdf8);
+      transition: width .2s ease;
+    }
+
+    .list {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      min-height: 90px;
+      max-height: 140px;
+      overflow: auto;
+      font-size: 11px;
+      color: var(--muted);
+      display: grid;
+      gap: 6px;
+    }
+
+    .list-item {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 8px;
+      padding: 6px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .danger {
+      border-color: rgba(239, 68, 68, 0.55);
+      color: #fecaca;
+      background: rgba(127, 29, 29, 0.35);
+    }
+
+    .tiny { font-size: 11px; color: var(--muted); }
+
+    .disclaimer {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(2, 6, 23, 0.8);
+      z-index: 10;
+      padding: 12px;
+    }
+
+    .disclaimer.open { display: grid; }
+
+    .disclaimer-card {
+      width: 100%;
+      max-width: 340px;
+      border-radius: 12px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .disclaimer-card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <h2>System Core & Node Control</h2>
+      <div id="sync-status" class="status-badge disconnected">UNAUTHORIZED</div>
+    </header>
+
+    <section class="panel">
+      <div class="row">
+        <input id="server-ip" type="text" placeholder="Server IP (e.g. 192.168.1.10)">
+        <input id="sync-key" type="password" placeholder="Server Sync Key">
+        <button id="pair-btn">Połącz i Synchronizuj</button>
+      </div>
+      <div class="tiny" id="pair-result">Not synchronized.</div>
+    </section>
+
+    <section class="panel">
+      <div class="tiny">Poziom autonomii agenta</div>
+      <div class="button-group">
+        <button data-autonomy="default" class="active">Default</button>
+        <button data-autonomy="auto">Auto-Accept</button>
+        <button data-autonomy="full">Full Control</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="tiny">Zasoby serwera</div>
+      <div class="metric-row"><span>CPU</span><strong id="cpu-value">0%</strong></div>
+      <div class="progress"><span id="cpu-bar"></span></div>
+      <div class="metric-row"><span>VRAM</span><strong id="vram-value">0 GB</strong></div>
+      <div class="progress"><span id="vram-bar"></span></div>
+    </section>
+
+    <section class="panel">
+      <div class="tiny">Pending approvals</div>
+      <div id="approvals" class="list"></div>
+      <div class="tiny">Activity log</div>
+      <div id="activity-log" class="list"></div>
+    </section>
+
+    <button id="emergency-disconnect" class="danger">EMERGENCY CONTROL DISCONNECT</button>
+  </div>
+
+  <div id="disclaimer" class="disclaimer">
+    <div class="disclaimer-card">
+      <strong>Full Control Disclaimer</strong>
+      <ul>
+        <li>Agent may modify a real Linux system.</li>
+        <li>Destructive model output can cause data loss.</li>
+        <li>Only local network transport is intended.</li>
+      </ul>
+      <button id="accept-disclaimer">I understand and accept</button>
+    </div>
+  </div>
+
+  <script src="system-core-renderer.js"></script>
+</body>
+</html>

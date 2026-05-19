@@ -38,6 +38,18 @@ const ALLOWED_INVOKE = new Set([
   'auth:sign-out',
   'auth:get-profile',
   'auth:get-device-token',
+  'server:pair',
+  'server:connect',
+  'server:disconnect',
+  'server:status',
+  'server:exec-tool',
+  'server:approve',
+  'server:reject',
+  'server:set-autonomy',
+  'server:force-disconnect',
+  'server:get-full-control-consent',
+  'server:accept-full-control-disclaimer',
+  'app-state:hint',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -47,6 +59,10 @@ const ALLOWED_RECEIVE = new Set([
   'desktop-health',
   'auth:session-changed',
   'auth:signed-out',
+  'server-approval-required',
+  'server-approval-resolved',
+  'server-activity-log',
+  'app-state-changed',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────
@@ -111,6 +127,32 @@ const authApi = {
   getProfile: () => invokeAllowed('auth:get-profile'),
   onSessionChanged: (listener) => subscribeAllowed('auth:session-changed', listener),
   onSignedOut: (listener) => subscribeAllowed('auth:signed-out', listener),
+};
+
+const serverApi = {
+  pair: (payload) => invokeAllowed('server:pair', payload),
+  connect: () => invokeAllowed('server:connect'),
+  disconnect: () => invokeAllowed('server:disconnect'),
+  getStatus: () => invokeAllowed('server:status'),
+  execTool: (tool, args = {}) => invokeAllowed('server:exec-tool', { tool, args }).then((response) => {
+    if (response?.ok === false) throw new Error(response?.error || 'server-tool-failed');
+    return response?.result;
+  }),
+  approve: (id) => invokeAllowed('server:approve', { id }),
+  reject: (id) => invokeAllowed('server:reject', { id }),
+  setAutonomy: (level) => invokeAllowed('server:set-autonomy', level),
+  forceDisconnect: () => invokeAllowed('server:force-disconnect'),
+  getFullControlConsent: () => invokeAllowed('server:get-full-control-consent'),
+  acceptFullControlDisclaimer: () => invokeAllowed('server:accept-full-control-disclaimer'),
+  onApprovalRequired: (listener) => subscribeAllowed('server-approval-required', listener),
+  onApprovalResolved: (listener) => subscribeAllowed('server-approval-resolved', listener),
+  onActivity: (listener) => subscribeAllowed('server-activity-log', listener),
+  onAppStateChanged: (listener) => subscribeAllowed('app-state-changed', listener),
+  sendAppStateHint: ({ state, active = false, source = 'renderer' }) => invokeAllowed('app-state:hint', {
+    state,
+    active,
+    source,
+  }),
 };
 
 const localState = {
@@ -193,6 +235,7 @@ function buildJarvisApiV2() {
       ...authApi,
       getLinkedAccounts,
     },
+    server: serverApi,
     backend: {
       connectToBackend,
       executeStructuredCommand,
@@ -292,6 +335,7 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     ...authApi,
     getLinkedAccounts,
   },
+  server: serverApi,
   sidecar: buildSidecarApi(),
   voiceGateway: buildVoiceGatewayApi(),
   temporal: {
