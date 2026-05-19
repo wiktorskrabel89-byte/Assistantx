@@ -37,8 +37,11 @@ import json
 import logging
 import os
 import signal
+import struct
 import sys
 import time
+import wave
+from io import BytesIO
 from typing import Any
 
 import websockets
@@ -142,9 +145,25 @@ class ConnectionState:
         self.speech_active: bool = False
         self.trailing_silence_frames: int = 0
         self.sample_rate: int = 16000
+        self.outbound_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=256)
+        self.last_rms_sent_at: float = 0.0
 
 
-async def _send(ws: WebSocketServerProtocol, payload: dict) -> None:
+async def _send(ws: WebSocketServerProtocol, payload: dict, state: ConnectionState | None = None) -> None:
+    if state is not None:
+        try:
+            state.outbound_queue.put_nowait(payload)
+            return
+        except asyncio.QueueFull:
+            try:
+                _ = state.outbound_queue.get_nowait()
+            except Exception:
+                pass
+            try:
+                state.outbound_queue.put_nowait(payload)
+                return
+            except Exception:
+                pass
     try:
         await ws.send(json.dumps(payload))
     except Exception:
@@ -170,7 +189,7 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         state.vad_enabled = bool(msg["vadEnabled"])
     if "listeningForCommand" in msg:
         state.listening_for_command = bool(msg["listeningForCommand"])
-    await _send(ws, {"type": "status", "phase": "configured", "message": "Settings applied."})
+    await _send(ws, {"type": "status", "phase": "configured", "message": "Settings applied."}, state)
 
 
 async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
@@ -183,6 +202,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
     except Exception:
         return
 
+    _emit_rms(state, pcm_bytes, source="mic", sample_rate=state.sample_rate)
     state.audio_buffer.append(pcm_bytes)
 
     # Keep a rolling buffer of ~3 seconds worth of audio
@@ -204,7 +224,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
             if detected:
                 state.listening_for_command = True
                 state.audio_buffer.clear()
-                await _send(ws, {"type": "wake_word", "phrase": state.wake_word_phrase})
+                await _send(ws, {"type": "wake_word", "phrase": state.wake_word_phrase}, state)
                 return
         except Exception as exc:
             logger.debug("Wake word processing error: %s", exc)
@@ -225,7 +245,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                         "type": "vad_event",
                         "phase": "speech_start",
                         "sampleRate": state.sample_rate,
-                    })
+                    }, state)
             else:
                 if state.speech_active:
                     state.command_audio_buffer.append(pcm_bytes)
@@ -238,7 +258,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                     "type": "vad_event",
                     "phase": "speech_end",
                     "sampleRate": state.sample_rate,
-                })
+                }, state)
                 if segment:
                     encoded = base64.b64encode(segment).decode("ascii")
                     await _send(ws, {
@@ -246,7 +266,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                         "data": encoded,
                         "format": "audio/raw",
                         "sampleRate": state.sample_rate,
-                    })
+                    }, state)
                 state.command_audio_buffer.clear()
                 state.speech_active = False
                 state.trailing_silence_frames = 0
@@ -270,7 +290,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                         "type": "stt_result",
                         "text": text,
                         "isFinal": is_final,
-                    })
+                    }, state)
                 if is_final:
                     state.listening_for_command = False
                     state.audio_buffer.clear()
@@ -288,27 +308,28 @@ async def _handle_tts_speak(ws: WebSocketServerProtocol, state: ConnectionState,
         return
 
     if not state.tts_enabled:
-        await _send(ws, {"type": "status", "phase": "tts_skipped", "message": "TTS disabled."})
+        await _send(ws, {"type": "status", "phase": "tts_skipped", "message": "TTS disabled."}, state)
         return
 
     loop = asyncio.get_event_loop()
     try:
         tts = _get_tts_engine()
         wav_bytes = await loop.run_in_executor(None, tts.synthesize, text)
+        _emit_rms_from_wav(state, wav_bytes, source="tts")
         encoded = base64.b64encode(wav_bytes).decode("ascii")
         await _send(ws, {
             "type": "tts_audio",
             "requestId": request_id,
             "data": encoded,
             "format": "wav",
-        })
+        }, state)
     except Exception as exc:
         logger.warning("TTS error: %s", exc)
         await _send(ws, {
             "type": "error",
             "message": f"TTS synthesis failed: {exc}",
             "requestId": request_id,
-        })
+        }, state)
 
 
 async def _handle_parse_intent(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
@@ -329,14 +350,14 @@ async def _handle_parse_intent(ws: WebSocketServerProtocol, state: ConnectionSta
             "intentKind": result.get("intent_kind", "system"),
             "entities": result.get("entities", {}),
             "confidence": result.get("confidence", 0.0),
-        })
+        }, state)
     except Exception as exc:
         logger.warning("NLP error: %s", exc)
         await _send(ws, {
             "type": "error",
             "message": f"Intent parsing failed: {exc}",
             "requestId": request_id,
-        })
+        }, state)
 
 
 async def _handle_memory_upsert(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
@@ -354,14 +375,14 @@ async def _handle_memory_upsert(ws: WebSocketServerProtocol, _state: ConnectionS
             "requestId": request_id,
             "ok": bool(result.get("ok")),
             "id": result.get("id", ""),
-        })
+        }, _state)
     except Exception as exc:
         logger.warning("Memory upsert error: %s", exc)
         await _send(ws, {
             "type": "error",
             "message": f"Memory upsert failed: {exc}",
             "requestId": request_id,
-        })
+        }, _state)
 
 
 async def _handle_memory_search(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
@@ -378,14 +399,14 @@ async def _handle_memory_search(ws: WebSocketServerProtocol, _state: ConnectionS
             "type": "memory_search_result",
             "requestId": request_id,
             "results": results,
-        })
+        }, _state)
     except Exception as exc:
         logger.warning("Memory search error: %s", exc)
         await _send(ws, {
             "type": "error",
             "message": f"Memory search failed: {exc}",
             "requestId": request_id,
-        })
+        }, _state)
 
 
 async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
@@ -401,7 +422,7 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
             "tool": tool,
             "ok": False,
             "results": [],
-        })
+        }, _state)
         return
     loop = asyncio.get_event_loop()
     try:
@@ -413,7 +434,7 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
             "tool": "web_search",
             "ok": True,
             "results": results,
-        })
+        }, _state)
     except Exception as exc:
         logger.warning("Tool call error: %s", exc)
         await _send(ws, {
@@ -423,7 +444,7 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
             "ok": False,
             "results": [],
             "error": str(exc),
-        })
+        }, _state)
 
 
 HANDLERS = {
@@ -441,12 +462,13 @@ async def handle_connection(ws: WebSocketServerProtocol) -> None:
     addr = ws.remote_address
     logger.info("Client connected: %s", addr)
     state = ConnectionState()
+    sender_task = asyncio.create_task(_sender_loop(ws, state))
 
     await _send(ws, {
         "type": "status",
         "phase": "connected",
         "message": "Jarvis AI-Agent sidecar ready.",
-    })
+    }, state)
 
     try:
         async for raw in ws:
@@ -466,7 +488,69 @@ async def handle_connection(ws: WebSocketServerProtocol) -> None:
     except websockets.exceptions.ConnectionClosedError as exc:
         logger.debug("Connection closed with error: %s", exc)
     finally:
+        sender_task.cancel()
+        try:
+            await sender_task
+        except BaseException:
+            pass
         logger.info("Client disconnected: %s", addr)
+
+
+async def _sender_loop(ws: WebSocketServerProtocol, state: ConnectionState) -> None:
+    while True:
+        payload = await state.outbound_queue.get()
+        try:
+            await ws.send(json.dumps(payload))
+        except Exception:
+            return
+
+
+def _emit_rms(state: ConnectionState, pcm_bytes: bytes, source: str, sample_rate: int) -> None:
+    if not pcm_bytes:
+        return
+    now = time.monotonic()
+    if now - state.last_rms_sent_at < 0.06:
+        return
+    state.last_rms_sent_at = now
+    rms = _pcm_int16_rms(pcm_bytes)
+    payload = {
+        "type": "rms_level",
+        "source": source,
+        "rms": round(float(rms), 6),
+        "sampleRate": int(sample_rate or 16000),
+        "timestamp": time.time(),
+    }
+    try:
+        state.outbound_queue.put_nowait(payload)
+    except asyncio.QueueFull:
+        pass
+
+
+def _emit_rms_from_wav(state: ConnectionState, wav_bytes: bytes, source: str) -> None:
+    if not wav_bytes:
+        return
+    try:
+        with wave.open(BytesIO(wav_bytes), "rb") as wav_reader:
+            frame_rate = wav_reader.getframerate() or 24000
+            frames = wav_reader.readframes(min(wav_reader.getnframes(), frame_rate // 4))
+            _emit_rms(state, frames, source=source, sample_rate=frame_rate)
+    except Exception:
+        pass
+
+
+def _pcm_int16_rms(pcm_bytes: bytes) -> float:
+    samples_count = len(pcm_bytes) // 2
+    if samples_count <= 0:
+        return 0.0
+    try:
+        samples = struct.unpack(f"<{samples_count}h", pcm_bytes[: samples_count * 2])
+    except Exception:
+        return 0.0
+    squared_sum = sum(float(sample) * float(sample) for sample in samples)
+    if squared_sum <= 0:
+        return 0.0
+    mean = squared_sum / max(samples_count, 1)
+    return (mean ** 0.5) / 32768.0
 
 
 async def _process_request(path: str, _request_headers):

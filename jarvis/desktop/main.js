@@ -850,6 +850,10 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 560,
+    frame: false,
+    transparent: true,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    backgroundColor: '#00000000',
     title: 'Jarvis Desktop',
     webPreferences: buildSecureWebPreferences({ preload: path.join(__dirname, 'preload.js') }),
   });
