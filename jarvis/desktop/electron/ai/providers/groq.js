@@ -3,7 +3,7 @@
 const { AiProvider } = require('../provider-interface');
 
 class GroqProvider extends AiProvider {
-  constructor({ model = 'qwen-32b', client = null } = {}) {
+  constructor({ model = 'qwen-2.5-32b-instruct', client = null } = {}) {
     super();
     this.provider = 'groq';
     this.model = model;

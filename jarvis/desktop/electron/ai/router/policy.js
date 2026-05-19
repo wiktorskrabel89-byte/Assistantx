@@ -56,19 +56,14 @@ function resolveCloudModel(provider, profile) {
   const profileName = normalizeProfile(profile);
   const matrix = {
     openrouter: {
-      chat: 'google/gemma-2-9b-it',
-      coding: 'qwen/qwen-2.5-coder-14b-instruct',
-      tool: 'qwen/qwen-2.5-coder-14b-instruct',
+      chat: 'qwen/qwen-2.5-32b-instruct',
+      coding: 'openai/gpt-4o',
+      tool: 'google/gemini-2.0-flash',
     },
     groq: {
-      chat: 'qwen/qwen3-32b',
-      coding: 'llama-3.3-70b-versatile',
-      tool: 'llama-3.3-70b-versatile',
-    },
-    anthropic: {
-      chat: 'claude-3-5-sonnet-20241022',
-      coding: 'claude-3-5-sonnet-20241022',
-      tool: 'claude-3-5-sonnet-20241022',
+      chat: 'qwen-2.5-32b-instruct',
+      coding: 'openai/gpt-4o',
+      tool: 'google/gemini-2.0-flash',
     },
   };
   const providerMatrix = matrix[providerName] || matrix.openrouter;
@@ -81,7 +76,7 @@ function normalizeCloudOrder(order) {
     .map((item) => String(item || '').toLowerCase().trim())
     .filter(Boolean)
     .filter((value, index, list) => list.indexOf(value) === index);
-  return normalized.length > 0 ? normalized : ['groq', 'openrouter', 'anthropic'];
+  return normalized.length > 0 ? normalized : ['groq', 'openrouter'];
 }
 
 function chooseCloudProvider(order, providers = {}) {

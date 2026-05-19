@@ -8,6 +8,9 @@ const RISK_BY_ACTION = {
   'open-account-login': 'medium',
   'install-everything-search': 'low',
   'setup:install-local': 'medium',
+  'server:verify-pairing': 'medium',
+  'server:set-permission-level': 'high',
+  'server:kill-switch': 'medium',
 };
 
 function createPermissionPolicy({ onAudit } = {}) {

@@ -948,6 +948,47 @@
             </div>
 
             <div class="stack">
+              <div class="section-label">System Core / Linux Runtime</div>
+              <div class="settings-grid">
+                <label class="field">
+                  <span>Runtime mode</span>
+                  <select id="runtime-mode">
+                    <option value="local-desktop">Local desktop runtime</option>
+                    <option value="remote-linux-runtime">Remote Linux runtime</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Permission level</span>
+                  <select id="runtime-permission-level">
+                    <option value="default">Default (manual approvals)</option>
+                    <option value="auto">Auto-Accept (low risk)</option>
+                    <option value="full">Full Control</option>
+                  </select>
+                </label>
+                <label class="field field-full">
+                  <span>Remote runtime API URL</span>
+                  <input id="remote-runtime-api-url" type="url" placeholder="http://192.168.1.20:9001" />
+                </label>
+                <label class="field field-full">
+                  <span>Remote runtime WS URL</span>
+                  <input id="remote-runtime-ws-url" type="url" placeholder="ws://192.168.1.20:9000" />
+                </label>
+                <button id="save-runtime-config" type="button" class="secondary field-full">Save runtime config</button>
+                <label class="field field-full">
+                  <span>Sync key</span>
+                  <input id="runtime-sync-key" type="password" placeholder="Enter Linux runtime sync key" />
+                </label>
+                <button id="runtime-pair" type="button" class="secondary">Pair runtime</button>
+                <button id="runtime-refresh-status" type="button" class="secondary">Refresh status</button>
+                <button id="runtime-apply-permission" type="button" class="secondary">Apply permission</button>
+                <button id="runtime-kill-switch" type="button" class="danger">Emergency disconnect</button>
+                <div id="runtime-status" class="field field-full" style="font-size:12px;color:#64748b;line-height:1.6;">
+                  Runtime not connected.
+                </div>
+              </div>
+            </div>
+
+            <div class="stack">
               <div class="section-label">AI Models</div>
               <div class="model-grid">
                 <label class="field">

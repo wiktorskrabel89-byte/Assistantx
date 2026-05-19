@@ -42,7 +42,7 @@ class CloudApiProvider extends AiProvider {
 
   async stream(request = {}, onEvent = () => {}) {
     const provider = normalizeProvider(request.provider);
-    const model = String(request.model || 'google/gemma-2-9b-it');
+    const model = String(request.model || 'qwen/qwen-2.5-32b-instruct');
     const apiKey = await resolveApiKey(provider);
     if (!apiKey) throw new Error(`Cloud API key is not configured for provider '${provider}'.`);
     if (provider === 'anthropic') {
@@ -53,7 +53,7 @@ class CloudApiProvider extends AiProvider {
 
   async generate(request = {}) {
     const provider = normalizeProvider(request.provider);
-    const model = String(request.model || 'google/gemma-2-9b-it');
+    const model = String(request.model || 'qwen/qwen-2.5-32b-instruct');
     const apiKey = await resolveApiKey(provider);
     if (!apiKey) throw new Error(`Cloud API key is not configured for provider '${provider}'.`);
     const config = getProviderConfig(provider);

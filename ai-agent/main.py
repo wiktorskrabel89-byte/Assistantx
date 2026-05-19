@@ -14,6 +14,7 @@ Message protocol (JSON lines sent by client → handled here):
   { "type": "memory_upsert", "text": "...", "metadata": {...}, "requestId": "..." }
   { "type": "memory_search", "query": "...", "topK": 5, "requestId": "..." }
   { "type": "tool_call", "tool": "web_search", "query": "...", "requestId": "..." }
+  { "type": "llm_route", "intent": "voice_chat|quick_command|analyze_codebase|rag_search|system_modification|write_code|execute_workflow", "prompt": "...", "context": {...}, "requestId": "..." }
 
 Events emitted to client:
   { "type": "status",           "phase": "...", "message": "..." }
@@ -26,6 +27,7 @@ Events emitted to client:
   { "type": "memory_upsert_result", "requestId": "...", "ok": bool, "id": "..." }
   { "type": "memory_search_result", "requestId": "...", "results": [...] }
   { "type": "tool_result", "requestId": "...", "tool": "web_search", "ok": bool, "results": [...] }
+  { "type": "llm_route_result", "requestId": "...", "ok": bool, "intent": "...", "provider": "...", "model": "...", "text": "..." }
   { "type": "error",            "message": "..." }
 """
 
@@ -447,6 +449,48 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
         }, _state)
 
 
+async def _handle_llm_route(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
+    intent = str(msg.get("intent", "")).strip().lower()
+    prompt = str(msg.get("prompt", "")).strip()
+    request_id = str(msg.get("requestId", ""))
+    context = msg.get("context")
+    if not prompt:
+        await _send(ws, {
+            "type": "llm_route_result",
+            "requestId": request_id,
+            "ok": False,
+            "intent": intent,
+            "provider": None,
+            "model": None,
+            "text": "",
+            "error": "prompt-required",
+        }, _state)
+        return
+    try:
+        from routing.llm_router import route_llm_request
+        result = await route_llm_request(intent, prompt, context)
+        await _send(ws, {
+            "type": "llm_route_result",
+            "requestId": request_id,
+            "ok": True,
+            "intent": intent,
+            "provider": result.get("provider"),
+            "model": result.get("model"),
+            "text": result.get("text", ""),
+        }, _state)
+    except Exception as exc:
+        await _send(ws, {
+            "type": "llm_route_result",
+            "requestId": request_id,
+            "ok": False,
+            "intent": intent,
+            "provider": None,
+            "model": None,
+            "text": "",
+            "error": str(exc),
+        }, _state)
+
+
 HANDLERS = {
     "configure": _handle_configure,
     "audio_chunk": _handle_audio_chunk,
@@ -455,6 +499,7 @@ HANDLERS = {
     "memory_upsert": _handle_memory_upsert,
     "memory_search": _handle_memory_search,
     "tool_call": _handle_tool_call,
+    "llm_route": _handle_llm_route,
 }
 
 

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
+const { createServerBridge } = require('./electron/server/bridge');
 const { getToken: getDeviceToken } = require('./auth');
 const {
   getAccountProfile,
@@ -57,6 +58,7 @@ const startupDiagnostics = createStartupDiagnostics();
 const aiRouter = new AIRouter();
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
+const serverBridge = createServerBridge();
 
 const permissions = createPermissionPolicy({
   onAudit(entry) {
@@ -1060,6 +1062,14 @@ createMainIpcHandlers({
   signOutAccountSession: async (meta) => signOutAccountSession(meta),
   getAccountProfile: async () => getAccountProfile(),
   beginDesktopLogin,
+  serverGetAuthStatus: () => serverBridge.getAuthStatus(),
+  serverClearAuth: () => serverBridge.clearAuth(),
+  serverVerifyPairing: (syncKey) => serverBridge.verifyPairing(syncKey),
+  serverGetRuntimeStatus: () => serverBridge.getRuntimeStatus(),
+  serverSetPermissionLevel: (level, fullControlConsent) => serverBridge.setPermissionLevel(level, fullControlConsent),
+  serverKillSwitch: () => serverBridge.killSwitch(),
+  serverGetConfig: () => serverBridge.getConfig(),
+  serverSetConfig: (payload) => serverBridge.setConfig(payload),
   getMainWindow: () => win,
   getOverlayWindow: () => overlayWin,
   createLauncherOverlayWindow,
