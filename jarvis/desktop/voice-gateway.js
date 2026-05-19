@@ -45,6 +45,7 @@ class VoiceGateway extends EventEmitter {
     this._sidecar.on('unavailable', () => this.emit('status', { phase: 'unavailable', source: 'sidecar' }));
     this._sidecar.on('wake_word', (payload) => this.emit('wake_word', payload || {}));
     this._sidecar.on('vad_event', (payload) => this.emit('vad_event', payload || {}));
+    this._sidecar.on('rms_level', (payload) => this.emit('rms_level', payload || {}));
     this._sidecar.on('error', (error) => this.emit('error', error));
     this._sidecar.on('audio_segment', (payload) => {
       void this._handleAudioSegment(payload || {});

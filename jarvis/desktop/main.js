@@ -478,22 +478,44 @@ function emitDesktopHealth() {
 async function probeOllamaAvailability(source = 'startup') {
   try {
     const availability = await aiRouter.getAvailability();
-    const status = availability.ollama_available ? 'healthy' : 'unavailable';
+    const status = availability.ollama_available ? 'healthy' : (availability.ollama_healthy ? 'degraded' : 'unavailable');
+    const missingModels = Array.isArray(availability.missing_models) ? availability.missing_models : [];
+    const cloudProviders = availability?.cloud?.providers || {};
+    const readyCloudProviders = Object.entries(cloudProviders)
+      .filter(([, entry]) => Boolean(entry?.ready))
+      .map(([name]) => name);
     startupDiagnostics.setComponent('ollama', status, {
       detail: availability.ollama_available
         ? 'Ollama server is reachable.'
-        : 'Ollama server is not reachable. Cloud fallback remains active.',
-      reason: availability.ollama_available ? 'reachable' : 'unreachable',
+        : availability.ollama_healthy
+          ? `Ollama reachable, but missing required models: ${missingModels.join(', ') || 'unknown'}.`
+          : 'Ollama server is not reachable. Cloud fallback remains active.',
+      reason: availability.ollama_available
+        ? 'reachable'
+        : availability.ollama_healthy ? 'missing_required_models' : 'unreachable',
       phase: 'probed',
-      details: { source, mode: availability.mode },
+      details: {
+        source,
+        mode: availability.mode,
+        missingModels,
+        requiredModels: availability.required_models || [],
+        readyCloudProviders,
+      },
     });
     startupDiagnostics.pushEvent(
       'ollama',
-      availability.ollama_available ? 'info' : 'warn',
+      availability.ollama_available ? 'info' : (availability.ollama_healthy ? 'warn' : 'warn'),
       availability.ollama_available
         ? 'Local Ollama runtime detected.'
-        : 'Local Ollama runtime unavailable; using cloud fallback.',
-      { source, mode: availability.mode },
+        : availability.ollama_healthy
+          ? 'Local Ollama reachable but required models are missing; using cloud fallback.'
+          : 'Local Ollama runtime unavailable; using cloud fallback.',
+      {
+        source,
+        mode: availability.mode,
+        missingModels,
+        readyCloudProviders,
+      },
     );
     emitDesktopHealth();
     return availability;
@@ -546,6 +568,28 @@ async function installLocalAiEngine() {
       },
     );
   });
+}
+
+async function routeAiRequest(payload = {}) {
+  const request = payload && typeof payload === 'object' ? payload : {};
+  const response = await aiRouter.routeRequest({
+    message: request.message || '',
+    messages: Array.isArray(request.messages) ? request.messages : undefined,
+    profile: request.profile,
+    contextType: request.contextType,
+    contextSize: request.contextSize,
+    retryCount: request.retryCount,
+    options: request.options,
+  });
+  return {
+    ok: true,
+    text: String(response?.text || ''),
+    provider: response?.provider || response?.route?.provider || 'unknown',
+    model: response?.model || response?.route?.model || 'unknown',
+    route: response?.route || null,
+    profile: response?.profile || null,
+    availability: response?.availability || null,
+  };
 }
 
 function allowWindowCloseForQuit() {
@@ -818,6 +862,10 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 560,
+    frame: false,
+    transparent: true,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    backgroundColor: '#00000000',
     title: 'Jarvis Desktop',
     webPreferences: buildSecureWebPreferences({ preload: path.join(__dirname, 'preload.js') }),
   });
@@ -989,6 +1037,7 @@ createMainIpcHandlers({
   ensureDbReady,
   getSidecarStatus,
   checkLocalAiAvailability: () => probeOllamaAvailability('ipc-check'),
+  routeAiRequest,
   installLocalAiEngine,
   restartSidecar: restartSidecarNow,
   startupDiagnostics,

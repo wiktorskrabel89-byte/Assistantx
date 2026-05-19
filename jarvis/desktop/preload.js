@@ -27,6 +27,7 @@ const ALLOWED_INVOKE = new Set([
   'open-url',
   'open-path',
   'jarvis-ai-request',
+  'jarvis-ai-route',
   'setup:check-local-ai',
   'setup:install-local',
   'get-displays',

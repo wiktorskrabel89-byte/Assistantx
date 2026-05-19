@@ -98,20 +98,33 @@ function resolveSpeechVoice(voices, voiceId, language) {
 	return voices[0] || null;
 }
 
-function appendMessage(log, title, body, tone = 'system') {
-	const item = document.createElement('div');
-	item.className = `message ${tone}`;
+	function appendMessage(log, title, body, tone = 'system', badges = []) {
+		const item = document.createElement('div');
+		item.className = `message ${tone}`;
 
 	const heading = document.createElement('small');
 	heading.textContent = `${new Date().toLocaleTimeString()} — ${title}`;
 
-	const text = document.createElement('div');
-	text.textContent = body;
+		const text = document.createElement('div');
+		text.textContent = body;
 
-	item.append(heading, text);
-	log.prepend(item);
-	return item;
-}
+		item.append(heading, text);
+		if (Array.isArray(badges) && badges.length > 0) {
+			const badgeWrap = document.createElement('div');
+			badgeWrap.className = 'context-badges';
+			for (const badge of badges.slice(0, 4)) {
+				const value = String(badge || '').trim();
+				if (!value) continue;
+				const el = document.createElement('span');
+				el.className = 'context-badge';
+				el.textContent = value;
+				badgeWrap.appendChild(el);
+			}
+			if (badgeWrap.childElementCount > 0) item.appendChild(badgeWrap);
+		}
+		log.prepend(item);
+		return item;
+	}
 
 function setStatusDot(status) {
 	const dot = document.getElementById('status-dot');
@@ -144,6 +157,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const updateModalHighlights = document.getElementById('update-modal-highlights');
 	const updateModalMarkdown = document.getElementById('update-modal-markdown');
 	const updateModalVersion = document.getElementById('update-modal-version');
+	const updateModalSource = document.getElementById('update-modal-source');
 	const updateModalDetails = document.getElementById('update-modal-details');
 	const updateModalProgress = document.getElementById('update-modal-progress');
 	const updateProgressLabel = document.getElementById('update-progress-label');
@@ -201,6 +215,15 @@ window.addEventListener('DOMContentLoaded', () => {
 	let speechVoicePromise = null;
 
 	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
+	const AGENT_STATE = {
+		IDLE: 'IDLE',
+		THINKING: 'THINKING',
+		LISTENING: 'LISTENING',
+		SPEAKING: 'SPEAKING',
+	};
+	let currentAgentState = AGENT_STATE.IDLE;
+	let visualizerEnergy = 0;
+	let inactivityTimer = null;
 
 	function setMainPanelTab(tab) {
 		const settingsActive = tab === 'settings';
@@ -286,12 +309,61 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	applyVoiceSettings(voiceSettings, { persist: false });
+	setVoiceVisualizer('idle');
+	['mousemove', 'keydown', 'click', 'focus'].forEach((eventName) => {
+		window.addEventListener(eventName, () => touchAgentActivity(), { passive: true });
+	});
 
-	function setVoiceVisualizer(state) {
+	function setAgentState(nextState) {
+		const normalized = String(nextState || '').toUpperCase();
+		const target = AGENT_STATE[normalized] || AGENT_STATE.IDLE;
+		currentAgentState = target;
+		if (typeof document !== 'undefined' && document.body) {
+			document.body.dataset.agentState = target.toLowerCase();
+		}
+	}
+
+	function touchAgentActivity() {
+		if (voiceVisualizer) voiceVisualizer.classList.remove('dimmed');
+		if (inactivityTimer) clearTimeout(inactivityTimer);
+		inactivityTimer = setTimeout(() => {
+			if (voiceVisualizer && currentAgentState === AGENT_STATE.IDLE) {
+				voiceVisualizer.classList.add('dimmed');
+			}
+		}, 10_000);
+	}
+
+	function applyVisualizerEnergy(nextEnergy = 0) {
 		if (!voiceVisualizer) return;
-		voiceVisualizer.classList.remove('listening', 'speaking');
-		if (state === 'listening') voiceVisualizer.classList.add('listening');
-		if (state === 'speaking') voiceVisualizer.classList.add('speaking');
+		const clamped = Math.max(0, Math.min(1, Number(nextEnergy) || 0));
+		visualizerEnergy = (visualizerEnergy * 0.72) + (clamped * 0.28);
+		voiceVisualizer.style.setProperty('--voice-energy', visualizerEnergy.toFixed(4));
+	}
+
+	function setVoiceVisualizer(state, options = {}) {
+		if (!voiceVisualizer) return;
+		voiceVisualizer.classList.remove('listening', 'speaking', 'thinking');
+		if (state === 'listening') {
+			voiceVisualizer.classList.add('listening');
+			setAgentState(AGENT_STATE.LISTENING);
+			touchAgentActivity();
+			return;
+		}
+		if (state === 'speaking') {
+			voiceVisualizer.classList.add('speaking');
+			setAgentState(AGENT_STATE.SPEAKING);
+			touchAgentActivity();
+			return;
+		}
+		if (state === 'thinking') {
+			voiceVisualizer.classList.add('thinking');
+			setAgentState(AGENT_STATE.THINKING);
+			touchAgentActivity();
+			return;
+		}
+		setAgentState(AGENT_STATE.IDLE);
+		if (options.resetEnergy !== false) applyVisualizerEnergy(0);
+		touchAgentActivity();
 	}
 
 	function readSpeechVoices() {
@@ -447,8 +519,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	function updateAutoUpdateStatus(payload) {
 		if (!updateStatusNode) return;
-
-		const detail = payload?.detail ? `${payload.status}: ${payload.detail}` : payload?.status || 'idle';
+		const normalizedStatus = String(payload?.status || 'idle').toLowerCase();
+		const reason = String(payload?.reason || '').toLowerCase();
+		let detail = payload?.detail ? `${payload.status}: ${payload.detail}` : payload?.status || 'idle';
+		if (normalizedStatus === 'error' || normalizedStatus === 'unavailable') {
+			if (reason.includes('auth') || reason.includes('permission')) {
+				detail = 'Updater: authentication is missing or invalid for private release feed.';
+			} else if (reason.includes('metadata')) {
+				detail = 'Updater: release metadata is missing or invalid.';
+			} else if (reason.includes('network') || reason.includes('offline')) {
+				detail = 'Updater: feed unavailable due to network reachability.';
+			}
+		}
 		const reasonLine = payload?.reason ? `\nreason: ${payload.reason}` : '';
 		updateStatusNode.textContent = `${detail}${reasonLine}`;
 
@@ -524,10 +606,15 @@ window.addEventListener('DOMContentLoaded', () => {
 		const version = String(payload?.version || '').trim();
 		if (version) {
 			updateModalVersion.textContent = `Version ${version}`;
+			if (updateModalSource) {
+				const source = String(payload?.releaseNotes?.source || 'unknown');
+				updateModalSource.textContent = `Release notes source: ${source}`;
+			}
 			if (updateModalDetails) updateModalDetails.hidden = false;
 			return;
 		}
 		updateModalVersion.textContent = 'Version details unavailable';
+		if (updateModalSource) updateModalSource.textContent = '';
 		if (updateModalDetails) updateModalDetails.hidden = true;
 	}
 
@@ -945,6 +1032,19 @@ window.addEventListener('DOMContentLoaded', () => {
 			(voiceGateway || sidecar).setListeningForCommand(true);
 		});
 
+		sidecar.on('rms_level', ({ source, rms }) => {
+			const scaled = Math.min(1, Math.max(0, Number(rms || 0) * 5.25));
+			applyVisualizerEnergy(scaled);
+			if (source === 'mic' && currentAgentState === AGENT_STATE.IDLE && scaled > 0.02) {
+				setVoiceVisualizer('listening');
+				return;
+			}
+			if (source === 'tts' && currentAgentState !== AGENT_STATE.SPEAKING && scaled > 0.02) {
+				setVoiceVisualizer('speaking');
+			}
+			if (scaled > 0.01) touchAgentActivity();
+		});
+
 		sidecar.on('stt_result', ({ text, isFinal }) => {
 			if (!text) return;
 			input.value = text;
@@ -1060,6 +1160,26 @@ window.addEventListener('DOMContentLoaded', () => {
 			);
 		});
 
+		sidecar.on('memory_search_result', ({ results }) => {
+			const hitCount = Array.isArray(results) ? results.length : 0;
+			if (hitCount > 0) {
+				appendMessage(log, 'Context', `Memory retrieval found ${hitCount} relevant items.`, 'system', ['context:memory']);
+			}
+		});
+
+		sidecar.on('tool_result', ({ tool, ok, results }) => {
+			if (tool !== 'web_search') return;
+			const count = Array.isArray(results) ? results.length : 0;
+			const tone = ok ? 'system' : 'error';
+			appendMessage(
+				log,
+				'Context',
+				ok ? `Web context retrieved (${count} results).` : 'Web context retrieval failed.',
+				tone,
+				['context:web'],
+			);
+		});
+
 		function syncSidecarConnection(status) {
 			const normalizedStatus = String(status || 'unknown').toLowerCase();
 			if (normalizedStatus === 'running') {
@@ -1086,6 +1206,11 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 		voiceGateway?.on('route', ({ mode }) => {
 			if (mode) appendMessage(log, 'Voice route', `Routing via ${mode}`, 'system');
+		});
+		voiceGateway?.on('rms_level', ({ rms }) => {
+			const scaled = Math.min(1, Math.max(0, Number(rms || 0) * 5.25));
+			applyVisualizerEnergy(scaled);
+			if (scaled > 0.01) touchAgentActivity();
 		});
 		voiceGateway?.on('fallback_required', () => {
 			appendMessage(log, 'Voice gateway', 'Falling back to browser speech APIs.', 'system');
@@ -1305,10 +1430,23 @@ window.addEventListener('DOMContentLoaded', () => {
 					appendMessage(log, 'Local AI', 'Ollama is ready. GPU-local routing enabled.', 'system');
 					return;
 				}
+				const missingModels = Array.isArray(state?.missing_models) ? state.missing_models : [];
+				const readyProviders = Object.entries(state?.cloud?.providers || {})
+					.filter(([, provider]) => Boolean(provider?.ready))
+					.map(([name]) => name);
+				if (state?.ollama_healthy && missingModels.length > 0) {
+					appendMessage(
+						log,
+						'Local AI',
+						`Ollama is reachable but missing required models: ${missingModels.join(', ')}. Running cloud fallback (${readyProviders.join(', ') || 'no cloud provider keys detected'}).`,
+						'system',
+					);
+					return;
+				}
 				appendMessage(
 					log,
 					'Local AI',
-					'Ollama not detected. Cloud fallback is active. Run "npm run setup:local-ai" in jarvis/desktop or use setup:install-local IPC.',
+					`Ollama not detected. Cloud fallback is active (${readyProviders.join(', ') || 'no cloud provider keys detected'}). Run "npm run setup:local-ai" in jarvis/desktop or use setup:install-local IPC.`,
 					'system',
 				);
 			}).catch(() => null);
@@ -1475,9 +1613,13 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (parsed.type === 'ai_thinking') {
 				if (parsed.inFlight) {
 					thinkingLogEntry = appendMessage(log, '🤔 Jarvis AI', 'Thinking…', 'system');
+					setVoiceVisualizer('thinking');
 				} else if (thinkingLogEntry) {
 					thinkingLogEntry.remove();
 					thinkingLogEntry = null;
+					if (!speechPlaybackActive && !speechToTextActive && !sidecarManualListening) {
+						setVoiceVisualizer('idle');
+					}
 				}
 				return;
 			}
@@ -1485,6 +1627,9 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (thinkingLogEntry) {
 				thinkingLogEntry.remove();
 				thinkingLogEntry = null;
+			}
+			if (!speechPlaybackActive && !speechToTextActive && !sidecarManualListening) {
+				setVoiceVisualizer('idle', { resetEnergy: false });
 			}
 			if (parsed.type === 'presence_snapshot') {
 				appendMessage(log, 'Presence', `Connected clients: ${parsed?.active_connections ?? 0}`, 'system');
@@ -1511,7 +1656,12 @@ window.addEventListener('DOMContentLoaded', () => {
 					? parsed.text
 					: JSON.stringify(parsed);
 			const title = parsed.type === 'command_result' ? (parsed.title || '✅ Jarvis') : `Backend (${parsed.type || '?'})`;
-			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system');
+			const badges = [];
+			if (parsed.provider) badges.push(`provider:${parsed.provider}`);
+			if (parsed.routeProfile) badges.push(`profile:${parsed.routeProfile}`);
+			if (parsed.routeReason) badges.push(`route:${parsed.routeReason}`);
+			if (parsed.model) badges.push(`model:${parsed.model}`);
+			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system', badges);
 			if (parsed.type === 'command_result' && parsed.level !== 'error') {
 				void speakWithSidecar(getComfortableSpokenText(parsed, body));
 			}

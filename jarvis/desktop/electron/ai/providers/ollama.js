@@ -24,6 +24,40 @@ class OllamaProvider extends AiProvider {
     }
   }
 
+  async listModels() {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/tags`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(4_000),
+      });
+      if (!response.ok) return [];
+      const payload = await response.json();
+      const models = Array.isArray(payload?.models) ? payload.models : [];
+      return models
+        .map((item) => String(item?.name || '').trim())
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  async getHealth(requiredModels = []) {
+    const healthy = await this.isHealthy();
+    const installedModels = healthy ? await this.listModels() : [];
+    const required = Array.isArray(requiredModels)
+      ? requiredModels.map((item) => String(item || '').trim()).filter(Boolean)
+      : [];
+    const missingModels = required.filter((model) => !installedModels.includes(model));
+    return {
+      healthy,
+      installedModels,
+      requiredModels: required,
+      missingModels,
+      requiredModelsPresent: missingModels.length === 0,
+    };
+  }
+
   async generate(request = {}) {
     const model = String(request.model || 'gemma4:e4b');
     const body = {
@@ -135,4 +169,3 @@ module.exports = {
   OllamaProvider,
   DEFAULT_OLLAMA_URL,
 };
-

@@ -7,7 +7,7 @@
  *  - Open and maintain a WebSocket connection to ws://127.0.0.1:8765
  *  - Capture microphone audio via Web Audio API and stream PCM to the sidecar
  *  - Emit events: connected | disconnected | wake_word | vad_event | audio_segment |
- *                 stt_result | tts_audio | intent_parsed | error | status
+ *                 stt_result | tts_audio | intent_parsed | rms_level | error | status
  *  - Expose API: configure(settings) | startAudioCapture() | stopAudioCapture() | requestTts(text, requestId)
  *                requestIntentParse(text, requestId) | isConnected()
  *
@@ -202,12 +202,20 @@ class SidecarBridge extends EventEmitter {
           ok: Boolean(rest.ok),
         });
         break;
-      case 'tool_result':
+       case 'tool_result':
         this.emit('tool_result', {
           requestId: rest.requestId || '',
           tool: rest.tool || '',
           results: Array.isArray(rest.results) ? rest.results : [],
           ok: rest.ok !== false,
+        });
+        break;
+      case 'rms_level':
+        this.emit('rms_level', {
+          source: rest.source || 'mic',
+          rms: Number(rest.rms || 0),
+          sampleRate: Number(rest.sampleRate) || AUDIO_SAMPLE_RATE,
+          timestamp: Number(rest.timestamp || Date.now()),
         });
         break;
       case 'error':
