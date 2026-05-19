@@ -38,6 +38,14 @@ const ALLOWED_INVOKE = new Set([
   'auth:sign-out',
   'auth:get-profile',
   'auth:get-device-token',
+  'server:get-auth-status',
+  'server:clear-auth',
+  'server:verify-pairing',
+  'server:get-runtime-status',
+  'server:set-permission-level',
+  'server:kill-switch',
+  'server:get-config',
+  'server:set-config',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -78,6 +86,8 @@ const {
 const {
   getJarvisApiUrl,
   getJarvisWebUrl,
+  getRemoteRuntimeWsUrl,
+  getRuntimeMode,
   setJarvisWebUrl,
 } = require('./runtime-config');
 
@@ -132,7 +142,10 @@ const localState = {
 let sidecarBridge = null;
 try {
   const { SidecarBridge } = require('./sidecar-bridge');
-  sidecarBridge = new SidecarBridge();
+  const runtimeMode = getRuntimeMode();
+  sidecarBridge = new SidecarBridge({
+    url: runtimeMode === 'remote-linux-runtime' ? getRemoteRuntimeWsUrl() : undefined,
+  });
 } catch {
   // Python sidecar not packaged or sidecar-bridge unavailable — browser fallback.
 }
@@ -166,6 +179,7 @@ function buildSidecarApi() {
     requestMemoryUpsert: (text, metadata, requestId) => sidecarBridge.requestMemoryUpsert(text, metadata, requestId),
     requestToolCall: (tool, query, requestId) => sidecarBridge.requestToolCall(tool, query, requestId),
     connect: () => sidecarBridge.connect(),
+    setConnection: (connection) => sidecarBridge.setConnection(connection),
     isCapturing: () => Boolean(sidecarBridge._capturing),
   };
 }
@@ -212,7 +226,19 @@ function buildJarvisApiV2() {
     runtime: {
       getJarvisApiUrl,
       getJarvisWebUrl,
+      getRemoteRuntimeWsUrl,
+      getRuntimeMode,
       setJarvisWebUrl,
+    },
+    server: {
+      getAuthStatus: () => invokeAllowed('server:get-auth-status'),
+      clearAuth: () => invokeAllowed('server:clear-auth'),
+      verifyPairing: (syncKey) => invokeAllowed('server:verify-pairing', { syncKey }),
+      getRuntimeStatus: () => invokeAllowed('server:get-runtime-status'),
+      setPermissionLevel: (level, fullControlConsent = false) => invokeAllowed('server:set-permission-level', { level, fullControlConsent }),
+      killSwitch: () => invokeAllowed('server:kill-switch'),
+      getConfig: () => invokeAllowed('server:get-config'),
+      setConfig: (payload) => invokeAllowed('server:set-config', payload || {}),
     },
     voice: {
       sidecar: buildSidecarApi(),
@@ -285,9 +311,21 @@ contextBridge.exposeInMainWorld('jarvisApi', {
   refreshSessionIfNeeded: authApi.refresh,
   getJarvisApiUrl,
   getJarvisWebUrl,
+  getRemoteRuntimeWsUrl,
+  getRuntimeMode,
   setJarvisWebUrl,
   checkLocalAiSetup: () => invokeAllowed('setup:check-local-ai'),
   installLocalAiEngine: () => invokeAllowed('setup:install-local'),
+  server: {
+    getAuthStatus: () => invokeAllowed('server:get-auth-status'),
+    clearAuth: () => invokeAllowed('server:clear-auth'),
+    verifyPairing: (syncKey) => invokeAllowed('server:verify-pairing', { syncKey }),
+    getRuntimeStatus: () => invokeAllowed('server:get-runtime-status'),
+    setPermissionLevel: (level, fullControlConsent = false) => invokeAllowed('server:set-permission-level', { level, fullControlConsent }),
+    killSwitch: () => invokeAllowed('server:kill-switch'),
+    getConfig: () => invokeAllowed('server:get-config'),
+    setConfig: (payload) => invokeAllowed('server:set-config', payload || {}),
+  },
   auth: {
     ...authApi,
     getLinkedAccounts,

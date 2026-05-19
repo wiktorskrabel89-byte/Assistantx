@@ -18,7 +18,7 @@ const ROUTING_PROFILES = {
 };
 
 const REQUIRED_LOCAL_MODELS = ['gemma4:e4b', 'qwen2.5-coder:14b'];
-const DEFAULT_CLOUD_PROVIDER_ORDER = ['groq', 'openrouter', 'anthropic'];
+const DEFAULT_CLOUD_PROVIDER_ORDER = ['groq', 'openrouter'];
 
 class AIRouter {
   constructor(options = {}) {

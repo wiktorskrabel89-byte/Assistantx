@@ -27,7 +27,7 @@ const DEFAULT_MODELS = [
   },
   {
     provider: 'groq',
-    model: 'qwen-32b',
+    model: 'qwen-2.5-32b-instruct',
     supportsTools: true,
     supportsVision: false,
     supportsStreaming: true,
@@ -38,7 +38,7 @@ const DEFAULT_MODELS = [
   },
   {
     provider: 'openrouter',
-    model: 'gpt-120b',
+    model: 'openai/gpt-4o',
     supportsTools: true,
     supportsVision: true,
     supportsStreaming: true,

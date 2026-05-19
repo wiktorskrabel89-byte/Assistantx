@@ -26,9 +26,11 @@ const AUDIO_CHUNK_MS = 100; // send 100 ms chunks
 const AUDIO_CHUNK_SIZE = (AUDIO_SAMPLE_RATE * AUDIO_CHUNK_MS) / 1000; // samples per chunk
 
 class SidecarBridge extends EventEmitter {
-  constructor({ host = DEFAULT_HOST, port = DEFAULT_PORT } = {}) {
+  constructor({ host = DEFAULT_HOST, port = DEFAULT_PORT, url = '', token = '' } = {}) {
     super();
-    this._url = `ws://${host}:${port}`;
+    this._baseUrl = String(url || '').trim() || `ws://${host}:${port}`;
+    this._token = String(token || '').trim();
+    this._url = this._buildUrl();
     this._ws = null;
     this._reconnectAttempts = 0;
     this._reconnectTimer = null;
@@ -43,12 +45,19 @@ class SidecarBridge extends EventEmitter {
     this._pendingSettings = null;
   }
 
+  _buildUrl() {
+    if (!this._token) return this._baseUrl;
+    const separator = this._baseUrl.includes('?') ? '&' : '?';
+    return `${this._baseUrl}${separator}token=${encodeURIComponent(this._token)}`;
+  }
+
   // ── Connection management ────────────────────────────────────────────────
 
   connect() {
     if (this._ws && (this._ws.readyState === WebSocket.OPEN || this._ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
+    this._url = this._buildUrl();
     this._openSocket();
   }
 
@@ -69,6 +78,23 @@ class SidecarBridge extends EventEmitter {
 
   isConnected() {
     return this._connected;
+  }
+
+  setConnection({ url, token } = {}) {
+    if (typeof url === 'string' && url.trim()) {
+      this._baseUrl = url.trim();
+    }
+    if (typeof token === 'string') {
+      this._token = token.trim();
+    }
+    this._url = this._buildUrl();
+    if (this._ws && this._ws.readyState === WebSocket.OPEN) {
+      try {
+        this._ws.close();
+      } catch {
+        // ignore close errors
+      }
+    }
   }
 
   _openSocket() {

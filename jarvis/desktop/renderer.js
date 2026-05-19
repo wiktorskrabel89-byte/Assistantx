@@ -210,6 +210,17 @@ window.addEventListener('DOMContentLoaded', () => {
 	const remindersList = document.getElementById('reminders-list');
 	const serverUrlInput = document.getElementById('jarvis-server-url');
 	const saveServerUrlButton = document.getElementById('save-server-url');
+	const runtimeModeSelect = document.getElementById('runtime-mode');
+	const runtimePermissionLevelSelect = document.getElementById('runtime-permission-level');
+	const remoteRuntimeApiUrlInput = document.getElementById('remote-runtime-api-url');
+	const remoteRuntimeWsUrlInput = document.getElementById('remote-runtime-ws-url');
+	const saveRuntimeConfigButton = document.getElementById('save-runtime-config');
+	const runtimeSyncKeyInput = document.getElementById('runtime-sync-key');
+	const runtimePairButton = document.getElementById('runtime-pair');
+	const runtimeRefreshStatusButton = document.getElementById('runtime-refresh-status');
+	const runtimeApplyPermissionButton = document.getElementById('runtime-apply-permission');
+	const runtimeKillSwitchButton = document.getElementById('runtime-kill-switch');
+	const runtimeStatusNode = document.getElementById('runtime-status');
 	let apiBaseUrl = getJarvisApiUrl();
 	let cachedSpeechVoices = [];
 	let speechVoicePromise = null;
@@ -1791,6 +1802,127 @@ window.addEventListener('DOMContentLoaded', () => {
 			);
 		});
 	}
+
+	const serverApi = window.jarvisApi?.server || window.jarvisApiV2?.server || null;
+	function setRuntimeStatusText(text) {
+		if (runtimeStatusNode) runtimeStatusNode.textContent = text;
+	}
+
+	async function refreshRuntimeUiFromConfig() {
+		if (!serverApi) return;
+		try {
+			const config = await serverApi.getConfig();
+			if (runtimeModeSelect) runtimeModeSelect.value = config.runtimeMode || 'local-desktop';
+			if (remoteRuntimeApiUrlInput) remoteRuntimeApiUrlInput.value = config.remoteRuntimeApiUrl || '';
+			if (remoteRuntimeWsUrlInput) remoteRuntimeWsUrlInput.value = config.remoteRuntimeWsUrl || '';
+			const auth = await serverApi.getAuthStatus();
+			if (runtimePermissionLevelSelect) runtimePermissionLevelSelect.value = auth.permissionLevel || 'default';
+			setRuntimeStatusText(auth.paired
+				? `Synchronized (${auth.permissionLevel || 'default'})`
+				: 'Runtime not connected.');
+		} catch (error) {
+			setRuntimeStatusText(`Runtime config error: ${error?.message || error}`);
+		}
+	}
+
+	async function refreshRuntimeStatus() {
+		if (!serverApi) {
+			setRuntimeStatusText('Runtime bridge unavailable in this environment.');
+			return;
+		}
+		const status = await serverApi.getRuntimeStatus();
+		if (!status?.ok) {
+			setRuntimeStatusText(`Runtime status error: ${status?.error || 'request failed'}`);
+			return;
+		}
+		const metrics = status.metrics || {};
+		const services = metrics.services || {};
+		setRuntimeStatusText(
+			[
+				`State: ${status.state || 'unknown'}`,
+				`Permission: ${status.permissionLevel || 'default'}`,
+				`CPU: ${Number(metrics.cpuPercent || 0).toFixed(1)}%`,
+				`RAM: ${Number(metrics.ramPercent || 0).toFixed(1)}%`,
+				`Services: ollama=${services.ollama || 'n/a'}, searxng=${services.searxng || 'n/a'}, netdata=${services.netdata || 'n/a'}`,
+			].join(' · '),
+		);
+	}
+
+	if (saveRuntimeConfigButton && serverApi) {
+		saveRuntimeConfigButton.addEventListener('click', async () => {
+			const payload = {
+				runtimeMode: runtimeModeSelect?.value || 'local-desktop',
+				remoteRuntimeApiUrl: remoteRuntimeApiUrlInput?.value?.trim() || '',
+				remoteRuntimeWsUrl: remoteRuntimeWsUrlInput?.value?.trim() || '',
+			};
+			const result = await serverApi.setConfig(payload);
+			if (!result?.ok) {
+				appendMessage(log, 'System Core', `Failed to save runtime config: ${result?.error || 'unknown'}`, 'error');
+				return;
+			}
+			if (payload.runtimeMode === 'remote-linux-runtime' && sidecar?.setConnection) {
+				sidecar.setConnection({ url: result.remoteRuntimeWsUrl || payload.remoteRuntimeWsUrl });
+			}
+			appendMessage(log, 'System Core', `Runtime config saved (${result.runtimeMode}).`);
+			await refreshRuntimeUiFromConfig();
+		});
+	}
+
+	if (runtimePairButton && serverApi) {
+		runtimePairButton.addEventListener('click', async () => {
+			const syncKey = runtimeSyncKeyInput?.value?.trim();
+			if (!syncKey) {
+				appendMessage(log, 'System Core', 'Sync key is required for pairing.', 'error');
+				return;
+			}
+			const result = await serverApi.verifyPairing(syncKey);
+			if (!result?.ok) {
+				appendMessage(log, 'System Core', `Pairing failed: ${result?.error || 'unauthorized'}`, 'error');
+				return;
+			}
+			if (sidecar?.setConnection && (remoteRuntimeWsUrlInput?.value || '').trim()) {
+				sidecar.setConnection({ url: remoteRuntimeWsUrlInput.value.trim(), token: result.sessionToken || '' });
+				sidecar.connect?.();
+			}
+			appendMessage(log, 'System Core', 'Linux runtime pairing successful.');
+			await refreshRuntimeUiFromConfig();
+			await refreshRuntimeStatus();
+		});
+	}
+
+	if (runtimeRefreshStatusButton && serverApi) {
+		runtimeRefreshStatusButton.addEventListener('click', () => {
+			void refreshRuntimeStatus();
+		});
+	}
+
+	if (runtimeApplyPermissionButton && serverApi) {
+		runtimeApplyPermissionButton.addEventListener('click', async () => {
+			const level = runtimePermissionLevelSelect?.value || 'default';
+			const fullControlConsent = level === 'full';
+			const result = await serverApi.setPermissionLevel(level, fullControlConsent);
+			if (!result?.ok) {
+				appendMessage(log, 'System Core', `Failed to set permission: ${result?.error || 'unknown'}`, 'error');
+				return;
+			}
+			appendMessage(log, 'System Core', `Permission level set to ${level}.`);
+			await refreshRuntimeStatus();
+		});
+	}
+
+	if (runtimeKillSwitchButton && serverApi) {
+		runtimeKillSwitchButton.addEventListener('click', async () => {
+			const result = await serverApi.killSwitch();
+			if (!result?.ok) {
+				appendMessage(log, 'System Core', `Kill switch failed: ${result?.error || 'unknown'}`, 'error');
+				return;
+			}
+			appendMessage(log, 'System Core', 'Emergency disconnect completed.');
+			setRuntimeStatusText('Runtime disconnected.');
+		});
+	}
+
+	void refreshRuntimeUiFromConfig();
 
 	// Cloud sync on startup if signed in
 	void refreshCurrentSession().then((initialSession) => {

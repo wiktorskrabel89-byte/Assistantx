@@ -49,6 +49,14 @@ function createMainIpcHandlers(deps) {
     signOutAccountSession,
     getAccountProfile,
     beginDesktopLogin,
+    serverGetAuthStatus,
+    serverClearAuth,
+    serverVerifyPairing,
+    serverGetRuntimeStatus,
+    serverSetPermissionLevel,
+    serverKillSwitch,
+    serverGetConfig,
+    serverSetConfig,
     getMainWindow,
     getOverlayWindow,
     createLauncherOverlayWindow,
@@ -339,6 +347,38 @@ function createMainIpcHandlers(deps) {
       const auth = await permissions.authorize('open-account-login');
       if (!auth.allowed) return denied('open-account-login', auth.reason);
       return beginDesktopLogin({ parentWindow: getMainWindow() });
+    },
+
+    'server:get-auth-status': () => serverGetAuthStatus(),
+    'server:clear-auth': () => serverClearAuth(),
+    'server:verify-pairing': async (_event, payload) => {
+      const auth = await permissions.authorize('server:verify-pairing');
+      if (!auth.allowed) return denied('server:verify-pairing', auth.reason);
+      const syncKey = validateString(payload?.syncKey, { allowEmpty: false, maxLen: 512 });
+      if (!syncKey) return invalidResult('server:verify-pairing', 'sync-key-required');
+      return serverVerifyPairing(syncKey);
+    },
+    'server:get-runtime-status': () => serverGetRuntimeStatus(),
+    'server:set-permission-level': async (_event, payload) => {
+      const auth = await permissions.authorize('server:set-permission-level');
+      if (!auth.allowed) return denied('server:set-permission-level', auth.reason);
+      const body = validatePlainObject(payload) || {};
+      const level = validateString(body.level, { allowEmpty: false, maxLen: 20 }) || 'default';
+      const fullControlConsent = Boolean(body.fullControlConsent);
+      return serverSetPermissionLevel(level, fullControlConsent);
+    },
+    'server:kill-switch': async () => {
+      const auth = await permissions.authorize('server:kill-switch');
+      if (!auth.allowed) return denied('server:kill-switch', auth.reason);
+      return serverKillSwitch();
+    },
+    'server:get-config': () => serverGetConfig(),
+    'server:set-config': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const runtimeMode = validateString(body.runtimeMode, { allowEmpty: true, maxLen: 64 }) || undefined;
+      const remoteRuntimeApiUrl = validateString(body.remoteRuntimeApiUrl, { allowEmpty: true, maxLen: 500 }) || undefined;
+      const remoteRuntimeWsUrl = validateString(body.remoteRuntimeWsUrl, { allowEmpty: true, maxLen: 500 }) || undefined;
+      return serverSetConfig({ runtimeMode, remoteRuntimeApiUrl, remoteRuntimeWsUrl });
     },
   };
 

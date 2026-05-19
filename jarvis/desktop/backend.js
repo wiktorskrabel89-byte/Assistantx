@@ -450,7 +450,7 @@ function buildRouteHint(message) {
     prefersLowCost: normalized.length < 260,
     prefersLowLatency: normalized.length < 260,
   });
-  return choice || { provider: 'groq', model: 'qwen-32b' };
+  return choice || { provider: 'groq', model: 'qwen-2.5-32b-instruct' };
 }
 
 function deriveAiProfile(message) {
