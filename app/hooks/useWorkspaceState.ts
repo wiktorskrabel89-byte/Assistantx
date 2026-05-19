@@ -16,6 +16,7 @@ import {
   STORAGE_KEY,
   upgradeState,
 } from "../lib/chat-state";
+import { normalizePublicLanguage, UI_LANGUAGE_COOKIE_NAME } from "@/app/lib/ui-language";
 import type {
   ActionMode,
   ActionStep,
@@ -100,6 +101,20 @@ export function useWorkspaceState() {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     async function loadState() {
+      const resolveUiLanguage = () => {
+        try {
+          const cookieLang = document.cookie
+            .split(";")
+            .map((entry) => entry.trim())
+            .find((entry) => entry.startsWith(`${UI_LANGUAGE_COOKIE_NAME}=`))
+            ?.split("=")[1];
+          if (cookieLang) return normalizePublicLanguage(cookieLang);
+        } catch {
+          // ignore cookie read issues
+        }
+        return "en";
+      };
+
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         try {
@@ -114,6 +129,7 @@ export function useWorkspaceState() {
         }
       }
 
+      setState((prev) => ({ ...prev, uiLanguage: resolveUiLanguage() }));
       if (!cancelled) setLoaded(true);
 
       const importLegacyHistory = async () => {
@@ -364,6 +380,12 @@ export function useWorkspaceState() {
   }, []);
 
   const setUiLanguage = useCallback((uiLanguage: string) => {
+    try {
+      const secure = window.location.protocol === "https:" ? "; Secure" : "";
+      document.cookie = `${UI_LANGUAGE_COOKIE_NAME}=${normalizePublicLanguage(uiLanguage)}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+    } catch {
+      // ignore cookie write issues
+    }
     setState((prev) => ({ ...prev, uiLanguage }));
   }, []);
 

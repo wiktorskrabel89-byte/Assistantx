@@ -636,6 +636,13 @@ export function ChatTab() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeChat.messages.length, exportMarkdown]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const openAppsPanel = () => setAppsOpen(true);
+    window.addEventListener("assistantx:open-apps-panel", openAppsPanel);
+    return () => window.removeEventListener("assistantx:open-apps-panel", openAppsPanel);
+  }, []);
+
   const exportJson = useCallback(() => {
     const blob = new Blob([JSON.stringify(activeChat, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
