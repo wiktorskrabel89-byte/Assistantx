@@ -114,7 +114,7 @@ Post-publish CI verifies `jarvis-latest` contains all required updater assets
 - [ ] Packaged app (not dev mode) shows real app version.
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
 - [ ] Startup check is silent (no native updater popups when already up to date).
-- [ ] Public GitHub release metadata/assets are reachable on update check.
+- [ ] Private GitHub release metadata/assets are reachable on update check with valid auth.
 - [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection, rollback floor).
 - [ ] Detached `latest.yml` signature is verified before updater execution.
 - [ ] `minimumAllowedVersion` / `stagingPercentage` are present and correct for the release policy.
