@@ -10,9 +10,31 @@ import type {
 } from "@/src/core/types/runtime";
 import { ToolRouter } from "@/src/tools/router/router";
 import { APP_FORCED_MODEL_ID, ROUTING_GEMINI_MODEL } from "@/lib/ai-config";
+import { executeSandboxCode, type SandboxExecutionLanguage } from "@/src/backend/runtime/sandbox-executor";
 
 function createExecutionId() {
   return randomUUID();
+}
+
+function getReflectionMaxIterations() {
+  const value = Number(process.env.REFLECTION_MAX_ITERATIONS ?? 3);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 3;
+}
+
+function getReflectionTokenBudget() {
+  const value = Number(process.env.REFLECTION_TOKEN_BUDGET ?? 32_000);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 32_000;
+}
+
+function estimateTokenUsage(value: unknown) {
+  return Math.ceil(JSON.stringify(value ?? {}).length / 4);
+}
+
+function isCodingWorkflow(request: RuntimeExecutionRequest) {
+  return request.workflow === "sandbox_execute"
+    || request.workflow === "pr_review"
+    || request.workflow.toLowerCase().includes("code")
+    || request.workflow.toLowerCase().includes("refactor");
 }
 
 function getGitHubRuntimeToken() {
@@ -260,7 +282,28 @@ export async function executeRuntimeRequest(
   let finalError: string | null = null;
 
   try {
-    if (request.workflow === "pr_review") {
+    if (request.workflow === "sandbox_execute") {
+      const language = request.input.language;
+      const code = request.input.code;
+      const supportedLanguages: SandboxExecutionLanguage[] = ["python", "bash", "sql", "typescript"];
+      if (typeof language !== "string" || !supportedLanguages.includes(language as SandboxExecutionLanguage)) {
+        throw new Error("sandbox_execute requires a supported language: python, bash, sql, or typescript.");
+      }
+      if (typeof code !== "string") {
+        throw new Error("sandbox_execute requires code.");
+      }
+
+      const result = await executeSandboxCode({
+        language: language as SandboxExecutionLanguage,
+        code,
+        timeoutMs: 10_000,
+      });
+
+      finalOutput = {
+        workflow: request.workflow,
+        ...result,
+      };
+    } else if (request.workflow === "pr_review") {
       const repo = typeof request.input.repo === "string" ? request.input.repo : "";
       const pullNumber = typeof request.input.pullNumber === "number" ? request.input.pullNumber : Number(request.input.pullNumber ?? 0);
       const headSha = typeof request.input.headSha === "string" ? request.input.headSha : "";
@@ -295,85 +338,105 @@ export async function executeRuntimeRequest(
         headSha,
         publishedToGitHub,
       };
-      const completedAt = new Date().toISOString();
-      await eventBus.publish({
-        type: RUNTIME_EVENT_TYPES.WORKFLOW_COMPLETED,
-        timestamp: completedAt,
-        actorUserId: request.actor.userId,
-        organizationId: request.actor.organizationId,
-        executionId,
-        payload: {
-          workflow: request.workflow,
-          repo,
-          pullNumber,
-          publishedToGitHub,
-        },
+    } else {
+      const primaryRole = isCodingWorkflow(request) ? "coder" : "coordinator";
+      const reflectionMaxIterations = getReflectionMaxIterations();
+      const reflectionTokenBudget = getReflectionTokenBudget();
+      let consumedTokens = 0;
+      let attempt = 0;
+      let lastVerification: Awaited<ReturnType<typeof runVerifier>> | null = null;
+      let agent = await runAgentTask({
+        id: `${executionId}:${primaryRole}:0`,
+        role: primaryRole,
+        goal: request.workflow,
+        input: request.input,
       });
+      consumedTokens += estimateTokenUsage(agent.output);
 
-      if (hasPersistentRecord) {
-        try {
-          const { updateWorkflowRun } = await import(
-            "@/src/core/persistence/runtime-db"
-          );
-          await updateWorkflowRun(executionId, {
-            status: "completed",
-            output: finalOutput,
-            completed_at: completedAt,
+      while (isCodingWorkflow(request)) {
+        const verifierTask = {
+          id: `${executionId}:verifier:${attempt}`,
+          role: "verifier" as const,
+          goal: request.workflow,
+          input: agent.output,
+        };
+        lastVerification = await runVerifier(verifierTask, agent.output);
+        consumedTokens += estimateTokenUsage(lastVerification.output);
+
+        if (lastVerification.safe) break;
+        if (attempt + 1 >= reflectionMaxIterations) break;
+        if (consumedTokens >= reflectionTokenBudget) {
+          await eventBus.publish({
+            type: RUNTIME_EVENT_TYPES.BUDGET_EXHAUSTED,
+            timestamp: new Date().toISOString(),
+            actorUserId: request.actor.userId,
+            organizationId: request.actor.organizationId,
+            executionId,
+            payload: {
+              workflow: request.workflow,
+              consumedTokens,
+              budget: reflectionTokenBudget,
+              fallbackModel: ROUTING_GEMINI_MODEL,
+            },
           });
-        } catch {
-          // Best-effort.
+          break;
         }
+
+        attempt += 1;
+        agent = await runAgentTask({
+          id: `${executionId}:${primaryRole}:${attempt}`,
+          role: primaryRole,
+          goal: request.workflow,
+          input: {
+            ...request.input,
+            reflectionAttempt: attempt,
+            verifierReasons: lastVerification.reasons,
+            fallbackModel: ROUTING_GEMINI_MODEL,
+          },
+        });
+        consumedTokens += estimateTokenUsage(agent.output);
       }
 
-      return {
-        executionId,
-        status: "completed",
-        output: finalOutput,
+      const toolResult = await toolRouter.execute(
+        {
+          toolId: "memory.read",
+          input: request.input,
+        },
+        {
+          executionId,
+          workflowId: request.workflow,
+          actor: request.actor,
+          metadata: { source: "runtime-facade" },
+        },
+      );
+
+      const verification = lastVerification ?? await runVerifier({
+        id: `${executionId}:verifier`,
+        role: "verifier" as const,
+        goal: request.workflow,
+        input: agent.output,
+      }, agent.output);
+
+      finalOutput = {
+        workflow: request.workflow,
+        agent,
+        toolResult,
+        verification: {
+          safe: verification.safe,
+          reasons: verification.reasons,
+        },
+        reflection: {
+          attempts: attempt + 1,
+          tokenBudget: reflectionTokenBudget,
+          consumedTokens,
+          usedFallbackModel: consumedTokens >= reflectionTokenBudget ? ROUTING_GEMINI_MODEL : null,
+        },
       };
-    }
 
-    const agent = await runAgentTask({
-      id: `${executionId}:coordinator`,
-      role: "coordinator",
-      goal: request.workflow,
-      input: request.input,
-    });
-
-    const toolResult = await toolRouter.execute(
-      {
-        toolId: "memory.read",
-        input: request.input,
-      },
-      {
-        executionId,
-        workflowId: request.workflow,
-        actor: request.actor,
-        metadata: { source: "runtime-facade" },
-      },
-    );
-
-    // Run the verifier gate on the coordinator output.
-    const verifierTask = {
-      id: `${executionId}:verifier`,
-      role: "verifier" as const,
-      goal: request.workflow,
-      input: agent.output,
-    };
-    const verification = await runVerifier(verifierTask, agent.output);
-
-    finalOutput = {
-      workflow: request.workflow,
-      agent,
-      toolResult,
-      verification: {
-        safe: verification.safe,
-        reasons: verification.reasons,
-      },
-    };
-
-    if (!verification.safe) {
-      finalStatus = "failed";
-      finalError = `Verifier rejected output: ${verification.reasons.join("; ")}`;
+      if (!verification.safe) {
+        finalStatus = "failed";
+        finalError = `Verifier rejected output: ${verification.reasons.join("; ")}`;
+      }
     }
   } catch (err) {
     finalStatus = "failed";

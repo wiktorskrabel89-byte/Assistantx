@@ -184,6 +184,7 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
   const [aiInput, setAiInput] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [serverRunLoading, setServerRunLoading] = useState(false);
   const [runMode, setRunMode] = useState(false);
   const [deviceFrame, setDeviceFrame] = useState<"none" | "mobile" | "tablet">("none");
   const [showCdnPicker, setShowCdnPicker] = useState(false);
@@ -306,6 +307,52 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
     void sendAI(prompt);
   }
 
+  async function runOnServer() {
+    if (sandboxMode === "html-css-js") return;
+    setServerRunLoading(true);
+    setConsoleOpen(true);
+    setConsoleLogs((prev) => [...prev, { kind: "info", text: `Running ${currentMode.label} on the server...` }]);
+
+    try {
+      const response = await fetch("/api/runtime/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workflow: "sandbox_execute",
+          input: {
+            language: sandboxMode,
+            code: singleCode || INITIAL_SINGLE[sandboxMode],
+          },
+        }),
+      });
+      const data = await response.json().catch(() => ({})) as {
+        error?: string;
+        output?: { stdout?: string; stderr?: string; exitCode?: number; timedOut?: boolean };
+      };
+      if (!response.ok || !data.output) {
+        throw new Error(data.error ?? "Server execution failed.");
+      }
+
+      const nextLogs: ConsoleEntry[] = [];
+      if (data.output.stdout) nextLogs.push({ kind: "log", text: data.output.stdout.trim() });
+      if (data.output.stderr) nextLogs.push({ kind: "error", text: data.output.stderr.trim() });
+      nextLogs.push({
+        kind: data.output.exitCode === 0 ? "info" : "warn",
+        text: data.output.timedOut
+          ? `Process timed out (${data.output.exitCode ?? 124}).`
+          : `Process exited with code ${data.output.exitCode ?? 0}.`,
+      });
+      setConsoleLogs((prev) => [...prev, ...nextLogs]);
+    } catch (error) {
+      setConsoleLogs((prev) => [
+        ...prev,
+        { kind: "error", text: error instanceof Error ? error.message : "Server execution failed." },
+      ]);
+    } finally {
+      setServerRunLoading(false);
+    }
+  }
+
   function insertCdn(lib: typeof CDN_LIBRARIES[0]) {
     const tagPrefix = lib.tag.slice(0, 40);
     if (html.includes(tagPrefix)) { setShowCdnPicker(false); return; }
@@ -422,6 +469,12 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
         <button type="button" onClick={handleReview} title="Przegląd kodu AI" aria-label="Przegląd kodu AI" className={sec}>
           <BookMarked className="h-3.5 w-3.5 text-violet-400" /><span className="hidden sm:inline">Przegląd AI</span>
         </button>
+        {sandboxMode !== "html-css-js" && (
+          <button type="button" onClick={() => void runOnServer()} title="Uruchom na serwerze" aria-label="Uruchom na serwerze" className={pri} disabled={serverRunLoading}>
+            {serverRunLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">Run on Server</span>
+          </button>
+        )}
         <button type="button" onClick={() => setAiPanelOpen((v) => !v)} title="Panel AI" aria-label="Panel AI" className={pri}>
           <Bot className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI</span>
         </button>
@@ -541,15 +594,15 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
                 ) : (
                   <div className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center ${dark ? "text-slate-400" : "text-slate-500"}`}>
                     <SquareTerminal className={`h-10 w-10 ${dark ? "text-slate-700" : "text-slate-300"}`} />
-                    <p className="max-w-xs text-sm">
-                      Tryb <strong>{currentMode.label}</strong> nie obsługuje podglądu w przeglądarce.
-                      Użyj przycisku <strong>AI</strong>, aby wygenerować lub przeanalizować kod.
-                    </p>
-                    <button type="button" onClick={() => setAiPanelOpen(true)} className={pri}>
-                      <Bot className="h-4 w-4" />Uruchom z AI
-                    </button>
-                  </div>
-                )}
+                     <p className="max-w-xs text-sm">
+                       Tryb <strong>{currentMode.label}</strong> nie obsługuje podglądu w przeglądarce.
+                       Użyj przycisku <strong>Run on Server</strong>, aby wykonać kod z limitem 10 sekund i zobaczyć stdout/stderr w konsoli.
+                     </p>
+                     <button type="button" onClick={() => void runOnServer()} className={pri} disabled={serverRunLoading}>
+                       {serverRunLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}Run on Server
+                     </button>
+                   </div>
+                 )}
                 {sandboxMode === "html-css-js" && (
                   <div className={`flex flex-shrink-0 items-center gap-3 border-t px-3 py-2 text-xs ${panelCls}`}>
                     <span className={`font-medium ${dark ? "text-slate-300" : "text-slate-700"}`}>{getPageTitle()}</span>
