@@ -96,6 +96,7 @@ type ChatRequestBody = {
   personalityMode?: string;
   enabledTools?: string[];
   googleContext?: string;
+  strict?: boolean;
 };
 
 /** Matches canonical UUID string formatting (8-4-4-4-12 hex), without validating version bits. */
@@ -378,6 +379,7 @@ export const POST = async (req: Request) => {
     personalityMode: rawPersonalityMode = "default",
     enabledTools,
     googleContext,
+    strict = false,
   } = body;
 
   // ── Validate conversationId format before any DB operation ──────────────────
@@ -642,6 +644,13 @@ export const POST = async (req: Request) => {
     smartRouteLabel = `Auto: ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
   }
 
+  if (strict && inferredCodeRequest) {
+    selectedModel = userPlan === "free" ? ROUTING_CODE_MODEL_FREE : ROUTING_CODE_MODEL;
+    resolvedTemperature = 0;
+    resolvedReasoningEffort = "high";
+    smartRouteLabel = `Coding strict — ${MODEL_LABELS[selectedModel] ?? selectedModel}`;
+  }
+
   // Determine if this is a search mode request for system prompt selection
   const isSearchMode = websearchTrigger || toolWebSearchEnabled || effectiveRawMode === "search";
   const isGemini = selectedModel.includes("gemini");
@@ -852,6 +861,7 @@ export const POST = async (req: Request) => {
     stream: true,
     max_tokens: getModelMaxTokens(selectedModel, inferredCodeRequest),
     temperature: resolvedTemperature,
+    ...(strict && inferredCodeRequest ? { top_p: 1 } : {}),
     messages: [
       { role: "system", content: systemPrompt },
       ...historyMessages,
@@ -1082,6 +1092,10 @@ export const POST = async (req: Request) => {
 
         // Helper: get ordered list of models to try (paid first if allowed, then free)
         function getModelFallbackList() {
+          if (strict && inferredCodeRequest) {
+            return [ROUTING_GEMINI_MODEL, "deepseek/deepseek-r1"]
+              .filter((id) => ![requestBody.model, selectedModel].includes(id));
+          }
           // Prefer paid models if user is premium, otherwise free
           const isCode = inferredCodeRequest;
           const allModels = isCode ? CODE_MODELS : CHAT_MODELS;

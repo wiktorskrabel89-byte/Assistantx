@@ -61,6 +61,7 @@ type AppNavigationColumnProps = {
   isAdmin?: boolean;
   desktopAccessory?: ReactNode;
   mobileAccessory?: ReactNode;
+  highlightCodebase?: boolean;
 };
 
 type AddOnItem = {
@@ -113,6 +114,7 @@ export function AppNavigationColumn({
   isAdmin = false,
   desktopAccessory,
   mobileAccessory,
+  highlightCodebase = false,
 }: AppNavigationColumnProps) {
   const [appsOpen, setAppsOpen] = useState(false);
   const [appsSearch, setAppsSearch] = useState("");
@@ -209,6 +211,11 @@ export function AppNavigationColumn({
     }`;
   }
 
+  function codebaseHighlightClass(tabId: AppNavigationTab) {
+    if (!(highlightCodebase && tabId === "codebase")) return "";
+    return " ring-2 ring-sky-400 ring-offset-2 ring-offset-sidebar animate-pulse";
+  }
+
   return (
     <>
     <aside className={`hidden min-h-0 overflow-hidden rounded-lg border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
@@ -293,7 +300,7 @@ export function AppNavigationColumn({
                 onClick={() => onSelectTab(id)}
                 aria-current={activeTab === id ? "page" : undefined}
                 title={`${label} (Ctrl+Shift+${shortcutNumber})`}
-                className={navButtonClass(activeTab === id)}
+                className={`${navButtonClass(activeTab === id)}${codebaseHighlightClass(id)}`}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate">{label}</span>

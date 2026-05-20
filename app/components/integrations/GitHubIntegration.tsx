@@ -51,9 +51,10 @@ type GitHubIntegrationProps = {
   linkedProviders: OAuthProvider[];
   authProvider: OAuthProvider | null;
   onImportFile: (file: File, prompt: string) => void;
+  highlightCard?: boolean;
 };
 
-export function GitHubIntegration({ dark, linkedProviders, authProvider, onImportFile }: GitHubIntegrationProps) {
+export function GitHubIntegration({ dark, linkedProviders, authProvider, onImportFile, highlightCard = false }: GitHubIntegrationProps) {
   const [githubRepoInput, setGithubRepoInput] = useState("");
   const [githubRefInput, setGithubRefInput] = useState("");
   const [githubFilter, setGithubFilter] = useState("");
@@ -263,7 +264,7 @@ export function GitHubIntegration({ dark, linkedProviders, authProvider, onImpor
   const isGithubConnected = linkedProviders.includes("github") || authProvider === "github";
 
   return (
-    <div className={`rounded-2xl border px-3 py-3 ${dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
+    <div className={`rounded-2xl border px-3 py-3 transition-shadow ${highlightCard ? "ring-2 ring-sky-400 ring-offset-2 ring-offset-background shadow-[0_0_0_1px_rgba(56,189,248,0.35)]" : ""} ${dark ? "border-gray-800 bg-gray-950/60" : "border-gray-200 bg-gray-50"}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-medium">GitHub repo import</div>

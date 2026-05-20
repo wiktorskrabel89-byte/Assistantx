@@ -123,6 +123,42 @@ AssistantX now includes a runtime-foundation scaffold under `/src` for the archi
 
 See `docs/architecture/runtime-foundation.md` for details.
 
+## Public MCP API
+
+AssistantX exposes MCP discovery and invocation routes:
+
+- `GET /api/mcp`
+- `GET /api/mcp/tools`
+- `POST /api/mcp/invoke`
+
+Authenticate with either:
+
+- `Authorization: Bearer <MCP_API_KEY>` for server-to-server access, or
+- `Authorization: Bearer <Supabase access token>` for a signed-in AssistantX user.
+
+Example discovery request:
+
+```bash
+curl -H "Authorization: Bearer $MCP_API_KEY" \
+  http://localhost:3000/api/mcp/tools
+```
+
+Example tool invocation:
+
+```bash
+curl -X POST http://localhost:3000/api/mcp/invoke \
+  -H "Authorization: Bearer $MCP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toolName": "memory/write",
+    "input": {
+      "content": "Remember that the PR review route is enabled.",
+      "layer": "episodic",
+      "tags": ["mcp", "example"]
+    }
+  }'
+```
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

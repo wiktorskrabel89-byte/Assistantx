@@ -60,6 +60,7 @@ export function SettingsTab() {
     setTtsVoiceId,
     setAutoSpeakResponses,
     setPersonalityMode,
+    setPostPrReviewCommentsToGitHub,
   } = useWorkspace();
 
   const tr = getTranslations(state.uiLanguage ?? "en");
@@ -238,6 +239,22 @@ export function SettingsTab() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">GitHub PR review comments</p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>
+                  Allow AssistantX to publish generated PR review feedback back to GitHub when a PR review workflow opts in.
+                </p>
+              </div>
+              <Switch
+                checked={activeWorkspace.settings.postPrReviewCommentsToGitHub ?? false}
+                onCheckedChange={setPostPrReviewCommentsToGitHub}
+                aria-label="Post PR review comments to GitHub"
+              />
             </div>
           </div>
 

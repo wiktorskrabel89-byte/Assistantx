@@ -133,6 +133,7 @@ export type WorkspaceSettings = {
   localOnlyMode: boolean;
   encryptedSync: boolean;
   pauseSync: boolean;
+  postPrReviewCommentsToGitHub: boolean;
 };
 
 export type Workspace = {

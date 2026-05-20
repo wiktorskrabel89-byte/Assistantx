@@ -8,8 +8,16 @@ import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
 import { isEditableElementTarget } from "./lib/keyboard";
 import { createClient } from "@/lib/client";
-import type { AppMode } from "./lib/chat-types";
+import type { AppMode, Mode } from "./lib/chat-types";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const GUEST_TOUR_TRIGGER_KEY = "assistantx.guest-tour";
+const GUEST_TOUR_DONE_KEY = "assistantx.guest-tour-done";
+const GUEST_ANALYSIS_PROMPT = [
+  "Use GPT OSS 120B in strict coding mode.",
+  "Analyze my repository context and suggest the next high-impact code improvements.",
+  "Focus on architecture risks, missing integrations, and the safest next implementation steps.",
+].join(" ");
 
 function TabSkeleton() {
   return <Skeleton className="h-full w-full rounded-[inherit]" />;
@@ -92,17 +100,33 @@ function TabContent({
   notificationsHook,
   sandboxInitCode,
   onOpenInSandbox,
+  onAskAboutFile,
+  externalComposerSeed,
+  onConsumeComposerSeed,
+  highlightGitHubCard,
+  highlightCodebase,
 }: {
   activeTab: AppNavigationTab;
   notificationsHook: ReturnType<typeof useNotifications>;
   sandboxInitCode?: { html: string; css: string; js: string } | null;
   onOpenInSandbox?: (html: string, css: string, js: string) => void;
+  onAskAboutFile?: (prompt: string) => void;
+  externalComposerSeed?: { text: string; mode: Mode } | null;
+  onConsumeComposerSeed?: () => void;
+  highlightGitHubCard?: boolean;
+  highlightCodebase?: boolean;
 }) {
   const { state } = useWorkspace();
 
   switch (activeTab) {
     case "chat":
-      return <ChatTab />;
+      return (
+        <ChatTab
+          externalComposerSeed={externalComposerSeed}
+          onConsumeExternalComposerSeed={onConsumeComposerSeed}
+          highlightGitHubCard={highlightGitHubCard}
+        />
+      );
     case "jarvis":
       return <JarvisTab />;
     case "clinical":
@@ -114,7 +138,13 @@ function TabContent({
     case "projects":
       return <ProjectsTab dark={state.dark} />;
     case "codebase":
-      return <CodebaseTab dark={state.dark} />;
+      return (
+        <CodebaseTab
+          dark={state.dark}
+          onAskAboutFile={onAskAboutFile}
+          highlightTour={highlightCodebase}
+        />
+      );
     case "website-creator":
       return <WebsiteCreatorTab dark={state.dark} onOpenInSandbox={onOpenInSandbox} />;
     case "prompt-library":
@@ -133,24 +163,14 @@ function TabContent({
 }
 
 function HomeContent() {
-  const { state, setAppMode, setPinnedAddOns, userEmail, loaded } = useWorkspace();
+  const { state, setAppMode, setPinnedAddOns, userEmail, authReady, loaded } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
   const notificationsHook = useNotifications();
   const [isAdmin, setIsAdmin] = useState(false);
   const adminCheckedRef = useRef(false);
   const [sandboxInitCode, setSandboxInitCode] = useState<{ html: string; css: string; js: string } | null>(null);
-  const [guestTourOpen, setGuestTourOpen] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      const shouldOpenTour = window.sessionStorage.getItem("assistantx.guest-tour") === "1";
-      if (shouldOpenTour) {
-        window.sessionStorage.removeItem("assistantx.guest-tour");
-      }
-      return shouldOpenTour;
-    } catch {
-      return false;
-    }
-  });
+  const [pendingComposerSeed, setPendingComposerSeed] = useState<{ text: string; mode: Mode } | null>(null);
+  const [guestTourOpen, setGuestTourOpen] = useState(false);
   const [guestTourStep, setGuestTourStep] = useState(1);
 
   const appMode: AppMode = state.appMode ?? "ai-chat";
@@ -240,11 +260,60 @@ function HomeContent() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!loaded || !authReady || typeof window === "undefined") return;
+    if (userEmail) {
+      const frameId = window.requestAnimationFrame(() => setGuestTourOpen(false));
+      return () => window.cancelAnimationFrame(frameId);
+    }
+    let frameId: number | null = null;
+    try {
+      const shouldOpenTour = window.sessionStorage.getItem(GUEST_TOUR_TRIGGER_KEY) === "1";
+      const alreadyDone = window.localStorage.getItem(GUEST_TOUR_DONE_KEY) === "1";
+      if (shouldOpenTour) {
+        window.sessionStorage.removeItem(GUEST_TOUR_TRIGGER_KEY);
+      }
+      if (shouldOpenTour && !alreadyDone) {
+        frameId = window.requestAnimationFrame(() => {
+          setGuestTourStep(1);
+          setGuestTourOpen(true);
+        });
+      }
+    } catch {
+      // ignore storage failures
+    }
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [authReady, loaded, userEmail]);
+
   const handleOpenInSandbox = useCallback((html: string, css: string, js: string) => {
     setSandboxInitCode({ html, css, js });
     setAppMode("ai-code");
     setActiveAppTab("sandbox");
   }, [setAppMode]);
+
+  const closeGuestTour = useCallback((markDone = true) => {
+    setGuestTourOpen(false);
+    if (!markDone || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(GUEST_TOUR_DONE_KEY, "1");
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
+
+  const queueComposerSeed = useCallback((text: string, mode: Mode) => {
+    setPendingComposerSeed({ text, mode });
+  }, []);
+
+  const openCodeAnalysisPrompt = useCallback(() => {
+    setAppMode("ai-chat");
+    setActiveAppTab("chat");
+    queueComposerSeed(GUEST_ANALYSIS_PROMPT, "code");
+  }, [queueComposerSeed, setAppMode]);
 
   const isChatTab = visibleTab === "chat";
 
@@ -262,10 +331,9 @@ function HomeContent() {
       return;
     }
     if (step === 3) {
-      setAppMode("ai-code");
-      setActiveAppTab("codebase");
+      openCodeAnalysisPrompt();
     }
-  }, [setAppMode]);
+  }, [openCodeAnalysisPrompt, setAppMode]);
 
   if (!loaded) {
     return <WorkspaceLoadingScreen />;
@@ -284,6 +352,7 @@ function HomeContent() {
           onSetPinnedAddOns={setPinnedAddOns}
           userEmail={userEmail}
           isAdmin={isAdmin}
+          highlightCodebase={guestTourOpen && guestTourStep === 2}
         />
 
         {isChatTab ? (
@@ -293,6 +362,9 @@ function HomeContent() {
             notificationsHook={notificationsHook}
             sandboxInitCode={sandboxInitCode}
             onOpenInSandbox={handleOpenInSandbox}
+            externalComposerSeed={pendingComposerSeed}
+            onConsumeComposerSeed={() => setPendingComposerSeed(null)}
+            highlightGitHubCard={guestTourOpen && guestTourStep === 1}
           />
         ) : (
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card transition-all duration-200">
@@ -302,6 +374,15 @@ function HomeContent() {
               notificationsHook={notificationsHook}
               sandboxInitCode={sandboxInitCode}
               onOpenInSandbox={handleOpenInSandbox}
+              onAskAboutFile={(prompt) => {
+                setAppMode("ai-chat");
+                setActiveAppTab("chat");
+                queueComposerSeed(prompt, "code");
+              }}
+              externalComposerSeed={pendingComposerSeed}
+              onConsumeComposerSeed={() => setPendingComposerSeed(null)}
+              highlightGitHubCard={guestTourOpen && guestTourStep === 1}
+              highlightCodebase={guestTourOpen && guestTourStep === 2}
             />
           </main>
         )}
@@ -320,7 +401,7 @@ function HomeContent() {
               <>
                 <h2 className="mt-2 text-xl font-semibold">Connect GitHub</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Open Apps panel and connect GitHub to unlock repo browsing and code workflows.
+                  Open the Apps panel and connect GitHub. The GitHub card is highlighted so you can unlock repo browsing and coding workflows right away.
                 </p>
                 <button
                   type="button"
@@ -335,7 +416,7 @@ function HomeContent() {
               <>
                 <h2 className="mt-2 text-xl font-semibold">Open Codebase</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Switch to AI Code mode and open the Codebase tab to load your repository tree.
+                  Switch to AI Code mode and open the highlighted Codebase tab to browse files and prepare a repository-wide task.
                 </p>
                 <button
                   type="button"
@@ -350,24 +431,24 @@ function HomeContent() {
               <>
                 <h2 className="mt-2 text-xl font-semibold">Analyze code with 120B</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Select a file and click “Ask AI about this file” to run coding analysis with the 120B model profile.
+                  I can prefill the chat composer with a 120B code-analysis prompt so you can start from a strong repository review workflow.
                 </p>
                 <button
                   type="button"
-                  onClick={() => goToTourStep(3)}
+                  onClick={() => openCodeAnalysisPrompt()}
                   className="mt-4 rounded-xl border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
                 >
-                  Keep me on Codebase
+                  Prefill code-analysis prompt
                 </button>
               </>
             ) : null}
             <div className="mt-6 flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => setGuestTourOpen(false)}
+                onClick={() => closeGuestTour(true)}
                 className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
               >
-                Close tour
+                Skip tour
               </button>
               <div className="flex gap-2">
                 <button
@@ -380,12 +461,12 @@ function HomeContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (guestTourStep >= 3) {
-                      setGuestTourOpen(false);
+                   onClick={() => {
+                     if (guestTourStep >= 3) {
+                      closeGuestTour(true);
                       return;
-                    }
-                    goToTourStep(guestTourStep + 1);
+                     }
+                     goToTourStep(guestTourStep + 1);
                   }}
                   className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                 >

@@ -514,6 +514,13 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setPostPrReviewCommentsToGitHub = useCallback((postPrReviewCommentsToGitHub: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, postPrReviewCommentsToGitHub },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const clearMemoryNotes = useCallback(() => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -873,6 +880,7 @@ export function useWorkspaceState() {
     setTtsVoiceId,
     setAutoSpeakResponses,
     setPersonalityMode,
+    setPostPrReviewCommentsToGitHub,
     clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,
