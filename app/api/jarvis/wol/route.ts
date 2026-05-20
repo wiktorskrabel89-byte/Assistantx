@@ -1,61 +1,6 @@
-import dgram from "node:dgram";
 import { timingSafeEqual } from "node:crypto";
 import { createClient } from "@/lib/server";
-
-/** Parse a MAC address string into a 6-byte Buffer.
- *  Accepts formats: AA:BB:CC:DD:EE:FF  AA-BB-CC-DD-EE-FF  AABBCCDDEEFF
- */
-function parseMac(mac: string): Buffer {
-  const hex = mac.replace(/[:\-]/g, "");
-  if (!/^[0-9a-fA-F]{12}$/.test(hex)) {
-    throw new Error(`Invalid MAC address: ${mac}`);
-  }
-  const bytes = Buffer.alloc(6);
-  for (let i = 0; i < 6; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-/** Build a Wake-on-LAN magic packet (102 bytes). */
-function buildMagicPacket(mac: Buffer): Buffer {
-  const packet = Buffer.alloc(102);
-  // 6 bytes of 0xFF
-  packet.fill(0xff, 0, 6);
-  // 16 repetitions of the 6-byte MAC
-  for (let i = 0; i < 16; i++) {
-    mac.copy(packet, 6 + i * 6);
-  }
-  return packet;
-}
-
-/** Send the magic packet via UDP broadcast. */
-function sendMagicPacket(
-  packet: Buffer,
-  broadcastAddr: string,
-  port: number,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
-
-    socket.once("error", (err) => {
-      socket.close();
-      reject(err);
-    });
-
-    socket.bind(() => {
-      socket.setBroadcast(true);
-      socket.send(packet, 0, packet.length, port, broadcastAddr, (err) => {
-        socket.close();
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-  });
-}
+import { sendWakeOnLanPacket } from "@/src/core/wake/magic-packet";
 
 /** Wake-on-LAN ports that are standard and safe to accept from callers. */
 const ALLOWED_WOL_PORTS = [7, 9];
@@ -119,24 +64,20 @@ export async function POST(request: Request): Promise<Response> {
   }
   const port = requestedPort;
 
-  let macBytes: Buffer;
   try {
-    macBytes = parseMac(mac);
+    await sendWakeOnLanPacket({
+      mac,
+      host: broadcast,
+      port,
+      socketType: "udp4",
+      enableBroadcast: true,
+    });
   } catch (err) {
+    const message = (err as Error).message;
+    const status = message.toLowerCase().includes("invalid mac") ? 400 : 500;
     return Response.json(
-      { error: (err as Error).message },
-      { status: 400 },
-    );
-  }
-
-  const packet = buildMagicPacket(macBytes);
-
-  try {
-    await sendMagicPacket(packet, broadcast, port);
-  } catch (err) {
-    return Response.json(
-      { error: `Failed to send WoL packet: ${(err as Error).message}` },
-      { status: 500 },
+      { error: status === 500 ? `Failed to send WoL packet: ${message}` : message },
+      { status },
     );
   }
 
