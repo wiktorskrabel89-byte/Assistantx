@@ -24,6 +24,7 @@ type CodebaseTabProps = {
   dark: boolean;
   /** Called to inject a pre-filled message into the chat composer */
   onAskAboutFile?: (prompt: string) => void;
+  highlightTour?: boolean;
 };
 
 function buildTree(files: GitHubFileSummary[]): Record<string, GitHubFileSummary[]> {
@@ -107,7 +108,7 @@ function FileTree({
   );
 }
 
-export function CodebaseTab({ dark, onAskAboutFile }: CodebaseTabProps) {
+export function CodebaseTab({ dark, onAskAboutFile, highlightTour = false }: CodebaseTabProps) {
   const [repoInput, setRepoInput] = useState("");
   const [refInput, setRefInput] = useState("");
   const [filter, setFilter] = useState("");
@@ -182,7 +183,7 @@ export function CodebaseTab({ dark, onAskAboutFile }: CodebaseTabProps) {
     : "bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)]";
 
   return (
-    <section className={`flex h-full min-h-0 flex-col overflow-hidden animate-tab-enter ${bg}`}>
+    <section className={`flex h-full min-h-0 flex-col overflow-hidden animate-tab-enter ${bg} ${highlightTour ? "ring-2 ring-sky-400 ring-inset" : ""}`}>
       {/* Header */}
       <div className={`flex flex-shrink-0 items-center gap-3 border-b px-4 py-3 ${dark ? "border-slate-800 bg-slate-950/70" : "border-slate-200 bg-white/80"}`}>
         <Database className={`h-4 w-4 ${dark ? "text-sky-400" : "text-sky-600"}`} />

@@ -19,6 +19,7 @@ type GitHubPanelProps = {
   onCopyVsCodePrompt: () => void;
   onDownloadVsCodeBundle: () => void;
   onSendGoogleContext?: (context: string) => void;
+  highlightGitHubCard?: boolean;
 };
 
 export function GitHubPanel({
@@ -35,6 +36,7 @@ export function GitHubPanel({
   onCopyVsCodePrompt,
   onDownloadVsCodeBundle,
   onSendGoogleContext,
+  highlightGitHubCard = false,
 }: GitHubPanelProps) {
   useEffect(() => {
     if (!open) return;
@@ -89,6 +91,7 @@ export function GitHubPanel({
               onCopyVsCodePrompt={onCopyVsCodePrompt}
               onDownloadVsCodeBundle={onDownloadVsCodeBundle}
               onSendGoogleContext={onSendGoogleContext}
+              highlightGitHubCard={highlightGitHubCard}
             />
           </div>
         </div>
