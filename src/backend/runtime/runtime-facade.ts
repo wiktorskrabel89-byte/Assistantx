@@ -43,9 +43,33 @@ function getGitHubRuntimeToken() {
     || null;
 }
 
+function assertValidGitHubRepo(repo: string) {
+  if (!/^[\w.\-]+\/[\w.\-]+$/.test(repo)) {
+    throw new Error("Invalid GitHub repository format.");
+  }
+}
+
+function getGitHubRepoParts(repo: string) {
+  assertValidGitHubRepo(repo);
+  const [owner, name] = repo.split("/");
+  return { owner, name };
+}
+
+function buildGitHubApiUrl(repo: string, pathSuffix: string) {
+  const { owner, name } = getGitHubRepoParts(repo);
+  const url = new URL(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/${pathSuffix}`);
+  return url.toString();
+}
+
 async function fetchPullRequestDiff(repo: string, pullNumber: number, diffUrl?: string) {
   const token = getGitHubRuntimeToken();
-  const url = diffUrl || `https://api.github.com/repos/${repo}/pulls/${pullNumber}`;
+  if (diffUrl) {
+    const parsed = new URL(diffUrl);
+    if (!new Set(["github.com", "api.github.com"]).has(parsed.hostname)) {
+      throw new Error("Pull request diff URL must point to GitHub.");
+    }
+  }
+  const url = buildGitHubApiUrl(repo, `pulls/${pullNumber}`);
   const response = await fetch(url, {
     headers: {
       Accept: diffUrl ? "application/vnd.github.v3.diff" : "application/vnd.github.v3.diff",
@@ -184,7 +208,7 @@ async function maybePublishGitHubPrComment({
   const token = getGitHubRuntimeToken();
   if (!token) return false;
 
-  const response = await fetch(`https://api.github.com/repos/${repo}/pulls/${pullNumber}/reviews`, {
+  const response = await fetch(buildGitHubApiUrl(repo, `pulls/${pullNumber}/reviews`), {
     method: "POST",
     headers: {
       Accept: "application/vnd.github+json",
@@ -342,6 +366,7 @@ export async function executeRuntimeRequest(
       const primaryRole = isCodingWorkflow(request) ? "coder" : "coordinator";
       const reflectionMaxIterations = getReflectionMaxIterations();
       const reflectionTokenBudget = getReflectionTokenBudget();
+      const fallbackModelChain = [ROUTING_GEMINI_MODEL, "deepseek/deepseek-r1"];
       let consumedTokens = 0;
       let attempt = 0;
       let lastVerification: Awaited<ReturnType<typeof runVerifier>> | null = null;
@@ -376,7 +401,8 @@ export async function executeRuntimeRequest(
               workflow: request.workflow,
               consumedTokens,
               budget: reflectionTokenBudget,
-              fallbackModel: ROUTING_GEMINI_MODEL,
+              fallbackModel: fallbackModelChain[0],
+              fallbackModelChain,
             },
           });
           break;
@@ -391,7 +417,8 @@ export async function executeRuntimeRequest(
             ...request.input,
             reflectionAttempt: attempt,
             verifierReasons: lastVerification.reasons,
-            fallbackModel: ROUTING_GEMINI_MODEL,
+            fallbackModel: fallbackModelChain[0],
+            fallbackModelChain,
           },
         });
         consumedTokens += estimateTokenUsage(agent.output);
@@ -429,7 +456,8 @@ export async function executeRuntimeRequest(
           attempts: attempt + 1,
           tokenBudget: reflectionTokenBudget,
           consumedTokens,
-          usedFallbackModel: consumedTokens >= reflectionTokenBudget ? ROUTING_GEMINI_MODEL : null,
+          usedFallbackModel: consumedTokens >= reflectionTokenBudget ? fallbackModelChain[0] : null,
+          fallbackModelChain,
         },
       };
 

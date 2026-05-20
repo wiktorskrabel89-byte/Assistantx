@@ -95,7 +95,8 @@ type ConsoleEntry = { text: string; kind: "log" | "warn" | "error" | "info" };
 async function streamChatRequest(
   prompt: string,
   signal: AbortSignal,
-  onToken: (t: string) => void
+  onToken: (t: string) => void,
+  options?: { strict?: boolean },
 ): Promise<void> {
   const res = await fetch("/api/chat", {
     method: "POST",
@@ -109,6 +110,7 @@ async function streamChatRequest(
       modelId: APP_FORCED_MODEL_ID,
       thinkingEffort: APP_FORCED_THINKING_EFFORT,
       allowedModels: [APP_FORCED_MODEL_ID],
+      strict: options?.strict === true,
     }),
   });
   if (!res.body) return;
@@ -185,6 +187,7 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
   const [aiResponse, setAiResponse] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [serverRunLoading, setServerRunLoading] = useState(false);
+  const [strictCoding, setStrictCoding] = useState(true);
   const [runMode, setRunMode] = useState(false);
   const [deviceFrame, setDeviceFrame] = useState<"none" | "mobile" | "tablet">("none");
   const [showCdnPicker, setShowCdnPicker] = useState(false);
@@ -281,13 +284,13 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
       await streamChatRequest(prompt + langHint, aiAbortRef.current.signal, (t) => {
         full += t;
         setAiResponse(full);
-      });
+      }, { strict: strictCoding });
     } catch (e) {
       if ((e as Error).name !== "AbortError") setAiResponse("Błąd podczas generowania odpowiedzi AI.");
     } finally {
       setAiLoading(false);
     }
-  }, [responseLang]);
+  }, [responseLang, strictCoding]);
 
   function handleReview() {
     setAiPanelOpen(true);
@@ -468,6 +471,16 @@ export function SandboxTab({ dark, initialCode }: { dark: boolean; initialCode?:
 
         <button type="button" onClick={handleReview} title="Przegląd kodu AI" aria-label="Przegląd kodu AI" className={sec}>
           <BookMarked className="h-3.5 w-3.5 text-violet-400" /><span className="hidden sm:inline">Przegląd AI</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStrictCoding((value) => !value)}
+          title="Strict coding profile"
+          aria-label="Strict coding profile"
+          className={strictCoding ? pri : sec}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Strict 120B</span>
         </button>
         {sandboxMode !== "html-css-js" && (
           <button type="button" onClick={() => void runOnServer()} title="Uruchom na serwerze" aria-label="Uruchom na serwerze" className={pri} disabled={serverRunLoading}>

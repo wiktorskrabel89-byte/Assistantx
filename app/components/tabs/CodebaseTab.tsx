@@ -129,7 +129,7 @@ function extractJsonPayload(text: string) {
   return JSON.parse(candidate.slice(start, end + 1)) as RefactorPlan;
 }
 
-async function streamAssistantResponse(prompt: string) {
+async function streamAssistantResponse(prompt: string, strict: boolean) {
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -141,6 +141,7 @@ async function streamAssistantResponse(prompt: string) {
       modelId: APP_FORCED_MODEL_ID,
       thinkingEffort: APP_FORCED_THINKING_EFFORT,
       allowedModels: [APP_FORCED_MODEL_ID],
+      strict,
     }),
   });
 
@@ -290,6 +291,7 @@ export function CodebaseTab({ dark, onAskAboutFile, highlightTour = false }: Cod
   const [planning, setPlanning] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
   const [prLoading, setPrLoading] = useState(false);
+  const [strictRefactor, setStrictRefactor] = useState(true);
   const [reviewPlan, setReviewPlan] = useState<RefactorPlan | null>(null);
   const [reviewError, setReviewError] = useState("");
   const [commitResult, setCommitResult] = useState<string>("");
@@ -413,7 +415,7 @@ export function CodebaseTab({ dark, onAskAboutFile, highlightTour = false }: Cod
         ...files.map((file) => `### ${file.path}\n\`\`\`\n${file.content}\n\`\`\``),
       ].join("\n");
 
-      const rawPlan = await streamAssistantResponse(prompt);
+      const rawPlan = await streamAssistantResponse(prompt, strictRefactor);
       const parsedPlan = extractJsonPayload(rawPlan);
       const allowedPaths = new Set(files.map((file) => file.path));
       const sanitizedFiles = (parsedPlan.files ?? []).filter((file) => allowedPaths.has(file.path) && typeof file.content === "string");
@@ -636,6 +638,14 @@ export function CodebaseTab({ dark, onAskAboutFile, highlightTour = false }: Cod
                     placeholder="Describe the refactor or repository-wide change."
                   />
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStrictRefactor((value) => !value)}
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${strictRefactor ? (dark ? "bg-sky-900 text-sky-100" : "bg-sky-100 text-sky-700") : (dark ? "bg-slate-900 text-slate-300" : "bg-slate-100 text-slate-700")}`}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Strict 120B
+                    </button>
                     <button
                       type="button"
                       onClick={() => void analyzeSelectedFiles()}
