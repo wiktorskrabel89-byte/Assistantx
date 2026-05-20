@@ -58,26 +58,34 @@ export async function POST(
     broadcastAddress: typeof body.broadcast === "string" ? body.broadcast : null,
   });
 
-  await insertAuditLog({
-    event_type: execution.ok ? "wake_completed" : "wake_failed",
-    user_id: user.id,
-    organization_id: device.organization_id ?? null,
-    target_type: "device",
-    target_id: id,
-    payload: {
-      reason,
-      candidate,
-      attempts: execution.attempts,
-      selectedMethod: execution.method,
-      requestedAt: new Date().toISOString(),
-    },
-  }).catch(() => null);
+  try {
+    await insertAuditLog({
+      event_type: execution.ok ? "wake_completed" : "wake_failed",
+      user_id: user.id,
+      organization_id: device.organization_id ?? null,
+      target_type: "device",
+      target_id: id,
+      payload: {
+        reason,
+        candidate,
+        attempts: execution.attempts,
+        selectedMethod: execution.method,
+        requestedAt: new Date().toISOString(),
+      },
+    });
+  } catch {
+    // best-effort audit write
+  }
 
-  await updateDeviceWakeResult({
-    deviceId: id,
-    method: execution.method ?? null,
-    success: execution.ok,
-  }).catch(() => null);
+  try {
+    await updateDeviceWakeResult({
+      deviceId: id,
+      method: execution.method ?? null,
+      success: execution.ok,
+    });
+  } catch {
+    // best-effort device wake stats update
+  }
 
   if (!execution.ok) {
     return Response.json({
@@ -92,4 +100,3 @@ export async function POST(
     attempts: execution.attempts,
   });
 }
-
