@@ -324,6 +324,7 @@ export function createSettings(): WorkspaceSettings {
     localOnlyMode: false,
     encryptedSync: false,
     pauseSync: false,
+    postPrReviewCommentsToGitHub: false,
   };
 }
 
