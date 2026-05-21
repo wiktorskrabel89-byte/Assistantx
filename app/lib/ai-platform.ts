@@ -43,6 +43,43 @@ export type ImageGenerationResult = {
   promptUsed: string;
 };
 
+function getImageDimensions(aspectRatio?: string) {
+  if (aspectRatio === "portrait") {
+    return { width: PORTRAIT_IMAGE_WIDTH, height: PORTRAIT_IMAGE_HEIGHT };
+  }
+  return { width: DEFAULT_IMAGE_WIDTH, height: DEFAULT_IMAGE_HEIGHT };
+}
+
+function normalizeLocalImageOutput(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed) || /^data:/i.test(trimmed)) return trimmed;
+  return `data:image/png;base64,${trimmed}`;
+}
+
+function extractLocalImageUrl(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const directCandidates = [
+    record.url,
+    (record.image as { url?: unknown } | undefined)?.url,
+    (record.output as Array<string | { url?: string }> | undefined)?.[0],
+    (record.data as Array<string | { url?: string }> | undefined)?.[0],
+    (record.images as Array<string | { url?: string }> | undefined)?.[0],
+  ];
+  for (const candidate of directCandidates) {
+    if (typeof candidate === "object" && candidate !== null && "url" in candidate) {
+      const value = normalizeLocalImageOutput((candidate as { url?: unknown }).url);
+      if (value) return value;
+      continue;
+    }
+    const value = normalizeLocalImageOutput(candidate);
+    if (value) return value;
+  }
+  return null;
+}
+
 export function normalizeSearchQuery(query: string) {
   return query.trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -192,6 +229,63 @@ export function buildPollinationsFallbackUrl(prompt: string, quality: "fast" | "
   return `https://image.pollinations.ai/prompt/${encoded}?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}&nologo=true&enhance=true&model=${model}`;
 }
 
+export async function generateImageWithLocalBackend(options: ImageGenerationOptions): Promise<ImageGenerationResult | null> {
+  const apiUrl = process.env.IMAGE_GEN_API_URL?.trim();
+  if (!apiUrl) return null;
+
+  const providerMode = (process.env.IMAGE_GEN_PROVIDER_MODE || "automatic1111").trim().toLowerCase();
+  const promptUsed = buildEnhancedImagePrompt(options.prompt, options.enhancePrompt);
+  const { width, height } = getImageDimensions(options.aspectRatio);
+  const timeoutMs = Math.max(5_000, Number(process.env.IMAGE_GEN_TIMEOUT_MS || 90_000));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const requestBody = providerMode === "automatic1111" || providerMode === "forge"
+      ? {
+          prompt: promptUsed || options.prompt,
+          width,
+          height,
+          steps: options.quality === "high" ? 28 : 16,
+          cfg_scale: options.quality === "high" ? 6 : 4.5,
+          send_images: true,
+        }
+      : {
+          prompt: promptUsed || options.prompt,
+          width,
+          height,
+          quality: options.quality ?? "fast",
+          enhancePrompt: options.enhancePrompt === true,
+        };
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Local image backend failed with ${response.status}`);
+    }
+
+    const payload = await response.json() as unknown;
+    const url = extractLocalImageUrl(payload);
+    if (!url) {
+      throw new Error("Local image backend response missing image output");
+    }
+
+    return {
+      url,
+      provider: "Local",
+      model: process.env.IMAGE_GEN_MODEL_LABEL?.trim() || "Local Forge/ComfyUI",
+      stages: ["Validating prompt", "Dispatching request to local image backend", "Publishing local image output"],
+      promptUsed: promptUsed || options.prompt,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function generateImageWithFal(options: ImageGenerationOptions): Promise<ImageGenerationResult> {
   const promptUsed = buildEnhancedImagePrompt(options.prompt, options.enhancePrompt);
   const quality = options.quality ?? "fast";
@@ -208,6 +302,7 @@ export async function generateImageWithFal(options: ImageGenerationOptions): Pro
   }
 
   const endpoint = quality === "high" ? FAL_FLUX_HIGH_URL : FAL_FLUX_FAST_URL;
+  const { width, height } = getImageDimensions(options.aspectRatio);
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -216,9 +311,7 @@ export async function generateImageWithFal(options: ImageGenerationOptions): Pro
     },
     body: JSON.stringify({
       prompt: promptUsed || options.prompt,
-      image_size: options.aspectRatio === "portrait"
-        ? { width: PORTRAIT_IMAGE_WIDTH, height: PORTRAIT_IMAGE_HEIGHT }
-        : { width: DEFAULT_IMAGE_WIDTH, height: DEFAULT_IMAGE_HEIGHT },
+      image_size: { width, height },
       sync_mode: true,
     }),
   });
