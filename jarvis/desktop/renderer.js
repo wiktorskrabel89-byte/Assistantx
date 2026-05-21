@@ -26,6 +26,9 @@ const {
 } = window.jarvisApi;
 
 const authApi = window.jarvisApi.auth || {};
+const githubApi = window.jarvisApi.github || {};
+const googleApi = window.jarvisApi.google || {};
+const toolsApi = window.jarvisApi.tools || {};
 const {
 	getSession: getAccountSession,
 	refresh: refreshSessionIfNeeded,
@@ -221,6 +224,29 @@ window.addEventListener('DOMContentLoaded', () => {
 	const runtimeApplyPermissionButton = document.getElementById('runtime-apply-permission');
 	const runtimeKillSwitchButton = document.getElementById('runtime-kill-switch');
 	const runtimeStatusNode = document.getElementById('runtime-status');
+	const workspaceApp = document.querySelector('.app');
+	const viewportWelcome = document.getElementById('welcome-screen');
+	const viewportMap = document.getElementById('viewport-map');
+	const viewportRepo = document.getElementById('viewport-repo');
+	const viewportHardware = document.getElementById('viewport-hardware');
+	const viewportMapCanvas = document.getElementById('viewport-map-canvas');
+	const repoListNode = document.getElementById('repo-list');
+	const repoTreeNode = document.getElementById('repo-tree');
+	const repoPreviewNode = document.getElementById('repo-preview');
+	const hardwareCpuNode = document.getElementById('hardware-cpu');
+	const hardwareRamNode = document.getElementById('hardware-ram');
+	const hardwareTempNode = document.getElementById('hardware-temp');
+	const openSettingsModalButton = document.getElementById('open-settings-modal');
+	const settingsModal = document.getElementById('settings-modal');
+	const closeSettingsModalButton = document.getElementById('close-settings-modal');
+	const githubStatusNode = document.getElementById('github-status');
+	const githubTokenInput = document.getElementById('github-token-input');
+	const githubSaveTokenButton = document.getElementById('github-save-token');
+	const githubClearTokenButton = document.getElementById('github-clear-token');
+	const googleStatusNode = document.getElementById('google-status');
+	const googleLoginButton = document.getElementById('google-login');
+	const googleLogoutButton = document.getElementById('google-logout');
+	const googleDeviceHintNode = document.getElementById('google-device-hint');
 	let apiBaseUrl = getJarvisApiUrl();
 	let cachedSpeechVoices = [];
 	let speechVoicePromise = null;
@@ -235,6 +261,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	let currentAgentState = AGENT_STATE.IDLE;
 	let visualizerEnergy = 0;
 	let inactivityTimer = null;
+	let currentViewport = 'welcome';
+	let mapWidget = null;
+	let currentRepoContext = null;
+	let googleDevicePollTimer = null;
 
 	function setMainPanelTab(tab) {
 		const settingsActive = tab === 'settings';
@@ -249,6 +279,323 @@ window.addEventListener('DOMContentLoaded', () => {
 	commandTabButton?.addEventListener('click', () => setMainPanelTab('command'));
 	settingsTabButton?.addEventListener('click', () => setMainPanelTab('settings'));
 	setMainPanelTab('command');
+
+	function switchViewport(mode) {
+		currentViewport = mode;
+		viewportWelcome?.classList.toggle('active', mode === 'welcome');
+		viewportMap?.classList.toggle('active', mode === 'map');
+		viewportRepo?.classList.toggle('active', mode === 'repo');
+		viewportHardware?.classList.toggle('active', mode === 'hardware');
+		workspaceApp?.classList.toggle('viewport-active', mode !== 'welcome');
+	}
+
+	function ensureMapWidget() {
+		if (!viewportMapCanvas) return null;
+		if (!mapWidget && window.MapWidget) {
+			mapWidget = new window.MapWidget();
+			mapWidget.init(viewportMapCanvas);
+		}
+		return mapWidget;
+	}
+
+	function extractMapPlace(text) {
+		const normalized = String(text || '').trim();
+		const explicit = normalized.match(/(?:poka[zż]\s+(?:mi\s+)?)?map[ęe]\s+(.+)/i);
+		if (explicit?.[1]) return explicit[1].trim();
+		const find = normalized.match(/znajd[źz]\s+(.+?)\s+na mapie/i);
+		return find?.[1]?.trim() || '';
+	}
+
+	function parseRepoTarget(text) {
+		const match = String(text || '').match(/(?:poka[zż]|otw[oó]rz)\s+repo(?:zytorium)?\s+([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/i);
+		if (!match?.[1]) return null;
+		const [owner, repo] = match[1].split('/');
+		return { owner, repo };
+	}
+
+	async function refreshHardwareSnapshot() {
+		if (!ipcRenderer) return;
+		try {
+			const telemetry = await ipcRenderer.invoke('get-local-telemetry');
+			const cpu = Number(telemetry?.cpu?.percent || telemetry?.cpu || 0);
+			const ram = Number(telemetry?.memory?.percent || telemetry?.ram?.percent || 0);
+			const temp = Number(telemetry?.temperature?.celsius || telemetry?.temperature || 0);
+			if (hardwareCpuNode) hardwareCpuNode.textContent = `CPU: ${cpu.toFixed(1)}%`;
+			if (hardwareRamNode) hardwareRamNode.textContent = `RAM: ${ram.toFixed(1)}%`;
+			if (hardwareTempNode) hardwareTempNode.textContent = `TEMP: ${temp.toFixed(1)}°C`;
+		} catch (error) {
+			appendMessage(log, 'Hardware', String(error?.message || error || 'hardware-read-failed'), 'error');
+		}
+	}
+
+	function renderRepoList(repos = []) {
+		if (!repoListNode) return;
+		if (!Array.isArray(repos) || repos.length === 0) {
+			repoListNode.textContent = 'Brak repozytoriów lub brak autoryzacji.';
+			return;
+		}
+		repoListNode.innerHTML = '';
+		repos.slice(0, 100).forEach((repo) => {
+			const row = document.createElement('button');
+			row.type = 'button';
+			row.className = 'secondary sm';
+			row.style.width = '100%';
+			row.style.marginBottom = '6px';
+			row.textContent = repo.full_name || repo.name;
+			row.addEventListener('click', async () => {
+				currentRepoContext = {
+					owner: repo.owner?.login || currentRepoContext?.owner,
+					repo: repo.name,
+				};
+				await loadRepoTree(currentRepoContext);
+			});
+			repoListNode.appendChild(row);
+		});
+	}
+
+	async function loadRepoTree(target) {
+		if (!target?.owner || !target?.repo || !githubApi.getTree) return;
+		switchViewport('repo');
+		const tree = await githubApi.getTree(target);
+		if (repoTreeNode) {
+			repoTreeNode.innerHTML = '';
+			(tree || []).filter((entry) => entry.type === 'blob').slice(0, 200).forEach((entry) => {
+				const item = document.createElement('button');
+				item.type = 'button';
+				item.className = 'secondary sm';
+				item.style.display = 'block';
+				item.style.width = '100%';
+				item.style.marginBottom = '6px';
+				item.textContent = entry.path;
+				item.addEventListener('click', async () => {
+					const file = await githubApi.readFile({
+						owner: target.owner,
+						repo: target.repo,
+						path: entry.path,
+					});
+					if (repoPreviewNode) repoPreviewNode.textContent = file?.content || '';
+				});
+				repoTreeNode.appendChild(item);
+			});
+		}
+	}
+
+	async function refreshGitHubStatus() {
+		if (!githubApi.getStatus || !githubStatusNode) return;
+		const status = await githubApi.getStatus();
+		if (status?.connected) {
+			githubStatusNode.textContent = `GitHub: connected as ${status.login || 'user'}`;
+			const repos = await githubApi.listRepos({ perPage: 30 });
+			renderRepoList(repos);
+			return;
+		}
+		githubStatusNode.textContent = status?.hasToken
+			? `GitHub: token invalid (${status?.error || 'unknown'})`
+			: 'GitHub: not configured';
+	}
+
+	async function refreshGoogleStatus() {
+		if (!googleApi.getStatus || !googleStatusNode) return;
+		const status = await googleApi.getStatus();
+		googleStatusNode.textContent = status?.connected
+			? 'Google: connected'
+			: `Google: not connected${status?.error ? ` (${status.error})` : ''}`;
+	}
+
+	async function handleIntegratedCommands(text) {
+		const normalized = String(text || '').trim();
+		if (!normalized) return false;
+
+		if (/status systemu|jak dzia[łl]a m[oó]j komputer/i.test(normalized)) {
+			switchViewport('hardware');
+			await refreshHardwareSnapshot();
+			appendMessage(log, 'Hardware', 'Showing system telemetry snapshot.', 'system');
+			return true;
+		}
+
+		if (/map[ęe]|na mapie/i.test(normalized)) {
+			const place = extractMapPlace(normalized);
+			if (!place) return false;
+			const widget = ensureMapWidget();
+			switchViewport('map');
+			try {
+				const loc = await widget?.goTo(place);
+				appendMessage(log, 'Map', `Centered map on ${loc?.label || place}.`, 'system');
+			} catch (error) {
+				appendMessage(log, 'Map', String(error?.message || error || 'map-search-failed'), 'error');
+			}
+			return true;
+		}
+
+		const repoTarget = parseRepoTarget(normalized);
+		if (repoTarget) {
+			currentRepoContext = repoTarget;
+			try {
+				await loadRepoTree(repoTarget);
+				appendMessage(log, 'GitHub', `Opened ${repoTarget.owner}/${repoTarget.repo}.`, 'system');
+			} catch (error) {
+				appendMessage(log, 'GitHub', String(error?.message || error || 'repo-open-failed'), 'error');
+			}
+			return true;
+		}
+
+		const fileMatch = normalized.match(/przeczytaj plik\s+(.+)/i);
+		if (fileMatch?.[1] && currentRepoContext && githubApi.readFile) {
+			switchViewport('repo');
+			try {
+				const file = await githubApi.readFile({
+					owner: currentRepoContext.owner,
+					repo: currentRepoContext.repo,
+					path: fileMatch[1].trim(),
+				});
+				if (repoPreviewNode) repoPreviewNode.textContent = file?.content || '';
+				appendMessage(log, 'GitHub', `Loaded file ${fileMatch[1].trim()}.`, 'system');
+			} catch (error) {
+				appendMessage(log, 'GitHub', String(error?.message || error || 'file-read-failed'), 'error');
+			}
+			return true;
+		}
+
+		const commitsMatch = normalized.match(/sprawd[źz]\s+ostatnie\s+commity(?:\s+([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+))?/i);
+		if (commitsMatch && githubApi.listCommits) {
+			const target = commitsMatch[1] ? parseRepoTarget(`pokaż repo ${commitsMatch[1]}`) : currentRepoContext;
+			if (!target) return false;
+			switchViewport('repo');
+			try {
+				const commits = await githubApi.listCommits(target);
+				if (repoPreviewNode) {
+					repoPreviewNode.textContent = (commits || []).slice(0, 10).map((item) => {
+						const sha = String(item?.sha || '').slice(0, 7);
+						const msg = item?.commit?.message || '';
+						const author = item?.commit?.author?.name || '';
+						return `${sha} ${author}: ${msg}`;
+					}).join('\n');
+				}
+			} catch (error) {
+				appendMessage(log, 'GitHub', String(error?.message || error || 'commit-read-failed'), 'error');
+			}
+			return true;
+		}
+
+		const launchMatch = normalized.match(/uruchom\s+(.+)/i);
+		if (launchMatch?.[1]) {
+			const name = launchMatch[1].trim().toLowerCase();
+			const gameHints = {
+				steam: { platform: 'steam', id: 'cs2' },
+				roblox: { platform: 'roblox', id: 'default' },
+				epic: { platform: 'epic', id: 'fortnite' },
+				battle: { platform: 'battlenet', id: 'wow' },
+			};
+			try {
+				const known = Object.entries(gameHints).find(([key]) => name.includes(key))?.[1];
+				if (known && toolsApi.launchGame) {
+					await toolsApi.launchGame(known);
+					appendMessage(log, 'Launcher', `Launched ${name} through game protocol.`, 'system');
+					return true;
+				}
+				if (toolsApi.launchApp) {
+					const result = await toolsApi.launchApp({ appName: name });
+					if (result?.ok) {
+						appendMessage(log, 'Launcher', `Launched ${result.appName}.`, 'system');
+						return true;
+					}
+					appendMessage(log, 'Launcher', `App not found: ${name}`, 'error');
+					return true;
+				}
+			} catch (error) {
+				appendMessage(log, 'Launcher', String(error?.message || error || 'app-launch-failed'), 'error');
+				return true;
+			}
+		}
+
+		if (/jaki mam plan na dzi[sś]/i.test(normalized) && googleApi.getCalendarToday) {
+			try {
+				const events = await googleApi.getCalendarToday();
+				const summary = (events || []).slice(0, 10).map((item) => {
+					const start = item?.start?.dateTime || item?.start?.date || '';
+					return `• ${start} ${item?.summary || '(untitled)'}`;
+				}).join('\n');
+				appendMessage(log, 'Google Calendar', summary || 'No events for today.', 'system');
+			} catch (error) {
+				appendMessage(log, 'Google Calendar', String(error?.message || error || 'calendar-read-failed'), 'error');
+			}
+			return true;
+		}
+
+		return false;
+	}
+
+	openSettingsModalButton?.addEventListener('click', () => {
+		if (settingsModal) settingsModal.hidden = false;
+	});
+
+	closeSettingsModalButton?.addEventListener('click', () => {
+		if (settingsModal) settingsModal.hidden = true;
+	});
+
+	settingsModal?.addEventListener('click', (event) => {
+		if (event.target === settingsModal) settingsModal.hidden = true;
+	});
+
+	githubSaveTokenButton?.addEventListener('click', async () => {
+		try {
+			const token = githubTokenInput?.value?.trim();
+			await githubApi.setToken?.(token);
+			if (githubTokenInput) githubTokenInput.value = '';
+			await refreshGitHubStatus();
+			appendMessage(log, 'GitHub', 'Token saved securely.', 'system');
+		} catch (error) {
+			appendMessage(log, 'GitHub', String(error?.message || error || 'github-token-save-failed'), 'error');
+		}
+	});
+
+	githubClearTokenButton?.addEventListener('click', async () => {
+		try {
+			await githubApi.clearToken?.();
+			await refreshGitHubStatus();
+			appendMessage(log, 'GitHub', 'Token removed.', 'system');
+		} catch (error) {
+			appendMessage(log, 'GitHub', String(error?.message || error || 'github-token-clear-failed'), 'error');
+		}
+	});
+
+	googleLoginButton?.addEventListener('click', async () => {
+		try {
+			const flow = await googleApi.loginStart?.();
+			if (googleDeviceHintNode) {
+				googleDeviceHintNode.textContent = `Wejdź na ${flow?.verification_url || flow?.verification_uri || ''} i wpisz kod ${flow?.user_code || ''}`;
+			}
+			if (googleDevicePollTimer) clearInterval(googleDevicePollTimer);
+			googleDevicePollTimer = setInterval(async () => {
+				try {
+					await googleApi.loginPoll?.({ deviceCode: flow?.device_code });
+					if (googleDeviceHintNode) googleDeviceHintNode.textContent = 'Google login completed.';
+					if (googleDevicePollTimer) clearInterval(googleDevicePollTimer);
+					googleDevicePollTimer = null;
+					await refreshGoogleStatus();
+				} catch (error) {
+					const message = String(error?.message || error || '');
+					if (!/authorization_pending|slow_down/.test(message)) {
+						if (googleDeviceHintNode) googleDeviceHintNode.textContent = message;
+						if (googleDevicePollTimer) clearInterval(googleDevicePollTimer);
+						googleDevicePollTimer = null;
+					}
+				}
+			}, Math.max(2, Number(flow?.interval || 5)) * 1000);
+		} catch (error) {
+			appendMessage(log, 'Google', String(error?.message || error || 'google-login-start-failed'), 'error');
+		}
+	});
+
+	googleLogoutButton?.addEventListener('click', async () => {
+		try {
+			await googleApi.logout?.();
+			if (googleDeviceHintNode) googleDeviceHintNode.textContent = '';
+			await refreshGoogleStatus();
+		} catch (error) {
+			appendMessage(log, 'Google', String(error?.message || error || 'google-logout-failed'), 'error');
+		}
+	});
 
 	const defaultVoiceSettings = {
 		chatModel: chatModelSelect?.value || 'auto-smart',
@@ -723,12 +1070,17 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	// ── Prompt submission ────────────────────────────────────────────────────
-	function submitPrompt() {
+	async function submitPrompt() {
 		const text = input.value.trim();
 		if (!text) return;
 		voiceGateway?.interrupt?.('new-prompt');
 		if (typeof window !== 'undefined' && window.speechSynthesis) {
 			window.speechSynthesis.cancel();
+		}
+		const handled = await handleIntegratedCommands(text);
+		if (handled) {
+			input.value = '';
+			return;
 		}
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
 		appendMessage(log, 'Prompt queued', text, 'system');
@@ -741,8 +1093,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		submitPrompt();
 	}
 
-	send.addEventListener('click', submitPrompt);
-	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPrompt(); });
+	send.addEventListener('click', () => { void submitPrompt(); });
+	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') void submitPrompt(); });
 
 	function startSpeechToText({ autoSubmit = false } = {}) {
 		if (sidecarConnected && sidecar) {
@@ -1588,7 +1940,14 @@ window.addEventListener('DOMContentLoaded', () => {
 			const [kind, payload] = value.split(':', 2);
 
 			if (kind === 'open') {
-				void executeStructuredCommand({ command: 'openApp', app: payload }, { source: 'local', origin: 'desktop' });
+				if (payload === 'roblox' || payload === 'steam') {
+					const game = payload === 'roblox'
+						? { platform: 'roblox', id: 'default' }
+						: { platform: 'steam', id: 'cs2' };
+					void toolsApi.launchGame?.(game);
+				} else {
+					void executeStructuredCommand({ command: 'openApp', app: payload }, { source: 'local', origin: 'desktop' });
+				}
 				appendMessage(log, 'Quick action', `Launch: ${payload}`);
 				return;
 			}
@@ -2178,6 +2537,10 @@ window.addEventListener('DOMContentLoaded', () => {
 			await syncToCloud(apiBaseUrl, { voiceSettings, syncReminders: false }).catch(() => null);
 		}
 	}, 5 * 60_000);
+
+	switchViewport('welcome');
+	void refreshGitHubStatus();
+	void refreshGoogleStatus();
 
 	void tokenPromise.then((token) => {
 		connectToBackend({ token });
