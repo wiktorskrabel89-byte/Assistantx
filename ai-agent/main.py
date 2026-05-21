@@ -66,6 +66,11 @@ _tts_engine: Any = None
 _nlp_engine: Any = None
 _vad_engine: Any = None
 _memory_store: Any = None
+_stt_backend_name = "none"
+_tts_backend_name = "none"
+
+RUNTIME_STATES = {"idle", "listening", "thinking_fast", "coding_hardcore", "degraded", "killed"}
+MODEL_MODES = {"fast", "coding"}
 
 
 def _get_wake_detector():
@@ -77,18 +82,52 @@ def _get_wake_detector():
 
 
 def _get_stt_engine():
+    global _stt_backend_name
     global _stt_engine
     if _stt_engine is None:
+        try:
+            from speech.whisper_cpp_stt import WhisperCppSTT
+            whisper_cpp = WhisperCppSTT()
+            if whisper_cpp.available:
+                _stt_engine = whisper_cpp
+                _stt_backend_name = "whisper.cpp"
+                return _stt_engine
+        except Exception as exc:
+            logger.debug("whisper.cpp STT init failed: %s", exc)
+
+        try:
+            from speech.stt import WhisperSTT
+            whisper = WhisperSTT(device="cpu")
+            if whisper.available:
+                _stt_engine = whisper
+                _stt_backend_name = "faster-whisper"
+                return _stt_engine
+        except Exception as exc:
+            logger.debug("faster-whisper STT init failed: %s", exc)
+
         from speech.parakeet_stt import ParakeetSTT
         _stt_engine = ParakeetSTT()
+        _stt_backend_name = "parakeet-onnx"
     return _stt_engine
 
 
 def _get_tts_engine():
+    global _tts_backend_name
     global _tts_engine
     if _tts_engine is None:
+        try:
+            from tts.piper_tts import PiperTTS
+            piper = PiperTTS()
+            if piper.available:
+                _tts_engine = piper
+                _tts_backend_name = "piper-cpu"
+                return _tts_engine
+        except Exception as exc:
+            logger.debug("Piper TTS init failed: %s", exc)
+
         from tts.kokoro_tts import KokoroTTS
         _tts_engine = KokoroTTS()
+        _tts_backend_name = "kokoro-cpu"
     return _tts_engine
 
 
@@ -126,6 +165,8 @@ def _health_snapshot() -> dict[str, Any]:
         "modelsLoaded": models_loaded,
         "stt": stt_ready,
         "tts": tts_ready,
+        "sttBackend": _stt_backend_name,
+        "ttsBackend": _tts_backend_name,
         "memory": _memory_store is not None,
         "uptime": int(time.monotonic() - STARTED_AT),
     }
@@ -141,6 +182,8 @@ class ConnectionState:
         self.tts_enabled: bool = True
         self.nlp_enabled: bool = False
         self.vad_enabled: bool = True
+        self.runtime_state: str = "idle"
+        self.model_mode: str = "fast"
         self.listening_for_command: bool = False
         self.audio_buffer: list[bytes] = []
         self.command_audio_buffer: list[bytes] = []
@@ -191,7 +234,23 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         state.vad_enabled = bool(msg["vadEnabled"])
     if "listeningForCommand" in msg:
         state.listening_for_command = bool(msg["listeningForCommand"])
-    await _send(ws, {"type": "status", "phase": "configured", "message": "Settings applied."}, state)
+    runtime_state = str(msg.get("runtimeState", state.runtime_state)).strip().lower()
+    model_mode = str(msg.get("modelMode", state.model_mode)).strip().lower()
+    if runtime_state in RUNTIME_STATES:
+        state.runtime_state = runtime_state
+    if model_mode in MODEL_MODES:
+        state.model_mode = model_mode
+    await _send(
+        ws,
+        {
+            "type": "status",
+            "phase": "configured",
+            "runtimeState": state.runtime_state,
+            "modelMode": state.model_mode,
+            "message": "Settings applied.",
+        },
+        state,
+    )
 
 
 async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
@@ -225,6 +284,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
             )
             if detected:
                 state.listening_for_command = True
+                state.runtime_state = "listening"
                 state.audio_buffer.clear()
                 await _send(ws, {"type": "wake_word", "phrase": state.wake_word_phrase}, state)
                 return
@@ -254,7 +314,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                 state.trailing_silence_frames += 1
 
             # ~0.4 s silence threshold for end-of-utterance with 100 ms chunks.
-            if state.speech_active and state.trailing_silence_frames >= 4:
+                if state.speech_active and state.trailing_silence_frames >= 4:
                 segment = b"".join(state.command_audio_buffer).strip()
                 await _send(ws, {
                     "type": "vad_event",
@@ -273,6 +333,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                 state.speech_active = False
                 state.trailing_silence_frames = 0
                 state.listening_for_command = False
+                state.runtime_state = "idle"
         except Exception as exc:
             logger.debug("VAD processing error: %s", exc)
 
@@ -315,6 +376,7 @@ async def _handle_tts_speak(ws: WebSocketServerProtocol, state: ConnectionState,
 
     loop = asyncio.get_event_loop()
     try:
+        state.runtime_state = "thinking_fast" if state.model_mode == "fast" else "coding_hardcore"
         tts = _get_tts_engine()
         wav_bytes = await loop.run_in_executor(None, tts.synthesize, text)
         _emit_rms_from_wav(state, wav_bytes, source="tts")
@@ -324,7 +386,9 @@ async def _handle_tts_speak(ws: WebSocketServerProtocol, state: ConnectionState,
             "requestId": request_id,
             "data": encoded,
             "format": "wav",
+            "backend": _tts_backend_name,
         }, state)
+        state.runtime_state = "idle"
     except Exception as exc:
         logger.warning("TTS error: %s", exc)
         await _send(ws, {
@@ -428,6 +492,7 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
         return
     loop = asyncio.get_event_loop()
     try:
+        _state.runtime_state = "thinking_fast"
         from tools.web_search import search_web
         results = await loop.run_in_executor(None, search_web, query, 5)
         await _send(ws, {
@@ -437,6 +502,7 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
             "ok": True,
             "results": results,
         }, _state)
+        _state.runtime_state = "idle"
     except Exception as exc:
         logger.warning("Tool call error: %s", exc)
         await _send(ws, {
@@ -454,6 +520,9 @@ async def _handle_llm_route(ws: WebSocketServerProtocol, _state: ConnectionState
     prompt = str(msg.get("prompt", "")).strip()
     request_id = str(msg.get("requestId", ""))
     context = msg.get("context")
+    requested_mode = str(msg.get("modelMode", _state.model_mode)).strip().lower()
+    if requested_mode in MODEL_MODES:
+        _state.model_mode = requested_mode
     if not prompt:
         await _send(ws, {
             "type": "llm_route_result",
@@ -467,8 +536,9 @@ async def _handle_llm_route(ws: WebSocketServerProtocol, _state: ConnectionState
         }, _state)
         return
     try:
+        _state.runtime_state = "thinking_fast" if _state.model_mode == "fast" else "coding_hardcore"
         from routing.llm_router import route_llm_request
-        result = await route_llm_request(intent, prompt, context)
+        result = await route_llm_request(intent, prompt, context, model_mode=_state.model_mode)
         await _send(ws, {
             "type": "llm_route_result",
             "requestId": request_id,
@@ -477,7 +547,9 @@ async def _handle_llm_route(ws: WebSocketServerProtocol, _state: ConnectionState
             "provider": result.get("provider"),
             "model": result.get("model"),
             "text": result.get("text", ""),
+            "modelMode": _state.model_mode,
         }, _state)
+        _state.runtime_state = "idle"
     except Exception as exc:
         await _send(ws, {
             "type": "llm_route_result",
@@ -488,7 +560,9 @@ async def _handle_llm_route(ws: WebSocketServerProtocol, _state: ConnectionState
             "model": None,
             "text": "",
             "error": str(exc),
+            "modelMode": _state.model_mode,
         }, _state)
+        _state.runtime_state = "degraded"
 
 
 HANDLERS = {
