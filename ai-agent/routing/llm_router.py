@@ -122,8 +122,22 @@ def call_openrouter_or_openai(model: str, prompt: str, context: Any = None) -> d
     raise RuntimeError("Neither OPENAI_API_KEY nor OPENROUTER_API_KEY is configured.")
 
 
-async def route_llm_request(intent: str, prompt: str, context: Any = None) -> dict[str, Any]:
+def _should_escalate_to_32b(intent: str, prompt: str, context: Any) -> bool:
+    if isinstance(context, dict):
+        if bool(context.get("needs_32b")):
+            return True
+        score = context.get("complexityScore")
+        if isinstance(score, (int, float)) and float(score) >= 0.82:
+            return True
+    text = f"{intent} {prompt}".lower()
+    return any(token in text for token in ("architecture", "refactor entire", "multi-file", "large codebase"))
+
+
+async def route_llm_request(intent: str, prompt: str, context: Any = None, model_mode: str = "fast") -> dict[str, Any]:
     normalized_intent = str(intent or "").strip().lower()
+    mode = str(model_mode or "fast").strip().lower()
+    escalate_to_32b = mode == "coding" and _should_escalate_to_32b(normalized_intent, prompt, context)
+
     if normalized_intent in {"voice_chat", "quick_command"}:
         return call_groq_or_openrouter(
             model="qwen-2.5-32b-instruct",
@@ -131,14 +145,32 @@ async def route_llm_request(intent: str, prompt: str, context: Any = None) -> di
             context=context,
         )
     if normalized_intent in {"analyze_codebase", "rag_search"}:
+        if escalate_to_32b:
+            return call_openrouter_or_openai(
+                model="qwen/qwen-2.5-coder-32b-instruct",
+                prompt=prompt,
+                context=context,
+            )
         return call_google_ai_studio(
             model="gemini-2.0-flash",
             prompt=prompt,
             context=context,
         )
     if normalized_intent in {"system_modification", "write_code", "execute_workflow"}:
+        if escalate_to_32b:
+            return call_openrouter_or_openai(
+                model="qwen/qwen-2.5-coder-32b-instruct",
+                prompt=prompt,
+                context=context,
+            )
+        return call_groq_or_openrouter(
+            model="qwen-2.5-32b-instruct",
+            prompt=prompt,
+            context=context,
+        )
+    if mode == "coding" and escalate_to_32b:
         return call_openrouter_or_openai(
-            model="openai/gpt-4o",
+            model="qwen/qwen-2.5-coder-32b-instruct",
             prompt=prompt,
             context=context,
         )
