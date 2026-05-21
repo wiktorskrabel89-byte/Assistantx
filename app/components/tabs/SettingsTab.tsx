@@ -60,6 +60,7 @@ export function SettingsTab() {
     setTtsVoiceId,
     setAutoSpeakResponses,
     setPersonalityMode,
+    setLocalOnlyMode,
     setPostPrReviewCommentsToGitHub,
   } = useWorkspace();
 
@@ -239,6 +240,22 @@ export function SettingsTab() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">Local device queue</p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>
+                  Send new chat prompts to your paired PC through Supabase `ai_tasks` instead of the default cloud chat route.
+                </p>
+              </div>
+              <Switch
+                checked={activeWorkspace.settings.localOnlyMode ?? false}
+                onCheckedChange={setLocalOnlyMode}
+                aria-label="Route chat through local device queue"
+              />
             </div>
           </div>
 

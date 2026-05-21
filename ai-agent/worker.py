@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
+import subprocess
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 
@@ -37,6 +40,14 @@ def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
         return default
+
+
+def _env_str(name: str, default: str) -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip()
+    return value or default
     try:
         return int(raw)
     except (TypeError, ValueError):
@@ -110,6 +121,8 @@ class WorkerConfig:
     source_code_max_chars: int
     default_temperature: float
     local_enabled: bool
+    device_id: str
+    allowed_directory: str
 
 
 def load_config() -> WorkerConfig:
@@ -137,6 +150,8 @@ def load_config() -> WorkerConfig:
         source_code_max_chars=max(1000, _env_int("LOCAL_WORKER_SOURCE_CODE_MAX_CHARS", 16000)),
         default_temperature=clamp_temperature(_env_float("LOCAL_WORKER_DEFAULT_TEMPERATURE", 0.0)),
         local_enabled=_env_bool("LOCAL_WORKER_ENABLED", True),
+        device_id=_env_str("LOCAL_WORKER_DEVICE_ID", ""),
+        allowed_directory=str(Path(_env_str("LOCAL_WORKER_ALLOWED_DIRECTORY", str(Path(__file__).resolve().parent.parent))).resolve()),
     )
 
 
@@ -191,43 +206,23 @@ class SupabaseRestClient:
         )
         return len(rows or [])
 
-    def fetch_pending_local_tasks(self, *, limit: int = 25) -> list[dict[str, Any]]:
-        rows = self._request(
-            "GET",
-            "/rest/v1/ai_tasks",
-            params={
-                "select": "task_id,user_id,prompt,temperature,created_at,status,routing",
-                "status": "eq.pending",
-                "routing": "eq.local",
-                "order": "created_at.asc",
-                "limit": str(max(1, limit)),
-            },
-        )
-        return list(rows or [])
-
-    def claim_task(
+    def claim_next_task(
         self,
-        task_id: str,
         *,
+        device_id: str | None,
+        include_unassigned: bool,
         route_to_cloud: bool,
         fallback_reason: str | None = None,
     ) -> dict[str, Any] | None:
-        now = _utc_now_iso()
-        patch: dict[str, Any] = {
-            "status": "processing",
-            "started_at": now,
-        }
-        if route_to_cloud:
-            patch["routing"] = "cloud"
-            patch["fallback_reason"] = fallback_reason or "cloud_fallback"
         rows = self._request(
-            "PATCH",
-            "/rest/v1/ai_tasks",
-            params={
-                "task_id": f"eq.{task_id}",
-                "status": "eq.pending",
+            "POST",
+            "/rest/v1/rpc/claim_next_ai_task",
+            body={
+                "p_target_device_id": device_id or None,
+                "p_include_unassigned": include_unassigned,
+                "p_route_to_cloud": route_to_cloud,
+                "p_fallback_reason": fallback_reason,
             },
-            body=patch,
             prefer="return=representation",
         )
         if not rows:
@@ -444,6 +439,150 @@ def should_force_cloud_fallback(
     return False
 
 
+ALLOWED_SYSTEM_ACTIONS = {
+    "launch_roblox",
+    "system_file_list",
+    "system_status_ping",
+}
+
+
+def _safe_json_dumps(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _coerce_payload(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    return {}
+
+
+def _resolve_allowed_path(config: WorkerConfig, requested_path: str) -> Path:
+    base = Path(config.allowed_directory).resolve()
+    candidate = Path(requested_path or ".")
+    resolved = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise RuntimeError("Requested path is outside the allowed local worker directory.") from exc
+    return resolved
+
+
+def _list_allowed_directory(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    resolved = _resolve_allowed_path(config, str(payload.get("path") or "."))
+    if not resolved.exists():
+        raise RuntimeError(f"Requested path does not exist: {resolved}")
+    if not resolved.is_dir():
+        raise RuntimeError(f"Requested path is not a directory: {resolved}")
+
+    entries = []
+    for item in sorted(resolved.iterdir(), key=lambda value: value.name.lower()):
+        entries.append({
+            "name": item.name,
+            "type": "directory" if item.is_dir() else "file",
+        })
+
+    return _safe_json_dumps({
+        "path": str(resolved),
+        "entries": entries,
+    })
+
+
+def _launch_roblox(payload: dict[str, Any]) -> str:
+    game_id = str(payload.get("game_id") or "").strip() or "185655149"
+    if not re.fullmatch(r"\d{3,20}", game_id):
+        raise RuntimeError("Invalid Roblox game_id.")
+
+    roblox_uri = f"roblox://placeId={game_id}"
+    if platform.system().lower().startswith("win"):
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", roblox_uri],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return f"Uruchomiono Roblox na lokalnym komputerze (placeId={game_id})."
+
+    raise RuntimeError("launch_roblox is currently supported only on Windows workers.")
+
+
+def _read_gpu_metrics() -> list[dict[str, Any]]:
+    try:
+        raw = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,name,temperature.gpu,utilization.gpu,memory.total,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        return []
+
+    devices: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) != 6:
+            continue
+        try:
+            devices.append({
+                "index": int(parts[0]),
+                "name": parts[1],
+                "temperatureC": int(parts[2]),
+                "utilizationPercent": int(parts[3]),
+                "memoryTotalMb": int(parts[4]),
+                "memoryFreeMb": int(parts[5]),
+            })
+        except ValueError:
+            continue
+    return devices
+
+
+def _system_status_ping() -> str:
+    cpu_percent: float | None = None
+    memory: dict[str, Any] = {"totalMb": None, "availableMb": None, "percentUsed": None}
+
+    try:
+        import psutil  # type: ignore
+
+        cpu_percent = float(psutil.cpu_percent(interval=0.2))
+        vm = psutil.virtual_memory()
+        memory = {
+            "totalMb": round(float(vm.total) / 1024 / 1024, 2),
+            "availableMb": round(float(vm.available) / 1024 / 1024, 2),
+            "percentUsed": round(float(vm.percent), 2),
+        }
+    except Exception:
+        if hasattr(os, "getloadavg"):
+            try:
+                load1, _, _ = os.getloadavg()
+                cpu_percent = round(float(load1), 2)
+            except Exception:
+                cpu_percent = None
+
+    return _safe_json_dumps({
+        "platform": platform.platform(),
+        "cpuPercent": cpu_percent,
+        "memory": memory,
+        "gpu": _read_gpu_metrics(),
+        "timestamp": _utc_now_iso(),
+    })
+
+
+def handle_system_action(config: WorkerConfig, *, action_type: str | None, payload: dict[str, Any]) -> str:
+    if action_type not in ALLOWED_SYSTEM_ACTIONS:
+        raise RuntimeError(f"Unsupported system_action '{action_type or ''}'.")
+
+    if action_type == "launch_roblox":
+        return _launch_roblox(payload)
+    if action_type == "system_file_list":
+        return _list_allowed_directory(config, payload)
+    if action_type == "system_status_ping":
+        return _system_status_ping()
+
+    raise RuntimeError(f"Unsupported system_action '{action_type or ''}'.")
+
+
 def process_task(
     config: WorkerConfig,
     supabase: SupabaseRestClient,
@@ -455,82 +594,95 @@ def process_task(
     task_id = str(task.get("task_id"))
     user_id = str(task.get("user_id") or "")
     raw_prompt = str(task.get("prompt") or "")
+    category = str(task.get("category") or "ai_request")
+    action_type = str(task.get("action_type") or "").strip() or None
+    payload = _coerce_payload(task.get("payload"))
     if not task_id or not user_id or not raw_prompt:
         return
 
-    try:
-        profile_default = supabase.get_user_profile_temperature(user_id, config.default_temperature)
-    except Exception as exc:
-        print(f"[Worker][warn] Could not read user profile temperature for {user_id}: {exc}")
-        profile_default = config.default_temperature
-
-    task_temperature = task.get("temperature")
-    if task_temperature is None:
-        current_temp = profile_default
-        try:
-            supabase.update_task_temperature(task_id, current_temp)
-        except Exception as exc:
-            print(f"[Worker][warn] Failed to freeze task temperature for {task_id}: {exc}")
-    else:
-        try:
-            current_temp = clamp_temperature(float(task_temperature))
-        except (TypeError, ValueError):
-            current_temp = profile_default
-            try:
-                supabase.update_task_temperature(task_id, current_temp)
-            except Exception:
-                pass
-
-    parsed_temp, changed = parse_temperature_command(raw_prompt, current_temp)
-    if changed:
-        current_temp = parsed_temp
-        try:
-            supabase.update_task_temperature(task_id, current_temp)
-            supabase.upsert_user_profile_temperature(user_id, current_temp)
-            print(f"[Worker][config] Temperature updated to {current_temp:.2f} for task {task_id}")
-        except Exception as exc:
-            print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
-
-    system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
-
     output_text = ""
-    provider = "ollama"
-    model = config.ollama_model
+    provider = "local_worker"
+    model = action_type or "ai_request"
     routing = "local"
+    changed = False
+    current_temp = config.default_temperature
 
     try:
-        if route_to_cloud:
-            output_text = generate_with_cloud_fallback(
-                config,
-                raw_prompt=raw_prompt,
-                temperature=current_temp,
-                system_instruction=system_instruction,
-            )
-            provider = "openrouter"
-            model = config.cloud_model
-            routing = "cloud"
+        if category == "system_action":
+            output_text = handle_system_action(config, action_type=action_type, payload=payload)
         else:
-            output_text = generate_with_ollama(
-                config,
-                raw_prompt=raw_prompt,
-                temperature=current_temp,
-                system_instruction=system_instruction,
-            )
-    except Exception as local_exc:
-        if not route_to_cloud:
-            print(f"[Worker][warn] Local generation failed for {task_id}, trying cloud fallback: {local_exc}")
-            output_text = generate_with_cloud_fallback(
-                config,
-                raw_prompt=raw_prompt,
-                temperature=current_temp,
-                system_instruction=system_instruction,
-            )
-            provider = "openrouter"
-            model = config.cloud_model
-            routing = "cloud"
-            fallback_reason = "local_generation_failed"
-        else:
-            raise
+            try:
+                profile_default = supabase.get_user_profile_temperature(user_id, config.default_temperature)
+            except Exception as exc:
+                print(f"[Worker][warn] Could not read user profile temperature for {user_id}: {exc}")
+                profile_default = config.default_temperature
+
+            task_temperature = task.get("temperature")
+            if task_temperature is None:
+                current_temp = profile_default
+                try:
+                    supabase.update_task_temperature(task_id, current_temp)
+                except Exception as exc:
+                    print(f"[Worker][warn] Failed to freeze task temperature for {task_id}: {exc}")
+            else:
+                try:
+                    current_temp = clamp_temperature(float(task_temperature))
+                except (TypeError, ValueError):
+                    current_temp = profile_default
+                    try:
+                        supabase.update_task_temperature(task_id, current_temp)
+                    except Exception:
+                        pass
+
+            parsed_temp, changed = parse_temperature_command(raw_prompt, current_temp)
+            if changed:
+                current_temp = parsed_temp
+                try:
+                    supabase.update_task_temperature(task_id, current_temp)
+                    supabase.upsert_user_profile_temperature(user_id, current_temp)
+                    print(f"[Worker][config] Temperature updated to {current_temp:.2f} for task {task_id}")
+                except Exception as exc:
+                    print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
+
+            system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
+            provider = "ollama"
+            model = config.ollama_model
+
+            try:
+                if route_to_cloud:
+                    output_text = generate_with_cloud_fallback(
+                        config,
+                        raw_prompt=raw_prompt,
+                        temperature=current_temp,
+                        system_instruction=system_instruction,
+                    )
+                    provider = "openrouter"
+                    model = config.cloud_model
+                    routing = "cloud"
+                else:
+                    output_text = generate_with_ollama(
+                        config,
+                        raw_prompt=raw_prompt,
+                        temperature=current_temp,
+                        system_instruction=system_instruction,
+                    )
+            except Exception as local_exc:
+                if not route_to_cloud:
+                    print(f"[Worker][warn] Local generation failed for {task_id}, trying cloud fallback: {local_exc}")
+                    output_text = generate_with_cloud_fallback(
+                        config,
+                        raw_prompt=raw_prompt,
+                        temperature=current_temp,
+                        system_instruction=system_instruction,
+                    )
+                    provider = "openrouter"
+                    model = config.cloud_model
+                    routing = "cloud"
+                    fallback_reason = "local_generation_failed"
+                else:
+                    raise
+    except Exception:
+        raise
 
     if changed:
         output_text = f"🔧 [System: Temperatura została zmieniona na {current_temp:.2f}]\n\n{output_text}"
@@ -549,37 +701,27 @@ def process_task(
 def fetch_next_task(config: WorkerConfig, supabase: SupabaseRestClient) -> tuple[dict[str, Any] | None, bool, str | None]:
     local_available = is_ollama_available(config)
     processing_count = supabase.fetch_processing_count()
-    pending = supabase.fetch_pending_local_tasks(limit=10)
-    if not pending:
+    fallback = False
+    fallback_reason = None
+
+    if not local_available:
+        if not config.openrouter_api_key:
+            return None, False, None
+        fallback = True
+        fallback_reason = "local_runtime_unavailable"
+    elif processing_count >= config.local_max_processing and config.openrouter_api_key:
+        fallback = True
+        fallback_reason = "local_queue_overflow"
+
+    claimed = supabase.claim_next_task(
+        device_id=config.device_id or None,
+        include_unassigned=True,
+        route_to_cloud=fallback,
+        fallback_reason=fallback_reason,
+    )
+    if not claimed:
         return None, False, None
-
-    for task in pending:
-        age_seconds = _seconds_since_created(task)
-        fallback = should_force_cloud_fallback(
-            config,
-            processing_count=processing_count,
-            task_age_seconds=age_seconds,
-            local_available=local_available,
-        )
-        fallback_reason = None
-        if fallback:
-            if not config.openrouter_api_key:
-                continue
-            if not local_available:
-                fallback_reason = "local_runtime_unavailable"
-            elif processing_count >= config.local_max_processing:
-                fallback_reason = "local_queue_overflow"
-            else:
-                fallback_reason = "local_timeout"
-        claimed = supabase.claim_task(
-            str(task.get("task_id")),
-            route_to_cloud=fallback,
-            fallback_reason=fallback_reason,
-        )
-        if claimed:
-            return claimed, fallback, fallback_reason
-
-    return None, False, None
+    return claimed, fallback, fallback_reason
 
 
 def run_worker_forever() -> None:
