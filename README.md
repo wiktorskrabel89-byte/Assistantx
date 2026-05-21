@@ -14,9 +14,51 @@ pnpm dev
 bun dev
 ```
 
+Run only the local queue worker (polls `ai_tasks` and executes local Ollama jobs):
+
+```bash
+npm run dev:worker
+```
+
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+## Local Worker Queue (ai-agent/worker.py)
+
+The repository now includes a dedicated Python worker process at:
+
+- `/home/runner/work/Assistantx/Assistantx/ai-agent/worker.py`
+
+It is isolated from HTTP API servers and is designed to:
+
+- poll `public.ai_tasks` (`pending` + `routing=local`)
+- process tasks with local Ollama (`qwen2.5:14b` by default)
+- parse in-chat commands like `zmień temp na 0.7`
+- persist temperature per-task (`ai_tasks.temperature`) and per-user (`user_profiles.default_temperature`)
+- inject a sanitized, size-limited copy of its own source code into the system prompt
+- auto-fallback to cloud model (`OPENROUTER_API_KEY`) when local runtime is unavailable or overloaded
+
+Database objects are introduced in migration:
+
+- `supabase/migrations/20260521_ai_tasks_local_worker.sql`
+
+Required env for worker:
+
+```bash
+SUPABASE_URL=... # or NEXT_PUBLIC_SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY=...
+OPENROUTER_API_KEY=... # required for cloud fallback
+```
+
+Useful worker tuning vars:
+
+```bash
+LOCAL_WORKER_MAX_PROCESSING=2
+LOCAL_WORKER_TASK_PICK_TIMEOUT_SECONDS=10
+LOCAL_OLLAMA_BASE_URL=http://localhost:11434
+LOCAL_OLLAMA_MODEL=qwen2.5:14b
+```
 
 ## Speed Insights Get Started
 

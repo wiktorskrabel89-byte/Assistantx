@@ -16,6 +16,7 @@ An AI workspace built with **Next.js 16** and a **Python FastAPI** backend. Feat
 | Dev (Next + FastAPI) | `npm run dev` |
 | Dev (Next only) | `npm run dev:next` |
 | Dev (FastAPI only) | `npm run dev:api` |
+| Dev (Local Worker queue) | `npm run dev:worker` |
 | Build | `npm run build` |
 | Start production | `npm start` |
 | Lint | `npm run lint` |
@@ -31,9 +32,17 @@ Required in `.env` (not committed):
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 GROQ_API_KEY=...
 GOOGLE_AI_STUDIO_API_KEY=...
 OPENROUTER_API_KEY=...
+
+# Optional Local Worker overrides
+LOCAL_WORKER_ENABLED=true
+LOCAL_OLLAMA_BASE_URL=http://localhost:11434
+LOCAL_OLLAMA_MODEL=qwen2.5:14b
+LOCAL_WORKER_MAX_PROCESSING=2
+LOCAL_WORKER_TASK_PICK_TIMEOUT_SECONDS=10
 ```
 
 ## Directory Structure
@@ -66,6 +75,8 @@ lib/
   integrations.ts   # Integration helpers
 ai agent/           # Python FastAPI backend
   main.py           # FastAPI app entry point
+ai-agent/           # Python sidecar + queue worker
+  worker.py         # Supabase ai_tasks polling worker (local Ollama + cloud fallback)
 supabase/
   migrations/       # SQL migration files
 proxy.ts            # Next.js middleware config (auth session refresh)
