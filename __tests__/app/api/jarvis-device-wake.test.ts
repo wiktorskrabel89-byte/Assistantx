@@ -13,6 +13,7 @@ jest.mock("@/src/core/config/feature-flags", () => ({
 jest.mock("@/app/api/jarvis/devices/_shared", () => ({
   getAuthenticatedUser: jest.fn(),
   resolveOwnedDevice: jest.fn(),
+  resolveAgentUrl: jest.fn(),
 }));
 
 jest.mock("@/src/core/persistence/runtime-db", () => ({
@@ -26,11 +27,12 @@ jest.mock("@/src/core/wake/coordinator", () => ({
 }));
 
 import { POST } from "@/app/api/jarvis/devices/[id]/wake/route";
-import { getAuthenticatedUser, resolveOwnedDevice } from "@/app/api/jarvis/devices/_shared";
+import { getAuthenticatedUser, resolveAgentUrl, resolveOwnedDevice } from "@/app/api/jarvis/devices/_shared";
 import { executeWakeChain } from "@/src/core/wake/coordinator";
 import { listDeviceWakeCandidates } from "@/src/core/persistence/runtime-db";
 
 const mockGetAuthenticatedUser = getAuthenticatedUser as jest.Mock;
+const mockResolveAgentUrl = resolveAgentUrl as jest.Mock;
 const mockResolveOwnedDevice = resolveOwnedDevice as jest.Mock;
 const mockListDeviceWakeCandidates = listDeviceWakeCandidates as jest.Mock;
 const mockExecuteWakeChain = executeWakeChain as jest.Mock;
@@ -47,6 +49,7 @@ describe("POST /api/jarvis/devices/:id/wake", () => {
       organization_id: null,
       trust_state: "trusted",
     });
+    mockResolveAgentUrl.mockReturnValue(null);
     mockListDeviceWakeCandidates.mockResolvedValue([{
       device_id: "device-1",
       provider: "relay",
@@ -102,4 +105,3 @@ describe("POST /api/jarvis/devices/:id/wake", () => {
     }));
   });
 });
-
