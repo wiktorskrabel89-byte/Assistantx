@@ -33,6 +33,7 @@ The repository now includes a dedicated Python worker process at:
 It is isolated from HTTP API servers and is designed to:
 
 - poll `public.ai_tasks` (`pending` + `routing=local`)
+- execute device-scoped `system_action` jobs (for example dynamic Roblox launch)
 - process tasks with local Ollama (`qwen2.5:14b` by default)
 - parse in-chat commands like `zmień temp na 0.7`
 - persist temperature per-task (`ai_tasks.temperature`) and per-user (`user_profiles.default_temperature`)
@@ -49,6 +50,14 @@ Required env for worker:
 SUPABASE_URL=... # or NEXT_PUBLIC_SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY=...
 OPENROUTER_API_KEY=... # required for cloud fallback
+```
+
+Optional worker/device auth vars:
+
+```bash
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_AUTH_TOKEN=...   # desktop user's JWT; enables RLS-safe paired-device mode
+LOCAL_WORKER_DEVICE_ID=... # restricts worker polling to one paired desktop device
 ```
 
 Useful worker tuning vars:

@@ -103,6 +103,12 @@ export type DeviceRow = {
   last_known_mac?: string | null;
   last_udp_port?: number | null;
   last_seen_network_epoch?: number | null;
+  hardware_id?: string | null;
+  bios_manufacturer?: string | null;
+  bios_model?: string | null;
+  setup_state?: "pending" | "waiting_for_pairing" | "paired" | "ready" | "needs_bios_manual_step" | "error";
+  last_public_ipv6_discovered_at?: string | null;
+  last_local_broadcast?: string | null;
   wake_method_last_success?: "tailscale_direct" | "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
   wake_fail_count?: number | null;
 };
@@ -157,6 +163,32 @@ export type DeviceWakeCandidateRow = {
   udp_port: number | null;
   eligible_for_wake: boolean;
   last_seen_at: string | null;
+};
+
+export type AiTaskStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+export type AiTaskRouting = "local" | "cloud";
+export type AiTaskCategory = "assistant" | "system_action";
+
+export type AiTaskRow = {
+  task_id?: string;
+  user_id: string;
+  device_id?: string | null;
+  prompt: string;
+  response?: string | null;
+  status?: AiTaskStatus;
+  routing?: AiTaskRouting;
+  provider?: string | null;
+  model?: string | null;
+  temperature?: number | null;
+  fallback_reason?: string | null;
+  error?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  category?: AiTaskCategory;
+  action_type?: string | null;
+  payload?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type RuntimeCapabilityRow = {
@@ -548,6 +580,12 @@ export async function upsertDevice(row: DeviceRow): Promise<DeviceRow> {
     last_known_mac: row.last_known_mac ?? null,
     last_udp_port: row.last_udp_port ?? null,
     last_seen_network_epoch: row.last_seen_network_epoch ?? null,
+    hardware_id: row.hardware_id ?? null,
+    bios_manufacturer: row.bios_manufacturer ?? null,
+    bios_model: row.bios_model ?? null,
+    setup_state: row.setup_state ?? "pending",
+    last_public_ipv6_discovered_at: row.last_public_ipv6_discovered_at ?? null,
+    last_local_broadcast: row.last_local_broadcast ?? null,
     wake_method_last_success: row.wake_method_last_success ?? null,
     wake_fail_count: row.wake_fail_count ?? 0,
     updated_at: new Date().toISOString(),
@@ -597,6 +635,12 @@ export async function upsertDevice(row: DeviceRow): Promise<DeviceRow> {
           last_known_mac: payload.last_known_mac,
           last_udp_port: payload.last_udp_port,
           last_seen_network_epoch: payload.last_seen_network_epoch,
+          hardware_id: payload.hardware_id,
+          bios_manufacturer: payload.bios_manufacturer,
+          bios_model: payload.bios_model,
+          setup_state: payload.setup_state,
+          last_public_ipv6_discovered_at: payload.last_public_ipv6_discovered_at,
+          last_local_broadcast: payload.last_local_broadcast,
           wake_method_last_success: payload.wake_method_last_success,
           wake_fail_count: payload.wake_fail_count,
           updated_at: payload.updated_at,
@@ -643,6 +687,8 @@ export async function listDevicesForUser(params: {
   userId: string;
   organizationId?: string | null;
   trustState?: DeviceTrustState;
+  role?: DeviceRole;
+  platform?: DevicePlatform;
 }): Promise<DeviceRow[]> {
   const supabase = await getClient();
   let query = supabase
@@ -655,6 +701,12 @@ export async function listDevicesForUser(params: {
   }
   if (params.trustState) {
     query = query.eq("trust_state", params.trustState);
+  }
+  if (params.role) {
+    query = query.eq("role", params.role);
+  }
+  if (params.platform) {
+    query = query.eq("platform", params.platform);
   }
   const { data, error } = await query;
   if (error) throw new Error(`listDevicesForUser: ${error.message}`);
@@ -976,6 +1028,58 @@ export async function listApprovalPolicies(params: {
   const { data, error } = await query.order("created_at", { ascending: false });
   if (error) throw new Error(`listApprovalPolicies: ${error.message}`);
   return (data ?? []) as ApprovalPolicyRow[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI tasks (local worker queue)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function insertAiTask(row: AiTaskRow): Promise<AiTaskRow> {
+  const supabase = await getClient();
+  const payload = {
+    task_id: row.task_id ?? randomUUID(),
+    user_id: row.user_id,
+    device_id: row.device_id ?? null,
+    prompt: row.prompt,
+    response: row.response ?? null,
+    status: row.status ?? "pending",
+    routing: row.routing ?? "local",
+    provider: row.provider ?? null,
+    model: row.model ?? null,
+    temperature: row.temperature ?? null,
+    fallback_reason: row.fallback_reason ?? null,
+    error: row.error ?? null,
+    started_at: row.started_at ?? null,
+    completed_at: row.completed_at ?? null,
+    category: row.category ?? "assistant",
+    action_type: row.action_type ?? null,
+    payload: row.payload ?? {},
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from("ai_tasks")
+    .insert(payload)
+    .select("*")
+    .single();
+  if (error) throw new Error(`insertAiTask: ${error.message}`);
+  return data as AiTaskRow;
+}
+
+export async function listAiTasksForDevice(params: {
+  userId: string;
+  deviceId: string;
+  limit?: number;
+}): Promise<AiTaskRow[]> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("ai_tasks")
+    .select("*")
+    .eq("user_id", params.userId)
+    .eq("device_id", params.deviceId)
+    .order("created_at", { ascending: false })
+    .limit(params.limit ?? 20);
+  if (error) throw new Error(`listAiTasksForDevice: ${error.message}`);
+  return (data ?? []) as AiTaskRow[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

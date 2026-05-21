@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
+import socket
+import subprocess
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -96,6 +100,7 @@ def get_self_code(max_chars: int) -> str:
 class WorkerConfig:
     supabase_url: str
     supabase_key: str
+    supabase_auth_token: str
     ollama_base_url: str
     ollama_model: str
     ollama_timeout_seconds: int
@@ -110,6 +115,7 @@ class WorkerConfig:
     source_code_max_chars: int
     default_temperature: float
     local_enabled: bool
+    worker_device_id: str
 
 
 def load_config() -> WorkerConfig:
@@ -123,6 +129,7 @@ def load_config() -> WorkerConfig:
     return WorkerConfig(
         supabase_url=supabase_url.rstrip("/"),
         supabase_key=supabase_key,
+        supabase_auth_token=os.getenv("SUPABASE_AUTH_TOKEN", "").strip(),
         ollama_base_url=(os.getenv("LOCAL_OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/"),
         ollama_model=os.getenv("LOCAL_OLLAMA_MODEL") or "qwen2.5:14b",
         ollama_timeout_seconds=max(5, _env_int("LOCAL_OLLAMA_TIMEOUT_SECONDS", 120)),
@@ -137,15 +144,17 @@ def load_config() -> WorkerConfig:
         source_code_max_chars=max(1000, _env_int("LOCAL_WORKER_SOURCE_CODE_MAX_CHARS", 16000)),
         default_temperature=clamp_temperature(_env_float("LOCAL_WORKER_DEFAULT_TEMPERATURE", 0.0)),
         local_enabled=_env_bool("LOCAL_WORKER_ENABLED", True),
+        worker_device_id=os.getenv("LOCAL_WORKER_DEVICE_ID", "").strip(),
     )
 
 
 class SupabaseRestClient:
-    def __init__(self, url: str, service_key: str):
+    def __init__(self, url: str, service_key: str, auth_token: str = ""):
         if not url or not service_key:
             raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY/SUPABASE_KEY are required.")
         self.base_url = url.rstrip("/")
         self.service_key = service_key
+        self.auth_token = auth_token.strip()
 
     def _request(
         self,
@@ -163,7 +172,7 @@ class SupabaseRestClient:
             url = f"{url}?{encoded}"
         headers = {
             "apikey": self.service_key,
-            "Authorization": f"Bearer {self.service_key}",
+            "Authorization": f"Bearer {self.auth_token}" if self.auth_token else f"Bearer {self.service_key}",
             "Content-Type": "application/json",
         }
         if prefer:
@@ -179,29 +188,35 @@ class SupabaseRestClient:
         except Exception:
             return raw
 
-    def fetch_processing_count(self) -> int:
+    def fetch_processing_count(self, *, device_id: str | None = None) -> int:
+        params = {
+            "select": "task_id",
+            "status": "eq.processing",
+            "routing": "eq.local",
+        }
+        if device_id:
+            params["device_id"] = f"eq.{device_id}"
         rows = self._request(
             "GET",
             "/rest/v1/ai_tasks",
-            params={
-                "select": "task_id",
-                "status": "eq.processing",
-                "routing": "eq.local",
-            },
+            params=params,
         )
         return len(rows or [])
 
-    def fetch_pending_local_tasks(self, *, limit: int = 25) -> list[dict[str, Any]]:
+    def fetch_pending_local_tasks(self, *, limit: int = 25, device_id: str | None = None) -> list[dict[str, Any]]:
+        params = {
+            "select": "task_id,user_id,device_id,prompt,temperature,created_at,status,routing,category,action_type,payload",
+            "status": "eq.pending",
+            "routing": "eq.local",
+            "order": "created_at.asc",
+            "limit": str(max(1, limit)),
+        }
+        if device_id:
+            params["device_id"] = f"eq.{device_id}"
         rows = self._request(
             "GET",
             "/rest/v1/ai_tasks",
-            params={
-                "select": "task_id,user_id,prompt,temperature,created_at,status,routing",
-                "status": "eq.pending",
-                "routing": "eq.local",
-                "order": "created_at.asc",
-                "limit": str(max(1, limit)),
-            },
+            params=params,
         )
         return list(rows or [])
 
@@ -304,6 +319,28 @@ class SupabaseRestClient:
                 "error": str(error_message)[:2000],
                 "completed_at": _utc_now_iso(),
             },
+        )
+
+    def get_device(self, device_id: str) -> dict[str, Any] | None:
+        rows = self._request(
+            "GET",
+            "/rest/v1/devices",
+            params={
+                "select": "*",
+                "id": f"eq.{device_id}",
+                "limit": "1",
+            },
+        )
+        if not rows:
+            return None
+        return rows[0]
+
+    def update_device(self, device_id: str, patch: dict[str, Any]) -> None:
+        self._request(
+            "PATCH",
+            "/rest/v1/devices",
+            params={"id": f"eq.{device_id}"},
+            body=patch,
         )
 
 
@@ -444,6 +481,137 @@ def should_force_cloud_fallback(
     return False
 
 
+def _normalize_mac_from_int(value: int) -> str | None:
+    if value <= 0:
+        return None
+    parts = [f"{(value >> shift) & 0xFF:02X}" for shift in range(40, -1, -8)]
+    mac = ":".join(parts)
+    return mac if mac != "00:00:00:00:00:00" else None
+
+
+def detect_primary_mac() -> str | None:
+    try:
+        return _normalize_mac_from_int(uuid.getnode())
+    except Exception:
+        return None
+
+
+def detect_public_ipv6() -> str | None:
+    for url in ("https://api64.ipify.org?format=json", "https://ifconfig.co/json"):
+        try:
+            req = urllib.request.Request(url=url, method="GET", headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            candidate = str(payload.get("ip") or payload.get("ip_addr") or "").strip()
+            if ":" in candidate:
+                return candidate
+        except Exception:
+            continue
+    return None
+
+
+def detect_windows_bios_info() -> tuple[str | None, str | None]:
+    if os.name != "nt":
+        return None, None
+    try:
+        output = subprocess.check_output(
+            ["wmic", "baseboard", "get", "manufacturer,product", "/value"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return None, None
+
+    manufacturer = None
+    model = None
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if line.startswith("Manufacturer="):
+            manufacturer = line.split("=", 1)[1].strip() or None
+        elif line.startswith("Product="):
+            model = line.split("=", 1)[1].strip() or None
+    return manufacturer, model
+
+
+def infer_setup_guidance(manufacturer: str | None) -> tuple[str, str | None]:
+    normalized = (manufacturer or "").lower()
+    if "dell" in normalized:
+        return "needs_bios_manual_step", "Enable Wake on LAN in BIOS (Dell: press F2, Power Management → Wake on LAN)."
+    if "asus" in normalized:
+        return "needs_bios_manual_step", "Enable Wake on LAN in BIOS (ASUS: Advanced → APM / Power settings)."
+    if "lenovo" in normalized:
+        return "needs_bios_manual_step", "If wake still fails, verify BIOS Wake on LAN under Power settings."
+    if "hp" in normalized:
+        return "needs_bios_manual_step", "If wake still fails, verify BIOS Wake on LAN under Power Management."
+    return "waiting_for_pairing", "Complete desktop pairing, then verify BIOS Wake on LAN if remote wake fails."
+
+
+def sync_worker_device_registration(config: WorkerConfig, supabase: SupabaseRestClient) -> None:
+    device_id = config.worker_device_id.strip()
+    if not device_id:
+        return
+    device = supabase.get_device(device_id)
+    if not device:
+        return
+
+    metadata = device.get("metadata") if isinstance(device.get("metadata"), dict) else {}
+    mac_address = detect_primary_mac()
+    public_ipv6 = detect_public_ipv6()
+    bios_manufacturer, bios_model = detect_windows_bios_info()
+    hardware_id = (
+        str(device.get("hardware_id") or "").strip()
+        or os.getenv("LOCAL_WORKER_HARDWARE_ID", "").strip()
+        or f"{platform.node()}-{uuid.getnode():012x}"
+    )
+    setup_state, setup_hint = infer_setup_guidance(bios_manufacturer)
+    if str(device.get("trust_state") or "") == "trusted":
+        setup_state = "ready" if mac_address else "paired"
+
+    merged_metadata = {
+        **metadata,
+        "setupHint": setup_hint,
+        "setupSource": "ai-agent/worker.py",
+        "publicIpv6": public_ipv6,
+        "workerPlatform": platform.platform(),
+        "workerHostname": socket.gethostname(),
+        "workerLastHeartbeatAt": _utc_now_iso(),
+    }
+    supabase.update_device(
+        device_id,
+        {
+            "hardware_id": hardware_id,
+            "bios_manufacturer": bios_manufacturer,
+            "bios_model": bios_model,
+            "setup_state": setup_state,
+            "last_seen_at": _utc_now_iso(),
+            "last_known_mac": mac_address,
+            "last_known_ipv6": public_ipv6,
+            "last_public_ipv6_discovered_at": _utc_now_iso() if public_ipv6 else device.get("last_public_ipv6_discovered_at"),
+            "metadata": merged_metadata,
+        },
+    )
+
+
+def execute_system_action(task: dict[str, Any]) -> str:
+    action_type = str(task.get("action_type") or "").strip().lower()
+    payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
+    if action_type == "launch_roblox":
+        game_id = str(payload.get("gameId") or payload.get("game_id") or "185655149").strip()
+        if not re.fullmatch(r"\d{1,20}", game_id):
+            game_id = "185655149"
+        if os.name != "nt":
+            raise RuntimeError("Roblox launch is currently supported only on Windows runtimes.")
+        uri = f"roblox://placeId={game_id}"
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", uri],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return f"Roblox launch requested for placeId={game_id}."
+    raise RuntimeError(f"Unsupported system_action: {action_type or 'unknown'}")
+
+
 def process_task(
     config: WorkerConfig,
     supabase: SupabaseRestClient,
@@ -455,7 +623,21 @@ def process_task(
     task_id = str(task.get("task_id"))
     user_id = str(task.get("user_id") or "")
     raw_prompt = str(task.get("prompt") or "")
+    category = str(task.get("category") or "assistant").strip().lower()
     if not task_id or not user_id or not raw_prompt:
+        return
+
+    if category == "system_action":
+        response_text = execute_system_action(task)
+        supabase.complete_task(
+            task_id,
+            response_text=response_text,
+            provider="jarvis-worker",
+            model=str(task.get("action_type") or "system_action"),
+            routing="local",
+            fallback_reason=fallback_reason,
+        )
+        print(f"[Worker] Completed system_action task={task_id} action={task.get('action_type')}")
         return
 
     try:
@@ -548,8 +730,8 @@ def process_task(
 
 def fetch_next_task(config: WorkerConfig, supabase: SupabaseRestClient) -> tuple[dict[str, Any] | None, bool, str | None]:
     local_available = is_ollama_available(config)
-    processing_count = supabase.fetch_processing_count()
-    pending = supabase.fetch_pending_local_tasks(limit=10)
+    processing_count = supabase.fetch_processing_count(device_id=config.worker_device_id or None)
+    pending = supabase.fetch_pending_local_tasks(limit=10, device_id=config.worker_device_id or None)
     if not pending:
         return None, False, None
 
@@ -584,15 +766,20 @@ def fetch_next_task(config: WorkerConfig, supabase: SupabaseRestClient) -> tuple
 
 def run_worker_forever() -> None:
     config = load_config()
-    supabase = SupabaseRestClient(config.supabase_url, config.supabase_key)
+    supabase = SupabaseRestClient(config.supabase_url, config.supabase_key, auth_token=config.supabase_auth_token)
     print(
         "[Worker] Started with "
         f"local_model={config.ollama_model} cloud_model={config.cloud_model} "
-        f"max_processing={config.local_max_processing} pick_timeout={config.task_pick_timeout_seconds}s"
+        f"max_processing={config.local_max_processing} pick_timeout={config.task_pick_timeout_seconds}s "
+        f"device_id={config.worker_device_id or 'none'} auth_mode={'user_jwt' if config.supabase_auth_token else 'service_key'}"
     )
+    last_device_sync_at = 0.0
 
     while True:
         try:
+            if config.worker_device_id and time.time() - last_device_sync_at >= 60.0:
+                sync_worker_device_registration(config, supabase)
+                last_device_sync_at = time.time()
             task, route_to_cloud, fallback_reason = fetch_next_task(config, supabase)
             if not task:
                 time.sleep(config.poll_interval_seconds)
