@@ -43,3 +43,16 @@ export function normalizeCanonicalPresenceState(value: unknown) {
   return null;
 }
 
+export function resolveAgentUrl(device: Pick<DeviceRow, "metadata"> | null | undefined): string | null {
+  const tailscaleUrl = String(process.env.JARVIS_HOME_TAILSCALE_URL || "").trim();
+  if (tailscaleUrl) return tailscaleUrl;
+
+  const metadata = device?.metadata && typeof device.metadata === "object"
+    ? device.metadata as Record<string, unknown>
+    : null;
+  const localUrl = typeof metadata?.local_url === "string" ? metadata.local_url.trim() : "";
+  if (localUrl) return localUrl;
+  const fallbackUrl = typeof metadata?.fallback_url === "string" ? metadata.fallback_url.trim() : "";
+  if (fallbackUrl) return fallbackUrl;
+  return null;
+}

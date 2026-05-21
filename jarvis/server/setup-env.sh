@@ -9,6 +9,9 @@ echo "=== Initializing JARVIS Linux server runtime ==="
 if command -v apt-get >/dev/null 2>&1; then
   sudo apt-get update
   sudo apt-get install -y curl docker.io docker-compose-plugin jq
+  if ! command -v tailscale >/dev/null 2>&1; then
+    curl -fsSL https://tailscale.com/install.sh | sh
+  fi
 fi
 
 sudo systemctl enable --now docker
@@ -38,6 +41,15 @@ fi
 
 if ! grep -q "^JARVIS_SYNC_KEY=" "${ENV_FILE}"; then
   echo "JARVIS_SYNC_KEY=$(openssl rand -hex 32)" >> "${ENV_FILE}"
+fi
+
+TAILSCALE_AUTH_KEY="$(grep -E '^TAILSCALE_AUTH_KEY=' "${ENV_FILE}" | tail -n1 | cut -d= -f2- | tr -d '"' | xargs || true)"
+if [[ -n "${TAILSCALE_AUTH_KEY}" && "${TAILSCALE_AUTH_KEY}" != "tskey-auth-REPLACE_ME" ]]; then
+  echo "Connecting host to tailnet..."
+  sudo tailscale up --authkey="${TAILSCALE_AUTH_KEY}" --hostname="jarvis-home-server" --accept-routes
+  echo "Tailscale IP: $(tailscale ip -4)"
+else
+  echo "[warn] TAILSCALE_AUTH_KEY not set. Skipping tailscale up."
 fi
 
 echo "Starting containers..."
