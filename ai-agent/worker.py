@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -10,8 +12,15 @@ import urllib.request
 import webbrowser
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+from code_analyzer import build_index, clone_or_update_repo, search_index
+
+try:
+    import psutil  # type: ignore
+except Exception:  # pragma: no cover
+    psutil = None
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -90,6 +99,20 @@ def get_self_code(max_chars: int) -> str:
     code = _sanitize_source(code)
     if len(code) > max_chars:
         return f"{code[:max_chars]}\n\n# [Truncated by worker to {max_chars} chars]"
+    return code
+
+
+def get_map_widget_code(max_chars: int) -> str:
+    try:
+        candidate = Path(__file__).resolve().parents[1] / "jarvis" / "desktop" / "map-widget.js"
+        if not candidate.exists():
+            return ""
+        code = candidate.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+    code = _sanitize_source(code)
+    if len(code) > max_chars:
+        return f"{code[:max_chars]}\n\n// [Truncated map-widget.js to {max_chars} chars]"
     return code
 
 
@@ -460,6 +483,17 @@ def execute_system_action(config: WorkerConfig, action_type: str, payload: dict[
     raise RuntimeError(f"Unsupported system action: {action_type}")
 
 
+def _should_attach_map_code(prompt: str) -> bool:
+    lowered = str(prompt or "").lower()
+    return (
+        "map" in lowered
+        or "mapa" in lowered
+        or "jarvis code" in lowered
+        or "kod jarvis" in lowered
+        or "map-widget" in lowered
+    )
+
+
 def generate_with_ollama(
     config: WorkerConfig,
     *,
@@ -564,6 +598,129 @@ def should_force_cloud_fallback(
     return False
 
 
+def _extract_repo_url(prompt: str) -> str:
+    match = re.search(r"(https?://github\.com/[^\s]+)", prompt, flags=re.IGNORECASE)
+    if not match:
+        return ""
+    return match.group(1).rstrip(".").rstrip("/")
+
+
+def _extract_search_query(prompt: str) -> str:
+    marker = re.search(r"(znajd[źz].*?)(?:w repozytorium|w repo|$)", prompt, flags=re.IGNORECASE)
+    if marker:
+        return marker.group(1)
+    return prompt
+
+
+def try_handle_code_indexing_prompt(config: WorkerConfig, raw_prompt: str) -> str | None:
+    prompt = str(raw_prompt or "").strip()
+    lowered = prompt.lower()
+    should_index = "indeks" in lowered or "sklonuj repo" in lowered or "clone repo" in lowered
+    should_search = "znajd" in lowered and "repo" in lowered
+    if not should_index and not should_search:
+        return None
+
+    repo_url = _extract_repo_url(prompt)
+    if not repo_url:
+        return "Nie podałeś linku do repozytorium GitHub. Użyj pełnego URL, np. https://github.com/owner/repo."
+
+    token = os.getenv("GITHUB_TOKEN", "").strip() or None
+    repo_path = clone_or_update_repo(repo_url, config.repo_cache_dir, token=token)
+    index_path = Path(config.index_cache_dir) / repo_path.name
+    stats = build_index(repo_path, index_path)
+    if should_search:
+        results = search_index(index_path, _extract_search_query(prompt), top_k=3)
+        if not results:
+            return (
+                f"Repo zindeksowane ({stats['chunks_indexed']} chunków), ale nie znalazłem pasujących fragmentów dla zapytania."
+            )
+        lines = [
+            f"Znalazłem {len(results)} dopasowania (repo: {repo_path.name}, chunki: {stats['chunks_indexed']}):"
+        ]
+        for idx, item in enumerate(results, start=1):
+            snippet = str(item.get("content", "")).strip().splitlines()
+            preview = "\n".join(snippet[:6])
+            lines.append(
+                f"\n[{idx}] {item.get('path')}:{item.get('start_line')}-{item.get('end_line')}\n{preview}"
+            )
+        return "\n".join(lines)
+    return (
+        f"Repo zostało sklonowane i zindeksowane lokalnie.\n"
+        f"Pliki: {stats['files_indexed']}, chunki: {stats['chunks_indexed']}.\n"
+        f"Ścieżka: {repo_path}"
+    )
+
+
+def collect_hardware_snapshot() -> dict[str, Any]:
+    if psutil is None:
+        return {
+            "cpu_percent": 0.0,
+            "ram_percent": 0.0,
+            "temperature_celsius": None,
+        }
+    cpu_percent = float(psutil.cpu_percent(interval=1))
+    ram_percent = float(psutil.virtual_memory().percent)
+    temp_c = None
+    try:
+        temperatures = psutil.sensors_temperatures() or {}
+        for values in temperatures.values():
+            if values:
+                temp_c = float(values[0].current)
+                break
+    except Exception:
+        temp_c = None
+    return {
+        "cpu_percent": cpu_percent,
+        "ram_percent": ram_percent,
+        "temperature_celsius": temp_c,
+    }
+
+
+def start_hardware_monitor(config: WorkerConfig, supabase: SupabaseRestClient) -> threading.Thread | None:
+    if not config.device_id:
+        return None
+
+    def loop() -> None:
+        while True:
+            try:
+                snapshot = collect_hardware_snapshot()
+                supabase.upsert_device_telemetry(
+                    {
+                        "device_id": config.device_id,
+                        "cpu_percent": snapshot.get("cpu_percent"),
+                        "ram_percent": snapshot.get("ram_percent"),
+                        "temperature_celsius": snapshot.get("temperature_celsius"),
+                        "updated_at": _utc_now_iso(),
+                    }
+                )
+            except Exception as exc:
+                print(f"[Worker][warn] Hardware monitor failed: {exc}")
+            time.sleep(config.hardware_interval_seconds)
+
+    thread = threading.Thread(target=loop, name="HardwareMonitorThread", daemon=True)
+    thread.start()
+    return thread
+
+
+def register_windows_shutdown_guard(config: WorkerConfig, supabase: SupabaseRestClient) -> None:
+    if platform.system().lower() != "windows":
+        return
+    try:
+        import win32api  # type: ignore
+
+        def _handler(ctrl_type: int) -> bool:
+            if ctrl_type in {5, 6}:  # logoff/shutdown
+                try:
+                    supabase.mark_device_offline(config.device_id)
+                except Exception:
+                    pass
+            return False
+
+        win32api.SetConsoleCtrlHandler(_handler, True)
+    except Exception as exc:
+        print(f"[Worker][warn] WinAPI shutdown guard not available: {exc}")
+
+
 def process_task(
     config: WorkerConfig,
     supabase: SupabaseRestClient,
@@ -657,7 +814,13 @@ def process_task(
     routing = "local"
 
     try:
-        if route_to_cloud:
+        indexed_response = try_handle_code_indexing_prompt(config, raw_prompt)
+        if indexed_response is not None:
+            output_text = indexed_response
+            provider = "local-indexer"
+            model = "code-indexer-v1"
+            routing = "local"
+        elif route_to_cloud:
             output_text = generate_with_cloud_fallback(
                 config,
                 raw_prompt=cleaned_prompt,
@@ -764,6 +927,8 @@ def fetch_next_task(config: WorkerConfig, supabase: SupabaseRestClient) -> tuple
 def run_worker_forever() -> None:
     config = load_config()
     supabase = SupabaseRestClient(config.supabase_url, config.supabase_key)
+    start_hardware_monitor(config, supabase)
+    register_windows_shutdown_guard(config, supabase)
     print(
         "[Worker] Started with "
         f"local_light_model={config.ollama_light_model} local_heavy_model={config.ollama_heavy_model} "

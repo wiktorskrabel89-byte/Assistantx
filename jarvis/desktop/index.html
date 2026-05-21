@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https: http: ws: wss:; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://www.openstreetmap.org; font-src 'self' data:; connect-src 'self' https: http: ws: wss: https://nominatim.openstreetmap.org https://api.github.com https://oauth2.googleapis.com https://www.googleapis.com https://gmail.googleapis.com; media-src 'self' data: blob:; frame-src https://www.openstreetmap.org; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Jarvis Desktop</title>
   <style>
     :root {
@@ -785,6 +785,119 @@
       min-width: 0;
     }
 
+    .command-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(420px, 55%);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .chat-column {
+      min-width: 0;
+    }
+
+    .viewport-shell {
+      min-height: 540px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.5);
+      overflow: hidden;
+      display: grid;
+    }
+
+    .viewport-pane {
+      display: none;
+      padding: 12px;
+      min-height: 100%;
+      overflow: auto;
+    }
+
+    .viewport-pane.active {
+      display: grid;
+      gap: 10px;
+    }
+
+    #viewport-map-canvas {
+      min-height: 420px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(2, 6, 23, 0.35);
+    }
+
+    .repo-layout {
+      display: grid;
+      grid-template-columns: minmax(160px, 240px) minmax(0, 1fr);
+      gap: 10px;
+      min-height: 420px;
+    }
+
+    .repo-list,
+    .repo-tree,
+    .repo-preview,
+    .hardware-cards,
+    .google-status,
+    .github-status {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.45);
+      padding: 10px;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+
+    .repo-list,
+    .repo-tree {
+      max-height: 420px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+    }
+
+    .repo-preview {
+      white-space: pre-wrap;
+      font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+      overflow: auto;
+      max-height: 420px;
+    }
+
+    .hardware-cards {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .settings-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(4px);
+      z-index: 1200;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+
+    .settings-modal-card {
+      width: min(760px, 100%);
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 14px;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .settings-modal-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .settings-modal-grid .full {
+      grid-column: span 2;
+    }
+
     /* ── Responsive ──────────────────────────────────────────────────────── */
     @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; }
@@ -912,30 +1025,65 @@
 
         <div class="tab-content">
           <div id="command-tab-panel" class="tab-panel active" role="tabpanel" aria-labelledby="command-tab-button">
-            <div class="log-header">
-              <div>
-                <h2 style="font-size:15px;font-weight:700;letter-spacing:-0.2px;">Command Log</h2>
-                <p class="muted" style="font-size:12px;margin-top:3px;">
-                  Responses from your PC appear here in real time. Type a prompt or use the quick-action buttons.
-                </p>
+            <div class="command-workspace">
+              <div class="chat-column">
+                <div class="log-header">
+                  <div>
+                    <h2 style="font-size:15px;font-weight:700;letter-spacing:-0.2px;">Command Log</h2>
+                    <p class="muted" style="font-size:12px;margin-top:3px;">
+                      Responses from your PC appear here in real time. Type a prompt or use the quick-action buttons.
+                    </p>
+                  </div>
+                </div>
+  
+                <div class="composer">
+                  <input id="input" type="text" placeholder="Type a Jarvis prompt or command… (e.g. &quot;open YouTube&quot;, &quot;screenshot&quot;)" />
+                  <button id="voice-input" type="button" class="secondary" title="Talk to Jarvis">🎙 Talk</button>
+                  <button id="send" type="button">Send</button>
+                </div>
+  
+                <div id="log">
+                  <div class="log-empty" id="log-empty">
+                    <span class="log-empty-icon">🤖</span>
+                    <span>No messages yet — send a command to get started</span>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <div class="composer">
-              <input id="input" type="text" placeholder="Type a Jarvis prompt or command… (e.g. &quot;open YouTube&quot;, &quot;screenshot&quot;)" />
-              <button id="voice-input" type="button" class="secondary" title="Talk to Jarvis">🎙 Talk</button>
-              <button id="send" type="button">Send</button>
-            </div>
-
-            <div id="log">
-              <div class="log-empty" id="log-empty">
-                <span class="log-empty-icon">🤖</span>
-                <span>No messages yet — send a command to get started</span>
-              </div>
+              <section class="viewport-shell" id="workspace-viewport">
+                <div id="welcome-screen" class="viewport-pane active">
+                  <h3 style="margin:0;">Dynamic Viewport</h3>
+                  <p class="muted">Use commands like "pokaż mapę Tokio", "pokaż repo owner/repo", "status systemu".</p>
+                </div>
+                <div id="viewport-map" class="viewport-pane">
+                  <h3 style="margin:0;">Mapa OpenStreetMap</h3>
+                  <div id="viewport-map-canvas"></div>
+                </div>
+                <div id="viewport-repo" class="viewport-pane">
+                  <h3 style="margin:0;">GitHub Repository Browser</h3>
+                  <div class="repo-layout">
+                    <div class="repo-list" id="repo-list">Brak repozytoriów.</div>
+                    <div style="display:grid;gap:10px;">
+                      <div class="repo-tree" id="repo-tree">Wybierz repozytorium.</div>
+                      <pre class="repo-preview"><code id="repo-preview">Wybierz plik z repozytorium.</code></pre>
+                    </div>
+                  </div>
+                </div>
+                <div id="viewport-hardware" class="viewport-pane">
+                  <h3 style="margin:0;">Hardware Snapshot</h3>
+                  <div class="hardware-cards">
+                    <div id="hardware-cpu">CPU: --%</div>
+                    <div id="hardware-ram">RAM: --%</div>
+                    <div id="hardware-temp">TEMP: --°C</div>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
-
+  
           <div id="settings-tab-panel" class="tab-panel" role="tabpanel" aria-labelledby="settings-tab-button">
+            <div style="display:flex;justify-content:flex-end;">
+              <button id="open-settings-modal" type="button" class="secondary sm">🔐 Accounts settings</button>
+            </div>
             <div class="stack">
               <div class="section-label">AssistantX Server</div>
               <div class="settings-grid">
@@ -945,8 +1093,6 @@
                 </label>
                 <button id="save-server-url" type="button" class="secondary field-full">Save server URL</button>
               </div>
-            </div>
-
             <div class="stack">
               <div class="section-label">System Core / Linux Runtime</div>
               <div class="settings-grid">
@@ -1112,6 +1258,24 @@
       </div>
     </main>
   </div>
+  <div id="settings-modal" class="settings-modal" hidden>
+    <section class="settings-modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">Integrations Settings</h3>
+        <button id="close-settings-modal" type="button" class="secondary sm">Close</button>
+      </div>
+      <div class="settings-modal-grid">
+        <div class="github-status full" id="github-status">GitHub: not configured</div>
+        <input id="github-token-input" type="password" placeholder="GitHub PAT (classic / fine-grained token)" class="full" />
+        <button id="github-save-token" type="button">Save GitHub token</button>
+        <button id="github-clear-token" type="button" class="secondary">Clear GitHub token</button>
+        <div class="google-status full" id="google-status">Google: not configured</div>
+        <button id="google-login" type="button">Login with Google</button>
+        <button id="google-logout" type="button" class="secondary">Logout Google</button>
+        <div class="full" id="google-device-hint" style="font-size:12px;color:#cbd5e1;"></div>
+      </div>
+    </section>
+  </div>
   <div id="update-modal-backdrop" class="update-modal-backdrop" hidden>
     <section id="update-modal" class="update-modal" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
       <div class="update-modal-header">
@@ -1151,6 +1315,7 @@
       </div>
     </section>
   </div>
+  <script src="map-widget.js"></script>
   <script src="renderer.js"></script>
   <script src="log-empty-state.js"></script>
 </body>
