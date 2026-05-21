@@ -188,11 +188,12 @@ export function useChatTransport({
   }, [queuedMessages]);
 
   useEffect(() => {
+    const localTaskControllers = localTaskControllersRef.current;
     return () => {
       isMountedRef.current = false;
       activeRequestAbortRef.current?.abort();
-      localTaskControllersRef.current.forEach((controller) => controller.abort());
-      localTaskControllersRef.current.clear();
+      localTaskControllers.forEach((controller) => controller.abort());
+      localTaskControllers.clear();
       queuedMessagesRef.current.forEach((queuedMessage) => revokeQueuedPreview(queuedMessage.filePreview));
     };
   }, [revokeQueuedPreview]);
