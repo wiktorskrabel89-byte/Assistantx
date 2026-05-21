@@ -45,6 +45,14 @@ export async function POST(
     return Response.json({ error: "No wake candidate available. Submit network snapshot first." }, { status: 400 });
   }
 
+  const deviceMetadata = device.metadata && typeof device.metadata === "object"
+    ? device.metadata as Record<string, unknown>
+    : null;
+  const preferTailscale = Boolean(
+    device.uses_vpn
+    || deviceMetadata?.uses_vpn === true
+    || deviceMetadata?.usesVpn === true,
+  );
   const execution = await executeWakeChain({
     candidate: {
       deviceId: id,
@@ -57,6 +65,7 @@ export async function POST(
     } satisfies WakeCandidate,
     broadcastAddress: typeof body.broadcast === "string" ? body.broadcast : null,
     agentUrl: resolveAgentUrl(device),
+    preferTailscale,
   });
 
   try {
@@ -90,14 +99,19 @@ export async function POST(
 
   if (!execution.ok) {
     return Response.json({
+      ok: false,
       error: "Wake sequence failed for all methods.",
+      mode: execution.mode,
+      nextAction: execution.nextAction,
       attempts: execution.attempts,
-    }, { status: 502 });
+    }, { status: 202 });
   }
 
   return Response.json({
     ok: true,
+    mode: execution.mode,
     method: execution.method,
+    nextAction: execution.nextAction,
     attempts: execution.attempts,
   });
 }

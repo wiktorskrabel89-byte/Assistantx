@@ -1,95 +1,180 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Download, GitBranch, Link2, Mail, Mic, Smartphone, Sparkles, Volume2, Wifi, WifiOff } from "lucide-react";
+import { Download, GitBranch, Link2, Loader2, Mail, Mic, Smartphone, Sparkles, Volume2, Wifi, WifiOff } from "lucide-react";
 
-// ── Live PC presence hook ────────────────────────────────────────────────────
-function usePcPresence(backendWsUrl?: string) {
-  const [pcOnline, setPcOnline] = useState(false);
-  const [pcError, setPcError] = useState<string | null>(null);
-  const [pcPresence, setPcPresence] = useState<{
-    status?: string;
-    cpu?: number | null;
-    freeRamMb?: number | null;
-    totalRamMb?: number | null;
-    activeApps?: string[];
-  } | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+type DeviceStatus = {
+  id: string;
+  label: string;
+  platform: string;
+  role: string;
+  trustState: string;
+  usesVpn: boolean;
+  wakeMethodLastSuccess: string | null;
+  wakeFailCount: number;
+  status: string;
+  rawStatus: string;
+  isOnline: boolean;
+  freshnessAgeMs: number | null;
+  freshnessState: string;
+  lastSeenAt: string | null;
+  lastHeartbeatAt: string | null;
+  cpuPercent: number | null;
+  ramPercent: number | null;
+  activeApps: string[];
+};
+
+type WakeRouteResponse = {
+  ok?: boolean;
+  error?: string;
+  mode?: "router" | "ipv6" | "rtc_wait";
+  method?: string | null;
+  nextAction?: string;
+};
+
+function formatFreshness(ageMs: number | null) {
+  if (ageMs === null) return "no heartbeat yet";
+  if (ageMs < 1000) return "just now";
+  const seconds = Math.round(ageMs / 1000);
+  return `${seconds}s ago`;
+}
+
+function useJarvisControlPlane() {
+  const [devices, setDevices] = useState<DeviceStatus[]>([]);
+  const [primaryDeviceId, setPrimaryDeviceId] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [isStatusLoading, setIsStatusLoading] = useState(true);
+  const [isBetaTester, setIsBetaTester] = useState(false);
+  const [isWaking, setIsWaking] = useState(false);
+  const [isQueueing, setIsQueueing] = useState(false);
+  const [wakeResponse, setWakeResponse] = useState<WakeRouteResponse | null>(null);
+  const [queuedTaskId, setQueuedTaskId] = useState<string | null>(null);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/jarvis/devices/status", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as {
+        devices?: DeviceStatus[];
+        primaryDeviceId?: string | null;
+        isBetaTester?: boolean;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to load Jarvis device status.");
+      }
+      setDevices(payload.devices ?? []);
+      setPrimaryDeviceId((current) => current ?? payload.primaryDeviceId ?? payload.devices?.[0]?.id ?? null);
+      setIsBetaTester(Boolean(payload.isBetaTester));
+      setStatusError(null);
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : "Failed to load Jarvis device status.");
+    } finally {
+      setIsStatusLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const url = backendWsUrl ?? (process.env.NEXT_PUBLIC_JARVIS_WS_URL ?? null);
-    if (!url) return;
-
-    let mounted = true;
-
-    const connect = () => {
-      if (!mounted) return;
-      try {
-        const ws = new WebSocket(url);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-          setPcError(null);
-          ws.send(JSON.stringify({ type: 'register', role: 'web' }));
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data as string);
-            if (msg.type === 'presence_snapshot') {
-              setPcOnline((msg.role_counts?.desktop ?? 0) > 0);
-            }
-            if (msg.type === 'peer_registered' && msg.role === 'desktop') setPcOnline(true);
-            if (msg.type === 'peer_disconnected' && msg.role === 'desktop') setPcOnline(false);
-            if (msg.type === 'device_status' && msg.role === 'desktop') {
-              setPcOnline(msg.status === 'online' || msg.status === 'busy');
-              setPcPresence({
-                status: msg.status,
-                cpu: msg.cpu ?? null,
-                freeRamMb: msg.freeRamMb ?? null,
-                totalRamMb: msg.totalRamMb ?? null,
-                activeApps: msg.activeApps ?? [],
-              });
-            }
-          } catch {
-            // ignore malformed message payloads
-          }
-        };
-
-        ws.onclose = (event) => {
-          setPcOnline(false);
-          const reason = event.reason ? ` (${event.reason})` : '';
-          const detail = `WebSocket closed: code ${event.code}${reason}`;
-          setPcError(detail);
-          console.warn('[JarvisTab] PC presence websocket closed:', { code: event.code, reason: event.reason, url });
-          if (mounted) timerRef.current = setTimeout(connect, 5000);
-        };
-
-        ws.onerror = (event) => {
-          setPcError('WebSocket error while connecting to PC presence service.');
-          console.warn('[JarvisTab] PC presence websocket error:', { url, event });
-        };
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : 'Unknown WebSocket initialization error';
-        setPcError(`Failed to initialize WebSocket: ${detail}`);
-        console.warn('[JarvisTab] Failed to create PC presence websocket:', { url, error });
-      }
-    };
-
-    connect();
+    void fetchStatus();
+    const intervalId = window.setInterval(() => {
+      void fetchStatus();
+    }, 10000);
     return () => {
-      mounted = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      wsRef.current?.close();
+      window.clearInterval(intervalId);
     };
-  }, [backendWsUrl]);
+  }, [fetchStatus]);
 
-  return { pcOnline, pcPresence, pcError };
+  const primaryDevice = useMemo(
+    () => devices.find((device) => device.id === primaryDeviceId) ?? devices[0] ?? null,
+    [devices, primaryDeviceId],
+  );
+
+  const wakeJarvis = useCallback(async () => {
+    if (!primaryDevice?.id) return;
+    setIsWaking(true);
+    setQueuedTaskId(null);
+    try {
+      const response = await fetch("/api/wake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: primaryDevice.id,
+          reason: "launch_jarvis",
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as WakeRouteResponse;
+      setWakeResponse(payload);
+      if (response.ok || response.status === 202) {
+        void fetchStatus();
+        return;
+      }
+      throw new Error(payload.error ?? "Wake request failed.");
+    } catch (error) {
+      setWakeResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : "Wake request failed.",
+        mode: "rtc_wait",
+        nextAction: "wait_for_bios_rtc",
+      });
+    } finally {
+      setIsWaking(false);
+    }
+  }, [fetchStatus, primaryDevice?.id]);
+
+  const queueRobloxLaunch = useCallback(async () => {
+    if (!primaryDevice?.id) return;
+    setIsQueueing(true);
+    setQueuedTaskId(null);
+    try {
+      const wakeResult = await fetch("/api/wake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: primaryDevice.id,
+          reason: "beta_launch_roblox",
+        }),
+      });
+      const wakePayload = await wakeResult.json().catch(() => ({})) as WakeRouteResponse;
+      setWakeResponse(wakePayload);
+
+      const response = await fetch("/api/jarvis/system-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: primaryDevice.id,
+          actionType: "launch_roblox",
+          payload: { gameId: "185655149" },
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { taskId?: string; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to queue Roblox launch.");
+      }
+      setQueuedTaskId(payload.taskId ?? null);
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : "Failed to queue Roblox launch.");
+    } finally {
+      setIsQueueing(false);
+    }
+  }, [primaryDevice?.id]);
+
+  return {
+    devices,
+    primaryDevice,
+    setPrimaryDeviceId,
+    isBetaTester,
+    isStatusLoading,
+    statusError,
+    wakeResponse,
+    isWaking,
+    wakeJarvis,
+    isQueueing,
+    queueRobloxLaunch,
+    queuedTaskId,
+  };
 }
 
 // ── Linked accounts ──────────────────────────────────────────────────────────
@@ -124,7 +209,20 @@ function useLinkedAccounts() {
 
 export default function JarvisTab() {
   const [latestGithubVersion, setLatestGithubVersion] = useState<string | null>(null);
-  const { pcOnline, pcPresence, pcError } = usePcPresence();
+  const {
+    devices,
+    primaryDevice,
+    setPrimaryDeviceId,
+    isBetaTester,
+    isStatusLoading,
+    statusError,
+    wakeResponse,
+    isWaking,
+    wakeJarvis,
+    isQueueing,
+    queueRobloxLaunch,
+    queuedTaskId,
+  } = useJarvisControlPlane();
   const { accounts, loading: accountsLoading, link, unlink } = useLinkedAccounts();
 
   useEffect(() => {
@@ -171,14 +269,17 @@ export default function JarvisTab() {
     window.location.href = "/api/jarvis/download?platform=android";
   }
 
-  const pcStatusText = pcOnline
+  const pcOnline = Boolean(primaryDevice?.isOnline);
+  const pcStatusText = primaryDevice
     ? [
-        `PC online${pcPresence?.status === 'busy' ? ' (busy)' : ''}`,
-        pcPresence?.cpu !== null && pcPresence?.cpu !== undefined ? `CPU ${pcPresence.cpu}%` : null,
-        pcPresence?.freeRamMb ? `RAM ${pcPresence.freeRamMb}/${pcPresence.totalRamMb}MB` : null,
-        pcPresence?.activeApps?.length ? pcPresence.activeApps.slice(0, 2).join(', ') : null,
-      ].filter(Boolean).join(' · ')
-    : (pcError ? `PC offline · ${pcError}` : 'PC offline');
+        `${primaryDevice.label}${pcOnline ? " online" : " offline"}`,
+        primaryDevice.status !== "offline" ? primaryDevice.status : null,
+        primaryDevice.cpuPercent !== null ? `CPU ${primaryDevice.cpuPercent}%` : null,
+        primaryDevice.ramPercent !== null ? `RAM ${primaryDevice.ramPercent}%` : null,
+        primaryDevice.activeApps.length > 0 ? primaryDevice.activeApps.slice(0, 2).join(", ") : null,
+        `heartbeat ${formatFreshness(primaryDevice.freshnessAgeMs)}`,
+      ].filter(Boolean).join(" · ")
+    : (isStatusLoading ? "Loading Jarvis devices..." : "No trusted Jarvis desktop paired yet.");
 
   const highlights = [
     {
@@ -209,15 +310,61 @@ export default function JarvisTab() {
 
         {/* Live PC Status Banner */}
         <Card className={`border ${pcOnline ? 'border-green-200/70 bg-green-50/80' : 'border-slate-200/70 bg-white/80'}`}>
-          <CardContent className="flex items-center gap-3 py-3">
+          <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-3">
             {pcOnline
               ? <Wifi className="h-4 w-4 shrink-0 text-green-600" />
               : <WifiOff className="h-4 w-4 shrink-0 text-slate-400" />}
             <span className={`text-sm font-medium ${pcOnline ? 'text-green-800' : 'text-slate-500'}`}>
               {pcStatusText}
             </span>
-            {!process.env.NEXT_PUBLIC_JARVIS_WS_URL && (
-              <span className="ml-auto text-xs text-slate-400">Set NEXT_PUBLIC_JARVIS_WS_URL to enable live status</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+              {devices.length > 1 && (
+                <select
+                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                  value={primaryDevice?.id ?? ""}
+                  onChange={(event) => setPrimaryDeviceId(event.target.value)}
+                >
+                  {devices.map((device) => (
+                    <option key={device.id} value={device.id}>
+                      {device.label} · {device.platform} · {device.trustState}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button
+                size="sm"
+                onClick={wakeJarvis}
+                disabled={!primaryDevice?.id || isWaking}
+                className="gap-2"
+              >
+                {isWaking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
+                Uruchom Jarvisa
+              </Button>
+              {isBetaTester && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={queueRobloxLaunch}
+                  disabled={!primaryDevice?.id || isQueueing}
+                  className="gap-2"
+                >
+                  {isQueueing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  Wake + queue Roblox
+                </Button>
+              )}
+            </div>
+            {statusError && (
+              <span className="text-xs text-amber-700">{statusError}</span>
+            )}
+            {wakeResponse?.mode && (
+              <span className={`text-xs ${wakeResponse.mode === "rtc_wait" ? "text-amber-700" : "text-sky-700"}`}>
+                Wake mode: {wakeResponse.mode} {wakeResponse.nextAction ? `· ${wakeResponse.nextAction}` : ""}
+              </span>
+            )}
+            {queuedTaskId && (
+              <span className="text-xs text-emerald-700">Queued Roblox task: {queuedTaskId}</span>
             )}
           </CardContent>
         </Card>

@@ -1,6 +1,14 @@
 import { sendWakeOnLanPacket } from "@/src/core/wake/magic-packet";
 
-export type WakeMethod = "tailscale_direct" | "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast";
+export type WakeMethod =
+  | "tailscale_direct"
+  | "router_api"
+  | "udp_path_probe"
+  | "ipv6_magic_packet"
+  | "lan_broadcast"
+  | "rtc_wait";
+
+export type WakeMode = "router" | "ipv6" | "rtc_wait";
 
 export type WakeCandidate = {
   deviceId: string;
@@ -22,6 +30,8 @@ export type WakeAttemptResult = {
 export type WakeExecutionResult = {
   ok: boolean;
   method: WakeMethod | null;
+  mode: WakeMode;
+  nextAction: "wait_for_presence" | "wait_for_bios_rtc";
   attempts: WakeAttemptResult[];
 };
 
@@ -77,6 +87,99 @@ async function attemptTailscaleDirect(agentUrl: string): Promise<WakeAttemptResu
       method: "tailscale_direct",
       ok: false,
       details: error instanceof Error ? error.message : "Tailscale direct healthcheck failed.",
+      latencyMs: now() - startedAt,
+    };
+  }
+}
+
+function interpolateTemplate(value: unknown, replacements: Record<string, string>): unknown {
+  if (typeof value === "string") {
+    return value.replace(/\{\{(\w+)\}\}/g, (_, token: string) => replacements[token] ?? "");
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => interpolateTemplate(item, replacements));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, interpolateTemplate(nested, replacements)]),
+    );
+  }
+  return value;
+}
+
+function parseJsonEnv(envName: string, fallback: Record<string, unknown>) {
+  const raw = String(process.env[envName] || "").trim();
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function attemptRouterApi(candidate: WakeCandidate): Promise<WakeAttemptResult> {
+  const startedAt = now();
+  const url = String(process.env.JARVIS_ROUTER_API_URL || "").trim();
+  if (!url) {
+    return {
+      method: "router_api",
+      ok: false,
+      details: "JARVIS_ROUTER_API_URL is not configured.",
+      latencyMs: now() - startedAt,
+    };
+  }
+
+  const method = String(process.env.JARVIS_ROUTER_API_METHOD || "POST").trim().toUpperCase();
+  const token = String(process.env.JARVIS_ROUTER_API_TOKEN || "").trim();
+  const tokenHeader = String(process.env.JARVIS_ROUTER_API_TOKEN_HEADER || "Authorization").trim() || "Authorization";
+  const replacements = {
+    deviceId: candidate.deviceId,
+    mac: candidate.macAddress ?? "",
+    ipv6: candidate.ipv6 ?? "",
+    port: String(candidate.udpPort ?? 9),
+    provider: candidate.provider,
+  };
+  const headers = interpolateTemplate(parseJsonEnv("JARVIS_ROUTER_API_HEADERS_JSON", {}), replacements) as Record<string, string>;
+  const bodyTemplate = parseJsonEnv("JARVIS_ROUTER_API_BODY_JSON", {
+    deviceId: "{{deviceId}}",
+    mac: "{{mac}}",
+    ipv6: "{{ipv6}}",
+    port: "{{port}}",
+  });
+  const body = interpolateTemplate(bodyTemplate, replacements);
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+        ...(token ? { [tokenHeader]: tokenHeader.toLowerCase() === "authorization" ? `Bearer ${token}` : token } : {}),
+      },
+      body: method === "GET" ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) {
+      const payload = await response.text().catch(() => "");
+      return {
+        method: "router_api",
+        ok: false,
+        details: payload || `Router API returned ${response.status}.`,
+        latencyMs: now() - startedAt,
+      };
+    }
+    return {
+      method: "router_api",
+      ok: true,
+      details: "Router API wake request succeeded.",
+      latencyMs: now() - startedAt,
+    };
+  } catch (error) {
+    return {
+      method: "router_api",
+      ok: false,
+      details: error instanceof Error ? error.message : "Router API wake failed.",
       latencyMs: now() - startedAt,
     };
   }
@@ -181,44 +284,73 @@ async function attemptLanBroadcast(candidate: WakeCandidate, overrideBroadcast?:
   }
 }
 
+function resolveWakeMode(method: WakeMethod | null): WakeMode {
+  if (method === "ipv6_magic_packet") return "ipv6";
+  if (method === null) return "rtc_wait";
+  return "router";
+}
+
+function resolveWakeOrder(preferTailscale: boolean) {
+  const configured = String(process.env.JARVIS_WAKE_FALLBACK_POLICY || "").trim();
+  const defaults: WakeMethod[] = ["router_api", "udp_path_probe", "ipv6_magic_packet", "lan_broadcast"];
+  const parsed = configured
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item): item is WakeMethod =>
+      ["router_api", "udp_path_probe", "ipv6_magic_packet", "lan_broadcast"].includes(item),
+    );
+  const ordered = parsed.length > 0 ? parsed : defaults;
+  return preferTailscale ? ["tailscale_direct", ...ordered] as WakeMethod[] : ordered;
+}
+
 export async function executeWakeChain(params: {
   candidate: WakeCandidate;
   broadcastAddress?: string | null;
   agentUrl?: string | null;
+  preferTailscale?: boolean;
 }): Promise<WakeExecutionResult> {
   const { candidate } = params;
   const attempts: WakeAttemptResult[] = [];
-
   const tailscaleUrl = String(params.agentUrl || process.env.JARVIS_HOME_TAILSCALE_URL || "").trim();
-  if (tailscaleUrl) {
-    const tailscaleAttempt = await attemptTailscaleDirect(tailscaleUrl);
-    attempts.push(tailscaleAttempt);
-    if (tailscaleAttempt.ok) {
-      return { ok: true, method: "tailscale_direct", attempts };
+  const order = resolveWakeOrder(Boolean(params.preferTailscale && tailscaleUrl));
+
+  for (const method of order) {
+    let attempt: WakeAttemptResult | null = null;
+    if (method === "tailscale_direct") {
+      attempt = await attemptTailscaleDirect(tailscaleUrl);
+    } else if (method === "router_api") {
+      attempt = await attemptRouterApi(candidate);
+    } else if (method === "udp_path_probe" && candidate.udpPort && (candidate.ipv6 || candidate.macAddress)) {
+      attempt = await attemptUdpPathProbe(candidate);
+    } else if (method === "ipv6_magic_packet" && candidate.ipv6 && candidate.macAddress) {
+      attempt = await attemptIpv6Magic(candidate);
+    } else if (method === "lan_broadcast") {
+      attempt = await attemptLanBroadcast(candidate, params.broadcastAddress || undefined);
+    }
+    if (!attempt) continue;
+    attempts.push(attempt);
+    if (attempt.ok) {
+      return {
+        ok: true,
+        method: attempt.method,
+        mode: resolveWakeMode(attempt.method),
+        nextAction: "wait_for_presence",
+        attempts,
+      };
     }
   }
 
-  if (candidate.udpPort && (candidate.ipv6 || candidate.macAddress)) {
-    const udpAttempt = await attemptUdpPathProbe(candidate);
-    attempts.push(udpAttempt);
-    if (udpAttempt.ok) {
-      return { ok: true, method: "udp_path_probe", attempts };
-    }
-  }
-
-  if (candidate.ipv6 && candidate.macAddress) {
-    const ipv6Attempt = await attemptIpv6Magic(candidate);
-    attempts.push(ipv6Attempt);
-    if (ipv6Attempt.ok) {
-      return { ok: true, method: "ipv6_magic_packet", attempts };
-    }
-  }
-
-  const lanAttempt = await attemptLanBroadcast(candidate, params.broadcastAddress || undefined);
-  attempts.push(lanAttempt);
-  if (lanAttempt.ok) {
-    return { ok: true, method: "lan_broadcast", attempts };
-  }
-
-  return { ok: false, method: null, attempts };
+  attempts.push({
+    method: "rtc_wait",
+    ok: false,
+    details: "Network wake methods failed. Waiting for BIOS RTC fallback.",
+    latencyMs: 0,
+  });
+  return {
+    ok: false,
+    method: null,
+    mode: "rtc_wait",
+    nextAction: "wait_for_bios_rtc",
+    attempts,
+  };
 }
