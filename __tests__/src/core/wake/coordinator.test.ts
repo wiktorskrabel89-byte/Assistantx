@@ -11,52 +11,67 @@ import { sendWakeOnLanPacket } from "@/src/core/wake/magic-packet";
 
 const mockSendWakeOnLanPacket = sendWakeOnLanPacket as jest.Mock;
 
-describe("wake coordinator tailscale path", () => {
+describe("wake coordinator method chain", () => {
   const originalFetch = global.fetch;
-  const originalTailscaleUrl = process.env.JARVIS_HOME_TAILSCALE_URL;
+  const originalWakeBaseUrl = process.env.JARVIS_WAKE_VPS_BASE_URL;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.JARVIS_WAKE_VPS_BASE_URL = "https://wake.example.com";
   });
 
   afterEach(() => {
-    process.env.JARVIS_HOME_TAILSCALE_URL = originalTailscaleUrl;
     global.fetch = originalFetch;
+    process.env.JARVIS_WAKE_VPS_BASE_URL = originalWakeBaseUrl;
   });
 
-  it("uses tailscale_direct first and short-circuits on health success", async () => {
-    process.env.JARVIS_HOME_TAILSCALE_URL = "ws://100.64.0.15:9000";
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch;
+  it("uses udp_path_probe first and short-circuits on success", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: "ok" }),
+    }) as unknown as typeof fetch;
 
     const result = await executeWakeChain({
+      preferTailscale: true,
       candidate: {
         deviceId: "dev-1",
         macAddress: "AA:BB:CC:DD:EE:FF",
         ipv6: "2001:db8::1",
         udpPort: 9,
-        provider: "tailscale",
+        provider: "relay",
         eligibleForWake: true,
         lastSeenAt: new Date().toISOString(),
       },
     });
 
     expect(result.ok).toBe(true);
-    expect(result.method).toBe("tailscale_direct");
-    expect(result.attempts[0]?.method).toBe("tailscale_direct");
+    expect(result.method).toBe("udp_path_probe");
+    expect(result.attempts.map((attempt) => attempt.method)).toEqual(["udp_path_probe"]);
     expect(mockSendWakeOnLanPacket).not.toHaveBeenCalled();
   });
 
-  it("falls back to wake methods when tailscale_direct fails", async () => {
-    process.env.JARVIS_HOME_TAILSCALE_URL = "ws://100.64.0.15:9000";
-    global.fetch = jest.fn().mockRejectedValue(new Error("network")) as unknown as typeof fetch;
+  it("falls back from udp_path_probe to ipv6_magic_packet and then lan_broadcast", async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: async () => ({ error: "udp failed" }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: async () => ({ error: "ipv6 failed" }),
+      }) as unknown as typeof fetch;
     mockSendWakeOnLanPacket.mockResolvedValue(undefined);
 
     const result = await executeWakeChain({
+      preferTailscale: true,
       candidate: {
         deviceId: "dev-1",
         macAddress: "AA:BB:CC:DD:EE:FF",
-        ipv6: null,
-        udpPort: null,
+        ipv6: "2001:db8::1",
+        udpPort: 9,
         provider: "relay",
         eligibleForWake: true,
         lastSeenAt: new Date().toISOString(),
@@ -65,8 +80,11 @@ describe("wake coordinator tailscale path", () => {
 
     expect(result.ok).toBe(true);
     expect(result.method).toBe("lan_broadcast");
-    expect(result.attempts.map((attempt) => attempt.method)).toEqual(["tailscale_direct", "lan_broadcast"]);
+    expect(result.attempts.map((attempt) => attempt.method)).toEqual([
+      "udp_path_probe",
+      "ipv6_magic_packet",
+      "lan_broadcast",
+    ]);
     expect(mockSendWakeOnLanPacket).toHaveBeenCalledTimes(1);
   });
 });
-

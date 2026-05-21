@@ -458,6 +458,13 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setLocalOnlyMode = useCallback((localOnlyMode: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, localOnlyMode },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const setWakeWordEnabled = useCallback((wakeWordEnabled: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -872,6 +879,7 @@ export function useWorkspaceState() {
     setMemoryNotes,
     setSystemPrompt,
     setEnabledTools,
+    setLocalOnlyMode,
     setWakeWordEnabled,
     setWakeWordPhrase,
     setSttEnabled,

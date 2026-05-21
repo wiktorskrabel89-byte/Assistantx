@@ -57,6 +57,9 @@ function createMainIpcHandlers(deps) {
     serverKillSwitch,
     serverGetConfig,
     serverSetConfig,
+    githubClient,
+    googleClient,
+    appsTool,
     getMainWindow,
     getOverlayWindow,
     createLauncherOverlayWindow,
@@ -347,6 +350,100 @@ function createMainIpcHandlers(deps) {
       const auth = await permissions.authorize('open-account-login');
       if (!auth.allowed) return denied('open-account-login', auth.reason);
       return beginDesktopLogin({ parentWindow: getMainWindow() });
+    },
+
+    'tools:launch-game': async (_event, payload) => {
+      const auth = await permissions.authorize('tools:launch-game');
+      if (!auth.allowed) return denied('tools:launch-game', auth.reason);
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('tools:launch-game', 'payload-must-be-object');
+      const platform = validateString(body.platform, { allowEmpty: false, maxLen: 40 });
+      const id = validateString(body.id, { allowEmpty: false, maxLen: 120 });
+      if (!platform || !id) return invalidResult('tools:launch-game', 'platform-and-id-required');
+      securityAudit({ action: 'tools:launch-game', target: `${platform}:${id}` });
+      return appsTool.openGame({ shell, platform, id });
+    },
+    'tools:launch-app': async (_event, payload) => {
+      const auth = await permissions.authorize('tools:launch-game');
+      if (!auth.allowed) return denied('tools:launch-app', auth.reason);
+      const body = validatePlainObject(payload);
+      const appName = validateString(body?.appName, { allowEmpty: false, maxLen: 120 });
+      if (!appName) return invalidResult('tools:launch-app', 'app-name-required');
+      securityAudit({ action: 'tools:launch-app', target: appName });
+      return appsTool.launchAnyApp({ shell, appName });
+    },
+
+    'github:set-token': (_event, token) => {
+      const value = validateString(token, { allowEmpty: false, maxLen: 5000 });
+      if (!value) return invalidResult('github:set-token', 'token-required');
+      return githubClient.setToken(value);
+    },
+    'github:clear-token': () => githubClient.clearToken(),
+    'github:status': async () => githubClient.getStatus(),
+    'github:list-repos': async (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const user = validateString(body.user, { allowEmpty: true, maxLen: 120 }) || undefined;
+      const perPage = validateInteger(body.perPage, { min: 1, max: 100, fallback: 50 });
+      return githubClient.listRepos({ user, perPage });
+    },
+    'github:get-tree': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('github:get-tree', 'payload-must-be-object');
+      const owner = validateString(body.owner, { allowEmpty: false, maxLen: 120 });
+      const repo = validateString(body.repo, { allowEmpty: false, maxLen: 120 });
+      const branch = validateString(body.branch, { allowEmpty: true, maxLen: 120 }) || undefined;
+      if (!owner || !repo) return invalidResult('github:get-tree', 'owner-and-repo-required');
+      return githubClient.getRepoTree({ owner, repo, branch });
+    },
+    'github:read-file': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('github:read-file', 'payload-must-be-object');
+      const owner = validateString(body.owner, { allowEmpty: false, maxLen: 120 });
+      const repo = validateString(body.repo, { allowEmpty: false, maxLen: 120 });
+      const filePath = validateString(body.path, { allowEmpty: false, maxLen: 1000 });
+      const ref = validateString(body.ref, { allowEmpty: true, maxLen: 120 }) || undefined;
+      if (!owner || !repo || !filePath) return invalidResult('github:read-file', 'owner-repo-path-required');
+      return githubClient.readFile({ owner, repo, filePath, ref });
+    },
+    'github:list-commits': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('github:list-commits', 'payload-must-be-object');
+      const owner = validateString(body.owner, { allowEmpty: false, maxLen: 120 });
+      const repo = validateString(body.repo, { allowEmpty: false, maxLen: 120 });
+      const perPage = validateInteger(body.perPage, { min: 1, max: 100, fallback: 20 });
+      if (!owner || !repo) return invalidResult('github:list-commits', 'owner-and-repo-required');
+      return githubClient.listCommits({ owner, repo, perPage });
+    },
+    'github:get-diff': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('github:get-diff', 'payload-must-be-object');
+      const owner = validateString(body.owner, { allowEmpty: false, maxLen: 120 });
+      const repo = validateString(body.repo, { allowEmpty: false, maxLen: 120 });
+      const sha = validateString(body.sha, { allowEmpty: false, maxLen: 120 });
+      if (!owner || !repo || !sha) return invalidResult('github:get-diff', 'owner-repo-sha-required');
+      return githubClient.getCommitDiff({ owner, repo, sha });
+    },
+
+    'google:login-start': async () => googleClient.auth.initiateDeviceFlow(),
+    'google:login-poll': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const deviceCode = validateString(body?.deviceCode, { allowEmpty: false, maxLen: 500 });
+      if (!deviceCode) return invalidResult('google:login-poll', 'device-code-required');
+      return googleClient.auth.pollForToken(deviceCode);
+    },
+    'google:logout': async () => googleClient.auth.revokeAccess(),
+    'google:status': () => googleClient.auth.getStatus(),
+    'google:calendar-today': async () => googleClient.calendar.getTodaySchedule(),
+    'google:gmail-unread': async (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const maxResults = validateInteger(body.maxResults, { min: 1, max: 50, fallback: 10 });
+      const threads = await googleClient.gmail.getUnreadThreads(maxResults);
+      const top = threads.slice(0, 5);
+      const headers = await Promise.all(top.map((item) => googleClient.gmail.getMessageHeaders(item.id)));
+      return {
+        threads,
+        headers,
+      };
     },
 
     'server:get-auth-status': () => serverGetAuthStatus(),

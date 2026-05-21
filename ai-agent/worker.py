@@ -13,7 +13,43 @@ import urllib.request
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
+
+WEB_SEARCH_TRIGGERS = (
+    "szukaj w sieci",
+    "poszukaj w internecie",
+    "sprawdź w google",
+    "co mówi net na temat",
+    "aktualne informacje o",
+)
+
+HEAVY_MODEL_HINTS = (
+    "32b",
+    "coder",
+    "qwen2.5-coder",
+    "kod",
+    "debug",
+    "bug",
+    "błąd",
+    "refaktor",
+    "architektur",
+    "wieloplik",
+    "sql",
+    "python",
+    "javascript",
+    "typescript",
+    "html",
+    "css",
+    "api",
+    "test",
+)
+
+LIGHT_MODEL_HINTS = (
+    "14b",
+    "lekki model",
+    "szybki czat",
+)
 
 
 def _utc_now_iso() -> str:
@@ -41,6 +77,14 @@ def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
         return default
+
+
+def _env_str(name: str, default: str) -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip()
+    return value or default
     try:
         return int(raw)
     except (TypeError, ValueError):
@@ -96,6 +140,20 @@ def get_self_code(max_chars: int) -> str:
     return code
 
 
+def get_map_widget_code(max_chars: int) -> str:
+    try:
+        candidate = Path(__file__).resolve().parents[1] / "jarvis" / "desktop" / "map-widget.js"
+        if not candidate.exists():
+            return ""
+        code = candidate.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+    code = _sanitize_source(code)
+    if len(code) > max_chars:
+        return f"{code[:max_chars]}\n\n// [Truncated map-widget.js to {max_chars} chars]"
+    return code
+
+
 @dataclass(frozen=True)
 class WorkerConfig:
     supabase_url: str
@@ -103,6 +161,10 @@ class WorkerConfig:
     supabase_auth_token: str
     ollama_base_url: str
     ollama_model: str
+    ollama_light_model: str
+    ollama_heavy_model: str
+    ollama_light_keep_alive: str | int
+    ollama_heavy_keep_alive: str | int
     ollama_timeout_seconds: int
     ollama_retries: int
     openrouter_api_key: str
@@ -126,12 +188,15 @@ def load_config() -> WorkerConfig:
         or os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
         or ""
     )
+    light_model = os.getenv("LOCAL_OLLAMA_LIGHT_MODEL") or os.getenv("LOCAL_OLLAMA_MODEL") or "qwen2.5:14b"
+    heavy_model = os.getenv("LOCAL_OLLAMA_HEAVY_MODEL") or "qwen2.5-coder:32b"
     return WorkerConfig(
         supabase_url=supabase_url.rstrip("/"),
         supabase_key=supabase_key,
         supabase_auth_token=os.getenv("SUPABASE_AUTH_TOKEN", "").strip(),
         ollama_base_url=(os.getenv("LOCAL_OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/"),
-        ollama_model=os.getenv("LOCAL_OLLAMA_MODEL") or "qwen2.5:14b",
+        ollama_light_model=os.getenv("LOCAL_OLLAMA_MODEL") or "qwen2.5:14b",
+        ollama_heavy_model=os.getenv("LOCAL_OLLAMA_CODER_MODEL") or "qwen2.5-coder:32b",
         ollama_timeout_seconds=max(5, _env_int("LOCAL_OLLAMA_TIMEOUT_SECONDS", 120)),
         ollama_retries=max(1, _env_int("LOCAL_OLLAMA_RETRIES", 2)),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
@@ -222,27 +287,21 @@ class SupabaseRestClient:
 
     def claim_task(
         self,
-        task_id: str,
         *,
+        device_id: str | None,
+        include_unassigned: bool,
         route_to_cloud: bool,
         fallback_reason: str | None = None,
     ) -> dict[str, Any] | None:
-        now = _utc_now_iso()
-        patch: dict[str, Any] = {
-            "status": "processing",
-            "started_at": now,
-        }
-        if route_to_cloud:
-            patch["routing"] = "cloud"
-            patch["fallback_reason"] = fallback_reason or "cloud_fallback"
         rows = self._request(
-            "PATCH",
-            "/rest/v1/ai_tasks",
-            params={
-                "task_id": f"eq.{task_id}",
-                "status": "eq.pending",
+            "POST",
+            "/rest/v1/rpc/claim_next_ai_task",
+            body={
+                "p_target_device_id": device_id or None,
+                "p_include_unassigned": include_unassigned,
+                "p_route_to_cloud": route_to_cloud,
+                "p_fallback_reason": fallback_reason,
             },
-            body=patch,
             prefer="return=representation",
         )
         if not rows:
@@ -369,27 +428,226 @@ def is_ollama_available(config: WorkerConfig) -> bool:
         return False
 
 
-def _build_system_instruction(source_code: str) -> str:
-    return (
+def _build_system_instruction(source_code: str, web_context: str = "") -> str:
+    base = (
         "Jesteś Jarvisem, zaawansowanym asystentem systemowym. Masz pełny wgląd w swój aktualny kod źródłowy "
         "backendu Pythona (Local Worker), na którym teraz pracujesz. Poniżej znajduje się Twój kod. "
         "Użyj go, jeśli użytkownik zapyta o Twoją strukturę, działanie lub poprosi o modyfikację:\n\n"
         f"```python\n{source_code}\n```"
     )
+    if web_context:
+        return f"{base}\n\nKontekst z lokalnego SearXNG:\n{web_context}"
+    return base
+
+
+def _choose_local_model(config: WorkerConfig, prompt: str) -> str:
+    prompt_lower = prompt.lower()
+    if any(keyword in prompt_lower for keyword in ("kod", "code", "program", "script", "skrypt", "debug", "refactor")):
+        return config.ollama_heavy_model
+    return config.ollama_light_model
+
+
+def _extract_web_search_context(config: WorkerConfig, prompt: str) -> tuple[str, str]:
+    lowered = prompt.lower()
+    if "szukaj w sieci" not in lowered and "search the web" not in lowered:
+        return prompt, ""
+
+    cleaned = re.sub(r"(?i)szukaj w sieci|search the web", "", prompt).strip()
+    if not cleaned:
+        cleaned = prompt
+    params = urllib.parse.urlencode({
+        "q": cleaned,
+        "format": "json",
+        "language": "pl-PL",
+    })
+    try:
+        req = urllib.request.Request(url=f"{config.searxng_url}?{params}", method="GET")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        results = payload.get("results", [])[:3]
+        snippets = []
+        for index, result in enumerate(results, start=1):
+            if not isinstance(result, dict):
+                continue
+            title = str(result.get("title") or "Untitled")
+            content = str(result.get("content") or result.get("url") or "").strip()
+            snippets.append(f"[{index}] {title}: {content}")
+        return cleaned, "\n".join(snippets)
+    except Exception as exc:
+        return cleaned, f"[SearXNG unavailable] {exc}"
+
+
+def _resolve_allowed_path(config: WorkerConfig, raw_path: str) -> str:
+    candidate = os.path.abspath(os.path.expanduser(raw_path))
+    for root in config.action_roots:
+        if candidate == root or candidate.startswith(f"{root}{os.sep}"):
+            return candidate
+    raise RuntimeError(f"Path outside allowed roots: {candidate}")
+
+
+def execute_system_action(config: WorkerConfig, action_type: str, payload: dict[str, Any]) -> str:
+    normalized_action = action_type.strip().lower()
+    if normalized_action == "launch_roblox":
+        game_id = str(payload.get("game_id") or payload.get("gameId") or "185655149").strip()
+        if not re.fullmatch(r"\d{3,20}", game_id):
+            raise RuntimeError("Invalid Roblox game id.")
+        roblox_url = f"roblox://placeId={game_id}"
+        if not webbrowser.open(roblox_url):
+            raise RuntimeError("Roblox URI handler did not acknowledge the launch request.")
+        return f"Roblox launch requested for placeId={game_id}."
+
+    if normalized_action == "system_file_list":
+        target = _resolve_allowed_path(config, str(payload.get("path") or ".").strip())
+        entries = sorted(os.listdir(target))[:100]
+        return json.dumps({"path": target, "entries": entries}, ensure_ascii=False)
+
+    raise RuntimeError(f"Unsupported system action: {action_type}")
+
+
+def _should_attach_map_code(prompt: str) -> bool:
+    lowered = str(prompt or "").lower()
+    return (
+        "map" in lowered
+        or "mapa" in lowered
+        or "jarvis code" in lowered
+        or "kod jarvis" in lowered
+        or "map-widget" in lowered
+    )
+
+
+def _append_web_search_context(system_instruction: str, web_context: str) -> str:
+    context = str(web_context or "").strip()
+    if not context:
+        return system_instruction
+    return (
+        f"{system_instruction}\n\n"
+        "Masz też świeży kontekst z lokalnej metawyszukiwarki SearXNG. "
+        "Korzystaj z niego tylko wtedy, gdy jest istotny dla odpowiedzi:\n\n"
+        f"{context}"
+    )
+
+
+def _detect_local_model(config: WorkerConfig, raw_prompt: str) -> str:
+    prompt = str(raw_prompt or "").lower()
+    if any(token in prompt for token in LIGHT_MODEL_HINTS):
+        return config.ollama_light_model
+    if any(token in prompt for token in HEAVY_MODEL_HINTS):
+        return config.ollama_heavy_model
+    return config.ollama_light_model
+
+
+def _get_keep_alive_for_model(config: WorkerConfig, model_name: str) -> str | int:
+    if model_name == config.ollama_heavy_model:
+        return config.ollama_heavy_keep_alive
+    return config.ollama_light_keep_alive
+
+
+def _extract_web_search_query(raw_prompt: str) -> str | None:
+    prompt = str(raw_prompt or "").strip()
+    lowered = prompt.lower()
+    for trigger in WEB_SEARCH_TRIGGERS:
+        index = lowered.find(trigger)
+        if index < 0:
+            continue
+        query = prompt[index + len(trigger):].strip(" :,-–—")
+        return query or prompt
+    return None
+
+
+def _search_searxng(config: WorkerConfig, query: str) -> list[dict[str, str]]:
+    url = f"{config.searxng_url}/search?{urllib.parse.urlencode({'q': query, 'format': 'json'})}"
+    request = urllib.request.Request(
+        url=url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "AssistantX-Local-Worker/1.0",
+        },
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=config.web_search_timeout_seconds) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    results: list[dict[str, str]] = []
+    for item in payload.get("results", [])[: config.web_search_max_results]:
+        results.append({
+            "title": str(item.get("title", "")).strip(),
+            "url": str(item.get("url", "")).strip(),
+            "content": str(item.get("content", "")).strip(),
+            "engine": str(item.get("engine", "")).strip(),
+        })
+    return results
+
+
+def _build_web_search_context(config: WorkerConfig, raw_prompt: str) -> str:
+    query = _extract_web_search_query(raw_prompt)
+    if not query:
+        return ""
+    try:
+        results = _search_searxng(config, query)
+    except Exception as exc:
+        print(f"[Worker][warn] SearXNG lookup failed for query={query!r}: {exc}")
+        return ""
+    if not results:
+        return ""
+    lines = [f"Wyniki lokalnego wyszukiwania dla: {query}"]
+    for index, item in enumerate(results, start=1):
+        lines.append(
+            f"[{index}] {item['title'] or item['url'] or 'Brak tytułu'}\n"
+            f"URL: {item['url'] or 'brak'}\n"
+            f"Treść: {item['content'] or 'brak'}"
+        )
+    return "\n\n".join(lines)
+
+
+def _resolve_system_action_path(config: WorkerConfig, requested_path: str) -> str:
+    root = os.path.realpath(config.workspace_root)
+    candidate = requested_path.strip() or "."
+    resolved = os.path.realpath(candidate if os.path.isabs(candidate) else os.path.join(root, candidate))
+    try:
+        if os.path.commonpath([root, resolved]) != root:
+            raise PermissionError("requested path escapes workspace root")
+    except ValueError as exc:
+        raise PermissionError("invalid workspace path") from exc
+    return resolved
+
+
+def execute_system_action(config: WorkerConfig, task: dict[str, Any]) -> tuple[str, str]:
+    action_type = str(task.get("action_type") or "").strip().lower()
+    payload = task.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
+
+    if action_type == "list_files":
+        target_path = _resolve_system_action_path(config, str(payload.get("path") or "."))
+        entries = sorted(os.listdir(target_path))[:100]
+        rendered = []
+        for entry in entries:
+            full_path = os.path.join(target_path, entry)
+            suffix = "/" if os.path.isdir(full_path) else ""
+            rendered.append(f"- {entry}{suffix}")
+        body = "\n".join(rendered) if rendered else "- (pusto)"
+        return action_type, f"📁 Zawartość katalogu `{target_path}`:\n{body}"
+
+    if action_type == "open_uri":
+        return action_type, "⚠️ Akcja `open_uri` wymaga dedykowanego wykonawcy hosta i nie jest obsługiwana przez worker HTTP-only."
+
+    return (action_type or "system_action"), f"⚠️ Nieobsługiwana akcja systemowa: `{action_type or 'unknown'}`."
 
 
 def generate_with_ollama(
     config: WorkerConfig,
     *,
+    model_name: str,
     raw_prompt: str,
     temperature: float,
     system_instruction: str,
+    keep_alive: str | int,
 ) -> str:
     request_payload = {
-        "model": config.ollama_model,
+        "model": model_name,
         "prompt": f"{system_instruction}\n\nUżytkownik: {raw_prompt}",
         "stream": False,
         "options": {"temperature": clamp_temperature(temperature)},
+        "keep_alive": keep_alive,
     }
     headers = {"Content-Type": "application/json"}
     last_exc: Exception | None = None
@@ -676,43 +934,88 @@ def process_task(
     system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
 
     output_text = ""
-    provider = "ollama"
-    model = config.ollama_model
+    provider = "local_worker"
+    model = action_type or "ai_request"
     routing = "local"
+    changed = False
+    current_temp = config.default_temperature
 
     try:
-        if route_to_cloud:
-            output_text = generate_with_cloud_fallback(
-                config,
-                raw_prompt=raw_prompt,
-                temperature=current_temp,
-                system_instruction=system_instruction,
-            )
-            provider = "openrouter"
-            model = config.cloud_model
-            routing = "cloud"
+        if category == "system_action":
+            output_text = handle_system_action(config, action_type=action_type, payload=payload)
         else:
-            output_text = generate_with_ollama(
-                config,
-                raw_prompt=raw_prompt,
-                temperature=current_temp,
-                system_instruction=system_instruction,
-            )
-    except Exception as local_exc:
-        if not route_to_cloud:
-            print(f"[Worker][warn] Local generation failed for {task_id}, trying cloud fallback: {local_exc}")
-            output_text = generate_with_cloud_fallback(
-                config,
-                raw_prompt=raw_prompt,
-                temperature=current_temp,
-                system_instruction=system_instruction,
-            )
-            provider = "openrouter"
-            model = config.cloud_model
-            routing = "cloud"
-            fallback_reason = "local_generation_failed"
-        else:
-            raise
+            try:
+                profile_default = supabase.get_user_profile_temperature(user_id, config.default_temperature)
+            except Exception as exc:
+                print(f"[Worker][warn] Could not read user profile temperature for {user_id}: {exc}")
+                profile_default = config.default_temperature
+
+            task_temperature = task.get("temperature")
+            if task_temperature is None:
+                current_temp = profile_default
+                try:
+                    supabase.update_task_temperature(task_id, current_temp)
+                except Exception as exc:
+                    print(f"[Worker][warn] Failed to freeze task temperature for {task_id}: {exc}")
+            else:
+                try:
+                    current_temp = clamp_temperature(float(task_temperature))
+                except (TypeError, ValueError):
+                    current_temp = profile_default
+                    try:
+                        supabase.update_task_temperature(task_id, current_temp)
+                    except Exception:
+                        pass
+
+            parsed_temp, changed = parse_temperature_command(raw_prompt, current_temp)
+            if changed:
+                current_temp = parsed_temp
+                try:
+                    supabase.update_task_temperature(task_id, current_temp)
+                    supabase.upsert_user_profile_temperature(user_id, current_temp)
+                    print(f"[Worker][config] Temperature updated to {current_temp:.2f} for task {task_id}")
+                except Exception as exc:
+                    print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
+
+            system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
+            provider = "ollama"
+            model = config.ollama_model
+
+            try:
+                if route_to_cloud:
+                    output_text = generate_with_cloud_fallback(
+                        config,
+                        raw_prompt=raw_prompt,
+                        temperature=current_temp,
+                        system_instruction=system_instruction,
+                    )
+                    provider = "openrouter"
+                    model = config.cloud_model
+                    routing = "cloud"
+                else:
+                    output_text = generate_with_ollama(
+                        config,
+                        raw_prompt=raw_prompt,
+                        temperature=current_temp,
+                        system_instruction=system_instruction,
+                    )
+            except Exception as local_exc:
+                if not route_to_cloud:
+                    print(f"[Worker][warn] Local generation failed for {task_id}, trying cloud fallback: {local_exc}")
+                    output_text = generate_with_cloud_fallback(
+                        config,
+                        raw_prompt=raw_prompt,
+                        temperature=current_temp,
+                        system_instruction=system_instruction,
+                    )
+                    provider = "openrouter"
+                    model = config.cloud_model
+                    routing = "cloud"
+                    fallback_reason = "local_generation_failed"
+                else:
+                    raise
+    except Exception:
+        raise
 
     if changed:
         output_text = f"🔧 [System: Temperatura została zmieniona na {current_temp:.2f}]\n\n{output_text}"
@@ -725,6 +1028,16 @@ def process_task(
         routing=routing,
         fallback_reason=fallback_reason,
     )
+    try:
+        supabase.insert_audit_log(
+            event_type="ai_task_completed",
+            user_id=user_id,
+            target_type="ai_task",
+            target_id=task_id,
+            payload={"provider": provider, "model": model, "routing": routing},
+        )
+    except Exception:
+        pass
     print(f"[Worker] Completed task={task_id} provider={provider} model={model} routing={routing}")
 
 
@@ -735,33 +1048,24 @@ def fetch_next_task(config: WorkerConfig, supabase: SupabaseRestClient) -> tuple
     if not pending:
         return None, False, None
 
-    for task in pending:
-        age_seconds = _seconds_since_created(task)
-        fallback = should_force_cloud_fallback(
-            config,
-            processing_count=processing_count,
-            task_age_seconds=age_seconds,
-            local_available=local_available,
-        )
-        fallback_reason = None
-        if fallback:
-            if not config.openrouter_api_key:
-                continue
-            if not local_available:
-                fallback_reason = "local_runtime_unavailable"
-            elif processing_count >= config.local_max_processing:
-                fallback_reason = "local_queue_overflow"
-            else:
-                fallback_reason = "local_timeout"
-        claimed = supabase.claim_task(
-            str(task.get("task_id")),
-            route_to_cloud=fallback,
-            fallback_reason=fallback_reason,
-        )
-        if claimed:
-            return claimed, fallback, fallback_reason
+    if not local_available:
+        if not config.openrouter_api_key:
+            return None, False, None
+        fallback = True
+        fallback_reason = "local_runtime_unavailable"
+    elif processing_count >= config.local_max_processing and config.openrouter_api_key:
+        fallback = True
+        fallback_reason = "local_queue_overflow"
 
-    return None, False, None
+    claimed = supabase.claim_next_task(
+        device_id=config.device_id or None,
+        include_unassigned=True,
+        route_to_cloud=fallback,
+        fallback_reason=fallback_reason,
+    )
+    if not claimed:
+        return None, False, None
+    return claimed, fallback, fallback_reason
 
 
 def run_worker_forever() -> None:
@@ -802,6 +1106,14 @@ def run_worker_forever() -> None:
             if task_id:
                 try:
                     supabase.fail_task(str(task_id), str(exc))
+                    if "task" in locals() and isinstance(task, dict):
+                        supabase.insert_audit_log(
+                            event_type="ai_task_failed",
+                            user_id=str(task.get("user_id") or "") or None,
+                            target_type="ai_task",
+                            target_id=str(task_id),
+                            payload={"error": str(exc)[:500]},
+                        )
                 except Exception:
                     pass
             time.sleep(config.poll_interval_seconds)

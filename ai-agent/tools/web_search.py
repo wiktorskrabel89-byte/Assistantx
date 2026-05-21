@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
-SEARXNG_BASE_URL = os.environ.get("JARVIS_SEARXNG_URL", "http://127.0.0.1:8888").rstrip("/")
+SEARXNG_BASE_URL = os.environ.get("JARVIS_SEARXNG_URL", "http://127.0.0.1:8080").rstrip("/")
 MAX_LIMIT = 10
 DEFAULT_LIMIT = 5
 DEFAULT_TIMEOUT_SECONDS = max(3, int(os.environ.get("JARVIS_WEB_SEARCH_TIMEOUT_SECONDS", "8")))

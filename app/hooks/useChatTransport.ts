@@ -24,6 +24,35 @@ const PROGRAMMING_LANGUAGE_HINTS: Array<{ name: string; patterns: RegExp[]; exte
 const ALL_MODEL_IDS = ALL_MODELS.map((model) => model.id);
 const DEFAULT_THINKING_EFFORT = 2;
 
+function mapLocalTaskStatus(task: {
+  status?: string | null;
+  category?: string | null;
+  action_type?: string | null;
+}) {
+  if (task.status === "pending") {
+    return "Queued on local device...";
+  }
+
+  if (task.status === "processing") {
+    if (task.category === "system_action") {
+      if (task.action_type === "launch_roblox") return "Launching Roblox on local device...";
+      if (task.action_type === "system_file_list") return "Listing files on local device...";
+      if (task.action_type === "system_status_ping") return "Reading local device status...";
+    }
+    return "Processing on local device...";
+  }
+
+  if (task.status === "completed") {
+    return "Done";
+  }
+
+  if (task.status === "failed") {
+    return "Local device task failed.";
+  }
+
+  return "Waiting for local device...";
+}
+
 function buildSystemPromptWithMode(
   settings: { activeJarvisModeId?: string | null; jarvisModes?: Array<{ id: string; name: string; instructions: string }>; systemPrompt?: string }
 ): string {
@@ -124,6 +153,7 @@ export function useChatTransport({
   const activeRequestTargetRef = useRef<ActiveRequestTarget | null>(null);
   const processingQueueRef = useRef(false);
   const queuedMessagesRef = useRef<QueuedMessage[]>([]);
+  const localTaskControllersRef = useRef<Map<string, AbortController>>(new Map());
   const isMountedRef = useRef(true);
   // Google integration context injected into the next chat message system prompt
   const googleContextRef = useRef<string>("");
@@ -137,14 +167,33 @@ export function useChatTransport({
     }
   }, []);
 
+  const updateMessageById = useCallback((
+    workspaceId: string,
+    chatId: string,
+    messageId: string,
+    updater: (message: ChatEntry) => ChatEntry,
+  ) => {
+    updateChat(workspaceId, chatId, (chat) => ({
+      ...chat,
+      messages: chat.messages.map((entry) => (
+        entry.id === messageId
+          ? updater(entry)
+          : entry
+      )),
+    }));
+  }, [updateChat]);
+
   useEffect(() => {
     queuedMessagesRef.current = queuedMessages;
   }, [queuedMessages]);
 
   useEffect(() => {
+    const localTaskControllers = localTaskControllersRef.current;
     return () => {
       isMountedRef.current = false;
       activeRequestAbortRef.current?.abort();
+      localTaskControllers.forEach((controller) => controller.abort());
+      localTaskControllers.clear();
       queuedMessagesRef.current.forEach((queuedMessage) => revokeQueuedPreview(queuedMessage.filePreview));
     };
   }, [revokeQueuedPreview]);
@@ -163,6 +212,94 @@ export function useChatTransport({
     }));
     controller.abort();
   }, [updateLastMessage]);
+
+  const pollLocalTask = useCallback(async (params: {
+    taskId: string;
+    messageId: string;
+    workspaceId: string;
+    chatId: string;
+    headers: Record<string, string>;
+  }) => {
+    const controller = new AbortController();
+    localTaskControllersRef.current.set(params.taskId, controller);
+
+    try {
+      while (!controller.signal.aborted && isMountedRef.current) {
+        const response = await fetch(`/api/jarvis/tasks/${encodeURIComponent(params.taskId)}`, {
+          method: "GET",
+          headers: params.headers,
+          signal: controller.signal,
+          cache: "no-store",
+        });
+
+        const payload = await response.json().catch(() => ({})) as {
+          error?: string;
+          uiStatus?: string;
+          task?: {
+            status?: string | null;
+            response?: string | null;
+            error?: string | null;
+            model?: string | null;
+            provider?: string | null;
+            category?: string | null;
+            action_type?: string | null;
+          };
+        };
+
+        if (!response.ok || !payload.task) {
+          updateMessageById(params.workspaceId, params.chatId, params.messageId, (entry) => ({
+            ...entry,
+            ai: payload.error ?? `Failed to refresh local task (${response.status}).`,
+            status: undefined,
+          }));
+          break;
+        }
+
+        const task = payload.task;
+        const uiStatus = payload.uiStatus ?? mapLocalTaskStatus(task);
+        if (task.status === "completed") {
+          updateMessageById(params.workspaceId, params.chatId, params.messageId, (entry) => ({
+            ...entry,
+            ai: task.response ?? "Local device task completed.",
+            model: task.model ?? entry.model,
+            routeReason: task.provider
+              ? `Completed by local device queue (${task.provider})`
+              : "Completed by local device queue",
+            status: undefined,
+          }));
+          break;
+        }
+
+        if (task.status === "failed" || task.status === "cancelled") {
+          updateMessageById(params.workspaceId, params.chatId, params.messageId, (entry) => ({
+            ...entry,
+            ai: task.error ?? task.response ?? "Local device task failed.",
+            status: undefined,
+            routeReason: "Local device queue",
+          }));
+          break;
+        }
+
+        updateMessageById(params.workspaceId, params.chatId, params.messageId, (entry) => ({
+          ...entry,
+          status: uiStatus === "Done" ? undefined : uiStatus,
+          routeReason: "Queued via Supabase local device worker",
+        }));
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    } catch (error) {
+      if (!isAbortLikeError(error)) {
+        updateMessageById(params.workspaceId, params.chatId, params.messageId, (entry) => ({
+          ...entry,
+          ai: error instanceof Error ? error.message : "Local device polling failed.",
+          status: undefined,
+        }));
+      }
+    } finally {
+      localTaskControllersRef.current.delete(params.taskId);
+    }
+  }, [updateMessageById]);
 
   const queueComposerMessage = useCallback((thinkingEffort: number) => {
     const text = message.trim();
@@ -317,6 +454,7 @@ export function useChatTransport({
 
     activeRequestAbortRef.current = requestAbortController;
     activeRequestTargetRef.current = { workspaceId, chatId, queueId: queuedMessage.id };
+    let pendingMessageId: string | null = null;
 
     try {
       if (queuedMessage.mode === "image" || shouldAutoGenerateImage) {
@@ -421,6 +559,7 @@ export function useChatTransport({
         fileName: queuedMessage.file?.name ?? undefined,
         status: "Analyzing prompt...",
       });
+      pendingMessageId = pending.id;
       updateChat(workspaceId, chatId, (chat) => ({
         ...chat,
         title,
@@ -432,6 +571,54 @@ export function useChatTransport({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (session?.access_token) {
         headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+
+      if (activeSettings.localOnlyMode) {
+        updateMessageById(workspaceId, chatId, pending.id, (entry) => ({
+          ...entry,
+          status: "Queueing task on local device...",
+          routeReason: "Local device queue via Supabase",
+        }));
+
+        const enqueueResponse = await fetch("/api/jarvis/tasks", {
+          method: "POST",
+          headers,
+          signal: requestAbortController.signal,
+          body: JSON.stringify({
+            prompt: userMsg,
+            category: "ai_request",
+          }),
+        });
+
+        const enqueuePayload = await enqueueResponse.json().catch(() => ({})) as {
+          error?: string;
+          taskId?: string;
+          task?: { status?: string | null };
+        };
+
+        if (!enqueueResponse.ok || !enqueuePayload.taskId) {
+          updateMessageById(workspaceId, chatId, pending.id, (entry) => ({
+            ...entry,
+            ai: enqueuePayload.error ?? `Failed to enqueue local device task (${enqueueResponse.status}).`,
+            status: undefined,
+          }));
+          return;
+        }
+
+        updateMessageById(workspaceId, chatId, pending.id, (entry) => ({
+          ...entry,
+          status: mapLocalTaskStatus({ status: enqueuePayload.task?.status ?? "pending" }),
+          routeReason: "Queued via Supabase local device worker",
+        }));
+
+        void pollLocalTask({
+          taskId: enqueuePayload.taskId,
+          messageId: pending.id,
+          workspaceId,
+          chatId,
+          headers,
+        });
+        return;
       }
 
       const chatBody = {
@@ -486,24 +673,34 @@ export function useChatTransport({
       }
     } catch (error) {
       if (isAbortLikeError(error)) return;
-      updateLastMessage(workspaceId, chatId, (entry) => ({
-        ...entry,
-        ai: error instanceof Error
-          ? error.message
-          : queuedMessage.mode === "upload"
-            ? "File analysis failed."
-            : queuedMessage.mode === "image"
-              ? "Image generation failed."
-              : "Message failed.",
-        status: undefined,
-      }));
+      const fallbackMessage = error instanceof Error
+        ? error.message
+        : queuedMessage.mode === "upload"
+          ? "File analysis failed."
+          : queuedMessage.mode === "image"
+            ? "Image generation failed."
+            : "Message failed.";
+
+      if (activeSettings.localOnlyMode && queuedMessage.mode !== "upload" && queuedMessage.mode !== "image" && pendingMessageId) {
+        updateMessageById(workspaceId, chatId, pendingMessageId, (entry) => ({
+          ...entry,
+          ai: fallbackMessage,
+          status: undefined,
+        }));
+      } else {
+        updateLastMessage(workspaceId, chatId, (entry) => ({
+          ...entry,
+          ai: fallbackMessage,
+          status: undefined,
+        }));
+      }
     } finally {
       if (activeRequestTargetRef.current?.queueId === queuedMessage.id) {
         activeRequestAbortRef.current = null;
         activeRequestTargetRef.current = null;
       }
     }
-  }, [consumeStream, stateRef, updateChat, updateLastMessage]);
+  }, [consumeStream, pollLocalTask, stateRef, updateChat, updateLastMessage, updateMessageById]);
 
   useEffect(() => {
     if (processingQueueRef.current || queuedMessages.length === 0) return;

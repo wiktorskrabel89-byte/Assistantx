@@ -6,6 +6,8 @@ services:
     container_name: jarvis-ollama
     ports:
       - "11434:11434"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${JARVIS_OLLAMA_GPU_DEVICE:-0}
     volumes:
       - ./data/ollama:/root/.ollama
     deploy:
@@ -13,7 +15,8 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              device_ids:
+                - "${JARVIS_OLLAMA_GPU_DEVICE:-0}"
               capabilities: [gpu]
     restart: unless-stopped
 
