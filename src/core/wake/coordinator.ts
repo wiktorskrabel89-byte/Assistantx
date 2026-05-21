@@ -22,6 +22,8 @@ export type WakeAttemptResult = {
 export type WakeExecutionResult = {
   ok: boolean;
   method: WakeMethod | null;
+  mode: WakeMode;
+  nextAction: "wait_for_presence" | "wait_for_bios_rtc";
   attempts: WakeAttemptResult[];
 };
 
@@ -128,10 +130,30 @@ async function attemptLanBroadcast(candidate: WakeCandidate, overrideBroadcast?:
   }
 }
 
+function resolveWakeMode(method: WakeMethod | null): WakeMode {
+  if (method === "ipv6_magic_packet") return "ipv6";
+  if (method === null) return "rtc_wait";
+  return "router";
+}
+
+function resolveWakeOrder(preferTailscale: boolean) {
+  const configured = String(process.env.JARVIS_WAKE_FALLBACK_POLICY || "").trim();
+  const defaults: WakeMethod[] = ["router_api", "udp_path_probe", "ipv6_magic_packet", "lan_broadcast"];
+  const parsed = configured
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item): item is WakeMethod =>
+      ["router_api", "udp_path_probe", "ipv6_magic_packet", "lan_broadcast"].includes(item),
+    );
+  const ordered = parsed.length > 0 ? parsed : defaults;
+  return preferTailscale ? ["tailscale_direct", ...ordered] as WakeMethod[] : ordered;
+}
+
 export async function executeWakeChain(params: {
   candidate: WakeCandidate;
   broadcastAddress?: string | null;
   agentUrl?: string | null;
+  preferTailscale?: boolean;
 }): Promise<WakeExecutionResult> {
   const { candidate } = params;
   const attempts: WakeAttemptResult[] = [];
@@ -142,21 +164,30 @@ export async function executeWakeChain(params: {
     if (udpAttempt.ok) {
       return { ok: true, method: "udp_path_probe", attempts };
     }
-  }
-
-  if (candidate.ipv6 && candidate.macAddress) {
-    const ipv6Attempt = await attemptIpv6Magic(candidate);
-    attempts.push(ipv6Attempt);
-    if (ipv6Attempt.ok) {
-      return { ok: true, method: "ipv6_magic_packet", attempts };
+    if (!attempt) continue;
+    attempts.push(attempt);
+    if (attempt.ok) {
+      return {
+        ok: true,
+        method: attempt.method,
+        mode: resolveWakeMode(attempt.method),
+        nextAction: "wait_for_presence",
+        attempts,
+      };
     }
   }
 
-  const lanAttempt = await attemptLanBroadcast(candidate, params.broadcastAddress || undefined);
-  attempts.push(lanAttempt);
-  if (lanAttempt.ok) {
-    return { ok: true, method: "lan_broadcast", attempts };
-  }
-
-  return { ok: false, method: null, attempts };
+  attempts.push({
+    method: "rtc_wait",
+    ok: false,
+    details: "Network wake methods failed. Waiting for BIOS RTC fallback.",
+    latencyMs: 0,
+  });
+  return {
+    ok: false,
+    method: null,
+    mode: "rtc_wait",
+    nextAction: "wait_for_bios_rtc",
+    attempts,
+  };
 }

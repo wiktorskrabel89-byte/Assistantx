@@ -32,6 +32,7 @@ describe("wake coordinator method chain", () => {
     }) as unknown as typeof fetch;
 
     const result = await executeWakeChain({
+      preferTailscale: true,
       candidate: {
         deviceId: "dev-1",
         macAddress: "AA:BB:CC:DD:EE:FF",
@@ -65,6 +66,7 @@ describe("wake coordinator method chain", () => {
     mockSendWakeOnLanPacket.mockResolvedValue(undefined);
 
     const result = await executeWakeChain({
+      preferTailscale: true,
       candidate: {
         deviceId: "dev-1",
         macAddress: "AA:BB:CC:DD:EE:FF",

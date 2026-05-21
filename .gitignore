@@ -45,3 +45,6 @@ next-env.d.ts
 .env*.local
 
 /jarvis/desktop/node_modules
+/ai-agent/__pycache__/
+*.pyc
+/jarvis/power-guard/target/

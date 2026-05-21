@@ -47,3 +47,22 @@ For coding load-management, the orchestrator uses lazy buffering:
 
 For command safety, filesystem auto-accept rules are scoped to `JARVIS_WORKSPACE_ROOT`.
 Operations outside this workspace escalate to full permission + interactive consent.
+
+## GPU split and local services
+
+- `ollama` is pinned to GPU `JARVIS_OLLAMA_GPU_DEVICE` (default `0`) in `docker-compose.yml`.
+- SearXNG stays local to the runtime stack and should be consumed through `JARVIS_SEARXNG_URL`.
+- Forge/ComfyUI is expected to run as an external host process on GPU `JARVIS_LOCAL_IMAGE_GPU_DEVICE` (default `1`), exposed through `JARVIS_LOCAL_IMAGE_API_URL`.
+
+## SearXNG hardening
+
+1. Generate a strong secret key before the first boot of your SearXNG instance.
+2. Ensure the SearXNG `search.formats` list includes `json`, otherwise local worker integrations will not receive structured results.
+3. Keep the HTTP binding local-only or restricted to a trusted path such as Docker bridge networking or Tailscale. Do not expose the SearXNG instance publicly unless you also add authentication and access controls.
+
+## Startup order
+
+1. Start the Docker runtime stack from `jarvis/server`.
+2. Confirm Ollama is reachable on GPU 0 and SearXNG is returning JSON.
+3. Start Forge/ComfyUI separately on GPU 1 and point the app/worker env to its API URL.
+4. Start the local worker (`npm run dev:worker`) so `ai_tasks` can use local models with cloud fallback.

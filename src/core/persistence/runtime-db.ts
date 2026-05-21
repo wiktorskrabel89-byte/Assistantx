@@ -93,6 +93,7 @@ export type DeviceRow = {
   label?: string | null;
   fingerprint_hash?: string | null;
   trust_state: DeviceTrustState;
+   uses_vpn?: boolean;
   pair_code?: string | null;
   pair_code_expires_at?: string | null;
   trust_key_hash?: string | null;
@@ -131,6 +132,18 @@ export type DevicePresenceRow = {
   network_mode?: "mesh_direct" | "relay" | "lan" | "unknown";
   is_online: boolean;
   last_heartbeat_at?: string;
+};
+
+export type DevicePresenceSnapshotRow = {
+  device_id: string;
+  status: DevicePresenceRow["status"];
+  active_apps: string[];
+  cpu_percent: number | null;
+  ram_percent: number | null;
+  network_mode: DevicePresenceRow["network_mode"];
+  is_online: boolean;
+  last_heartbeat_at: string | null;
+  updated_at?: string | null;
 };
 
 export type NetworkPeerRow = {
@@ -534,14 +547,15 @@ export async function upsertDevice(row: DeviceRow): Promise<DeviceRow> {
     user_id: row.user_id,
     organization_id: row.organization_id ?? null,
     platform: row.platform,
-    role: row.role,
-    label: row.label ?? null,
-    fingerprint_hash: row.fingerprint_hash ?? null,
-    trust_state: row.trust_state,
-    pair_code: row.pair_code ?? null,
-    pair_code_expires_at: row.pair_code_expires_at ?? null,
-    trust_key_hash: row.trust_key_hash ?? null,
-    consent_profile: row.consent_profile ?? {},
+      role: row.role,
+      label: row.label ?? null,
+      fingerprint_hash: row.fingerprint_hash ?? null,
+      trust_state: row.trust_state,
+      uses_vpn: row.uses_vpn ?? false,
+      pair_code: row.pair_code ?? null,
+      pair_code_expires_at: row.pair_code_expires_at ?? null,
+      trust_key_hash: row.trust_key_hash ?? null,
+      consent_profile: row.consent_profile ?? {},
     metadata: row.metadata ?? {},
     last_seen_at: row.last_seen_at ?? null,
     last_known_ipv6: row.last_known_ipv6 ?? null,
@@ -659,6 +673,17 @@ export async function listDevicesForUser(params: {
   const { data, error } = await query;
   if (error) throw new Error(`listDevicesForUser: ${error.message}`);
   return (data ?? []) as DeviceRow[];
+}
+
+export async function listDevicePresenceByDeviceIds(deviceIds: string[]): Promise<DevicePresenceSnapshotRow[]> {
+  if (deviceIds.length === 0) return [];
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("device_presence")
+    .select("device_id,status,active_apps,cpu_percent,ram_percent,network_mode,is_online,last_heartbeat_at,updated_at")
+    .in("device_id", deviceIds);
+  if (error) throw new Error(`listDevicePresenceByDeviceIds: ${error.message}`);
+  return (data ?? []) as DevicePresenceSnapshotRow[];
 }
 
 export async function updateDeviceTrust(params: {

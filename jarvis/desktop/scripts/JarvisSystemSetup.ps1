@@ -90,6 +90,21 @@ function Get-JarvisExecutablePath {
     return $null
 }
 
+function Get-JarvisPowerGuardPath {
+    param(
+        [string]$SearchRoot
+    )
+
+    $guardExe = Get-ChildItem -Path $SearchRoot -Filter "jarvis-power-guard.exe" -File -Recurse -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+
+    if ($guardExe) {
+        return $guardExe.FullName
+    }
+
+    return $null
+}
+
 if (-not (Test-IsAdministrator)) {
     Write-Host "ERROR: Run this script as Administrator." -ForegroundColor Red
     exit 1
@@ -223,13 +238,27 @@ try {
 } catch {
     Write-Host "Jarvis: Nie udało się wyłączyć Fast Boot." -ForegroundColor Yellow
 }
-try {
-    powercfg /h off | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "powercfg exited with code $LASTEXITCODE"
+$guardPath = Get-JarvisPowerGuardPath -SearchRoot $InstallDir
+$guardEnabled = (-not [string]::IsNullOrWhiteSpace($guardPath)) -or ($env:JARVIS_POWER_GUARD_ENABLED -match '^(1|true|yes|on)$')
+if ($guardEnabled) {
+    try {
+        powercfg /h on | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "powercfg exited with code $LASTEXITCODE"
+        }
+        Write-Host "Jarvis: Hibernacja została włączona dla Power Guarda." -ForegroundColor Green
+    } catch {
+        Write-Host "Jarvis: Nie udało się włączyć hibernacji dla Power Guarda. Szczegóły: $($_.Exception.Message)" -ForegroundColor Yellow
     }
-} catch {
-    Write-Host "Jarvis: Nie udało się wyłączyć hibernacji. Szczegóły: $($_.Exception.Message)" -ForegroundColor Yellow
+} else {
+    try {
+        powercfg /h off | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "powercfg exited with code $LASTEXITCODE"
+        }
+    } catch {
+        Write-Host "Jarvis: Nie udało się wyłączyć hibernacji. Szczegóły: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 }
 Write-Host "Jarvis: Szybkie uruchamianie wyłączone. BIOS ma teraz pełną kontrolę." -ForegroundColor Green
 
@@ -326,6 +355,15 @@ if (-not $SkipAutostart -and (Test-Path $finalAppPath)) {
     $shortcut.WorkingDirectory = Split-Path -Path $finalAppPath -Parent
     $shortcut.Save()
     Write-Host "Jarvis: Dodano do autostartu. Będę gotowy przy każdym włączeniu!" -ForegroundColor Green
+
+    if (-not [string]::IsNullOrWhiteSpace($guardPath)) {
+        $guardShortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\Jarvis Power Guard.lnk"
+        $guardShortcut = $shell.CreateShortcut($guardShortcutPath)
+        $guardShortcut.TargetPath = $guardPath
+        $guardShortcut.WorkingDirectory = Split-Path -Path $guardPath -Parent
+        $guardShortcut.Save()
+        Write-Host "Jarvis: Power Guard także został dodany do autostartu." -ForegroundColor Green
+    }
 } elseif ($SkipAutostart) {
     Write-Host "Jarvis: Pominąłem autostart na życzenie (-SkipAutostart)." -ForegroundColor Gray
 } else {
