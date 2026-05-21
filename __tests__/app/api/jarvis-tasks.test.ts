@@ -141,4 +141,32 @@ describe("Jarvis task routes", () => {
     expect(body.task.task_id).toBe("task-1");
     expect(body.uiStatus).toBe("Reading local device status...");
   });
+
+  it("approves a pending local task for the owning user", async () => {
+    mockCreateClient.mockResolvedValue({
+      auth: {
+        getUser: jest.fn().mockResolvedValue({ data: { user: { id: "user-1" } }, error: null }),
+      },
+      rpc: jest.fn().mockResolvedValue({
+        data: [{
+          task_id: "task-approval-1",
+          status: "approved",
+          category: "system_action",
+          action_type: "delete_folder",
+        }],
+        error: null,
+      }),
+    });
+
+    const { POST } = await import("@/app/api/jarvis/tasks/[taskId]/approve/route");
+    const response = await POST(
+      new Request("http://localhost/api/jarvis/tasks/task-approval-1/approve", { method: "POST" }) as never,
+      { params: Promise.resolve({ taskId: "task-approval-1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { task: { status: string }, uiStatus: string };
+    expect(body.task.status).toBe("approved");
+    expect(body.uiStatus).toMatch(/waiting for local device execution/i);
+  });
 });

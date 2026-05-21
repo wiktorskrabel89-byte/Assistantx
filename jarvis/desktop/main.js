@@ -54,6 +54,8 @@ function ensureDbReady() {
 let sidecarProcess = null;
 let sidecarStatus = 'idle';
 let sidecarHeartbeatInFlight = false;
+let sidecarStdoutBuffer = '';
+let sidecarReady = false;
 const SIDECAR_PORT = process.env.JARVIS_SIDECAR_PORT || '8765';
 const SIDECAR_HEALTH_TIMEOUT_MS = Number(process.env.JARVIS_SIDECAR_HEALTH_TIMEOUT_MS || 5000);
 const SIDECAR_HEALTH_RETRIES = Math.max(1, Number(process.env.JARVIS_SIDECAR_HEALTH_RETRIES || 3));
@@ -280,6 +282,57 @@ function markSidecarListeningForHeartbeat() {
   });
 }
 
+function markSidecarReady(details = {}) {
+  if (sidecarReady || !sidecarProcess) return;
+  sidecarReady = true;
+  sidecarStatus = 'running';
+  startupDiagnostics.setComponent('sidecar', 'healthy', {
+    detail: 'AI runtime stdio bridge is ready.',
+    reason: 'stdio_ready',
+    details,
+    phase: 'healthy',
+  });
+  startupDiagnostics.setComponent('launcher', 'healthy', {
+    detail: 'Launcher initialized AI runtime successfully.',
+    reason: 'sidecar_ready',
+    details,
+    phase: 'healthy',
+  });
+  startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar stdio bridge is healthy.', details);
+  telemetryBus.publish('sidecar.running');
+  telemetryBus.publish('startup.healthy');
+  emitDesktopHealth();
+  sendToRenderer('sidecar-status', { status: sidecarStatus });
+}
+
+function handleSidecarStdoutLine(line) {
+  if (!line) return;
+  let payload = null;
+  try {
+    payload = JSON.parse(line);
+  } catch {
+    log(`[sidecar] ${line}`);
+    return;
+  }
+  markSidecarReady({ messageType: payload?.type || 'unknown' });
+  sendToRenderer('sidecar-message', payload);
+}
+
+function sendSidecarMessage(payload) {
+  if (!sidecarProcess?.stdin || sidecarProcess.killed) {
+    return { ok: false, error: 'sidecar-not-running' };
+  }
+  try {
+    sidecarProcess.stdin.write(`${JSON.stringify(payload)}\n`);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'sidecar-write-failed',
+    };
+  }
+}
+
 function startSidecar() {
   const mainPy = getSidecarMainPath();
   setLauncherPhase('validating-runtime', 'Validating AI runtime paths.');
@@ -342,38 +395,30 @@ function startSidecar() {
   telemetryBus.publish('startup.starting');
   emitDesktopHealth();
   sidecarHeartbeatInFlight = false;
-  const sidecarArgs = [mainPy];
+  sidecarReady = false;
+  sidecarStdoutBuffer = '';
+  const sidecarArgs = [mainPy, '--mode', 'stdio'];
   log('[sidecar] Launching sidecar:', python);
   log('[sidecar] Args:', sidecarArgs);
   sidecarProcess = spawn(python, sidecarArgs, {
     cwd: path.dirname(mainPy),
-    env: {
-      ...process.env,
-      JARVIS_SIDECAR_PORT: SIDECAR_PORT,
-    },
+    env: process.env,
     windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
 
   sidecarStatus = 'starting';
 
   sidecarProcess.stdout?.on('data', (data) => {
-    const line = data.toString().trim();
-    if (line) log(`[sidecar] ${line}`);
-    if (line.includes('listening on')) {
-      sidecarStatus = 'running';
-      markSidecarListeningForHeartbeat();
-    }
-    sendToRenderer('sidecar-status', { status: sidecarStatus });
+    sidecarStdoutBuffer += data.toString();
+    const lines = sidecarStdoutBuffer.split(/\r?\n/);
+    sidecarStdoutBuffer = lines.pop() ?? '';
+    lines.forEach(handleSidecarStdoutLine);
   });
 
   sidecarProcess.stderr?.on('data', (data) => {
     const line = data.toString().trim();
     if (line) console.error(`[sidecar:err] ${line}`);
-    if (line.includes('listening on')) {
-      sidecarStatus = 'running';
-      markSidecarListeningForHeartbeat();
-    }
     if (/reconnect|retry|re-?connect/i.test(line)) {
       telemetryBus.publish('sidecar.reconnect');
     }
@@ -384,6 +429,8 @@ function startSidecar() {
     log(`[sidecar] process exited: code=${code} signal=${signal}`);
     sidecarProcess = null;
     sidecarHeartbeatInFlight = false;
+    sidecarReady = false;
+    sidecarStdoutBuffer = '';
     sidecarStatus = 'stopped';
     startupDiagnostics.setComponent('sidecar', code && code !== 0 ? 'crashed' : 'stopped', {
       detail: `AI runtime stopped (code=${code} signal=${signal}).`,
@@ -408,6 +455,7 @@ function startSidecar() {
     console.error('[sidecar] spawn error:', err.message);
     sidecarStatus = 'error';
     sidecarHeartbeatInFlight = false;
+    sidecarReady = false;
     startupDiagnostics.setComponent('sidecar', 'unavailable', {
       detail: `AI runtime spawn error: ${err.message}`,
       reason: 'spawn_error',
@@ -439,6 +487,8 @@ function stopSidecar() {
   }
   sidecarStatus = 'stopped';
   sidecarHeartbeatInFlight = false;
+  sidecarReady = false;
+  sidecarStdoutBuffer = '';
   startupDiagnostics.setComponent('sidecar', 'stopped', {
     detail: 'AI runtime stopped by desktop runtime.',
     reason: 'manual_stop',
@@ -1043,6 +1093,7 @@ createMainIpcHandlers({
   launcherService,
   ensureDbReady,
   getSidecarStatus,
+  sendSidecarMessage,
   checkLocalAiAvailability: () => probeOllamaAvailability('ipc-check'),
   routeAiRequest,
   installLocalAiEngine,

@@ -40,9 +40,6 @@ class CodeChunk:
     content: str
 
 
-GitIgnoreSpec = tuple[Path, pathspec.PathSpec]
-
-
 def _safe_repo_dirname(repo_url: str) -> str:
     digest = hashlib.sha1(repo_url.encode("utf-8")).hexdigest()[:12]
     name = re.sub(r"[^a-zA-Z0-9._-]+", "-", repo_url.rsplit("/", 1)[-1]).strip("-")
@@ -103,7 +100,7 @@ def _load_gitignore_spec(repo_dir: Path) -> pathspec.PathSpec:
             _normalize_gitignore_pattern(line, base_relative)
             for line in lines
         )
-    return pathspec.PathSpec.from_lines("gitwildmatch", combined_patterns)
+    return pathspec.PathSpec.from_lines("gitignore", combined_patterns)
 
 
 def _is_ignored(path: Path, repo_dir: Path, ignore_spec: pathspec.PathSpec, *, is_dir: bool = False) -> bool:
@@ -114,7 +111,7 @@ def _is_ignored(path: Path, repo_dir: Path, ignore_spec: pathspec.PathSpec, *, i
 
 
 def _iter_code_files(repo_dir: Path, ignore_spec: pathspec.PathSpec | None = None) -> Iterable[Path]:
-    ignore_spec = ignore_spec or pathspec.PathSpec.from_lines("gitwildmatch", [])
+    ignore_spec = ignore_spec or pathspec.PathSpec.from_lines("gitignore", [])
     for root, dirs, files in os.walk(repo_dir):
         root_path = Path(root)
         dirs[:] = [

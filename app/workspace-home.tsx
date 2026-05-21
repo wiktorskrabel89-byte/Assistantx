@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
+import { PendingApprovalBanner } from "./components/PendingApprovalBanner";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
 import { useNotifications } from "./hooks/useNotifications";
+import { usePendingApprovals } from "./hooks/usePendingApprovals";
 import { isEditableElementTarget } from "./lib/keyboard";
 import { createClient } from "@/lib/client";
 import type { AppMode, Mode } from "./lib/chat-types";
@@ -166,6 +168,7 @@ function HomeContent() {
   const { state, setAppMode, setPinnedAddOns, userEmail, authReady, loaded } = useWorkspace();
   const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
   const notificationsHook = useNotifications();
+  const approvalsHook = usePendingApprovals();
   const [isAdmin, setIsAdmin] = useState(false);
   const adminCheckedRef = useRef(false);
   const [sandboxInitCode, setSandboxInitCode] = useState<{ html: string; css: string; js: string } | null>(null);
@@ -356,18 +359,25 @@ function HomeContent() {
         />
 
         {isChatTab ? (
-          <TabContent
-            key={visibleTab}
-            activeTab={visibleTab}
-            notificationsHook={notificationsHook}
-            sandboxInitCode={sandboxInitCode}
-            onOpenInSandbox={handleOpenInSandbox}
-            externalComposerSeed={pendingComposerSeed}
-            onConsumeComposerSeed={() => setPendingComposerSeed(null)}
-            highlightGitHubCard={guestTourOpen && guestTourStep === 1}
-          />
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <PendingApprovalBanner approvalsHook={approvalsHook} />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <TabContent
+                key={visibleTab}
+                activeTab={visibleTab}
+                notificationsHook={notificationsHook}
+                sandboxInitCode={sandboxInitCode}
+                onOpenInSandbox={handleOpenInSandbox}
+                externalComposerSeed={pendingComposerSeed}
+                onConsumeComposerSeed={() => setPendingComposerSeed(null)}
+                highlightGitHubCard={guestTourOpen && guestTourStep === 1}
+              />
+            </div>
+          </div>
         ) : (
-          <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card transition-all duration-200">
+          <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <PendingApprovalBanner approvalsHook={approvalsHook} />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card transition-all duration-200">
             <TabContent
               key={visibleTab}
               activeTab={visibleTab}
@@ -384,6 +394,7 @@ function HomeContent() {
               highlightGitHubCard={guestTourOpen && guestTourStep === 1}
               highlightCodebase={guestTourOpen && guestTourStep === 2}
             />
+            </div>
           </main>
         )}
       </div>
