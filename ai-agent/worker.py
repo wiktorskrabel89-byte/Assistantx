@@ -101,6 +101,20 @@ def get_self_code(max_chars: int) -> str:
     return code
 
 
+def get_map_widget_code(max_chars: int) -> str:
+    try:
+        candidate = Path(__file__).resolve().parents[1] / "jarvis" / "desktop" / "map-widget.js"
+        if not candidate.exists():
+            return ""
+        code = candidate.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+    code = _sanitize_source(code)
+    if len(code) > max_chars:
+        return f"{code[:max_chars]}\n\n// [Truncated map-widget.js to {max_chars} chars]"
+    return code
+
+
 @dataclass(frozen=True)
 class WorkerConfig:
     supabase_url: str
@@ -382,6 +396,17 @@ def _build_system_instruction(source_code: str) -> str:
     )
 
 
+def _should_attach_map_code(prompt: str) -> bool:
+    lowered = str(prompt or "").lower()
+    return (
+        "map" in lowered
+        or "mapa" in lowered
+        or "jarvis code" in lowered
+        or "kod jarvis" in lowered
+        or "map-widget" in lowered
+    )
+
+
 def generate_with_ollama(
     config: WorkerConfig,
     *,
@@ -656,6 +681,14 @@ def process_task(
             print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
 
     system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
+    if _should_attach_map_code(raw_prompt):
+        map_code = get_map_widget_code(max(1200, config.source_code_max_chars // 4))
+        if map_code:
+            system_instruction = (
+                f"{system_instruction}\n\n"
+                "Dodatkowo masz dostęp do kodu mapy w desktopowej aplikacji Jarvis:\n\n"
+                f"```javascript\n{map_code}\n```"
+            )
 
     output_text = ""
     provider = "ollama"
