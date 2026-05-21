@@ -701,7 +701,7 @@ def process_task(
             )
             provider = "openrouter"
             model = config.cloud_model
-                routing = "cloud"
+            routing = "cloud"
         else:
             output_text = generate_with_ollama(
                 config,
