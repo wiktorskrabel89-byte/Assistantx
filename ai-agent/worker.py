@@ -11,6 +11,41 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+WEB_SEARCH_TRIGGERS = (
+    "szukaj w sieci",
+    "poszukaj w internecie",
+    "sprawdź w google",
+    "co mówi net na temat",
+    "aktualne informacje o",
+)
+
+HEAVY_MODEL_HINTS = (
+    "32b",
+    "coder",
+    "qwen2.5-coder",
+    "kod",
+    "debug",
+    "bug",
+    "błąd",
+    "refaktor",
+    "architektur",
+    "wieloplik",
+    "sql",
+    "python",
+    "javascript",
+    "typescript",
+    "html",
+    "css",
+    "api",
+    "test",
+)
+
+LIGHT_MODEL_HINTS = (
+    "14b",
+    "lekki model",
+    "szybki czat",
+)
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -98,6 +133,10 @@ class WorkerConfig:
     supabase_key: str
     ollama_base_url: str
     ollama_model: str
+    ollama_light_model: str
+    ollama_heavy_model: str
+    ollama_light_keep_alive: str | int
+    ollama_heavy_keep_alive: str | int
     ollama_timeout_seconds: int
     ollama_retries: int
     openrouter_api_key: str
@@ -110,6 +149,10 @@ class WorkerConfig:
     source_code_max_chars: int
     default_temperature: float
     local_enabled: bool
+    searxng_url: str
+    web_search_timeout_seconds: int
+    web_search_max_results: int
+    workspace_root: str
 
 
 def load_config() -> WorkerConfig:
@@ -120,11 +163,17 @@ def load_config() -> WorkerConfig:
         or os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
         or ""
     )
+    light_model = os.getenv("LOCAL_OLLAMA_LIGHT_MODEL") or os.getenv("LOCAL_OLLAMA_MODEL") or "qwen2.5:14b"
+    heavy_model = os.getenv("LOCAL_OLLAMA_HEAVY_MODEL") or "qwen2.5-coder:32b"
     return WorkerConfig(
         supabase_url=supabase_url.rstrip("/"),
         supabase_key=supabase_key,
         ollama_base_url=(os.getenv("LOCAL_OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/"),
-        ollama_model=os.getenv("LOCAL_OLLAMA_MODEL") or "qwen2.5:14b",
+        ollama_model=light_model,
+        ollama_light_model=light_model,
+        ollama_heavy_model=heavy_model,
+        ollama_light_keep_alive=os.getenv("LOCAL_OLLAMA_LIGHT_KEEP_ALIVE", "5m").strip() or "5m",
+        ollama_heavy_keep_alive=0 if (os.getenv("LOCAL_OLLAMA_HEAVY_KEEP_ALIVE", "0").strip() or "0") == "0" else os.getenv("LOCAL_OLLAMA_HEAVY_KEEP_ALIVE", "0").strip(),
         ollama_timeout_seconds=max(5, _env_int("LOCAL_OLLAMA_TIMEOUT_SECONDS", 120)),
         ollama_retries=max(1, _env_int("LOCAL_OLLAMA_RETRIES", 2)),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
@@ -137,6 +186,10 @@ def load_config() -> WorkerConfig:
         source_code_max_chars=max(1000, _env_int("LOCAL_WORKER_SOURCE_CODE_MAX_CHARS", 16000)),
         default_temperature=clamp_temperature(_env_float("LOCAL_WORKER_DEFAULT_TEMPERATURE", 0.0)),
         local_enabled=_env_bool("LOCAL_WORKER_ENABLED", True),
+        searxng_url=(os.getenv("JARVIS_SEARXNG_URL") or "http://127.0.0.1:8080").rstrip("/"),
+        web_search_timeout_seconds=max(3, _env_int("LOCAL_WORKER_WEB_SEARCH_TIMEOUT_SECONDS", 8)),
+        web_search_max_results=max(1, min(10, _env_int("LOCAL_WORKER_WEB_SEARCH_MAX_RESULTS", 3))),
+        workspace_root=os.path.realpath(os.getenv("JARVIS_WORKSPACE_ROOT") or os.getcwd()),
     )
 
 
@@ -341,18 +394,139 @@ def _build_system_instruction(source_code: str) -> str:
     )
 
 
+def _append_web_search_context(system_instruction: str, web_context: str) -> str:
+    context = str(web_context or "").strip()
+    if not context:
+        return system_instruction
+    return (
+        f"{system_instruction}\n\n"
+        "Masz też świeży kontekst z lokalnej metawyszukiwarki SearXNG. "
+        "Korzystaj z niego tylko wtedy, gdy jest istotny dla odpowiedzi:\n\n"
+        f"{context}"
+    )
+
+
+def _detect_local_model(config: WorkerConfig, raw_prompt: str) -> str:
+    prompt = str(raw_prompt or "").lower()
+    if any(token in prompt for token in LIGHT_MODEL_HINTS):
+        return config.ollama_light_model
+    if any(token in prompt for token in HEAVY_MODEL_HINTS):
+        return config.ollama_heavy_model
+    return config.ollama_light_model
+
+
+def _get_keep_alive_for_model(config: WorkerConfig, model_name: str) -> str | int:
+    if model_name == config.ollama_heavy_model:
+        return config.ollama_heavy_keep_alive
+    return config.ollama_light_keep_alive
+
+
+def _extract_web_search_query(raw_prompt: str) -> str | None:
+    prompt = str(raw_prompt or "").strip()
+    lowered = prompt.lower()
+    for trigger in WEB_SEARCH_TRIGGERS:
+        index = lowered.find(trigger)
+        if index < 0:
+            continue
+        query = prompt[index + len(trigger):].strip(" :,-–—")
+        return query or prompt
+    return None
+
+
+def _search_searxng(config: WorkerConfig, query: str) -> list[dict[str, str]]:
+    url = f"{config.searxng_url}/search?{urllib.parse.urlencode({'q': query, 'format': 'json'})}"
+    request = urllib.request.Request(
+        url=url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "AssistantX-Local-Worker/1.0",
+        },
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=config.web_search_timeout_seconds) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    results: list[dict[str, str]] = []
+    for item in payload.get("results", [])[: config.web_search_max_results]:
+        results.append({
+            "title": str(item.get("title", "")).strip(),
+            "url": str(item.get("url", "")).strip(),
+            "content": str(item.get("content", "")).strip(),
+            "engine": str(item.get("engine", "")).strip(),
+        })
+    return results
+
+
+def _build_web_search_context(config: WorkerConfig, raw_prompt: str) -> str:
+    query = _extract_web_search_query(raw_prompt)
+    if not query:
+        return ""
+    try:
+        results = _search_searxng(config, query)
+    except Exception as exc:
+        print(f"[Worker][warn] SearXNG lookup failed for query={query!r}: {exc}")
+        return ""
+    if not results:
+        return ""
+    lines = [f"Wyniki lokalnego wyszukiwania dla: {query}"]
+    for index, item in enumerate(results, start=1):
+        lines.append(
+            f"[{index}] {item['title'] or item['url'] or 'Brak tytułu'}\n"
+            f"URL: {item['url'] or 'brak'}\n"
+            f"Treść: {item['content'] or 'brak'}"
+        )
+    return "\n\n".join(lines)
+
+
+def _resolve_system_action_path(config: WorkerConfig, requested_path: str) -> str:
+    root = os.path.realpath(config.workspace_root)
+    candidate = requested_path.strip() or "."
+    resolved = os.path.realpath(candidate if os.path.isabs(candidate) else os.path.join(root, candidate))
+    try:
+        if os.path.commonpath([root, resolved]) != root:
+            raise PermissionError("requested path escapes workspace root")
+    except ValueError as exc:
+        raise PermissionError("invalid workspace path") from exc
+    return resolved
+
+
+def execute_system_action(config: WorkerConfig, task: dict[str, Any]) -> tuple[str, str]:
+    action_type = str(task.get("action_type") or "").strip().lower()
+    payload = task.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
+
+    if action_type == "list_files":
+        target_path = _resolve_system_action_path(config, str(payload.get("path") or "."))
+        entries = sorted(os.listdir(target_path))[:100]
+        rendered = []
+        for entry in entries:
+            full_path = os.path.join(target_path, entry)
+            suffix = "/" if os.path.isdir(full_path) else ""
+            rendered.append(f"- {entry}{suffix}")
+        body = "\n".join(rendered) if rendered else "- (pusto)"
+        return action_type, f"📁 Zawartość katalogu `{target_path}`:\n{body}"
+
+    if action_type == "open_uri":
+        return action_type, "⚠️ Akcja `open_uri` wymaga dedykowanego wykonawcy hosta i nie jest obsługiwana przez worker HTTP-only."
+
+    return (action_type or "system_action"), f"⚠️ Nieobsługiwana akcja systemowa: `{action_type or 'unknown'}`."
+
+
 def generate_with_ollama(
     config: WorkerConfig,
     *,
+    model_name: str,
     raw_prompt: str,
     temperature: float,
     system_instruction: str,
+    keep_alive: str | int,
 ) -> str:
     request_payload = {
-        "model": config.ollama_model,
+        "model": model_name,
         "prompt": f"{system_instruction}\n\nUżytkownik: {raw_prompt}",
         "stream": False,
         "options": {"temperature": clamp_temperature(temperature)},
+        "keep_alive": keep_alive,
     }
     headers = {"Content-Type": "application/json"}
     last_exc: Exception | None = None
@@ -491,12 +665,31 @@ def process_task(
         except Exception as exc:
             print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
 
+    task_category = str(task.get("category") or "").strip().lower()
+    if task_category == "system_action":
+        action_name, output_text = execute_system_action(config, task)
+        if changed:
+            output_text = f"🔧 [System: Temperatura została zmieniona na {current_temp:.2f}]\n\n{output_text}"
+        supabase.complete_task(
+            task_id,
+            response_text=output_text,
+            provider="local-system",
+            model=action_name,
+            routing="local",
+            fallback_reason=fallback_reason,
+        )
+        print(f"[Worker] Completed system action task={task_id} action={action_name}")
+        return
+
     system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
+    if not route_to_cloud:
+        system_instruction = _append_web_search_context(system_instruction, _build_web_search_context(config, raw_prompt))
 
     output_text = ""
     provider = "ollama"
-    model = config.ollama_model
+    model = _detect_local_model(config, raw_prompt)
     routing = "local"
+    keep_alive = _get_keep_alive_for_model(config, model)
 
     try:
         if route_to_cloud:
@@ -508,13 +701,15 @@ def process_task(
             )
             provider = "openrouter"
             model = config.cloud_model
-            routing = "cloud"
+                routing = "cloud"
         else:
             output_text = generate_with_ollama(
                 config,
+                model_name=model,
                 raw_prompt=raw_prompt,
                 temperature=current_temp,
                 system_instruction=system_instruction,
+                keep_alive=keep_alive,
             )
     except Exception as local_exc:
         if not route_to_cloud:
@@ -587,7 +782,7 @@ def run_worker_forever() -> None:
     supabase = SupabaseRestClient(config.supabase_url, config.supabase_key)
     print(
         "[Worker] Started with "
-        f"local_model={config.ollama_model} cloud_model={config.cloud_model} "
+        f"light_model={config.ollama_light_model} heavy_model={config.ollama_heavy_model} cloud_model={config.cloud_model} "
         f"max_processing={config.local_max_processing} pick_timeout={config.task_pick_timeout_seconds}s"
     )
 

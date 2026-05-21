@@ -4,6 +4,8 @@
 import { POST } from "@/app/api/image/route";
 
 describe("POST /api/image", () => {
+  const originalFetch = global.fetch;
+
   function makeRequest(body: object) {
     return new Request("http://localhost/api/image", {
       method: "POST",
@@ -13,8 +15,15 @@ describe("POST /api/image", () => {
   }
 
   beforeEach(() => {
-    // Ensure no OpenAI key so tests use Pollinations path
+    delete process.env.IMAGE_GEN_API_URL;
+    delete process.env.IMAGE_GEN_PROVIDER_MODE;
+    delete process.env.IMAGE_GEN_MODEL_LABEL;
     delete process.env.OPENAI_API_KEY;
+    global.fetch = originalFetch;
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
   });
 
   it("returns a Pollinations URL and model name on success", async () => {
@@ -66,5 +75,36 @@ describe("POST /api/image", () => {
 
     expect(() => new URL(json.url)).not.toThrow();
     expect(json.url).toMatch(/^https:\/\//);
+  });
+
+  it("uses the local image backend when configured", async () => {
+    process.env.IMAGE_GEN_API_URL = "http://127.0.0.1:7860/sdapi/v1/txt2img";
+    process.env.IMAGE_GEN_MODEL_LABEL = "Local Forge";
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ images: ["YWJj"] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    ) as typeof global.fetch;
+
+    const req = makeRequest({ prompt: "robot portrait" });
+    const res = await POST(req);
+    const json = await res.json();
+
+    expect(json.provider).toBe("Local");
+    expect(json.model).toBe("Local Forge");
+    expect(json.url).toContain("data:image/png;base64,YWJj");
+  });
+
+  it("falls back to Pollinations when the local backend fails", async () => {
+    process.env.IMAGE_GEN_API_URL = "http://127.0.0.1:7860/sdapi/v1/txt2img";
+    global.fetch = jest.fn().mockRejectedValue(new Error("local backend offline")) as typeof global.fetch;
+
+    const req = makeRequest({ prompt: "city skyline" });
+    const res = await POST(req);
+    const json = await res.json();
+
+    expect(json.provider).toBe("Pollinations");
+    expect(json.url).toContain("image.pollinations.ai");
   });
 });

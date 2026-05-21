@@ -33,10 +33,12 @@ The repository now includes a dedicated Python worker process at:
 It is isolated from HTTP API servers and is designed to:
 
 - poll `public.ai_tasks` (`pending` + `routing=local`)
-- process tasks with local Ollama (`qwen2.5:14b` by default)
+- process tasks with local Ollama using dual routing (`qwen2.5:14b` by default, `qwen2.5-coder:32b` for heavier coding-style prompts)
 - parse in-chat commands like `zmień temp na 0.7`
 - persist temperature per-task (`ai_tasks.temperature`) and per-user (`user_profiles.default_temperature`)
 - inject a sanitized, size-limited copy of its own source code into the system prompt
+- augment explicit Polish web-search prompts through local SearXNG (`JARVIS_SEARXNG_URL`)
+- keep the light model warm while unloading the heavy model immediately after use
 - auto-fallback to cloud model (`OPENROUTER_API_KEY`) when local runtime is unavailable or overloaded
 
 Database objects are introduced in migration:
@@ -57,8 +59,21 @@ Useful worker tuning vars:
 LOCAL_WORKER_MAX_PROCESSING=2
 LOCAL_WORKER_TASK_PICK_TIMEOUT_SECONDS=10
 LOCAL_OLLAMA_BASE_URL=http://localhost:11434
-LOCAL_OLLAMA_MODEL=qwen2.5:14b
+LOCAL_OLLAMA_LIGHT_MODEL=qwen2.5:14b
+LOCAL_OLLAMA_HEAVY_MODEL=qwen2.5-coder:32b
+LOCAL_OLLAMA_LIGHT_KEEP_ALIVE=5m
+LOCAL_OLLAMA_HEAVY_KEEP_ALIVE=0
+JARVIS_SEARXNG_URL=http://127.0.0.1:8080
+LOCAL_WORKER_WEB_SEARCH_MAX_RESULTS=3
+IMAGE_GEN_API_URL=http://127.0.0.1:7860/sdapi/v1/txt2img
 ```
+
+Suggested local startup checklist:
+
+1. Pull the Ollama models you want the worker to route between.
+2. Start SearXNG locally and enable the `json` response format in its settings.
+3. Start Forge/ComfyUI separately on GPU 1 and expose its API URL through `IMAGE_GEN_API_URL`.
+4. Run `npm run dev:worker` to process `ai_tasks` with local-first routing and cloud fallback.
 
 ## Speed Insights Get Started
 
