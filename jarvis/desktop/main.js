@@ -27,6 +27,9 @@ const { emitSessionChanged } = require('./electron/auth/events');
 const { redactUrl } = require('./electron/auth/redaction');
 const { bindAuthEvents } = require('./electron/auth/sync');
 const { generateOAuthState, parseAuthCallback, toSafeSessionView } = require('./electron/auth/validators');
+const { createGitHubClient } = require('./electron/tools/github');
+const { createGoogleClient } = require('./electron/tools/google');
+const appsTool = require('./electron/tools/apps');
 const {
   buildMetadataSignatureUrl,
   classifyInstallerBlocker,
@@ -59,6 +62,8 @@ const aiRouter = new AIRouter();
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
 const serverBridge = createServerBridge();
+const githubClient = createGitHubClient({ app });
+const googleClient = createGoogleClient({ app });
 
 const permissions = createPermissionPolicy({
   onAudit(entry) {
@@ -1070,6 +1075,9 @@ createMainIpcHandlers({
   serverKillSwitch: () => serverBridge.killSwitch(),
   serverGetConfig: () => serverBridge.getConfig(),
   serverSetConfig: (payload) => serverBridge.setConfig(payload),
+  githubClient,
+  googleClient,
+  appsTool,
   getMainWindow: () => win,
   getOverlayWindow: () => overlayWin,
   createLauncherOverlayWindow,
@@ -1111,8 +1119,38 @@ app.on('second-instance', (_event, argv) => {
   }
 });
 
+let shutdownPresenceSyncInFlight = null;
+async function syncShutdownPresence() {
+  if (shutdownPresenceSyncInFlight) return shutdownPresenceSyncInFlight;
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
+  const supabaseKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '').trim();
+  const deviceId = String(process.env.JARVIS_DEVICE_ID || '').trim();
+  if (!supabaseUrl || !supabaseKey || !deviceId) return null;
+  shutdownPresenceSyncInFlight = fetch(`${supabaseUrl}/rest/v1/device_presence?device_id=eq.${encodeURIComponent(deviceId)}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      status: 'offline',
+      is_online: false,
+      updated_at: new Date().toISOString(),
+      last_heartbeat_at: new Date().toISOString(),
+    }),
+  }).catch(() => null);
+  return shutdownPresenceSyncInFlight;
+}
+
+app.on('session-end', () => {
+  void syncShutdownPresence();
+});
+
 app.on('before-quit', () => {
   app.isQuitting = true;
+  void syncShutdownPresence();
 });
 
 nativeAutoUpdater?.on?.('before-quit-for-update', () => {

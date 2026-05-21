@@ -65,6 +65,8 @@ describe("POST /api/jarvis/devices/:id/wake", () => {
     mockExecuteWakeChain.mockResolvedValue({
       ok: true,
       method: "ipv6_magic_packet",
+      mode: "ipv6",
+      nextAction: "wait_for_presence",
       attempts: [{ method: "ipv6_magic_packet", ok: true, details: "ok", latencyMs: 12 }],
     });
 
@@ -88,7 +90,9 @@ describe("POST /api/jarvis/devices/:id/wake", () => {
     mockExecuteWakeChain.mockResolvedValue({
       ok: false,
       method: null,
-      attempts: [{ method: "lan_broadcast", ok: false, details: "failed", latencyMs: 20 }],
+      mode: "rtc_wait",
+      nextAction: "wait_for_bios_rtc",
+      attempts: [{ method: "rtc_wait", ok: false, details: "failed", latencyMs: 20 }],
     });
 
     const response = await POST(
@@ -99,9 +103,10 @@ describe("POST /api/jarvis/devices/:id/wake", () => {
       { params: Promise.resolve({ id: "device-1" }) },
     );
 
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual(expect.objectContaining({
       error: "Wake sequence failed for all methods.",
+      mode: "rtc_wait",
     }));
   });
 });
