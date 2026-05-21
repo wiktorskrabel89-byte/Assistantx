@@ -88,9 +88,12 @@ export async function POST(
   }
 
   try {
+    const persistedMethod = execution.method && execution.method !== "rtc_wait"
+      ? execution.method
+      : null;
     await updateDeviceWakeResult({
       deviceId: id,
-      method: execution.method ?? null,
+      method: persistedMethod,
       success: execution.ok,
     });
   } catch {

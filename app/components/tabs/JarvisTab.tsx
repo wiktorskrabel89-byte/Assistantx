@@ -78,11 +78,14 @@ function useJarvisControlPlane() {
   }, []);
 
   useEffect(() => {
-    void fetchStatus();
+    const timeoutId = window.setTimeout(() => {
+      void fetchStatus();
+    }, 0);
     const intervalId = window.setInterval(() => {
       void fetchStatus();
     }, 10000);
     return () => {
+      window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
   }, [fetchStatus]);
@@ -122,7 +125,7 @@ function useJarvisControlPlane() {
     } finally {
       setIsWaking(false);
     }
-  }, [fetchStatus, primaryDevice?.id]);
+  }, [fetchStatus, primaryDevice]);
 
   const queueRobloxLaunch = useCallback(async () => {
     if (!primaryDevice?.id) return;
@@ -159,7 +162,7 @@ function useJarvisControlPlane() {
     } finally {
       setIsQueueing(false);
     }
-  }, [primaryDevice?.id]);
+  }, [primaryDevice]);
 
   return {
     devices,

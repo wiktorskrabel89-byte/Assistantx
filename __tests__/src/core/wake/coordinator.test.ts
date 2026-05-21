@@ -31,6 +31,7 @@ describe("wake coordinator tailscale path", () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch;
 
     const result = await executeWakeChain({
+      preferTailscale: true,
       candidate: {
         deviceId: "dev-1",
         macAddress: "AA:BB:CC:DD:EE:FF",
@@ -55,6 +56,7 @@ describe("wake coordinator tailscale path", () => {
     mockSendWakeOnLanPacket.mockResolvedValue(undefined);
 
     const result = await executeWakeChain({
+      preferTailscale: true,
       candidate: {
         deviceId: "dev-1",
         macAddress: "AA:BB:CC:DD:EE:FF",
