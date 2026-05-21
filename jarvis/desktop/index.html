@@ -1187,6 +1187,57 @@
                   </select>
                 </label>
               </div>
+            </div>
+
+            <div class="stack">
+              <div class="section-label">Local Servers</div>
+              <div class="settings-grid">
+                <label class="field">
+                  <span>Server label</span>
+                  <input id="local-server-label" type="text" placeholder="My local server" />
+                </label>
+                <label class="field">
+                  <span>Base URL</span>
+                  <input id="local-server-base-url" type="url" placeholder="http://127.0.0.1:11434" />
+                </label>
+                <label class="field">
+                  <span>API type</span>
+                  <select id="local-server-api-type">
+                    <option value="ollama">Ollama</option>
+                    <option value="lmstudio">LM Studio</option>
+                    <option value="openai-compat">OpenAI-compatible</option>
+                  </select>
+                </label>
+                <button id="local-server-add" type="button" class="secondary">Add server</button>
+                <div id="local-server-list" class="field field-full" style="font-size:12px;line-height:1.5;color:#cbd5e1;">
+                  No local servers configured.
+                </div>
+              </div>
+              <div class="settings-grid">
+                <label class="field">
+                  <span>Chat local model</span>
+                  <select id="local-chat-model">
+                    <option value="">Use cloud auto-router</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Code local model</span>
+                  <select id="local-code-model">
+                    <option value="">Use cloud auto-router</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>External local model</span>
+                  <select id="local-external-model">
+                    <option value="">Use cloud auto-router</option>
+                  </select>
+                </label>
+                <label class="toggle" for="local-prefer-enabled">
+                  <input id="local-prefer-enabled" type="checkbox" />
+                  Prefer local when available
+                </label>
+                <button id="local-server-save-assignment" type="button" class="secondary">Save local routing</button>
+              </div>
               <div class="voice-actions">
                 <label class="toggle" for="stt-enabled">
                   <input id="stt-enabled" type="checkbox" checked />

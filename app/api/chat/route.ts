@@ -97,6 +97,10 @@ type ChatRequestBody = {
   enabledTools?: string[];
   googleContext?: string;
   strict?: boolean;
+  localBaseUrl?: string;
+  localApiType?: "ollama" | "lmstudio" | "openai-compat";
+  localModelId?: string;
+  preferLocalWhenAvailable?: boolean;
 };
 
 /** Matches canonical UUID string formatting (8-4-4-4-12 hex), without validating version bits. */
@@ -111,6 +115,20 @@ const COMPACT_SYSTEM_PROMPT_CHARS = 2500;
 const COMPACT_HISTORY_MESSAGE_CHARS = 1200;
 const COMPACT_USER_MESSAGE_CHARS = 2200;
 const COMPACT_SYSTEM_SEPARATOR = "\n\n[Context compacted for token limits]\n\n";
+
+function normalizeLocalBaseUrl(input: unknown): string | null {
+  if (typeof input !== "string" || !input.trim()) return null;
+  try {
+    const parsed = new URL(input.trim());
+    if (!["http:", "https:"].includes(parsed.protocol)) return null;
+    parsed.pathname = "";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
 
 function estimateTokensFromText(text: string): number {
   // Approximation only: OpenAI-compatible tokenizers vary by model/language/code content.
@@ -380,6 +398,10 @@ export const POST = async (req: Request) => {
     enabledTools,
     googleContext,
     strict = false,
+    localBaseUrl,
+    localApiType,
+    localModelId,
+    preferLocalWhenAvailable = false,
   } = body;
 
   // ── Validate conversationId format before any DB operation ──────────────────
@@ -565,6 +587,17 @@ export const POST = async (req: Request) => {
   const effectiveRawMode = rawMode;
 
   const fallbackModel = getFreePlanFallback(inferredCodeRequest);
+  const normalizedLocalBaseUrl = normalizeLocalBaseUrl(localBaseUrl);
+  const normalizedLocalApiType = localApiType === "ollama" || localApiType === "lmstudio" || localApiType === "openai-compat"
+    ? localApiType
+    : null;
+  const localRouting = (typeof localModelId === "string" && localModelId.trim() && normalizedLocalBaseUrl && normalizedLocalApiType)
+    ? {
+        modelId: localModelId.trim(),
+        baseUrl: normalizedLocalBaseUrl,
+        apiType: normalizedLocalApiType,
+      }
+    : null;
 
   // ── Smart routing: pick model + temperature + reasoning effort per request type ──
   // When the user (or a workspace) explicitly provides allowedModels or a modelId
@@ -576,7 +609,16 @@ export const POST = async (req: Request) => {
   // Values: "low" | "medium" | "high" (maps directly to OpenRouter's reasoning_level).
   let resolvedReasoningEffort: string;
 
-  if (planEnforcedModelId) {
+  if (localRouting) {
+    selectedModel = localRouting.modelId;
+    resolvedTemperature = getModelTemperature(ROUTING_MAIN_MODEL, {
+      isCodeRequest: inferredCodeRequest,
+      isLongContext: inferredLongContext,
+      isVisionRequest: inferredVisionRequest,
+    });
+    resolvedReasoningEffort = determineReasoningEffort(inferredComplexCoding, inferredHeavyReasoning, inferredCodeRequest);
+    smartRouteLabel = `Local server: ${selectedModel}`;
+  } else if (planEnforcedModelId) {
     // Manual / workspace-pinned model
     selectedModel = planEnforcedModelId;
     resolvedTemperature = getModelTemperature(selectedModel, {
@@ -718,6 +760,8 @@ export const POST = async (req: Request) => {
         ? `Tavily live web search enabled — answering with ${MODEL_LABELS[selectedModel] ?? selectedModel}`
         : `Web Search enabled — browsing with ${MODEL_LABELS[selectedModel] ?? selectedModel}`)
       : "Search mode")
+    : localRouting
+      ? `Local server (${localRouting.apiType}) — ${selectedModel}`
     : modelId
       ? `Manual model override: ${MODEL_LABELS[selectedModel] ?? selectedModel}${planDowngradeNote}`
       : inferredImageRequest
@@ -965,6 +1009,22 @@ export const POST = async (req: Request) => {
 
   const sendModelRequest = async (body: Record<string, unknown>) => {
     const targetModel = String(body.model ?? "");
+    const isLocalTarget = Boolean(localRouting && targetModel === localRouting.modelId);
+    if (isLocalTarget) {
+      const localBody: Record<string, unknown> = { ...body };
+      delete localBody.plugins;
+      delete localBody.reasoning_level;
+      delete localBody.thinking_config;
+      const endpoint = `${localRouting.baseUrl}/v1/chat/completions`;
+      return fetch(endpoint, {
+        method: "POST",
+        signal: requestSignal,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(localBody),
+      });
+    }
     const useGoogleStudio = isGeminiModel(targetModel);
     const useOpenRouter = isOpenRouterModel(targetModel);
     const endpoint = useGoogleStudio
@@ -1114,6 +1174,14 @@ export const POST = async (req: Request) => {
           let fallbackReason = routeReason;
           let found = false;
           const currentModel = String(requestBody.model ?? selectedModel);
+          const localTargetFailed = Boolean(localRouting && currentModel === localRouting.modelId);
+
+          if (localTargetFailed) {
+            if (preferLocalWhenAvailable) {
+              throw new Error(`Local server request failed (${status}): ${err}`);
+            }
+            safeEnqueue(`data: ${JSON.stringify({ status: "Local server unavailable, retrying with cloud fallback..." })}\n\n`);
+          }
 
           if (isRequestSizeTokenError(status, err)) {
             safeEnqueue(`data: ${JSON.stringify({ status: "Request too large, retrying with reduced context..." })}\n\n`);

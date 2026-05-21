@@ -41,6 +41,7 @@ const {
   verifyDetachedMetadataSignature,
 } = require('./electron/updater/feed-metadata');
 const { AIRouter } = require('./electron/ai/router');
+const { createLocalServerStore } = require('./electron/ai/local-server-store');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
 // Ensures the launcher SQLite database is initialised before any IPC handler
@@ -58,7 +59,10 @@ const SIDECAR_PORT = process.env.JARVIS_SIDECAR_PORT || '8765';
 const SIDECAR_HEALTH_TIMEOUT_MS = Number(process.env.JARVIS_SIDECAR_HEALTH_TIMEOUT_MS || 5000);
 const SIDECAR_HEALTH_RETRIES = Math.max(1, Number(process.env.JARVIS_SIDECAR_HEALTH_RETRIES || 3));
 const startupDiagnostics = createStartupDiagnostics();
-const aiRouter = new AIRouter();
+const localServerStore = createLocalServerStore();
+const aiRouter = new AIRouter({
+  getLocalServerConfig: () => localServerStore.getRouterConfig(),
+});
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
 const serverBridge = createServerBridge();
@@ -1075,6 +1079,13 @@ createMainIpcHandlers({
   serverKillSwitch: () => serverBridge.killSwitch(),
   serverGetConfig: () => serverBridge.getConfig(),
   serverSetConfig: (payload) => serverBridge.setConfig(payload),
+  localServerList: () => localServerStore.list(),
+  localServerAdd: (payload) => localServerStore.add(payload),
+  localServerUpdate: (serverId, patch) => localServerStore.update(serverId, patch),
+  localServerRemove: (serverId) => localServerStore.remove(serverId),
+  localServerScan: (serverId) => localServerStore.scan(serverId),
+  localServerGetAssignment: () => localServerStore.getAssignment(),
+  localServerSetAssignment: (patch) => localServerStore.setAssignment(patch),
   githubClient,
   googleClient,
   appsTool,
