@@ -1,4 +1,4 @@
-import { getAuthenticatedUser, resolveOwnedDevice } from "@/app/api/jarvis/devices/_shared";
+import { getAuthenticatedUser, resolveAgentUrl, resolveOwnedDevice } from "@/app/api/jarvis/devices/_shared";
 import { insertAuditLog, listDeviceWakeCandidates, updateDeviceWakeResult } from "@/src/core/persistence/runtime-db";
 import { executeWakeChain, type WakeCandidate } from "@/src/core/wake/coordinator";
 import { FEATURE_FLAGS } from "@/src/core/config/feature-flags";
@@ -56,6 +56,7 @@ export async function POST(
       lastSeenAt: candidate.last_seen_at,
     } satisfies WakeCandidate,
     broadcastAddress: typeof body.broadcast === "string" ? body.broadcast : null,
+    agentUrl: resolveAgentUrl(device),
   });
 
   try {
