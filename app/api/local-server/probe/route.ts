@@ -15,13 +15,22 @@ function normalizeBaseUrl(input: string): string | null {
   try {
     const parsed = new URL(input.trim());
     if (!["http:", "https:"].includes(parsed.protocol)) return null;
-    parsed.pathname = "";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString().replace(/\/$/, "");
+    const allowedHost = normalizeAllowedLoopbackHost(parsed.hostname);
+    if (!allowedHost) return null;
+    if (parsed.port && !/^\d{1,5}$/.test(parsed.port)) return null;
+    const port = parsed.port ? `:${parsed.port}` : "";
+    return `${parsed.protocol}//${allowedHost}${port}`;
   } catch {
     return null;
   }
+}
+
+function normalizeAllowedLoopbackHost(hostname: string): string | null {
+  const host = hostname.trim().toLowerCase();
+  if (host === "localhost") return "localhost";
+  if (host === "127.0.0.1") return "127.0.0.1";
+  if (host === "::1" || host === "[::1]") return "[::1]";
+  return null;
 }
 
 async function ensureAuthenticatedUser() {
@@ -77,7 +86,7 @@ export async function POST(req: Request) {
   }
   const baseUrl = typeof body.baseUrl === "string" ? normalizeBaseUrl(body.baseUrl) : null;
   if (!baseUrl) {
-    return Response.json({ error: "Invalid baseUrl. Expected http(s) URL." }, { status: 400 });
+    return Response.json({ error: "Invalid baseUrl. Only localhost/127.0.0.1/[::1] loopback URLs are allowed." }, { status: 400 });
   }
 
   const endpoint = apiType === "ollama" ? `${baseUrl}/api/tags` : `${baseUrl}/v1/models`;

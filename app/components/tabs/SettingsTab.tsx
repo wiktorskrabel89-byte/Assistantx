@@ -198,7 +198,7 @@ export function SettingsTab() {
   const softSurfaceClass = dark
     ? "border-slate-800 bg-slate-900/60"
     : "border-slate-200 bg-slate-50/80";
-  const localServers = activeWorkspace.settings.localServers ?? [];
+  const localServers = activeWorkspace.settings.localServers;
   const localAssignment = activeWorkspace.settings.localModelAssignment ?? {
     chatModelId: null,
     codeModelId: null,
