@@ -104,7 +104,7 @@ export type DeviceRow = {
   last_known_mac?: string | null;
   last_udp_port?: number | null;
   last_seen_network_epoch?: number | null;
-  wake_method_last_success?: "tailscale_direct" | "router_api" | "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
+  wake_method_last_success?: "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
   wake_fail_count?: number | null;
 };
 
@@ -851,7 +851,7 @@ export async function updateDeviceNetworkSnapshot(params: {
 
 export async function updateDeviceWakeResult(params: {
   deviceId: string;
-  method?: "tailscale_direct" | "router_api" | "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
+  method?: "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
   success: boolean;
 }): Promise<void> {
   const supabase = await getClient();

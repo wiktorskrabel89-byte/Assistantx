@@ -1,14 +1,6 @@
 import { sendWakeOnLanPacket } from "@/src/core/wake/magic-packet";
 
-export type WakeMethod =
-  | "tailscale_direct"
-  | "router_api"
-  | "udp_path_probe"
-  | "ipv6_magic_packet"
-  | "lan_broadcast"
-  | "rtc_wait";
-
-export type WakeMode = "router" | "ipv6" | "rtc_wait";
+export type WakeMethod = "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast";
 
 export type WakeCandidate = {
   deviceId: string;
@@ -37,152 +29,6 @@ export type WakeExecutionResult = {
 
 function now() {
   return Date.now();
-}
-
-function toHealthcheckUrl(urlValue: string): string | null {
-  const trimmed = urlValue.trim();
-  if (!trimmed) return null;
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol === "ws:") parsed.protocol = "http:";
-    if (parsed.protocol === "wss:") parsed.protocol = "https:";
-    parsed.pathname = "/health";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString();
-  } catch {
-    return null;
-  }
-}
-
-async function attemptTailscaleDirect(agentUrl: string): Promise<WakeAttemptResult> {
-  const startedAt = now();
-  const healthcheckUrl = toHealthcheckUrl(agentUrl);
-  if (!healthcheckUrl) {
-    return {
-      method: "tailscale_direct",
-      ok: false,
-      details: "Invalid JARVIS_HOME_TAILSCALE_URL format.",
-      latencyMs: now() - startedAt,
-    };
-  }
-  try {
-    const response = await fetch(healthcheckUrl, { method: "GET", signal: AbortSignal.timeout(3_000) });
-    if (!response.ok) {
-      return {
-        method: "tailscale_direct",
-        ok: false,
-        details: `Healthcheck failed with status ${response.status}.`,
-        latencyMs: now() - startedAt,
-      };
-    }
-    return {
-      method: "tailscale_direct",
-      ok: true,
-      details: "Direct Tailscale healthcheck succeeded.",
-      latencyMs: now() - startedAt,
-    };
-  } catch (error) {
-    return {
-      method: "tailscale_direct",
-      ok: false,
-      details: error instanceof Error ? error.message : "Tailscale direct healthcheck failed.",
-      latencyMs: now() - startedAt,
-    };
-  }
-}
-
-function interpolateTemplate(value: unknown, replacements: Record<string, string>): unknown {
-  if (typeof value === "string") {
-    return value.replace(/\{\{(\w+)\}\}/g, (_, token: string) => replacements[token] ?? "");
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => interpolateTemplate(item, replacements));
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, interpolateTemplate(nested, replacements)]),
-    );
-  }
-  return value;
-}
-
-function parseJsonEnv(envName: string, fallback: Record<string, unknown>) {
-  const raw = String(process.env[envName] || "").trim();
-  if (!raw) return fallback;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-async function attemptRouterApi(candidate: WakeCandidate): Promise<WakeAttemptResult> {
-  const startedAt = now();
-  const url = String(process.env.JARVIS_ROUTER_API_URL || "").trim();
-  if (!url) {
-    return {
-      method: "router_api",
-      ok: false,
-      details: "JARVIS_ROUTER_API_URL is not configured.",
-      latencyMs: now() - startedAt,
-    };
-  }
-
-  const method = String(process.env.JARVIS_ROUTER_API_METHOD || "POST").trim().toUpperCase();
-  const token = String(process.env.JARVIS_ROUTER_API_TOKEN || "").trim();
-  const tokenHeader = String(process.env.JARVIS_ROUTER_API_TOKEN_HEADER || "Authorization").trim() || "Authorization";
-  const replacements = {
-    deviceId: candidate.deviceId,
-    mac: candidate.macAddress ?? "",
-    ipv6: candidate.ipv6 ?? "",
-    port: String(candidate.udpPort ?? 9),
-    provider: candidate.provider,
-  };
-  const headers = interpolateTemplate(parseJsonEnv("JARVIS_ROUTER_API_HEADERS_JSON", {}), replacements) as Record<string, string>;
-  const bodyTemplate = parseJsonEnv("JARVIS_ROUTER_API_BODY_JSON", {
-    deviceId: "{{deviceId}}",
-    mac: "{{mac}}",
-    ipv6: "{{ipv6}}",
-    port: "{{port}}",
-  });
-  const body = interpolateTemplate(bodyTemplate, replacements);
-
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...headers,
-        ...(token ? { [tokenHeader]: tokenHeader.toLowerCase() === "authorization" ? `Bearer ${token}` : token } : {}),
-      },
-      body: method === "GET" ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) {
-      const payload = await response.text().catch(() => "");
-      return {
-        method: "router_api",
-        ok: false,
-        details: payload || `Router API returned ${response.status}.`,
-        latencyMs: now() - startedAt,
-      };
-    }
-    return {
-      method: "router_api",
-      ok: true,
-      details: "Router API wake request succeeded.",
-      latencyMs: now() - startedAt,
-    };
-  } catch (error) {
-    return {
-      method: "router_api",
-      ok: false,
-      details: error instanceof Error ? error.message : "Router API wake failed.",
-      latencyMs: now() - startedAt,
-    };
-  }
 }
 
 async function callWakeMicroservice(pathname: string, body: Record<string, unknown>) {
@@ -311,21 +157,12 @@ export async function executeWakeChain(params: {
 }): Promise<WakeExecutionResult> {
   const { candidate } = params;
   const attempts: WakeAttemptResult[] = [];
-  const tailscaleUrl = String(params.agentUrl || process.env.JARVIS_HOME_TAILSCALE_URL || "").trim();
-  const order = resolveWakeOrder(Boolean(params.preferTailscale && tailscaleUrl));
 
-  for (const method of order) {
-    let attempt: WakeAttemptResult | null = null;
-    if (method === "tailscale_direct") {
-      attempt = await attemptTailscaleDirect(tailscaleUrl);
-    } else if (method === "router_api") {
-      attempt = await attemptRouterApi(candidate);
-    } else if (method === "udp_path_probe" && candidate.udpPort && (candidate.ipv6 || candidate.macAddress)) {
-      attempt = await attemptUdpPathProbe(candidate);
-    } else if (method === "ipv6_magic_packet" && candidate.ipv6 && candidate.macAddress) {
-      attempt = await attemptIpv6Magic(candidate);
-    } else if (method === "lan_broadcast") {
-      attempt = await attemptLanBroadcast(candidate, params.broadcastAddress || undefined);
+  if (candidate.udpPort && (candidate.ipv6 || candidate.macAddress)) {
+    const udpAttempt = await attemptUdpPathProbe(candidate);
+    attempts.push(udpAttempt);
+    if (udpAttempt.ok) {
+      return { ok: true, method: "udp_path_probe", attempts };
     }
     if (!attempt) continue;
     attempts.push(attempt);

@@ -33,13 +33,18 @@ The repository now includes a dedicated Python worker process at:
 It is isolated from HTTP API servers and is designed to:
 
 - poll `public.ai_tasks` (`pending` + `routing=local`)
-- process tasks with local Ollama using dual routing (`qwen2.5:14b` by default, `qwen2.5-coder:32b` for heavier coding-style prompts)
+- process tasks with local Ollama (`qwen2.5:14b` by default)
+- process async Jarvis queue tasks created by `/api/jarvis/tasks`
 - parse in-chat commands like `zmień temp na 0.7`
 - persist temperature per-task (`ai_tasks.temperature`) and per-user (`user_profiles.default_temperature`)
 - inject a sanitized, size-limited copy of its own source code into the system prompt
 - augment explicit Polish web-search prompts through local SearXNG (`JARVIS_SEARXNG_URL`)
 - keep the light model warm while unloading the heavy model immediately after use
 - auto-fallback to cloud model (`OPENROUTER_API_KEY`) when local runtime is unavailable or overloaded
+- execute the allowlisted `system_action` commands:
+  - `launch_roblox`
+  - `system_file_list`
+  - `system_status_ping`
 
 Database objects are introduced in migration:
 
@@ -58,6 +63,8 @@ Useful worker tuning vars:
 ```bash
 LOCAL_WORKER_MAX_PROCESSING=2
 LOCAL_WORKER_TASK_PICK_TIMEOUT_SECONDS=10
+LOCAL_WORKER_DEVICE_ID=...
+LOCAL_WORKER_ALLOWED_DIRECTORY=/path/to/safe/root
 LOCAL_OLLAMA_BASE_URL=http://localhost:11434
 LOCAL_OLLAMA_LIGHT_MODEL=qwen2.5:14b
 LOCAL_OLLAMA_HEAVY_MODEL=qwen2.5-coder:32b

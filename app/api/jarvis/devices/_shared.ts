@@ -44,9 +44,6 @@ export function normalizeCanonicalPresenceState(value: unknown) {
 }
 
 export function resolveAgentUrl(device: Pick<DeviceRow, "metadata"> | null | undefined): string | null {
-  const tailscaleUrl = String(process.env.JARVIS_HOME_TAILSCALE_URL || "").trim();
-  if (tailscaleUrl) return tailscaleUrl;
-
   const metadata = device?.metadata && typeof device.metadata === "object"
     ? device.metadata as Record<string, unknown>
     : null;
