@@ -18,30 +18,9 @@ const MCP_SERVERS = [
     category: 'developer',
   },
   {
-    id: 'filesystem',
-    package: '@modelcontextprotocol/server-filesystem',
-    bin: 'mcp-server-filesystem',
-    authMethod: 'local_path',
-    category: 'developer',
-  },
-  {
-    id: 'google-calendar',
-    package: '@modelcontextprotocol/server-google-calendar',
-    bin: 'mcp-server-google-calendar',
-    authMethod: 'google_oauth2',
-    category: 'productivity',
-  },
-  {
-    id: 'gmail',
-    package: '@modelcontextprotocol/server-gmail',
-    bin: 'mcp-server-gmail',
-    authMethod: 'google_oauth2',
-    category: 'productivity',
-  },
-  {
-    id: 'google-drive',
-    package: '@modelcontextprotocol/server-google-drive',
-    bin: 'mcp-server-google-drive',
+    id: 'google-suite',
+    package: 'internal-google-suite',
+    bin: '',
     authMethod: 'google_oauth2',
     category: 'productivity',
   },
@@ -51,13 +30,6 @@ const MCP_SERVERS = [
     bin: 'mcp-server-postgres',
     authMethod: 'uri',
     category: 'database',
-  },
-  {
-    id: 'fetch',
-    package: '@modelcontextprotocol/server-fetch',
-    bin: 'mcp-server-fetch',
-    authMethod: 'none',
-    category: 'web',
   },
   {
     id: 'brave-search',
@@ -74,15 +46,33 @@ const MCP_SERVERS = [
     category: 'communication',
   },
   {
-    id: 'memory',
-    package: '@modelcontextprotocol/server-memory',
-    bin: 'mcp-server-memory',
-    authMethod: 'local_file',
-    category: 'memory',
+    id: 'operating-system',
+    package: 'internal-operating-system',
+    bin: '',
+    authMethod: 'none',
+    category: 'system',
   },
 ];
 
-const GOOGLE_SERVER_IDS = new Set(['google-calendar', 'gmail', 'google-drive']);
+const GOOGLE_SERVER_IDS = new Set(['google-suite', 'google-calendar', 'gmail', 'google-drive']);
+const VIRTUAL_SERVER_IDS = new Set(['google-suite', 'operating-system']);
+const GOOGLE_SUITE_COMPONENTS = [
+  {
+    id: 'google-calendar',
+    package: '@modelcontextprotocol/server-google-calendar',
+    bin: 'mcp-server-google-calendar',
+  },
+  {
+    id: 'gmail',
+    package: '@modelcontextprotocol/server-gmail',
+    bin: 'mcp-server-gmail',
+  },
+  {
+    id: 'google-drive',
+    package: '@modelcontextprotocol/server-google-drive',
+    bin: 'mcp-server-google-drive',
+  },
+];
 
 /**
  * Resolves the binary path for an MCP server npm package.
@@ -187,21 +177,71 @@ function createMCPServerManager({ googleClient, githubClient, app }) {
     return extra;
   }
 
-  function buildArgs(serverId) {
-    if (serverId === 'filesystem') {
-      const rootPath = getApiKey('filesystem') || app.getPath('documents');
-      return [rootPath];
-    }
-    if (serverId === 'memory') {
-      const memPath = path.join(app.getPath('userData'), 'jarvis-memory.json');
-      return ['--memory-path', memPath];
-    }
+  function buildArgs() {
     return [];
+  }
+
+  function getGoogleSuiteComponentByMethod(toolName) {
+    const method = String(toolName || '').trim();
+    if (!method) return null;
+    if (method.startsWith('list_events') || method.startsWith('create_event') || method.startsWith('update_event')
+      || method.startsWith('delete_event') || method.startsWith('get_calendar') || method.startsWith('list_calendars')) {
+      return 'google-calendar';
+    }
+    if (method.startsWith('list_messages') || method.startsWith('get_message') || method.startsWith('search_messages')
+      || method.startsWith('send_message') || method.startsWith('draft_message') || method.startsWith('list_labels')) {
+      return 'gmail';
+    }
+    if (method.startsWith('search_files') || method.startsWith('read_file') || method.startsWith('list_files')
+      || method.startsWith('export_file') || method.startsWith('get_file_metadata')) {
+      return 'google-drive';
+    }
+    return null;
+  }
+
+  async function startGoogleSuite() {
+    for (const component of GOOGLE_SUITE_COMPONENTS) {
+      if (processes.has(component.id)) continue;
+      const binPath = resolveBinPath(component.bin);
+      let command;
+      let args;
+      if (binPath) {
+        command = binPath;
+        args = [];
+      } else {
+        command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+        args = ['--yes', component.package];
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const env = await buildEnv('google-suite');
+      const proc = createMCPServerProcess({ serverId: component.id, command, args, env });
+      proc.on('log', (entry) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[MCP] [${entry.level}] ${entry.msg}`);
+        }
+      });
+      processes.set(component.id, proc);
+      proc.start();
+    }
+  }
+
+  function stopGoogleSuite() {
+    for (const component of GOOGLE_SUITE_COMPONENTS) {
+      const proc = processes.get(component.id);
+      if (!proc) continue;
+      proc.stop();
+      processes.delete(component.id);
+    }
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
   async function startServer(serverId) {
+    if (serverId === 'google-suite') {
+      await startGoogleSuite();
+      return;
+    }
+    if (VIRTUAL_SERVER_IDS.has(serverId)) return;
     if (processes.has(serverId)) return; // already running
 
     const meta = MCP_SERVERS.find((s) => s.id === serverId);
@@ -229,6 +269,11 @@ function createMCPServerManager({ googleClient, githubClient, app }) {
   }
 
   function stopServer(serverId) {
+    if (serverId === 'google-suite') {
+      stopGoogleSuite();
+      return;
+    }
+    if (VIRTUAL_SERVER_IDS.has(serverId)) return;
     const proc = processes.get(serverId);
     if (proc) {
       proc.stop();
@@ -284,6 +329,13 @@ function createMCPServerManager({ googleClient, githubClient, app }) {
    * @param {object} params
    */
   async function callTool(serverId, toolName, params = {}) {
+    if (serverId === 'google-suite') {
+      const componentId = getGoogleSuiteComponentByMethod(toolName);
+      if (!componentId) throw new Error(`mcp-google-suite-unsupported-tool:${toolName}`);
+      const proc = processes.get(componentId);
+      if (!proc) throw new Error(`mcp-server-not-running:${componentId}`);
+      return proc.call('tools/call', { name: toolName, arguments: params });
+    }
     const proc = processes.get(serverId);
     if (!proc) throw new Error(`mcp-server-not-running:${serverId}`);
     return proc.call('tools/call', { name: toolName, arguments: params });
@@ -293,6 +345,31 @@ function createMCPServerManager({ googleClient, githubClient, app }) {
 
   function listServers() {
     return MCP_SERVERS.map((meta) => {
+      if (meta.id === 'google-suite') {
+        const componentStatuses = GOOGLE_SUITE_COMPONENTS.map((component) => processes.get(component.id)?.getStatus() || null);
+        const runningCount = componentStatuses.filter((status) => status?.running).length;
+        const pid = componentStatuses.find((status) => status?.pid)?.pid || null;
+        const restartCount = componentStatuses.reduce((sum, status) => sum + Number(status?.restartCount || 0), 0);
+        const uptime = Math.max(0, ...componentStatuses.map((status) => Number(status?.uptime || 0)));
+        return {
+          ...meta,
+          installed: enabledServers.has(meta.id),
+          running: enabledServers.has(meta.id) && runningCount > 0,
+          pid,
+          uptime,
+          restartCount,
+        };
+      }
+      if (VIRTUAL_SERVER_IDS.has(meta.id)) {
+        return {
+          ...meta,
+          installed: enabledServers.has(meta.id),
+          running: enabledServers.has(meta.id),
+          pid: null,
+          uptime: 0,
+          restartCount: 0,
+        };
+      }
       const proc = processes.get(meta.id);
       return {
         ...meta,
@@ -303,6 +380,25 @@ function createMCPServerManager({ googleClient, githubClient, app }) {
   }
 
   function getServerStatus(serverId) {
+    if (serverId === 'google-suite') {
+      const componentStatuses = GOOGLE_SUITE_COMPONENTS.map((component) => processes.get(component.id)?.getStatus() || null);
+      return {
+        serverId,
+        running: enabledServers.has(serverId) && componentStatuses.some((status) => status?.running),
+        pid: componentStatuses.find((status) => status?.pid)?.pid || null,
+        uptime: Math.max(0, ...componentStatuses.map((status) => Number(status?.uptime || 0))),
+        restartCount: componentStatuses.reduce((sum, status) => sum + Number(status?.restartCount || 0), 0),
+      };
+    }
+    if (VIRTUAL_SERVER_IDS.has(serverId)) {
+      return {
+        serverId,
+        running: enabledServers.has(serverId),
+        pid: null,
+        uptime: 0,
+        restartCount: 0,
+      };
+    }
     const proc = processes.get(serverId);
     if (!proc) return { serverId, running: false, pid: null, uptime: 0, restartCount: 0 };
     return proc.getStatus();

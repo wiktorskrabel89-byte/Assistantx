@@ -8,6 +8,7 @@ const RISK_BY_ACTION = {
   'open-account-login': 'medium',
   'tools:launch-game': 'medium',
   'tools:launch-app': 'medium',
+  'tools:os-execute-command': 'high',
   'install-everything-search': 'low',
   'setup:install-local': 'medium',
   'server:verify-pairing': 'medium',

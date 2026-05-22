@@ -30,6 +30,10 @@ const { generateOAuthState, parseAuthCallback, toSafeSessionView } = require('./
 const { createGitHubClient } = require('./electron/tools/github');
 const { createGoogleClient } = require('./electron/tools/google');
 const appsTool = require('./electron/tools/apps');
+const { createFilesystemTools } = require('./electron/tools/filesystem');
+const { createBrowserTools } = require('./electron/tools/browser');
+const { createMemoryTools } = require('./electron/tools/memory');
+const { createOperatingSystemTools } = require('./electron/tools/os');
 const { createMCPServerManager } = require('./electron/mcp/server-manager');
 const { createMCPToolRouter } = require('./electron/mcp/tool-router');
 const {
@@ -73,8 +77,6 @@ const serverBridge = createServerBridge();
 const githubClient = createGitHubClient({ app });
 const googleClient = createGoogleClient({ app });
 const mcpManager = createMCPServerManager({ googleClient, githubClient, app });
-const mcpRouter = createMCPToolRouter({ serverManager: mcpManager });
-
 const permissions = createPermissionPolicy({
   onAudit(entry) {
     startupDiagnostics.pushEvent('permissions', 'info', 'Permission policy decision.', entry);
@@ -88,6 +90,26 @@ function securityAudit(entry = {}) {
     at: entry.at || new Date().toISOString(),
   });
 }
+
+const nativeFilesystemTools = createFilesystemTools({ rootPath: app.getPath('home') });
+const nativeBrowserTools = createBrowserTools();
+const nativeMemoryTools = createMemoryTools({ app });
+const nativeOperatingSystemTools = createOperatingSystemTools({
+  app,
+  shell,
+  appsTool,
+  permissions,
+  securityAudit,
+});
+const mcpRouter = createMCPToolRouter({
+  serverManager: mcpManager,
+  nativeTools: {
+    filesystem: nativeFilesystemTools,
+    fetch: nativeBrowserTools,
+    memory: nativeMemoryTools,
+    'operating-system': nativeOperatingSystemTools,
+  },
+});
 
 assertNoDynamicCodeExecution('main-process-guardrails', 'main.js bootstrap');
 
