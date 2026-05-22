@@ -23,12 +23,13 @@
     "dist:win:arm64": "electron-builder --publish never --win nsis --arm64",
     "_dist:win:all:native": "electron-builder --publish never --win nsis --x64 --arm64",
     "dist:win:all": "node scripts/dist-win-all.js",
+    "setup:local-ai": "powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1",
     "bootstrap:windows": "powershell -ExecutionPolicy Bypass -File scripts/JarvisSystemSetup.ps1",
     "publish:download": "node scripts/publish-installer.js",
     "dist:win:public": "npm run dist:win:all && npm run publish:download"
   },
   "devDependencies": {
-    "electron": "^42.0.1",
+    "electron": "^42.1.0",
     "electron-builder": "^26.0.12"
   },
   "build": {
@@ -108,7 +109,7 @@
         "provider": "github",
         "owner": "wiktorskrabel89-byte",
         "repo": "Assistantx",
-        "private": false
+        "private": true
       }
     ]
   },

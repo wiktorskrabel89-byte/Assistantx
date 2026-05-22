@@ -16,6 +16,7 @@ import {
   STORAGE_KEY,
   upgradeState,
 } from "../lib/chat-state";
+import { normalizePublicLanguage, UI_LANGUAGE_COOKIE_NAME } from "@/app/lib/ui-language";
 import type {
   ActionMode,
   ActionStep,
@@ -23,6 +24,8 @@ import type {
   ChatThread,
   CustomAgent,
   JarvisMode,
+  LocalModelAssignment,
+  LocalServerEntry,
   Mode,
   SharePayload,
   StoredState,
@@ -100,6 +103,20 @@ export function useWorkspaceState() {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     async function loadState() {
+      const resolveUiLanguage = () => {
+        try {
+          const cookieLang = document.cookie
+            .split(";")
+            .map((entry) => entry.trim())
+            .find((entry) => entry.startsWith(`${UI_LANGUAGE_COOKIE_NAME}=`))
+            ?.split("=")[1];
+          if (cookieLang) return normalizePublicLanguage(cookieLang);
+        } catch {
+          // ignore cookie read issues
+        }
+        return "en";
+      };
+
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         try {
@@ -114,6 +131,7 @@ export function useWorkspaceState() {
         }
       }
 
+      setState((prev) => ({ ...prev, uiLanguage: resolveUiLanguage() }));
       if (!cancelled) setLoaded(true);
 
       const importLegacyHistory = async () => {
@@ -364,6 +382,12 @@ export function useWorkspaceState() {
   }, []);
 
   const setUiLanguage = useCallback((uiLanguage: string) => {
+    try {
+      const secure = window.location.protocol === "https:" ? "; Secure" : "";
+      document.cookie = `${UI_LANGUAGE_COOKIE_NAME}=${normalizePublicLanguage(uiLanguage)}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+    } catch {
+      // ignore cookie write issues
+    }
     setState((prev) => ({ ...prev, uiLanguage }));
   }, []);
 
@@ -436,6 +460,83 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setLocalOnlyMode = useCallback((localOnlyMode: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, localOnlyMode },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const addLocalServer = useCallback((entry: Omit<LocalServerEntry, "id"> & { id?: string }) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        localServers: [
+          ...workspace.settings.localServers,
+          {
+            ...entry,
+            id: entry.id ?? createId(),
+          },
+        ],
+      },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const removeLocalServer = useCallback((id: string) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => {
+      const nextServers = workspace.settings.localServers.filter((server) => server.id !== id);
+      const shouldResetAssignment = workspace.settings.localModelAssignment.serverId === id;
+      return {
+        ...workspace,
+        settings: {
+          ...workspace.settings,
+          localServers: nextServers,
+          localModelAssignment: shouldResetAssignment
+            ? {
+                chatModelId: null,
+                codeModelId: null,
+                externalApiModelId: null,
+                serverId: null,
+              }
+            : workspace.settings.localModelAssignment,
+        },
+      };
+    });
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const updateLocalServer = useCallback((id: string, patch: Partial<LocalServerEntry>) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        localServers: workspace.settings.localServers.map((server) => (
+          server.id === id ? { ...server, ...patch, id: server.id } : server
+        )),
+      },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setLocalModelAssignment = useCallback((patch: Partial<LocalModelAssignment>) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        localModelAssignment: {
+          ...workspace.settings.localModelAssignment,
+          ...patch,
+        },
+      },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setPreferLocalWhenAvailable = useCallback((preferLocalWhenAvailable: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, preferLocalWhenAvailable },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const setWakeWordEnabled = useCallback((wakeWordEnabled: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -489,6 +590,13 @@ export function useWorkspaceState() {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
       settings: { ...workspace.settings, personalityMode },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setPostPrReviewCommentsToGitHub = useCallback((postPrReviewCommentsToGitHub: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, postPrReviewCommentsToGitHub },
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
@@ -843,6 +951,12 @@ export function useWorkspaceState() {
     setMemoryNotes,
     setSystemPrompt,
     setEnabledTools,
+    setLocalOnlyMode,
+    addLocalServer,
+    removeLocalServer,
+    updateLocalServer,
+    setLocalModelAssignment,
+    setPreferLocalWhenAvailable,
     setWakeWordEnabled,
     setWakeWordPhrase,
     setSttEnabled,
@@ -851,6 +965,7 @@ export function useWorkspaceState() {
     setTtsVoiceId,
     setAutoSpeakResponses,
     setPersonalityMode,
+    setPostPrReviewCommentsToGitHub,
     clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,

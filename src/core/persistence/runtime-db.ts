@@ -93,12 +93,25 @@ export type DeviceRow = {
   label?: string | null;
   fingerprint_hash?: string | null;
   trust_state: DeviceTrustState;
+   uses_vpn?: boolean;
   pair_code?: string | null;
   pair_code_expires_at?: string | null;
   trust_key_hash?: string | null;
   consent_profile?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   last_seen_at?: string | null;
+  last_known_ipv6?: string | null;
+  last_known_mac?: string | null;
+  last_udp_port?: number | null;
+  last_seen_network_epoch?: number | null;
+  hardware_id?: string | null;
+  bios_manufacturer?: string | null;
+  bios_model?: string | null;
+  setup_state?: "pending" | "waiting_for_pairing" | "paired" | "ready" | "needs_bios_manual_step" | "error";
+  last_public_ipv6_discovered_at?: string | null;
+  last_local_broadcast?: string | null;
+  wake_method_last_success?: "tailscale_direct" | "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
+  wake_fail_count?: number | null;
 };
 
 export type DeviceSessionRow = {
@@ -118,13 +131,25 @@ export type DevicePresenceRow = {
   device_id: string;
   user_id: string;
   organization_id?: string | null;
-  status: "offline" | "booting" | "online" | "busy" | "gaming" | "sleeping" | "idle";
+  status: "offline" | "booting" | "online" | "busy" | "gaming" | "sleeping" | "idle" | "hibernated" | "unreachable";
   active_apps?: string[];
   cpu_percent?: number | null;
   ram_percent?: number | null;
   network_mode?: "mesh_direct" | "relay" | "lan" | "unknown";
   is_online: boolean;
   last_heartbeat_at?: string;
+};
+
+export type DevicePresenceSnapshotRow = {
+  device_id: string;
+  status: DevicePresenceRow["status"];
+  active_apps: string[];
+  cpu_percent: number | null;
+  ram_percent: number | null;
+  network_mode: DevicePresenceRow["network_mode"];
+  is_online: boolean;
+  last_heartbeat_at: string | null;
+  updated_at?: string | null;
 };
 
 export type NetworkPeerRow = {
@@ -141,6 +166,42 @@ export type NetworkPeerRow = {
   relay_connected?: boolean;
   eligible_for_wake?: boolean;
   metadata?: Record<string, unknown>;
+};
+
+export type DeviceWakeCandidateRow = {
+  device_id: string;
+  provider: string;
+  mac_address: string | null;
+  ipv6: string | null;
+  udp_port: number | null;
+  eligible_for_wake: boolean;
+  last_seen_at: string | null;
+};
+
+export type AiTaskStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+export type AiTaskRouting = "local" | "cloud";
+export type AiTaskCategory = "assistant" | "system_action";
+
+export type AiTaskRow = {
+  task_id?: string;
+  user_id: string;
+  device_id?: string | null;
+  prompt: string;
+  response?: string | null;
+  status?: AiTaskStatus;
+  routing?: AiTaskRouting;
+  provider?: string | null;
+  model?: string | null;
+  temperature?: number | null;
+  fallback_reason?: string | null;
+  error?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  category?: AiTaskCategory;
+  action_type?: string | null;
+  payload?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type RuntimeCapabilityRow = {
@@ -518,16 +579,29 @@ export async function upsertDevice(row: DeviceRow): Promise<DeviceRow> {
     user_id: row.user_id,
     organization_id: row.organization_id ?? null,
     platform: row.platform,
-    role: row.role,
-    label: row.label ?? null,
-    fingerprint_hash: row.fingerprint_hash ?? null,
-    trust_state: row.trust_state,
-    pair_code: row.pair_code ?? null,
-    pair_code_expires_at: row.pair_code_expires_at ?? null,
-    trust_key_hash: row.trust_key_hash ?? null,
-    consent_profile: row.consent_profile ?? {},
+      role: row.role,
+      label: row.label ?? null,
+      fingerprint_hash: row.fingerprint_hash ?? null,
+      trust_state: row.trust_state,
+      uses_vpn: row.uses_vpn ?? false,
+      pair_code: row.pair_code ?? null,
+      pair_code_expires_at: row.pair_code_expires_at ?? null,
+      trust_key_hash: row.trust_key_hash ?? null,
+      consent_profile: row.consent_profile ?? {},
     metadata: row.metadata ?? {},
     last_seen_at: row.last_seen_at ?? null,
+    last_known_ipv6: row.last_known_ipv6 ?? null,
+    last_known_mac: row.last_known_mac ?? null,
+    last_udp_port: row.last_udp_port ?? null,
+    last_seen_network_epoch: row.last_seen_network_epoch ?? null,
+    hardware_id: row.hardware_id ?? null,
+    bios_manufacturer: row.bios_manufacturer ?? null,
+    bios_model: row.bios_model ?? null,
+    setup_state: row.setup_state ?? "pending",
+    last_public_ipv6_discovered_at: row.last_public_ipv6_discovered_at ?? null,
+    last_local_broadcast: row.last_local_broadcast ?? null,
+    wake_method_last_success: row.wake_method_last_success ?? null,
+    wake_fail_count: row.wake_fail_count ?? 0,
     updated_at: new Date().toISOString(),
   };
 
@@ -571,6 +645,18 @@ export async function upsertDevice(row: DeviceRow): Promise<DeviceRow> {
           consent_profile: payload.consent_profile,
           metadata: payload.metadata,
           last_seen_at: payload.last_seen_at,
+          last_known_ipv6: payload.last_known_ipv6,
+          last_known_mac: payload.last_known_mac,
+          last_udp_port: payload.last_udp_port,
+          last_seen_network_epoch: payload.last_seen_network_epoch,
+          hardware_id: payload.hardware_id,
+          bios_manufacturer: payload.bios_manufacturer,
+          bios_model: payload.bios_model,
+          setup_state: payload.setup_state,
+          last_public_ipv6_discovered_at: payload.last_public_ipv6_discovered_at,
+          last_local_broadcast: payload.last_local_broadcast,
+          wake_method_last_success: payload.wake_method_last_success,
+          wake_fail_count: payload.wake_fail_count,
           updated_at: payload.updated_at,
         })
         .eq("id", existing.id)
@@ -615,6 +701,8 @@ export async function listDevicesForUser(params: {
   userId: string;
   organizationId?: string | null;
   trustState?: DeviceTrustState;
+  role?: DeviceRole;
+  platform?: DevicePlatform;
 }): Promise<DeviceRow[]> {
   const supabase = await getClient();
   let query = supabase
@@ -628,9 +716,26 @@ export async function listDevicesForUser(params: {
   if (params.trustState) {
     query = query.eq("trust_state", params.trustState);
   }
+  if (params.role) {
+    query = query.eq("role", params.role);
+  }
+  if (params.platform) {
+    query = query.eq("platform", params.platform);
+  }
   const { data, error } = await query;
   if (error) throw new Error(`listDevicesForUser: ${error.message}`);
   return (data ?? []) as DeviceRow[];
+}
+
+export async function listDevicePresenceByDeviceIds(deviceIds: string[]): Promise<DevicePresenceSnapshotRow[]> {
+  if (deviceIds.length === 0) return [];
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("device_presence")
+    .select("device_id,status,active_apps,cpu_percent,ram_percent,network_mode,is_online,last_heartbeat_at,updated_at")
+    .in("device_id", deviceIds);
+  if (error) throw new Error(`listDevicePresenceByDeviceIds: ${error.message}`);
+  return (data ?? []) as DevicePresenceSnapshotRow[];
 }
 
 export async function updateDeviceTrust(params: {
@@ -750,6 +855,116 @@ export async function upsertNetworkPeer(row: NetworkPeerRow): Promise<void> {
   if (error) throw new Error(`upsertNetworkPeer: ${error.message}`);
 }
 
+export async function listNetworkPeersForDevice(params: {
+  deviceId: string;
+}): Promise<NetworkPeerRow[]> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("network_peers")
+    .select("*")
+    .eq("device_id", params.deviceId)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(`listNetworkPeersForDevice: ${error.message}`);
+  return (data ?? []) as NetworkPeerRow[];
+}
+
+export async function updateDevicePresenceTimestamp(deviceId: string): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("devices")
+    .update({
+      last_seen_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", deviceId);
+  if (error) throw new Error(`updateDevicePresenceTimestamp: ${error.message}`);
+}
+
+export async function updateDeviceNetworkSnapshot(params: {
+  deviceId: string;
+  ipv6?: string | null;
+  mac?: string | null;
+  udpPort?: number | null;
+  networkEpoch?: number | null;
+}): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase
+    .from("devices")
+    .update({
+      last_known_ipv6: params.ipv6 ?? null,
+      last_known_mac: params.mac ?? null,
+      last_udp_port: params.udpPort ?? null,
+      last_seen_network_epoch: params.networkEpoch ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.deviceId);
+  if (error) throw new Error(`updateDeviceNetworkSnapshot: ${error.message}`);
+}
+
+export async function updateDeviceWakeResult(params: {
+  deviceId: string;
+  method?: "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
+  success: boolean;
+}): Promise<void> {
+  const supabase = await getClient();
+  const device = await getDeviceById(params.deviceId);
+  if (!device) {
+    throw new Error("updateDeviceWakeResult: device not found");
+  }
+  const nextFailCount = params.success ? 0 : (device.wake_fail_count ?? 0) + 1;
+  const { error } = await supabase
+    .from("devices")
+    .update({
+      wake_method_last_success: params.success ? (params.method ?? null) : (device.wake_method_last_success ?? null),
+      wake_fail_count: nextFailCount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.deviceId);
+  if (error) throw new Error(`updateDeviceWakeResult: ${error.message}`);
+}
+
+export async function listDeviceWakeCandidates(params: {
+  deviceId: string;
+}): Promise<DeviceWakeCandidateRow[]> {
+  const device = await getDeviceById(params.deviceId);
+  if (!device) return [];
+  const peers = await listNetworkPeersForDevice({ deviceId: params.deviceId });
+  const candidates: DeviceWakeCandidateRow[] = [];
+
+  const deviceMac = typeof device.last_known_mac === "string" ? device.last_known_mac : null;
+  const deviceIpv6 = typeof device.last_known_ipv6 === "string" ? device.last_known_ipv6 : null;
+  candidates.push({
+    device_id: params.deviceId,
+    provider: "device_snapshot",
+    mac_address: deviceMac,
+    ipv6: deviceIpv6,
+    udp_port: device.last_udp_port ?? null,
+    eligible_for_wake: Boolean(deviceMac || deviceIpv6),
+    last_seen_at: device.last_seen_at ?? null,
+  });
+
+  for (const peer of peers) {
+    const metadata = (peer.metadata && typeof peer.metadata === "object") ? peer.metadata as Record<string, unknown> : {};
+    const ipv6 = typeof metadata.ipv6 === "string"
+      ? metadata.ipv6
+      : (typeof peer.mesh_ip === "string" && peer.mesh_ip.includes(":") ? peer.mesh_ip : null);
+    const udpPort = typeof metadata.udpPort === "number" ? metadata.udpPort : null;
+    candidates.push({
+      device_id: params.deviceId,
+      provider: peer.provider,
+      mac_address: peer.mac_address ?? null,
+      ipv6,
+      udp_port: udpPort,
+      eligible_for_wake: Boolean(peer.eligible_for_wake),
+      last_seen_at: typeof metadata.lastSeenAt === "string" ? metadata.lastSeenAt : null,
+    });
+  }
+
+  return candidates
+    .filter((candidate) => candidate.mac_address || candidate.ipv6)
+    .sort((a, b) => Number(b.eligible_for_wake) - Number(a.eligible_for_wake));
+}
+
 export async function upsertRuntimeCapability(row: RuntimeCapabilityRow): Promise<void> {
   const supabase = await getClient();
   const { error } = await supabase
@@ -838,6 +1053,58 @@ export async function listApprovalPolicies(params: {
   const { data, error } = await query.order("created_at", { ascending: false });
   if (error) throw new Error(`listApprovalPolicies: ${error.message}`);
   return (data ?? []) as ApprovalPolicyRow[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI tasks (local worker queue)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function insertAiTask(row: AiTaskRow): Promise<AiTaskRow> {
+  const supabase = await getClient();
+  const payload = {
+    task_id: row.task_id ?? randomUUID(),
+    user_id: row.user_id,
+    device_id: row.device_id ?? null,
+    prompt: row.prompt,
+    response: row.response ?? null,
+    status: row.status ?? "pending",
+    routing: row.routing ?? "local",
+    provider: row.provider ?? null,
+    model: row.model ?? null,
+    temperature: row.temperature ?? null,
+    fallback_reason: row.fallback_reason ?? null,
+    error: row.error ?? null,
+    started_at: row.started_at ?? null,
+    completed_at: row.completed_at ?? null,
+    category: row.category ?? "assistant",
+    action_type: row.action_type ?? null,
+    payload: row.payload ?? {},
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from("ai_tasks")
+    .insert(payload)
+    .select("*")
+    .single();
+  if (error) throw new Error(`insertAiTask: ${error.message}`);
+  return data as AiTaskRow;
+}
+
+export async function listAiTasksForDevice(params: {
+  userId: string;
+  deviceId: string;
+  limit?: number;
+}): Promise<AiTaskRow[]> {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("ai_tasks")
+    .select("*")
+    .eq("user_id", params.userId)
+    .eq("device_id", params.deviceId)
+    .order("created_at", { ascending: false })
+    .limit(params.limit ?? 20);
+  if (error) throw new Error(`listAiTasksForDevice: ${error.message}`);
+  return (data ?? []) as AiTaskRow[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -26,6 +26,10 @@ const {
 } = window.jarvisApi;
 
 const authApi = window.jarvisApi.auth || {};
+const githubApi = window.jarvisApi.github || {};
+const googleApi = window.jarvisApi.google || {};
+const toolsApi = window.jarvisApi.tools || {};
+const localServerApi = window.jarvisApi.localServer || window.jarvisApiV2?.localServer || null;
 const {
 	getSession: getAccountSession,
 	refresh: refreshSessionIfNeeded,
@@ -98,20 +102,33 @@ function resolveSpeechVoice(voices, voiceId, language) {
 	return voices[0] || null;
 }
 
-function appendMessage(log, title, body, tone = 'system') {
-	const item = document.createElement('div');
-	item.className = `message ${tone}`;
+	function appendMessage(log, title, body, tone = 'system', badges = []) {
+		const item = document.createElement('div');
+		item.className = `message ${tone}`;
 
 	const heading = document.createElement('small');
 	heading.textContent = `${new Date().toLocaleTimeString()} — ${title}`;
 
-	const text = document.createElement('div');
-	text.textContent = body;
+		const text = document.createElement('div');
+		text.textContent = body;
 
-	item.append(heading, text);
-	log.prepend(item);
-	return item;
-}
+		item.append(heading, text);
+		if (Array.isArray(badges) && badges.length > 0) {
+			const badgeWrap = document.createElement('div');
+			badgeWrap.className = 'context-badges';
+			for (const badge of badges.slice(0, 4)) {
+				const value = String(badge || '').trim();
+				if (!value) continue;
+				const el = document.createElement('span');
+				el.className = 'context-badge';
+				el.textContent = value;
+				badgeWrap.appendChild(el);
+			}
+			if (badgeWrap.childElementCount > 0) item.appendChild(badgeWrap);
+		}
+		log.prepend(item);
+		return item;
+	}
 
 function setStatusDot(status) {
 	const dot = document.getElementById('status-dot');
@@ -138,13 +155,24 @@ window.addEventListener('DOMContentLoaded', () => {
 	const checkUpdatesButton = document.getElementById('check-updates');
 	const installUpdateButton = document.getElementById('install-update');
 	const updateModalBackdrop = document.getElementById('update-modal-backdrop');
+	const updateModalBadge = document.getElementById('update-modal-badge');
 	const updateModalTitle = document.getElementById('update-modal-title');
 	const updateModalSubtitle = document.getElementById('update-modal-subtitle');
 	const updateModalHighlights = document.getElementById('update-modal-highlights');
+	const updateModalMarkdown = document.getElementById('update-modal-markdown');
 	const updateModalVersion = document.getElementById('update-modal-version');
+	const updateModalSource = document.getElementById('update-modal-source');
 	const updateModalDetails = document.getElementById('update-modal-details');
+	const updateModalProgress = document.getElementById('update-modal-progress');
+	const updateProgressLabel = document.getElementById('update-progress-label');
+	const updateProgressPercent = document.getElementById('update-progress-percent');
+	const updateProgressFill = document.getElementById('update-progress-fill');
+	const updateModalError = document.getElementById('update-modal-error');
+	const updateTokenForm = document.getElementById('update-token-form');
+	const updateTokenInput = document.getElementById('update-token-input');
 	const updateModalPrimaryButton = document.getElementById('update-modal-primary');
 	const updateModalSecondaryButton = document.getElementById('update-modal-secondary');
+	const updateModalClearTokenButton = document.getElementById('update-modal-clear-token');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
 	const openBrowserTabButton = document.getElementById('open-browser-tab');
 	const commandTabButton = document.getElementById('command-tab-button');
@@ -163,6 +191,16 @@ window.addEventListener('DOMContentLoaded', () => {
 	const scheduleCron = document.getElementById('schedule-cron');
 	const scheduleAddButton = document.getElementById('schedule-add');
 	const chatModelSelect = document.getElementById('chat-model');
+	const localServerLabelInput = document.getElementById('local-server-label');
+	const localServerBaseUrlInput = document.getElementById('local-server-base-url');
+	const localServerApiTypeSelect = document.getElementById('local-server-api-type');
+	const localServerAddButton = document.getElementById('local-server-add');
+	const localServerListNode = document.getElementById('local-server-list');
+	const localChatModelSelect = document.getElementById('local-chat-model');
+	const localCodeModelSelect = document.getElementById('local-code-model');
+	const localExternalModelSelect = document.getElementById('local-external-model');
+	const localPreferEnabledToggle = document.getElementById('local-prefer-enabled');
+	const localServerSaveAssignmentButton = document.getElementById('local-server-save-assignment');
 	const sttModelSelect = document.getElementById('stt-model');
 	const ttsModelSelect = document.getElementById('tts-model');
 	const ttsVoiceProfileSelect = document.getElementById('tts-voice-profile');
@@ -186,11 +224,58 @@ window.addEventListener('DOMContentLoaded', () => {
 	const remindersList = document.getElementById('reminders-list');
 	const serverUrlInput = document.getElementById('jarvis-server-url');
 	const saveServerUrlButton = document.getElementById('save-server-url');
+	const runtimeModeSelect = document.getElementById('runtime-mode');
+	const runtimePermissionLevelSelect = document.getElementById('runtime-permission-level');
+	const remoteRuntimeApiUrlInput = document.getElementById('remote-runtime-api-url');
+	const remoteRuntimeWsUrlInput = document.getElementById('remote-runtime-ws-url');
+	const saveRuntimeConfigButton = document.getElementById('save-runtime-config');
+	const runtimeSyncKeyInput = document.getElementById('runtime-sync-key');
+	const runtimePairButton = document.getElementById('runtime-pair');
+	const runtimeRefreshStatusButton = document.getElementById('runtime-refresh-status');
+	const runtimeApplyPermissionButton = document.getElementById('runtime-apply-permission');
+	const runtimeKillSwitchButton = document.getElementById('runtime-kill-switch');
+	const runtimeStatusNode = document.getElementById('runtime-status');
+	const workspaceApp = document.querySelector('.app');
+	const viewportWelcome = document.getElementById('welcome-screen');
+	const viewportMap = document.getElementById('viewport-map');
+	const viewportRepo = document.getElementById('viewport-repo');
+	const viewportHardware = document.getElementById('viewport-hardware');
+	const viewportMapCanvas = document.getElementById('viewport-map-canvas');
+	const repoListNode = document.getElementById('repo-list');
+	const repoTreeNode = document.getElementById('repo-tree');
+	const repoPreviewNode = document.getElementById('repo-preview');
+	const hardwareCpuNode = document.getElementById('hardware-cpu');
+	const hardwareRamNode = document.getElementById('hardware-ram');
+	const hardwareTempNode = document.getElementById('hardware-temp');
+	const openSettingsModalButton = document.getElementById('open-settings-modal');
+	const settingsModal = document.getElementById('settings-modal');
+	const closeSettingsModalButton = document.getElementById('close-settings-modal');
+	const githubStatusNode = document.getElementById('github-status');
+	const githubTokenInput = document.getElementById('github-token-input');
+	const githubSaveTokenButton = document.getElementById('github-save-token');
+	const githubClearTokenButton = document.getElementById('github-clear-token');
+	const googleStatusNode = document.getElementById('google-status');
+	const googleLoginButton = document.getElementById('google-login');
+	const googleLogoutButton = document.getElementById('google-logout');
+	const googleDeviceHintNode = document.getElementById('google-device-hint');
 	let apiBaseUrl = getJarvisApiUrl();
 	let cachedSpeechVoices = [];
 	let speechVoicePromise = null;
 
 	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
+	const AGENT_STATE = {
+		IDLE: 'IDLE',
+		THINKING: 'THINKING',
+		LISTENING: 'LISTENING',
+		SPEAKING: 'SPEAKING',
+	};
+	let currentAgentState = AGENT_STATE.IDLE;
+	let visualizerEnergy = 0;
+	let inactivityTimer = null;
+	let currentViewport = 'welcome';
+	let mapWidget = null;
+	let currentRepoContext = null;
+	let googleDevicePollTimer = null;
 
 	function setMainPanelTab(tab) {
 		const settingsActive = tab === 'settings';
@@ -205,6 +290,323 @@ window.addEventListener('DOMContentLoaded', () => {
 	commandTabButton?.addEventListener('click', () => setMainPanelTab('command'));
 	settingsTabButton?.addEventListener('click', () => setMainPanelTab('settings'));
 	setMainPanelTab('command');
+
+	function switchViewport(mode) {
+		currentViewport = mode;
+		viewportWelcome?.classList.toggle('active', mode === 'welcome');
+		viewportMap?.classList.toggle('active', mode === 'map');
+		viewportRepo?.classList.toggle('active', mode === 'repo');
+		viewportHardware?.classList.toggle('active', mode === 'hardware');
+		workspaceApp?.classList.toggle('viewport-active', mode !== 'welcome');
+	}
+
+	function ensureMapWidget() {
+		if (!viewportMapCanvas) return null;
+		if (!mapWidget && window.MapWidget) {
+			mapWidget = new window.MapWidget();
+			mapWidget.init(viewportMapCanvas);
+		}
+		return mapWidget;
+	}
+
+	function extractMapPlace(text) {
+		const normalized = String(text || '').trim();
+		const explicit = normalized.match(/(?:poka[zż]\s+(?:mi\s+)?)?map[ęe]\s+(.+)/i);
+		if (explicit?.[1]) return explicit[1].trim();
+		const find = normalized.match(/znajd[źz]\s+(.+?)\s+na mapie/i);
+		return find?.[1]?.trim() || '';
+	}
+
+	function parseRepoTarget(text) {
+		const match = String(text || '').match(/(?:poka[zż]|otw[oó]rz)\s+repo(?:zytorium)?\s+([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/i);
+		if (!match?.[1]) return null;
+		const [owner, repo] = match[1].split('/');
+		return { owner, repo };
+	}
+
+	async function refreshHardwareSnapshot() {
+		if (!ipcRenderer) return;
+		try {
+			const telemetry = await ipcRenderer.invoke('get-local-telemetry');
+			const cpu = Number(telemetry?.cpu?.percent || telemetry?.cpu || 0);
+			const ram = Number(telemetry?.memory?.percent || telemetry?.ram?.percent || 0);
+			const temp = Number(telemetry?.temperature?.celsius || telemetry?.temperature || 0);
+			if (hardwareCpuNode) hardwareCpuNode.textContent = `CPU: ${cpu.toFixed(1)}%`;
+			if (hardwareRamNode) hardwareRamNode.textContent = `RAM: ${ram.toFixed(1)}%`;
+			if (hardwareTempNode) hardwareTempNode.textContent = `TEMP: ${temp.toFixed(1)}°C`;
+		} catch (error) {
+			appendMessage(log, 'Hardware', String(error?.message || error || 'hardware-read-failed'), 'error');
+		}
+	}
+
+	function renderRepoList(repos = []) {
+		if (!repoListNode) return;
+		if (!Array.isArray(repos) || repos.length === 0) {
+			repoListNode.textContent = 'Brak repozytoriów lub brak autoryzacji.';
+			return;
+		}
+		repoListNode.innerHTML = '';
+		repos.slice(0, 100).forEach((repo) => {
+			const row = document.createElement('button');
+			row.type = 'button';
+			row.className = 'secondary sm';
+			row.style.width = '100%';
+			row.style.marginBottom = '6px';
+			row.textContent = repo.full_name || repo.name;
+			row.addEventListener('click', async () => {
+				currentRepoContext = {
+					owner: repo.owner?.login || currentRepoContext?.owner,
+					repo: repo.name,
+				};
+				await loadRepoTree(currentRepoContext);
+			});
+			repoListNode.appendChild(row);
+		});
+	}
+
+	async function loadRepoTree(target) {
+		if (!target?.owner || !target?.repo || !githubApi.getTree) return;
+		switchViewport('repo');
+		const tree = await githubApi.getTree(target);
+		if (repoTreeNode) {
+			repoTreeNode.innerHTML = '';
+			(tree || []).filter((entry) => entry.type === 'blob').slice(0, 200).forEach((entry) => {
+				const item = document.createElement('button');
+				item.type = 'button';
+				item.className = 'secondary sm';
+				item.style.display = 'block';
+				item.style.width = '100%';
+				item.style.marginBottom = '6px';
+				item.textContent = entry.path;
+				item.addEventListener('click', async () => {
+					const file = await githubApi.readFile({
+						owner: target.owner,
+						repo: target.repo,
+						path: entry.path,
+					});
+					if (repoPreviewNode) repoPreviewNode.textContent = file?.content || '';
+				});
+				repoTreeNode.appendChild(item);
+			});
+		}
+	}
+
+	async function refreshGitHubStatus() {
+		if (!githubApi.getStatus || !githubStatusNode) return;
+		const status = await githubApi.getStatus();
+		if (status?.connected) {
+			githubStatusNode.textContent = `GitHub: connected as ${status.login || 'user'}`;
+			const repos = await githubApi.listRepos({ perPage: 30 });
+			renderRepoList(repos);
+			return;
+		}
+		githubStatusNode.textContent = status?.hasToken
+			? `GitHub: token invalid (${status?.error || 'unknown'})`
+			: 'GitHub: not configured';
+	}
+
+	async function refreshGoogleStatus() {
+		if (!googleApi.getStatus || !googleStatusNode) return;
+		const status = await googleApi.getStatus();
+		googleStatusNode.textContent = status?.connected
+			? 'Google: connected'
+			: `Google: not connected${status?.error ? ` (${status.error})` : ''}`;
+	}
+
+	async function handleIntegratedCommands(text) {
+		const normalized = String(text || '').trim();
+		if (!normalized) return false;
+
+		if (/status systemu|jak dzia[łl]a m[oó]j komputer/i.test(normalized)) {
+			switchViewport('hardware');
+			await refreshHardwareSnapshot();
+			appendMessage(log, 'Hardware', 'Showing system telemetry snapshot.', 'system');
+			return true;
+		}
+
+		if (/map[ęe]|na mapie/i.test(normalized)) {
+			const place = extractMapPlace(normalized);
+			if (!place) return false;
+			const widget = ensureMapWidget();
+			switchViewport('map');
+			try {
+				const loc = await widget?.goTo(place);
+				appendMessage(log, 'Map', `Centered map on ${loc?.label || place}.`, 'system');
+			} catch (error) {
+				appendMessage(log, 'Map', String(error?.message || error || 'map-search-failed'), 'error');
+			}
+			return true;
+		}
+
+		const repoTarget = parseRepoTarget(normalized);
+		if (repoTarget) {
+			currentRepoContext = repoTarget;
+			try {
+				await loadRepoTree(repoTarget);
+				appendMessage(log, 'GitHub', `Opened ${repoTarget.owner}/${repoTarget.repo}.`, 'system');
+			} catch (error) {
+				appendMessage(log, 'GitHub', String(error?.message || error || 'repo-open-failed'), 'error');
+			}
+			return true;
+		}
+
+		const fileMatch = normalized.match(/przeczytaj plik\s+(.+)/i);
+		if (fileMatch?.[1] && currentRepoContext && githubApi.readFile) {
+			switchViewport('repo');
+			try {
+				const file = await githubApi.readFile({
+					owner: currentRepoContext.owner,
+					repo: currentRepoContext.repo,
+					path: fileMatch[1].trim(),
+				});
+				if (repoPreviewNode) repoPreviewNode.textContent = file?.content || '';
+				appendMessage(log, 'GitHub', `Loaded file ${fileMatch[1].trim()}.`, 'system');
+			} catch (error) {
+				appendMessage(log, 'GitHub', String(error?.message || error || 'file-read-failed'), 'error');
+			}
+			return true;
+		}
+
+		const commitsMatch = normalized.match(/sprawd[źz]\s+ostatnie\s+commity(?:\s+([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+))?/i);
+		if (commitsMatch && githubApi.listCommits) {
+			const target = commitsMatch[1] ? parseRepoTarget(`pokaż repo ${commitsMatch[1]}`) : currentRepoContext;
+			if (!target) return false;
+			switchViewport('repo');
+			try {
+				const commits = await githubApi.listCommits(target);
+				if (repoPreviewNode) {
+					repoPreviewNode.textContent = (commits || []).slice(0, 10).map((item) => {
+						const sha = String(item?.sha || '').slice(0, 7);
+						const msg = item?.commit?.message || '';
+						const author = item?.commit?.author?.name || '';
+						return `${sha} ${author}: ${msg}`;
+					}).join('\n');
+				}
+			} catch (error) {
+				appendMessage(log, 'GitHub', String(error?.message || error || 'commit-read-failed'), 'error');
+			}
+			return true;
+		}
+
+		const launchMatch = normalized.match(/uruchom\s+(.+)/i);
+		if (launchMatch?.[1]) {
+			const name = launchMatch[1].trim().toLowerCase();
+			const gameHints = {
+				steam: { platform: 'steam', id: 'cs2' },
+				roblox: { platform: 'roblox', id: 'default' },
+				epic: { platform: 'epic', id: 'fortnite' },
+				battle: { platform: 'battlenet', id: 'wow' },
+			};
+			try {
+				const known = Object.entries(gameHints).find(([key]) => name.includes(key))?.[1];
+				if (known && toolsApi.launchGame) {
+					await toolsApi.launchGame(known);
+					appendMessage(log, 'Launcher', `Launched ${name} through game protocol.`, 'system');
+					return true;
+				}
+				if (toolsApi.launchApp) {
+					const result = await toolsApi.launchApp({ appName: name });
+					if (result?.ok) {
+						appendMessage(log, 'Launcher', `Launched ${result.appName}.`, 'system');
+						return true;
+					}
+					appendMessage(log, 'Launcher', `App not found: ${name}`, 'error');
+					return true;
+				}
+			} catch (error) {
+				appendMessage(log, 'Launcher', String(error?.message || error || 'app-launch-failed'), 'error');
+				return true;
+			}
+		}
+
+		if (/jaki mam plan na dzi[sś]/i.test(normalized) && googleApi.getCalendarToday) {
+			try {
+				const events = await googleApi.getCalendarToday();
+				const summary = (events || []).slice(0, 10).map((item) => {
+					const start = item?.start?.dateTime || item?.start?.date || '';
+					return `• ${start} ${item?.summary || '(untitled)'}`;
+				}).join('\n');
+				appendMessage(log, 'Google Calendar', summary || 'No events for today.', 'system');
+			} catch (error) {
+				appendMessage(log, 'Google Calendar', String(error?.message || error || 'calendar-read-failed'), 'error');
+			}
+			return true;
+		}
+
+		return false;
+	}
+
+	openSettingsModalButton?.addEventListener('click', () => {
+		if (settingsModal) settingsModal.hidden = false;
+	});
+
+	closeSettingsModalButton?.addEventListener('click', () => {
+		if (settingsModal) settingsModal.hidden = true;
+	});
+
+	settingsModal?.addEventListener('click', (event) => {
+		if (event.target === settingsModal) settingsModal.hidden = true;
+	});
+
+	githubSaveTokenButton?.addEventListener('click', async () => {
+		try {
+			const token = githubTokenInput?.value?.trim();
+			await githubApi.setToken?.(token);
+			if (githubTokenInput) githubTokenInput.value = '';
+			await refreshGitHubStatus();
+			appendMessage(log, 'GitHub', 'Token saved securely.', 'system');
+		} catch (error) {
+			appendMessage(log, 'GitHub', String(error?.message || error || 'github-token-save-failed'), 'error');
+		}
+	});
+
+	githubClearTokenButton?.addEventListener('click', async () => {
+		try {
+			await githubApi.clearToken?.();
+			await refreshGitHubStatus();
+			appendMessage(log, 'GitHub', 'Token removed.', 'system');
+		} catch (error) {
+			appendMessage(log, 'GitHub', String(error?.message || error || 'github-token-clear-failed'), 'error');
+		}
+	});
+
+	googleLoginButton?.addEventListener('click', async () => {
+		try {
+			const flow = await googleApi.loginStart?.();
+			if (googleDeviceHintNode) {
+				googleDeviceHintNode.textContent = `Wejdź na ${flow?.verification_url || flow?.verification_uri || ''} i wpisz kod ${flow?.user_code || ''}`;
+			}
+			if (googleDevicePollTimer) clearInterval(googleDevicePollTimer);
+			googleDevicePollTimer = setInterval(async () => {
+				try {
+					await googleApi.loginPoll?.({ deviceCode: flow?.device_code });
+					if (googleDeviceHintNode) googleDeviceHintNode.textContent = 'Google login completed.';
+					if (googleDevicePollTimer) clearInterval(googleDevicePollTimer);
+					googleDevicePollTimer = null;
+					await refreshGoogleStatus();
+				} catch (error) {
+					const message = String(error?.message || error || '');
+					if (!/authorization_pending|slow_down/.test(message)) {
+						if (googleDeviceHintNode) googleDeviceHintNode.textContent = message;
+						if (googleDevicePollTimer) clearInterval(googleDevicePollTimer);
+						googleDevicePollTimer = null;
+					}
+				}
+			}, Math.max(2, Number(flow?.interval || 5)) * 1000);
+		} catch (error) {
+			appendMessage(log, 'Google', String(error?.message || error || 'google-login-start-failed'), 'error');
+		}
+	});
+
+	googleLogoutButton?.addEventListener('click', async () => {
+		try {
+			await googleApi.logout?.();
+			if (googleDeviceHintNode) googleDeviceHintNode.textContent = '';
+			await refreshGoogleStatus();
+		} catch (error) {
+			appendMessage(log, 'Google', String(error?.message || error || 'google-logout-failed'), 'error');
+		}
+	});
 
 	const defaultVoiceSettings = {
 		chatModel: chatModelSelect?.value || 'auto-smart',
@@ -247,6 +649,14 @@ window.addEventListener('DOMContentLoaded', () => {
 	let speechToTextActive = false;
 	let speechPlaybackActive = false;
 	let voiceSettings = readVoiceSettings();
+	let desktopLocalServers = [];
+	let desktopLocalAssignment = {
+		chatModelId: null,
+		codeModelId: null,
+		externalApiModelId: null,
+		serverId: null,
+		preferLocalWhenAvailable: false,
+	};
 
 	function applyVoiceSettings(nextSettings, { persist = true } = {}) {
 		voiceSettings = { ...defaultVoiceSettings, ...nextSettings };
@@ -275,13 +685,217 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (persist) writeVoiceSettings(voiceSettings);
 	}
 
-	applyVoiceSettings(voiceSettings, { persist: false });
+	function localAssignmentValue(role) {
+		if (!desktopLocalAssignment.serverId) return '';
+		const modelId = desktopLocalAssignment[role];
+		if (!modelId) return '';
+		return `${desktopLocalAssignment.serverId}::${modelId}`;
+	}
 
-	function setVoiceVisualizer(state) {
+	function fillLocalModelSelect(selectNode, selectedValue) {
+		if (!selectNode) return;
+		const entries = ['<option value="">Use cloud auto-router</option>'];
+		for (const server of desktopLocalServers) {
+			if (!server?.enabled) continue;
+			const models = Array.isArray(server.discoveredModels) ? server.discoveredModels : [];
+			for (const model of models) {
+				const value = `${server.id}::${model}`;
+				const selected = value === selectedValue ? ' selected' : '';
+				entries.push(`<option value="${value.replace(/"/g, '&quot;')}"${selected}>${server.label} · ${model}</option>`);
+			}
+		}
+		selectNode.innerHTML = entries.join('');
+	}
+
+	function renderLocalServers() {
+		if (localServerListNode) {
+			if (!desktopLocalServers.length) {
+				localServerListNode.textContent = 'No local servers configured.';
+			} else {
+				localServerListNode.innerHTML = desktopLocalServers.map((server) => {
+					const models = Array.isArray(server.discoveredModels) && server.discoveredModels.length
+						? server.discoveredModels.join(', ')
+						: 'no scanned models';
+					return `
+						<div style="border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;margin-bottom:8px;">
+							<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+								<div>
+									<div style="font-weight:600;">${server.label}</div>
+									<div style="font-size:11px;opacity:.8;">${server.baseUrl} · ${server.apiType}</div>
+									<div style="font-size:11px;opacity:.7;">${models}</div>
+								</div>
+								<div style="display:flex;gap:6px;flex-wrap:wrap;">
+									<button type="button" class="secondary sm" data-local-scan="${server.id}">Scan</button>
+									<button type="button" class="secondary sm" data-local-toggle="${server.id}">${server.enabled ? 'Disable' : 'Enable'}</button>
+									<button type="button" class="danger sm" data-local-remove="${server.id}">Remove</button>
+								</div>
+							</div>
+						</div>
+					`;
+				}).join('');
+			}
+		}
+
+		fillLocalModelSelect(localChatModelSelect, localAssignmentValue('chatModelId'));
+		fillLocalModelSelect(localCodeModelSelect, localAssignmentValue('codeModelId'));
+		fillLocalModelSelect(localExternalModelSelect, localAssignmentValue('externalApiModelId'));
+		if (localPreferEnabledToggle) {
+			localPreferEnabledToggle.checked = Boolean(desktopLocalAssignment.preferLocalWhenAvailable);
+		}
+	}
+
+	async function loadLocalServersState() {
+		if (!localServerApi) return;
+		try {
+			const [listRes, assignmentRes] = await Promise.all([
+				localServerApi.list(),
+				localServerApi.getModelAssignment(),
+			]);
+			desktopLocalServers = Array.isArray(listRes?.servers) ? listRes.servers : [];
+			desktopLocalAssignment = {
+				chatModelId: assignmentRes?.localModelAssignment?.chatModelId || null,
+				codeModelId: assignmentRes?.localModelAssignment?.codeModelId || null,
+				externalApiModelId: assignmentRes?.localModelAssignment?.externalApiModelId || null,
+				serverId: assignmentRes?.localModelAssignment?.serverId || null,
+				preferLocalWhenAvailable: Boolean(assignmentRes?.preferLocalWhenAvailable),
+			};
+			renderLocalServers();
+		} catch (error) {
+			appendMessage(log, 'Local servers', `Failed to load local servers: ${error?.message || error}`, 'error');
+		}
+	}
+
+	applyVoiceSettings(voiceSettings, { persist: false });
+	void loadLocalServersState();
+	localServerAddButton?.addEventListener('click', async () => {
+		if (!localServerApi) return;
+		const label = String(localServerLabelInput?.value || '').trim() || 'Local server';
+		const baseUrl = String(localServerBaseUrlInput?.value || '').trim();
+		const apiType = String(localServerApiTypeSelect?.value || 'ollama');
+		if (!baseUrl) {
+			appendMessage(log, 'Local servers', 'Base URL is required.', 'error');
+			return;
+		}
+		const result = await localServerApi.add({ label, baseUrl, apiType, enabled: true });
+		if (!result?.ok) {
+			appendMessage(log, 'Local servers', `Failed to add server: ${result?.reason || result?.error || 'unknown error'}`, 'error');
+			return;
+		}
+		if (localServerLabelInput) localServerLabelInput.value = '';
+		await loadLocalServersState();
+	});
+
+	localServerListNode?.addEventListener('click', async (event) => {
+		if (!localServerApi) return;
+		const target = event.target;
+		if (!(target instanceof HTMLElement)) return;
+		const scanId = target.getAttribute('data-local-scan');
+		if (scanId) {
+			const scanResult = await localServerApi.scan(scanId);
+			if (!scanResult?.ok) {
+				appendMessage(log, 'Local servers', `Scan failed: ${scanResult?.error || scanResult?.reason || 'unknown error'}`, 'error');
+			}
+			await loadLocalServersState();
+			return;
+		}
+		const toggleId = target.getAttribute('data-local-toggle');
+		if (toggleId) {
+			const server = desktopLocalServers.find((entry) => entry.id === toggleId);
+			if (!server) return;
+			await localServerApi.update({ id: toggleId, patch: { enabled: !server.enabled } });
+			await loadLocalServersState();
+			return;
+		}
+		const removeId = target.getAttribute('data-local-remove');
+		if (removeId) {
+			await localServerApi.remove(removeId);
+			await loadLocalServersState();
+		}
+	});
+
+	localServerSaveAssignmentButton?.addEventListener('click', async () => {
+		if (!localServerApi) return;
+		const parseSelection = (value) => {
+			const raw = String(value || '');
+			if (!raw.includes('::')) return { serverId: null, modelId: null };
+			const [serverId, modelId] = raw.split('::');
+			return { serverId: serverId || null, modelId: modelId || null };
+		};
+		const chat = parseSelection(localChatModelSelect?.value);
+		const code = parseSelection(localCodeModelSelect?.value);
+		const external = parseSelection(localExternalModelSelect?.value);
+		const resolvedServerId = chat.serverId || code.serverId || external.serverId || null;
+		const result = await localServerApi.setModelAssignment({
+			localModelAssignment: {
+				serverId: resolvedServerId,
+				chatModelId: chat.modelId,
+				codeModelId: code.modelId,
+				externalApiModelId: external.modelId,
+			},
+			preferLocalWhenAvailable: Boolean(localPreferEnabledToggle?.checked),
+		});
+		if (!result?.ok) {
+			appendMessage(log, 'Local servers', `Failed to save local routing: ${result?.reason || result?.error || 'unknown error'}`, 'error');
+			return;
+		}
+		appendMessage(log, 'Local servers', 'Local model assignment saved.', 'system');
+		await loadLocalServersState();
+	});
+	setVoiceVisualizer('idle');
+	['mousemove', 'keydown', 'click', 'focus'].forEach((eventName) => {
+		window.addEventListener(eventName, () => touchAgentActivity(), { passive: true });
+	});
+
+	function setAgentState(nextState) {
+		const normalized = String(nextState || '').toUpperCase();
+		const target = AGENT_STATE[normalized] || AGENT_STATE.IDLE;
+		currentAgentState = target;
+		if (typeof document !== 'undefined' && document.body) {
+			document.body.dataset.agentState = target.toLowerCase();
+		}
+	}
+
+	function touchAgentActivity() {
+		if (voiceVisualizer) voiceVisualizer.classList.remove('dimmed');
+		if (inactivityTimer) clearTimeout(inactivityTimer);
+		inactivityTimer = setTimeout(() => {
+			if (voiceVisualizer && currentAgentState === AGENT_STATE.IDLE) {
+				voiceVisualizer.classList.add('dimmed');
+			}
+		}, 10_000);
+	}
+
+	function applyVisualizerEnergy(nextEnergy = 0) {
 		if (!voiceVisualizer) return;
-		voiceVisualizer.classList.remove('listening', 'speaking');
-		if (state === 'listening') voiceVisualizer.classList.add('listening');
-		if (state === 'speaking') voiceVisualizer.classList.add('speaking');
+		const clamped = Math.max(0, Math.min(1, Number(nextEnergy) || 0));
+		visualizerEnergy = (visualizerEnergy * 0.72) + (clamped * 0.28);
+		voiceVisualizer.style.setProperty('--voice-energy', visualizerEnergy.toFixed(4));
+	}
+
+	function setVoiceVisualizer(state, options = {}) {
+		if (!voiceVisualizer) return;
+		voiceVisualizer.classList.remove('listening', 'speaking', 'thinking');
+		if (state === 'listening') {
+			voiceVisualizer.classList.add('listening');
+			setAgentState(AGENT_STATE.LISTENING);
+			touchAgentActivity();
+			return;
+		}
+		if (state === 'speaking') {
+			voiceVisualizer.classList.add('speaking');
+			setAgentState(AGENT_STATE.SPEAKING);
+			touchAgentActivity();
+			return;
+		}
+		if (state === 'thinking') {
+			voiceVisualizer.classList.add('thinking');
+			setAgentState(AGENT_STATE.THINKING);
+			touchAgentActivity();
+			return;
+		}
+		setAgentState(AGENT_STATE.IDLE);
+		if (options.resetEnergy !== false) applyVisualizerEnergy(0);
+		touchAgentActivity();
 	}
 
 	function readSpeechVoices() {
@@ -437,8 +1051,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	function updateAutoUpdateStatus(payload) {
 		if (!updateStatusNode) return;
-
-		const detail = payload?.detail ? `${payload.status}: ${payload.detail}` : payload?.status || 'idle';
+		const normalizedStatus = String(payload?.status || 'idle').toLowerCase();
+		const reason = String(payload?.reason || '').toLowerCase();
+		let detail = payload?.detail ? `${payload.status}: ${payload.detail}` : payload?.status || 'idle';
+		if (normalizedStatus === 'error' || normalizedStatus === 'unavailable') {
+			if (reason.includes('auth') || reason.includes('permission')) {
+				detail = 'Updater: authentication is missing or invalid for private release feed.';
+			} else if (reason.includes('metadata')) {
+				detail = 'Updater: release metadata is missing or invalid.';
+			} else if (reason.includes('network') || reason.includes('offline')) {
+				detail = 'Updater: feed unavailable due to network reachability.';
+			}
+		}
 		const reasonLine = payload?.reason ? `\nreason: ${payload.reason}` : '';
 		updateStatusNode.textContent = `${detail}${reasonLine}`;
 
@@ -466,9 +1090,19 @@ window.addEventListener('DOMContentLoaded', () => {
 				mode: 'available',
 				payload,
 			});
+		} else if (payload?.status === 'downloading') {
+			showUpdateModal({
+				mode: 'downloading',
+				payload,
+			});
 		} else if (payload?.status === 'install-ready') {
 			showUpdateModal({
 				mode: 'install-ready',
+				payload,
+			});
+		} else if (payload?.status === 'error' || payload?.status === 'unavailable') {
+			showUpdateModal({
+				mode: payload?.requiresTokenSetup ? 'auth-required' : 'error',
 				payload,
 			});
 		}
@@ -504,11 +1138,28 @@ window.addEventListener('DOMContentLoaded', () => {
 		const version = String(payload?.version || '').trim();
 		if (version) {
 			updateModalVersion.textContent = `Version ${version}`;
+			if (updateModalSource) {
+				const source = String(payload?.releaseNotes?.source || 'unknown');
+				updateModalSource.textContent = `Release notes source: ${source}`;
+			}
 			if (updateModalDetails) updateModalDetails.hidden = false;
 			return;
 		}
 		updateModalVersion.textContent = 'Version details unavailable';
+		if (updateModalSource) updateModalSource.textContent = '';
 		if (updateModalDetails) updateModalDetails.hidden = true;
+	}
+
+	function renderUpdateMarkdown(payload) {
+		if (!updateModalMarkdown) return;
+		const markdown = String(payload?.releaseNotes?.markdown || '').trim();
+		if (!markdown) {
+			updateModalMarkdown.hidden = true;
+			updateModalMarkdown.textContent = '';
+			return;
+		}
+		updateModalMarkdown.hidden = false;
+		updateModalMarkdown.textContent = markdown;
 	}
 
 	function closeUpdateModal() {
@@ -522,14 +1173,67 @@ window.addEventListener('DOMContentLoaded', () => {
 
 		updateModalBackdrop.hidden = false;
 		updateModalBackdrop.dataset.mode = mode;
+		if (updateModalBadge) {
+			updateModalBadge.textContent = mode === 'auth-required' ? 'SECURE' : 'NEW';
+		}
 		renderUpdateHighlights(payload);
+		renderUpdateMarkdown(payload);
 		setUpdateModalVersion(payload);
+		if (updateModalProgress) updateModalProgress.hidden = true;
+		if (updateModalError) {
+			updateModalError.hidden = true;
+			updateModalError.textContent = '';
+		}
+		if (updateTokenForm) updateTokenForm.hidden = true;
+		if (updateModalClearTokenButton) updateModalClearTokenButton.hidden = true;
+		updateModalSecondaryButton.hidden = false;
+		updateModalPrimaryButton.disabled = false;
 
 		if (mode === 'install-ready') {
 			updateModalTitle.textContent = 'Restart AssistantX to update';
 			updateModalSubtitle.textContent = 'The update has been downloaded and is ready to install.';
 			updateModalPrimaryButton.textContent = 'Restart now';
 			updateModalSecondaryButton.textContent = 'Later';
+			return;
+		}
+
+		if (mode === 'downloading') {
+			const progress = Math.max(0, Math.min(100, Number(payload?.downloadProgress || 0)));
+			updateModalTitle.textContent = 'Downloading AssistantX update';
+			updateModalSubtitle.textContent = 'Please keep AssistantX open while the update downloads.';
+			updateModalPrimaryButton.textContent = 'Downloading…';
+			updateModalPrimaryButton.disabled = true;
+			updateModalSecondaryButton.textContent = 'Hide';
+			if (updateModalProgress) updateModalProgress.hidden = false;
+			if (updateProgressLabel) updateProgressLabel.textContent = 'Downloading…';
+			if (updateProgressPercent) updateProgressPercent.textContent = `${Math.round(progress)}%`;
+			if (updateProgressFill) updateProgressFill.style.width = `${Math.round(progress)}%`;
+			return;
+		}
+
+		if (mode === 'error') {
+			updateModalTitle.textContent = 'AssistantX update error';
+			updateModalSubtitle.textContent = 'The updater could not complete this action.';
+			updateModalPrimaryButton.textContent = 'Try again';
+			updateModalSecondaryButton.textContent = 'Later';
+			if (updateModalError) {
+				updateModalError.hidden = false;
+				updateModalError.textContent = payload?.detail || 'Unknown update error.';
+			}
+			return;
+		}
+
+		if (mode === 'auth-required') {
+			updateModalTitle.textContent = 'Integrate Private Updates';
+			updateModalSubtitle.textContent = 'Set your GitHub token to securely access private AssistantX releases.';
+			updateModalPrimaryButton.textContent = 'Save token';
+			updateModalSecondaryButton.textContent = 'Later';
+			if (updateTokenForm) updateTokenForm.hidden = false;
+			if (updateModalError) {
+				updateModalError.hidden = false;
+				updateModalError.textContent = payload?.detail || 'Private update token is required.';
+			}
+			if (updateModalClearTokenButton) updateModalClearTokenButton.hidden = false;
 			return;
 		}
 
@@ -540,12 +1244,17 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	// ── Prompt submission ────────────────────────────────────────────────────
-	function submitPrompt() {
+	async function submitPrompt() {
 		const text = input.value.trim();
 		if (!text) return;
 		voiceGateway?.interrupt?.('new-prompt');
 		if (typeof window !== 'undefined' && window.speechSynthesis) {
 			window.speechSynthesis.cancel();
+		}
+		const handled = await handleIntegratedCommands(text);
+		if (handled) {
+			input.value = '';
+			return;
 		}
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
 		appendMessage(log, 'Prompt queued', text, 'system');
@@ -558,8 +1267,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		submitPrompt();
 	}
 
-	send.addEventListener('click', submitPrompt);
-	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPrompt(); });
+	send.addEventListener('click', () => { void submitPrompt(); });
+	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') void submitPrompt(); });
 
 	function startSpeechToText({ autoSubmit = false } = {}) {
 		if (sidecarConnected && sidecar) {
@@ -860,6 +1569,19 @@ window.addEventListener('DOMContentLoaded', () => {
 			(voiceGateway || sidecar).setListeningForCommand(true);
 		});
 
+		sidecar.on('rms_level', ({ source, rms }) => {
+			const scaled = Math.min(1, Math.max(0, Number(rms || 0) * 5.25));
+			applyVisualizerEnergy(scaled);
+			if (source === 'mic' && currentAgentState === AGENT_STATE.IDLE && scaled > 0.02) {
+				setVoiceVisualizer('listening');
+				return;
+			}
+			if (source === 'tts' && currentAgentState !== AGENT_STATE.SPEAKING && scaled > 0.02) {
+				setVoiceVisualizer('speaking');
+			}
+			if (scaled > 0.01) touchAgentActivity();
+		});
+
 		sidecar.on('stt_result', ({ text, isFinal }) => {
 			if (!text) return;
 			input.value = text;
@@ -975,6 +1697,26 @@ window.addEventListener('DOMContentLoaded', () => {
 			);
 		});
 
+		sidecar.on('memory_search_result', ({ results }) => {
+			const hitCount = Array.isArray(results) ? results.length : 0;
+			if (hitCount > 0) {
+				appendMessage(log, 'Context', `Memory retrieval found ${hitCount} relevant items.`, 'system', ['context:memory']);
+			}
+		});
+
+		sidecar.on('tool_result', ({ tool, ok, results }) => {
+			if (tool !== 'web_search') return;
+			const count = Array.isArray(results) ? results.length : 0;
+			const tone = ok ? 'system' : 'error';
+			appendMessage(
+				log,
+				'Context',
+				ok ? `Web context retrieved (${count} results).` : 'Web context retrieval failed.',
+				tone,
+				['context:web'],
+			);
+		});
+
 		function syncSidecarConnection(status) {
 			const normalizedStatus = String(status || 'unknown').toLowerCase();
 			if (normalizedStatus === 'running') {
@@ -1001,6 +1743,11 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 		voiceGateway?.on('route', ({ mode }) => {
 			if (mode) appendMessage(log, 'Voice route', `Routing via ${mode}`, 'system');
+		});
+		voiceGateway?.on('rms_level', ({ rms }) => {
+			const scaled = Math.min(1, Math.max(0, Number(rms || 0) * 5.25));
+			applyVisualizerEnergy(scaled);
+			if (scaled > 0.01) touchAgentActivity();
 		});
 		voiceGateway?.on('fallback_required', () => {
 			appendMessage(log, 'Voice gateway', 'Falling back to browser speech APIs.', 'system');
@@ -1160,6 +1907,20 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 		}).catch(() => null);
 
+		ipcRenderer.invoke('updater:get-auth-status').then((authState) => {
+			if (authState?.required && !authState?.available) {
+				showUpdateModal({
+					mode: 'auth-required',
+					payload: {
+						status: 'error',
+						detail: 'Private update token is required before checking for updates.',
+						releaseNotes: {},
+						requiresTokenSetup: true,
+					},
+				});
+			}
+		}).catch(() => null);
+
 		ipcRenderer.on('desktop-health', (payload) => {
 			const overall = String(payload?.overall || 'unknown');
 			const componentList = Object.entries(payload?.components || {})
@@ -1178,6 +1939,18 @@ window.addEventListener('DOMContentLoaded', () => {
 			const result = await ipcRenderer.invoke('check-for-updates');
 			if (result?.ok === false && result.reason === 'not-packaged') {
 				appendMessage(log, 'Updater', 'Running in dev mode — download and install the EXE to get automatic updates.', 'system');
+				return;
+			}
+			if (result?.ok === false && (result.reason === 'updater-token-missing' || result.reason === 'updater-token-error')) {
+				showUpdateModal({
+					mode: 'auth-required',
+					payload: {
+						status: 'error',
+						detail: 'Configure your private update token to continue.',
+						releaseNotes: {},
+						requiresTokenSetup: true,
+					},
+				});
 			}
 		});
 	}
@@ -1187,6 +1960,34 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (!snapshot) return;
 			appendMessage(log, 'Desktop diagnostics', `Startup status: ${snapshot.overall || 'unknown'}`, snapshot.overall === 'unavailable' ? 'error' : 'system');
 		}).catch(() => null);
+
+		if (typeof window.jarvisApi?.checkLocalAiSetup === 'function') {
+			window.jarvisApi.checkLocalAiSetup().then((state) => {
+				if (state?.ollama_available) {
+					appendMessage(log, 'Local AI', 'Ollama is ready. GPU-local routing enabled.', 'system');
+					return;
+				}
+				const missingModels = Array.isArray(state?.missing_models) ? state.missing_models : [];
+				const readyProviders = Object.entries(state?.cloud?.providers || {})
+					.filter(([, provider]) => Boolean(provider?.ready))
+					.map(([name]) => name);
+				if (state?.ollama_healthy && missingModels.length > 0) {
+					appendMessage(
+						log,
+						'Local AI',
+						`Ollama is reachable but missing required models: ${missingModels.join(', ')}. Running cloud fallback (${readyProviders.join(', ') || 'no cloud provider keys detected'}).`,
+						'system',
+					);
+					return;
+				}
+				appendMessage(
+					log,
+					'Local AI',
+					`Ollama not detected. Cloud fallback is active (${readyProviders.join(', ') || 'no cloud provider keys detected'}). Run "npm run setup:local-ai" in jarvis/desktop or use setup:install-local IPC.`,
+					'system',
+				);
+			}).catch(() => null);
+		}
 
 		ipcRenderer.invoke('get-local-telemetry').then((telemetry) => {
 			if (!telemetry?.sidecar) return;
@@ -1236,6 +2037,31 @@ window.addEventListener('DOMContentLoaded', () => {
 				return;
 			}
 
+			if (mode === 'auth-required') {
+				const token = String(updateTokenInput?.value || '').trim();
+				if (!token) {
+					appendMessage(log, 'Updater', 'Token is required to access private updates.', 'error');
+					return;
+				}
+				updateModalPrimaryButton.disabled = true;
+				const result = await ipcRenderer.invoke('updater:set-token', token);
+				updateModalPrimaryButton.disabled = false;
+				if (!result?.ok) {
+					appendMessage(log, 'Updater', `Token save failed: ${result?.reason || 'unknown error'}`, 'error');
+					return;
+				}
+				if (updateTokenInput) updateTokenInput.value = '';
+				appendMessage(log, 'Updater', 'Private update token saved securely.', 'system');
+				closeUpdateModal();
+				await ipcRenderer.invoke('check-for-updates');
+				return;
+			}
+
+			if (mode === 'error') {
+				await ipcRenderer.invoke('check-for-updates');
+				return;
+			}
+
 			updateModalPrimaryButton.disabled = true;
 			const result = await ipcRenderer.invoke('download-update');
 			updateModalPrimaryButton.disabled = false;
@@ -1248,12 +2074,26 @@ window.addEventListener('DOMContentLoaded', () => {
 
 		updateModalSecondaryButton.addEventListener('click', async () => {
 			const mode = updateModalBackdrop?.dataset?.mode || 'available';
-			const reason = mode === 'install-ready' ? 'restart-later' : 'later';
-			await ipcRenderer.invoke('defer-update', {
-				reason,
-				source: 'renderer-modal',
-			});
+			if (mode === 'available' || mode === 'install-ready' || mode === 'deferred') {
+				const reason = mode === 'install-ready' ? 'restart-later' : 'later';
+				await ipcRenderer.invoke('defer-update', {
+					reason,
+					source: 'renderer-modal',
+				});
+			}
 			closeUpdateModal();
+		});
+	}
+
+	if (updateModalClearTokenButton && ipcRenderer) {
+		updateModalClearTokenButton.addEventListener('click', async () => {
+			const result = await ipcRenderer.invoke('updater:clear-token');
+			if (!result?.ok) {
+				appendMessage(log, 'Updater', `Token clear failed: ${result?.reason || 'unknown error'}`, 'error');
+				return;
+			}
+			if (updateTokenInput) updateTokenInput.value = '';
+			appendMessage(log, 'Updater', 'Private update token removed.', 'system');
 		});
 	}
 
@@ -1274,7 +2114,14 @@ window.addEventListener('DOMContentLoaded', () => {
 			const [kind, payload] = value.split(':', 2);
 
 			if (kind === 'open') {
-				void executeStructuredCommand({ command: 'openApp', app: payload }, { source: 'local', origin: 'desktop' });
+				if (payload === 'roblox' || payload === 'steam') {
+					const game = payload === 'roblox'
+						? { platform: 'roblox', id: 'default' }
+						: { platform: 'steam', id: 'cs2' };
+					void toolsApi.launchGame?.(game);
+				} else {
+					void executeStructuredCommand({ command: 'openApp', app: payload }, { source: 'local', origin: 'desktop' });
+				}
 				appendMessage(log, 'Quick action', `Launch: ${payload}`);
 				return;
 			}
@@ -1310,9 +2157,13 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (parsed.type === 'ai_thinking') {
 				if (parsed.inFlight) {
 					thinkingLogEntry = appendMessage(log, '🤔 Jarvis AI', 'Thinking…', 'system');
+					setVoiceVisualizer('thinking');
 				} else if (thinkingLogEntry) {
 					thinkingLogEntry.remove();
 					thinkingLogEntry = null;
+					if (!speechPlaybackActive && !speechToTextActive && !sidecarManualListening) {
+						setVoiceVisualizer('idle');
+					}
 				}
 				return;
 			}
@@ -1320,6 +2171,9 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (thinkingLogEntry) {
 				thinkingLogEntry.remove();
 				thinkingLogEntry = null;
+			}
+			if (!speechPlaybackActive && !speechToTextActive && !sidecarManualListening) {
+				setVoiceVisualizer('idle', { resetEnergy: false });
 			}
 			if (parsed.type === 'presence_snapshot') {
 				appendMessage(log, 'Presence', `Connected clients: ${parsed?.active_connections ?? 0}`, 'system');
@@ -1346,7 +2200,12 @@ window.addEventListener('DOMContentLoaded', () => {
 					? parsed.text
 					: JSON.stringify(parsed);
 			const title = parsed.type === 'command_result' ? (parsed.title || '✅ Jarvis') : `Backend (${parsed.type || '?'})`;
-			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system');
+			const badges = [];
+			if (parsed.provider) badges.push(`provider:${parsed.provider}`);
+			if (parsed.routeProfile) badges.push(`profile:${parsed.routeProfile}`);
+			if (parsed.routeReason) badges.push(`route:${parsed.routeReason}`);
+			if (parsed.model) badges.push(`model:${parsed.model}`);
+			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system', badges);
 			if (parsed.type === 'command_result' && parsed.level !== 'error') {
 				void speakWithSidecar(getComfortableSpokenText(parsed, body));
 			}
@@ -1476,6 +2335,127 @@ window.addEventListener('DOMContentLoaded', () => {
 			);
 		});
 	}
+
+	const serverApi = window.jarvisApi?.server || window.jarvisApiV2?.server || null;
+	function setRuntimeStatusText(text) {
+		if (runtimeStatusNode) runtimeStatusNode.textContent = text;
+	}
+
+	async function refreshRuntimeUiFromConfig() {
+		if (!serverApi) return;
+		try {
+			const config = await serverApi.getConfig();
+			if (runtimeModeSelect) runtimeModeSelect.value = config.runtimeMode || 'local-desktop';
+			if (remoteRuntimeApiUrlInput) remoteRuntimeApiUrlInput.value = config.remoteRuntimeApiUrl || '';
+			if (remoteRuntimeWsUrlInput) remoteRuntimeWsUrlInput.value = config.remoteRuntimeWsUrl || '';
+			const auth = await serverApi.getAuthStatus();
+			if (runtimePermissionLevelSelect) runtimePermissionLevelSelect.value = auth.permissionLevel || 'default';
+			setRuntimeStatusText(auth.paired
+				? `Synchronized (${auth.permissionLevel || 'default'})`
+				: 'Runtime not connected.');
+		} catch (error) {
+			setRuntimeStatusText(`Runtime config error: ${error?.message || error}`);
+		}
+	}
+
+	async function refreshRuntimeStatus() {
+		if (!serverApi) {
+			setRuntimeStatusText('Runtime bridge unavailable in this environment.');
+			return;
+		}
+		const status = await serverApi.getRuntimeStatus();
+		if (!status?.ok) {
+			setRuntimeStatusText(`Runtime status error: ${status?.error || 'request failed'}`);
+			return;
+		}
+		const metrics = status.metrics || {};
+		const services = metrics.services || {};
+		setRuntimeStatusText(
+			[
+				`State: ${status.state || 'unknown'}`,
+				`Permission: ${status.permissionLevel || 'default'}`,
+				`CPU: ${Number(metrics.cpuPercent || 0).toFixed(1)}%`,
+				`RAM: ${Number(metrics.ramPercent || 0).toFixed(1)}%`,
+				`Services: ollama=${services.ollama || 'n/a'}, searxng=${services.searxng || 'n/a'}, netdata=${services.netdata || 'n/a'}`,
+			].join(' · '),
+		);
+	}
+
+	if (saveRuntimeConfigButton && serverApi) {
+		saveRuntimeConfigButton.addEventListener('click', async () => {
+			const payload = {
+				runtimeMode: runtimeModeSelect?.value || 'local-desktop',
+				remoteRuntimeApiUrl: remoteRuntimeApiUrlInput?.value?.trim() || '',
+				remoteRuntimeWsUrl: remoteRuntimeWsUrlInput?.value?.trim() || '',
+			};
+			const result = await serverApi.setConfig(payload);
+			if (!result?.ok) {
+				appendMessage(log, 'System Core', `Failed to save runtime config: ${result?.error || 'unknown'}`, 'error');
+				return;
+			}
+			if (payload.runtimeMode === 'remote-linux-runtime' && sidecar?.setConnection) {
+				sidecar.setConnection({ url: result.remoteRuntimeWsUrl || payload.remoteRuntimeWsUrl });
+			}
+			appendMessage(log, 'System Core', `Runtime config saved (${result.runtimeMode}).`);
+			await refreshRuntimeUiFromConfig();
+		});
+	}
+
+	if (runtimePairButton && serverApi) {
+		runtimePairButton.addEventListener('click', async () => {
+			const syncKey = runtimeSyncKeyInput?.value?.trim();
+			if (!syncKey) {
+				appendMessage(log, 'System Core', 'Sync key is required for pairing.', 'error');
+				return;
+			}
+			const result = await serverApi.verifyPairing(syncKey);
+			if (!result?.ok) {
+				appendMessage(log, 'System Core', `Pairing failed: ${result?.error || 'unauthorized'}`, 'error');
+				return;
+			}
+			if (sidecar?.setConnection && (remoteRuntimeWsUrlInput?.value || '').trim()) {
+				sidecar.setConnection({ url: remoteRuntimeWsUrlInput.value.trim(), token: result.sessionToken || '' });
+				sidecar.connect?.();
+			}
+			appendMessage(log, 'System Core', 'Linux runtime pairing successful.');
+			await refreshRuntimeUiFromConfig();
+			await refreshRuntimeStatus();
+		});
+	}
+
+	if (runtimeRefreshStatusButton && serverApi) {
+		runtimeRefreshStatusButton.addEventListener('click', () => {
+			void refreshRuntimeStatus();
+		});
+	}
+
+	if (runtimeApplyPermissionButton && serverApi) {
+		runtimeApplyPermissionButton.addEventListener('click', async () => {
+			const level = runtimePermissionLevelSelect?.value || 'default';
+			const fullControlConsent = level === 'full';
+			const result = await serverApi.setPermissionLevel(level, fullControlConsent);
+			if (!result?.ok) {
+				appendMessage(log, 'System Core', `Failed to set permission: ${result?.error || 'unknown'}`, 'error');
+				return;
+			}
+			appendMessage(log, 'System Core', `Permission level set to ${level}.`);
+			await refreshRuntimeStatus();
+		});
+	}
+
+	if (runtimeKillSwitchButton && serverApi) {
+		runtimeKillSwitchButton.addEventListener('click', async () => {
+			const result = await serverApi.killSwitch();
+			if (!result?.ok) {
+				appendMessage(log, 'System Core', `Kill switch failed: ${result?.error || 'unknown'}`, 'error');
+				return;
+			}
+			appendMessage(log, 'System Core', 'Emergency disconnect completed.');
+			setRuntimeStatusText('Runtime disconnected.');
+		});
+	}
+
+	void refreshRuntimeUiFromConfig();
 
 	// Cloud sync on startup if signed in
 	void refreshCurrentSession().then((initialSession) => {
@@ -1731,6 +2711,10 @@ window.addEventListener('DOMContentLoaded', () => {
 			await syncToCloud(apiBaseUrl, { voiceSettings, syncReminders: false }).catch(() => null);
 		}
 	}, 5 * 60_000);
+
+	switchViewport('welcome');
+	void refreshGitHubStatus();
+	void refreshGoogleStatus();
 
 	void tokenPromise.then((token) => {
 		connectToBackend({ token });

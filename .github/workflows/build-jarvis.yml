@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Full history so we can generate a meaningful changelog
           fetch-depth: 0
@@ -119,14 +119,14 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: jarvis/desktop/package-lock.json
 
       - name: Set up Java for Android build
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -205,12 +205,12 @@ jobs:
             exit 1
           }
 
-          if ($publish.private -ne $false) {
-            Write-Error "Updater publish config must declare 'private: false' for public GitHub release access."
+          if ($publish.private -ne $true) {
+            Write-Error "Updater publish config must declare 'private: true' for private GitHub release access."
             exit 1
           }
 
-          Write-Host "Desktop publish config validated: GitHub provider => $actualOwner/$actualRepo (public)"
+          Write-Host "Desktop publish config validated: GitHub provider => $actualOwner/$actualRepo (private)"
 
       - name: Build installers (x64 + ARM64)
         working-directory: jarvis/desktop
@@ -422,21 +422,21 @@ jobs:
           Write-Host "Verified release-notes.json"
 
       - name: Upload x64 installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: JarvisSetup-x64
           path: jarvis/desktop/dist/JarvisSetup-x64.exe
           if-no-files-found: warn
 
       - name: Upload arm64 installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: JarvisSetup-arm64
           path: jarvis/desktop/dist/JarvisSetup-arm64.exe
           if-no-files-found: warn
 
       - name: Upload updater metadata artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: JarvisUpdaterMetadata
           path: |
@@ -524,7 +524,7 @@ jobs:
 
       - name: Upload Android installer artifact
         if: steps.android_apk.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Jarvis-android
           path: jarvis/android/dist/Jarvis-android.apk
@@ -532,14 +532,14 @@ jobs:
 
       - name: Upload Android Gradle log artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Jarvis-android-gradle-log
           path: jarvis/android/dist/gradle-build.log
           if-no-files-found: ignore
 
       - name: Publish to GitHub Release (jarvis-latest)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: jarvis-latest
           name: "Jarvis Desktop — v${{ steps.meta.outputs.version }}"
@@ -558,7 +558,7 @@ jobs:
 
       - name: Publish Android APK to GitHub Release (jarvis-latest)
         if: steps.android_apk.outputs.found == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: jarvis-latest
           files: |

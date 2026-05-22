@@ -2,6 +2,13 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { PublicLanguageSelector } from "@/app/components/PublicLanguageSelector";
+import {
+  detectLanguageFromAcceptLanguage,
+  normalizePublicLanguage,
+  type PublicUILanguage,
+  UI_LANGUAGE_COOKIE_NAME,
+} from "@/app/lib/ui-language";
 import { createClient } from "@/lib/client";
 import { getOAuthQueryParams, getOAuthScopes, getProviderLabel, type OAuthProvider } from "@/lib/integrations";
 import {
@@ -16,6 +23,69 @@ import {
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
 type AuthTab = "login" | "register";
+
+const LOGIN_COPY: Record<PublicUILanguage, Record<string, string>> = {
+  en: {
+    workspaceChip: "AssistantX Workspace",
+    buildFaster: "Build faster with",
+    cloudTitle: "AssistantX Cloud",
+    heroSubtitle: "Resume your sessions, memory, and tools with one login. Designed for focused work with a clean, reliable auth flow.",
+    persistentSessions: "Persistent sessions",
+    persistentSessionsDesc: "Workspace state and chat history are tied to your account, not only one browser tab.",
+    secureFlow: "Secure login flow",
+    secureFlowDesc: "Sign in with your email and password or use a social provider.",
+    signInTab: "Sign In",
+    createAccountTab: "Create Account",
+    welcomeBack: "Welcome back",
+    joinAssistantX: "Join AssistantX",
+    signInSub: "Sign in with a social provider or your email and password.",
+    createSub: "Create your account with a social provider or an email and password.",
+    continueAsGuest: "Continue as Guest",
+    entering: "Entering…",
+    orSignIn: "or sign in",
+    orEmail: "or email",
+    continueWithGoogle: "Continue with Google",
+    continueWithGitHub: "Continue with GitHub",
+    pricing: "Pricing",
+    roadmap: "Roadmap",
+    socialProof: "Trusted stack: Supabase • GitHub • Google • OpenRouter • Next.js • FastAPI",
+    trustSignals: "Acrux.pl Sp. z o.o., ul. Sobczaka 1, Poznań. NIP: 7792506166.",
+    plansHeadline: "Transparent pricing before login",
+    plansBody: "Free plan available, plus Pro and Pro+ with premium model access.",
+    openPricing: "Open pricing",
+    openRoadmap: "Open roadmap",
+  },
+  pl: {
+    workspaceChip: "AssistantX Workspace",
+    buildFaster: "Twórz szybciej z",
+    cloudTitle: "AssistantX Cloud",
+    heroSubtitle: "Wznów sesje, pamięć i narzędzia po jednym logowaniu. Zaprojektowane pod skupioną pracę i stabilny auth flow.",
+    persistentSessions: "Trwałe sesje",
+    persistentSessionsDesc: "Stan workspace i historia czatu są przypięte do konta, nie tylko do jednej karty przeglądarki.",
+    secureFlow: "Bezpieczne logowanie",
+    secureFlowDesc: "Zaloguj się emailem i hasłem albo przez dostawcę społecznościowego.",
+    signInTab: "Zaloguj się",
+    createAccountTab: "Utwórz konto",
+    welcomeBack: "Witaj ponownie",
+    joinAssistantX: "Dołącz do AssistantX",
+    signInSub: "Zaloguj się przez dostawcę lub email i hasło.",
+    createSub: "Utwórz konto przez dostawcę lub email i hasło.",
+    continueAsGuest: "Kontynuuj jako gość",
+    entering: "Wchodzę…",
+    orSignIn: "lub zaloguj się",
+    orEmail: "lub email",
+    continueWithGoogle: "Kontynuuj z Google",
+    continueWithGitHub: "Kontynuuj z GitHub",
+    pricing: "Cennik",
+    roadmap: "Roadmapa",
+    socialProof: "Zaufany stack: Supabase • GitHub • Google • OpenRouter • Next.js • FastAPI",
+    trustSignals: "Acrux.pl Sp. z o.o., ul. Sobczaka 1, Poznań. NIP: 7792506166.",
+    plansHeadline: "Przejrzysty cennik przed logowaniem",
+    plansBody: "Dostępny plan Free oraz Pro i Pro+ z modelami premium.",
+    openPricing: "Zobacz cennik",
+    openRoadmap: "Zobacz roadmapę",
+  },
+};
 
 function sanitizeRedirectPath(value: string | null | undefined) {
   const next = String(value ?? "");
@@ -65,6 +135,18 @@ export default function LoginPage() {
   const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
   const [guestLoading, setGuestLoading] = useState(false);
   const [authError, setAuthError] = useState(initialLocationError);
+  const [uiLanguage] = useState<PublicUILanguage>(() => {
+    if (typeof window === "undefined") return "en";
+    const cookieLang = document.cookie
+      .split(";")
+      .map((entry) => entry.trim())
+      .find((entry) => entry.startsWith(`${UI_LANGUAGE_COOKIE_NAME}=`))
+      ?.split("=")[1];
+    if (cookieLang) return normalizePublicLanguage(cookieLang);
+    return detectLanguageFromAcceptLanguage(window.navigator.language);
+  });
+
+  const t = LOGIN_COPY[uiLanguage];
 
   function getSupabase() {
     if (supabaseRef.current) return supabaseRef.current;
@@ -190,6 +272,11 @@ export default function LoginPage() {
       return;
     }
 
+    try {
+      window.sessionStorage.setItem("assistantx.guest-tour", "1");
+    } catch {
+      // ignore
+    }
     window.location.href = sanitizeRedirectPath(redirectContext.next);
   }
 
@@ -365,31 +452,54 @@ export default function LoginPage() {
     <main className="min-h-screen bg-background px-5 py-8 text-foreground sm:px-8 sm:py-10">
       <div className="mx-auto grid min-h-[86vh] w-full max-w-6xl items-center gap-10 lg:grid-cols-[1.1fr,0.9fr]">
         <section className="hidden lg:block">
+          <div className="mb-4 flex items-center gap-2">
+            <PublicLanguageSelector initialLanguage={uiLanguage} />
+          </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground/70">
             <span className="h-1.5 w-1.5 rounded-full bg-foreground/40" />
-            AssistantX Workspace
+            {t.workspaceChip}
           </div>
           <h1 className="mt-6 max-w-xl text-5xl font-semibold leading-tight tracking-tight text-foreground">
-            Build faster with
-            <span className="block text-foreground/80">AssistantX Cloud</span>
+            {t.buildFaster}
+            <span className="block text-foreground/80">{t.cloudTitle}</span>
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
-            Resume your sessions, memory, and tools with one login. Designed for focused work with a clean, reliable auth flow.
+            {t.heroSubtitle}
           </p>
+          <p className="mt-4 text-xs text-muted-foreground">{t.socialProof}</p>
 
           <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-border bg-card px-5 py-4">
-              <div className="text-sm font-semibold text-foreground">Persistent sessions</div>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">Workspace state and chat history are tied to your account, not only one browser tab.</p>
+              <div className="text-sm font-semibold text-foreground">{t.persistentSessions}</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.persistentSessionsDesc}</p>
             </div>
             <div className="rounded-xl border border-border bg-card px-5 py-4">
-              <div className="text-sm font-semibold text-foreground">Secure login flow</div>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">Sign in with your email and password or use a social provider.</p>
+              <div className="text-sm font-semibold text-foreground">{t.secureFlow}</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.secureFlowDesc}</p>
+            </div>
+          </div>
+          <div className="mt-3 rounded-xl border border-border bg-card px-5 py-4">
+            <div className="text-sm font-semibold text-foreground">{t.plansHeadline}</div>
+            <p className="mt-1 text-sm text-muted-foreground">{t.plansBody}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href="/pricing" className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-accent">
+                {t.openPricing}
+              </Link>
+              <Link href="/roadmap" className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-accent">
+                {t.openRoadmap}
+              </Link>
             </div>
           </div>
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <PublicLanguageSelector initialLanguage={uiLanguage} />
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <Link href="/pricing" className="hover:text-foreground">{t.pricing}</Link>
+              <Link href="/roadmap" className="hover:text-foreground">{t.roadmap}</Link>
+            </div>
+          </div>
           {/* Tab switcher */}
           <div role="tablist" aria-label="Authentication options" className="mb-6 flex rounded-xl border border-border bg-muted p-1">
             <button
@@ -405,7 +515,7 @@ export default function LoginPage() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Sign In
+              {t.signInTab}
             </button>
             <button
               type="button"
@@ -420,17 +530,17 @@ export default function LoginPage() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Create Account
+              {t.createAccountTab}
             </button>
           </div>
 
           <h2 className="mb-1 text-2xl font-semibold tracking-tight text-foreground">
-            {tab === "login" ? "Welcome back" : "Join AssistantX"}
+            {tab === "login" ? t.welcomeBack : t.joinAssistantX}
           </h2>
           <p className="mb-5 text-sm leading-6 text-muted-foreground">
             {tab === "login"
-              ? "Sign in with a social provider or your email and password."
-              : "Create your account with a social provider or an email and password."}
+              ? t.signInSub
+              : t.createSub}
           </p>
 
           {/* Guest access */}
@@ -440,12 +550,12 @@ export default function LoginPage() {
             disabled={isBusy}
             className="mb-4 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {guestLoading ? "Entering…" : "Continue as Guest"}
+            {guestLoading ? t.entering : t.continueAsGuest}
           </button>
 
           <div className="mb-4 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
-            <span>or sign in</span>
+            <span>{t.orSignIn}</span>
             <span className="h-px flex-1 bg-border" />
           </div>
 
@@ -457,7 +567,7 @@ export default function LoginPage() {
               disabled={isBusy}
               className="rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {oauthLoading === "google" ? "Redirecting to Google..." : "Continue with Google"}
+              {oauthLoading === "google" ? "Redirecting to Google..." : t.continueWithGoogle}
             </button>
             <button
               type="button"
@@ -465,7 +575,7 @@ export default function LoginPage() {
               disabled={isBusy}
               className="rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {oauthLoading === "github" ? "Redirecting to GitHub..." : "Continue with GitHub"}
+              {oauthLoading === "github" ? "Redirecting to GitHub..." : t.continueWithGitHub}
             </button>
           </div>
 
@@ -486,7 +596,7 @@ export default function LoginPage() {
 
           <div className="mt-5 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
-            <span>or email</span>
+              <span>{t.orEmail}</span>
             <span className="h-px flex-1 bg-border" />
           </div>
 
@@ -621,7 +731,14 @@ export default function LoginPage() {
             <Link href="/terms" className="hover:text-foreground">
               Terms of Service
             </Link>
+            <Link href="/pricing" className="hover:text-foreground">
+              {t.pricing}
+            </Link>
+            <Link href="/roadmap" className="hover:text-foreground">
+              {t.roadmap}
+            </Link>
           </div>
+          <div className="mt-3 text-xs text-muted-foreground">{t.trustSignals}</div>
         </section>
       </div>
     </main>

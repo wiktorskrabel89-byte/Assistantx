@@ -4,7 +4,6 @@ import { Readable } from "node:stream";
 
 const REPO = "wiktorskrabel89-byte/Assistantx";
 const RELEASE_TAG = "jarvis-latest";
-const RELEASE_DOWNLOAD_BASE = `https://github.com/${REPO}/releases/download/${RELEASE_TAG}`;
 const RELEASE_DOWNLOAD_TIMEOUT_MS = 30_000;
 const BUILD_COMMAND =
   "cd jarvis/desktop && npm install && npm run dist:win:all && npm run publish:download";
@@ -135,8 +134,25 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
-  // 2. Try to stream the latest GitHub Release asset when the runtime has
-  // access to a GitHub token (required for private releases).
+  // 2. Private release downloads require server-side GitHub credentials.
+  const githubToken = getGithubToken();
+  if (!githubToken) {
+    return Response.json(
+      {
+        error: "Installer is temporarily unavailable",
+        platform: target.platform,
+        arch: target.arch,
+        reason: "private_release_requires_server_token",
+        instructions:
+          `${target.instructions}\n\n` +
+          "This repository is private. Configure one of JARVIS_GITHUB_TOKEN, GITHUB_TOKEN, or GH_TOKEN on the web runtime, " +
+          "or publish the installer file to public/jarvis/.",
+      },
+      { status: 503 },
+    );
+  }
+
+  // 3. Try to stream the latest GitHub Release asset with authenticated GitHub API access.
   const releaseLookup = await getGithubReleaseAsset(target.filenames);
   const releaseAsset = releaseLookup.asset;
   if (releaseAsset) {
@@ -145,22 +161,37 @@ export async function GET(request: Request): Promise<Response> {
       return proxiedAsset;
     }
 
-    return Response.redirect(releaseAsset.browser_download_url, 302);
+    return Response.json(
+      {
+        error: "Installer is temporarily unavailable",
+        platform: target.platform,
+        arch: target.arch,
+        reason: "private_release_proxy_failed",
+        instructions:
+          "GitHub asset lookup succeeded but authenticated download failed. Verify the configured GitHub token has Contents: Read access " +
+          `to ${REPO} and try again.`,
+      },
+      { status: 503 },
+    );
   }
 
-  if (releaseLookup.lookupFailed && getGithubToken()) {
-    console.warn(`[jarvis/download] Release lookup failed for ${target.filenames.join(", ")}; using deterministic fallback URL.`);
+  if (releaseLookup.lookupFailed) {
+    console.warn(`[jarvis/download] Release lookup failed for ${target.filenames.join(", ")}.`);
+    return Response.json(
+      {
+        error: "Installer is temporarily unavailable",
+        platform: target.platform,
+        arch: target.arch,
+        reason: "private_release_lookup_failed",
+        instructions:
+          "Authenticated release lookup failed. Verify the configured GitHub token has Contents: Read access " +
+          `to ${REPO} and that release tag ${RELEASE_TAG} exists.`,
+      },
+      { status: 503 },
+    );
   }
 
-  // 3. Fall back to the deterministic GitHub Releases URL so logged-in users
-  // can still download assets from the private repository even when release
-  // metadata lookup fails in the runtime.
-  const fallbackFilename = target.filenames[0];
-  if (fallbackFilename) {
-    return Response.redirect(`${RELEASE_DOWNLOAD_BASE}/${encodeURIComponent(fallbackFilename)}`, 302);
-  }
-
-  // 4. Neither available — return actionable error
+  // 4. Release exists but target asset is missing.
   return Response.json(
     {
       error: target.missingError,

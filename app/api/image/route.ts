@@ -8,6 +8,7 @@ import {
   buildPollinationsFallbackUrl,
   createGeneratedImageStoragePath,
   buildEnhancedImagePrompt,
+  generateImageWithLocalBackend,
   generateImageWithFal,
   logUsageEvent,
 } from "@/app/lib/ai-platform";
@@ -132,13 +133,21 @@ export async function POST(req: Request) {
 
     let generated;
     try {
-      generated = await generateImageWithFal({
+      generated = await generateImageWithLocalBackend({
         prompt,
         quality,
         enhancePrompt,
         aspectRatio: body.aspectRatio,
       });
-    } catch (falError) {
+      if (!generated) {
+        generated = await generateImageWithFal({
+          prompt,
+          quality,
+          enhancePrompt,
+          aspectRatio: body.aspectRatio,
+        });
+      }
+    } catch (localOrFalError) {
       const promptUsed = buildEnhancedImagePrompt(prompt, enhancePrompt);
       if (process.env.OPENAI_API_KEY) {
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -155,7 +164,7 @@ export async function POST(req: Request) {
           promptUsed,
         };
       } else {
-        console.warn("fal.ai image generation failed, falling back to Pollinations:", falError);
+        console.warn("Image generation failed before cloud fallback, using Pollinations:", localOrFalError);
         generated = {
           url: buildPollinationsFallbackUrl(promptUsed, quality),
           provider: "Pollinations",

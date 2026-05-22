@@ -3,7 +3,7 @@
 const { AiProvider } = require('../provider-interface');
 
 class OpenRouterProvider extends AiProvider {
-  constructor({ model = 'gpt-120b', client = null } = {}) {
+  constructor({ model = 'openai/gpt-4o', client = null } = {}) {
     super();
     this.provider = 'openrouter';
     this.model = model;

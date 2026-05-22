@@ -14,9 +14,82 @@ pnpm dev
 bun dev
 ```
 
+Run only the local queue worker (polls `ai_tasks` and executes local Ollama jobs):
+
+```bash
+npm run dev:worker
+```
+
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+## Local Worker Queue (ai-agent/worker.py)
+
+The repository now includes a dedicated Python worker process at:
+
+- `/home/runner/work/Assistantx/Assistantx/ai-agent/worker.py`
+
+It is isolated from HTTP API servers and is designed to:
+
+- poll `public.ai_tasks` (`pending` + `routing=local`)
+- execute device-scoped `system_action` jobs (for example dynamic Roblox launch)
+- process tasks with local Ollama (`qwen2.5:14b` by default)
+- process async Jarvis queue tasks created by `/api/jarvis/tasks`
+- parse in-chat commands like `zmień temp na 0.7`
+- persist temperature per-task (`ai_tasks.temperature`) and per-user (`user_profiles.default_temperature`)
+- inject a sanitized, size-limited copy of its own source code into the system prompt
+- augment explicit Polish web-search prompts through local SearXNG (`JARVIS_SEARXNG_URL`)
+- keep the light model warm while unloading the heavy model immediately after use
+- auto-fallback to cloud model (`OPENROUTER_API_KEY`) when local runtime is unavailable or overloaded
+- execute the allowlisted `system_action` commands:
+  - `launch_roblox`
+  - `system_file_list`
+  - `system_status_ping`
+
+Database objects are introduced in migration:
+
+- `supabase/migrations/20260521_ai_tasks_local_worker.sql`
+
+Required env for worker:
+
+```bash
+SUPABASE_URL=... # or NEXT_PUBLIC_SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY=...
+OPENROUTER_API_KEY=... # required for cloud fallback
+```
+
+Optional worker/device auth vars:
+
+```bash
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_AUTH_TOKEN=...   # desktop user's JWT; enables RLS-safe paired-device mode
+LOCAL_WORKER_DEVICE_ID=... # restricts worker polling to one paired desktop device
+```
+
+Useful worker tuning vars:
+
+```bash
+LOCAL_WORKER_MAX_PROCESSING=2
+LOCAL_WORKER_TASK_PICK_TIMEOUT_SECONDS=10
+LOCAL_WORKER_DEVICE_ID=...
+LOCAL_WORKER_ALLOWED_DIRECTORY=/path/to/safe/root
+LOCAL_OLLAMA_BASE_URL=http://localhost:11434
+LOCAL_OLLAMA_LIGHT_MODEL=qwen2.5:14b
+LOCAL_OLLAMA_HEAVY_MODEL=qwen2.5-coder:32b
+LOCAL_OLLAMA_LIGHT_KEEP_ALIVE=5m
+LOCAL_OLLAMA_HEAVY_KEEP_ALIVE=0
+JARVIS_SEARXNG_URL=http://127.0.0.1:8080
+LOCAL_WORKER_WEB_SEARCH_MAX_RESULTS=3
+IMAGE_GEN_API_URL=http://127.0.0.1:7860/sdapi/v1/txt2img
+```
+
+Suggested local startup checklist:
+
+1. Pull the Ollama models you want the worker to route between.
+2. Start SearXNG locally and enable the `json` response format in its settings.
+3. Start Forge/ComfyUI separately on GPU 1 and expose its API URL through `IMAGE_GEN_API_URL`.
+4. Run `npm run dev:worker` to process `ai_tasks` with local-first routing and cloud fallback.
 
 ## Speed Insights Get Started
 
@@ -122,6 +195,42 @@ AssistantX now includes a runtime-foundation scaffold under `/src` for the archi
 - thin runtime API adapter (`app/api/runtime/execute/route.ts`)
 
 See `docs/architecture/runtime-foundation.md` for details.
+
+## Public MCP API
+
+AssistantX exposes MCP discovery and invocation routes:
+
+- `GET /api/mcp`
+- `GET /api/mcp/tools`
+- `POST /api/mcp/invoke`
+
+Authenticate with either:
+
+- `Authorization: Bearer <MCP_API_KEY>` for server-to-server access, or
+- `Authorization: Bearer <Supabase access token>` for a signed-in AssistantX user.
+
+Example discovery request:
+
+```bash
+curl -H "Authorization: Bearer $MCP_API_KEY" \
+  http://localhost:3000/api/mcp/tools
+```
+
+Example tool invocation:
+
+```bash
+curl -X POST http://localhost:3000/api/mcp/invoke \
+  -H "Authorization: Bearer $MCP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toolName": "memory/write",
+    "input": {
+      "content": "Remember that the PR review route is enabled.",
+      "layer": "episodic",
+      "tags": ["mcp", "example"]
+    }
+  }'
+```
 
 ## Deploy on Vercel
 

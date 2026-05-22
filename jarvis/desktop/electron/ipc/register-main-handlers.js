@@ -27,6 +27,10 @@ function createMainIpcHandlers(deps) {
     launcherService,
     ensureDbReady,
     getSidecarStatus,
+    sendSidecarMessage,
+    checkLocalAiAvailability,
+    routeAiRequest,
+    installLocalAiEngine,
     restartSidecar,
     startupDiagnostics,
     getLocalTelemetrySnapshot,
@@ -35,6 +39,9 @@ function createMainIpcHandlers(deps) {
     installUpdate,
     deferUpdate,
     getUpdateState,
+    getUpdaterAuthStatus,
+    setUpdaterPrivateToken,
+    clearUpdaterPrivateToken,
     getJarvisWebUrl,
     setJarvisWebUrl,
     getAuthSessionView,
@@ -43,6 +50,24 @@ function createMainIpcHandlers(deps) {
     signOutAccountSession,
     getAccountProfile,
     beginDesktopLogin,
+    serverGetAuthStatus,
+    serverClearAuth,
+    serverVerifyPairing,
+    serverGetRuntimeStatus,
+    serverSetPermissionLevel,
+    serverKillSwitch,
+    serverGetConfig,
+    serverSetConfig,
+    localServerList,
+    localServerAdd,
+    localServerUpdate,
+    localServerRemove,
+    localServerScan,
+    localServerGetAssignment,
+    localServerSetAssignment,
+    githubClient,
+    googleClient,
+    appsTool,
     getMainWindow,
     getOverlayWindow,
     createLauncherOverlayWindow,
@@ -50,6 +75,8 @@ function createMainIpcHandlers(deps) {
     resetQuitAndInstallPreparation,
     permissions,
     securityAudit,
+    mcpManager,
+    mcpRouter,
   } = deps;
 
   const handlers = {
@@ -58,12 +85,24 @@ function createMainIpcHandlers(deps) {
       port: Number(process.env.JARVIS_SIDECAR_PORT || '8765'),
     }),
 
+    'setup:check-local-ai': async () => checkLocalAiAvailability(),
+
+    'setup:install-local': async () => {
+      const auth = await permissions.authorize('setup:install-local');
+      if (!auth.allowed) return denied('setup:install-local', auth.reason);
+      return installLocalAiEngine();
+    },
+
     'restart-sidecar': async () => {
       const auth = await permissions.authorize('restart-sidecar');
       if (!auth.allowed) return denied('restart-sidecar', auth.reason);
       restartSidecar();
       return { ok: true };
     },
+
+    'sidecar:send': withSchema('sidecar:send', (payload) => validatePlainObject(payload), async (_event, payload) => (
+      sendSidecarMessage(payload || {})
+    )),
 
     'open-url': withSchema('open-url', (payload) => validateString(payload, { maxLen: 2000 }), async (_event, url) => {
       const auth = await permissions.authorize('open-url', { url });
@@ -231,6 +270,44 @@ function createMainIpcHandlers(deps) {
       }
     },
 
+    'jarvis-ai-route': async (_event, payload) => {
+      const auth = await permissions.authorize('jarvis-ai-request');
+      if (!auth.allowed) return denied('jarvis-ai-request', auth.reason);
+      const body = validatePlainObject(payload) || {};
+      const message = validateString(body.message, { allowEmpty: false, maxLen: 30000 });
+      if (!message) {
+        return {
+          ok: false,
+          error: 'message-required',
+        };
+      }
+      const messages = Array.isArray(body.messages)
+        ? body.messages
+          .slice(-20)
+          .map((entry) => ({
+            role: validateString(entry?.role, { allowEmpty: false, maxLen: 20 }) || 'user',
+            content: validateString(entry?.content, { allowEmpty: true, maxLen: 16000 }) || '',
+          }))
+        : undefined;
+      const profile = validateString(body.profile, { allowEmpty: true, maxLen: 20 }) || 'chat';
+      const contextType = validateString(body.contextType, { allowEmpty: true, maxLen: 20 }) || 'general';
+      try {
+        return await routeAiRequest({
+          message,
+          messages,
+          profile,
+          contextType,
+          retryCount: validateInteger(body.retryCount, { min: 0, max: 5, fallback: 0 }),
+          contextSize: validateString(body.contextSize, { allowEmpty: true, maxLen: 20 }) || undefined,
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          error: String(error?.message || error || 'ai-router-failed'),
+        };
+      }
+    },
+
     'get-desktop-diagnostics': () => startupDiagnostics.snapshot(),
     'get-local-telemetry': () => getLocalTelemetrySnapshot(),
     'get-app-meta': () => ({ version: app.getVersion(), packaged: app.isPackaged }),
@@ -253,6 +330,13 @@ function createMainIpcHandlers(deps) {
 
     'check-for-updates': () => checkForUpdates(),
     'get-update-state': () => getUpdateState(),
+    'updater:get-auth-status': () => getUpdaterAuthStatus(),
+    'updater:set-token': (_event, payload) => {
+      const token = validateString(payload, { allowEmpty: false, maxLen: 5000 });
+      if (!token) return invalidResult('updater:set-token', 'token-required');
+      return setUpdaterPrivateToken(token);
+    },
+    'updater:clear-token': () => clearUpdaterPrivateToken(),
     'get-jarvis-web-url': () => getJarvisWebUrl(),
 
     'set-jarvis-web-url': (_event, url) => {
@@ -280,6 +364,238 @@ function createMainIpcHandlers(deps) {
       const auth = await permissions.authorize('open-account-login');
       if (!auth.allowed) return denied('open-account-login', auth.reason);
       return beginDesktopLogin({ parentWindow: getMainWindow() });
+    },
+
+    'tools:launch-game': async (_event, payload) => {
+      const auth = await permissions.authorize('tools:launch-game');
+      if (!auth.allowed) return denied('tools:launch-game', auth.reason);
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('tools:launch-game', 'payload-must-be-object');
+      const platform = validateString(body.platform, { allowEmpty: false, maxLen: 40 });
+      const id = validateString(body.id, { allowEmpty: false, maxLen: 120 });
+      if (!platform || !id) return invalidResult('tools:launch-game', 'platform-and-id-required');
+      securityAudit({ action: 'tools:launch-game', target: `${platform}:${id}` });
+      return appsTool.openGame({ shell, platform, id });
+    },
+    'tools:launch-app': async (_event, payload) => {
+      const auth = await permissions.authorize('tools:launch-game');
+      if (!auth.allowed) return denied('tools:launch-app', auth.reason);
+      const body = validatePlainObject(payload);
+      const appName = validateString(body?.appName, { allowEmpty: false, maxLen: 120 });
+      if (!appName) return invalidResult('tools:launch-app', 'app-name-required');
+      securityAudit({ action: 'tools:launch-app', target: appName });
+      return appsTool.launchAnyApp({ shell, appName });
+    },
+
+    'github:set-token': (_event, token) => {
+      const value = validateString(token, { allowEmpty: false, maxLen: 5000 });
+      if (!value) return invalidResult('github:set-token', 'token-required');
+      return githubClient.setToken(value);
+    },
+    'github:clear-token': () => githubClient.clearToken(),
+    'github:status': async () => githubClient.getStatus(),
+    'github:list-repos': async (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const user = validateString(body.user, { allowEmpty: true, maxLen: 120 }) || undefined;
+      const perPage = validateInteger(body.perPage, { min: 1, max: 100, fallback: 50 });
+      return githubClient.listRepos({ user, perPage });
+    },
+    'github:get-tree': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('github:get-tree', 'payload-must-be-object');
+      const owner = validateString(body.owner, { allowEmpty: false, maxLen: 120 });
+      const repo = validateString(body.repo, { allowEmpty: false, maxLen: 120 });
+      const branch = validateString(body.branch, { allowEmpty: true, maxLen: 120 }) || undefined;
+      if (!owner || !repo) return invalidResult('github:get-tree', 'owner-and-repo-required');
+      return githubClient.getRepoTree({ owner, repo, branch });
+    },
+    'github:read-file': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('github:read-file', 'payload-must-be-object');
+      const owner = validateString(body.owner, { allowEmpty: false, maxLen: 120 });
+      const repo = validateString(body.repo, { allowEmpty: false, maxLen: 120 });
+      const filePath = validateString(body.path, { allowEmpty: false, maxLen: 1000 });
+      const ref = validateString(body.ref, { allowEmpty: true, maxLen: 120 }) || undefined;
+      if (!owner || !repo || !filePath) return invalidResult('github:read-file', 'owner-repo-path-required');
+      return githubClient.readFile({ owner, repo, filePath, ref });
+    },
+    'github:list-commits': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('github:list-commits', 'payload-must-be-object');
+      const owner = validateString(body.owner, { allowEmpty: false, maxLen: 120 });
+      const repo = validateString(body.repo, { allowEmpty: false, maxLen: 120 });
+      const perPage = validateInteger(body.perPage, { min: 1, max: 100, fallback: 20 });
+      if (!owner || !repo) return invalidResult('github:list-commits', 'owner-and-repo-required');
+      return githubClient.listCommits({ owner, repo, perPage });
+    },
+    'github:get-diff': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('github:get-diff', 'payload-must-be-object');
+      const owner = validateString(body.owner, { allowEmpty: false, maxLen: 120 });
+      const repo = validateString(body.repo, { allowEmpty: false, maxLen: 120 });
+      const sha = validateString(body.sha, { allowEmpty: false, maxLen: 120 });
+      if (!owner || !repo || !sha) return invalidResult('github:get-diff', 'owner-repo-sha-required');
+      return githubClient.getCommitDiff({ owner, repo, sha });
+    },
+
+    'google:login-start': async () => googleClient.auth.initiateDeviceFlow(),
+    'google:login-poll': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const deviceCode = validateString(body?.deviceCode, { allowEmpty: false, maxLen: 500 });
+      if (!deviceCode) return invalidResult('google:login-poll', 'device-code-required');
+      return googleClient.auth.pollForToken(deviceCode);
+    },
+    'google:logout': async () => googleClient.auth.revokeAccess(),
+    'google:status': () => googleClient.auth.getStatus(),
+    'google:calendar-today': async () => googleClient.calendar.getTodaySchedule(),
+    'google:gmail-unread': async (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const maxResults = validateInteger(body.maxResults, { min: 1, max: 50, fallback: 10 });
+      const threads = await googleClient.gmail.getUnreadThreads(maxResults);
+      const top = threads.slice(0, 5);
+      const headers = await Promise.all(top.map((item) => googleClient.gmail.getMessageHeaders(item.id)));
+      return {
+        threads,
+        headers,
+      };
+    },
+
+    'server:get-auth-status': () => serverGetAuthStatus(),
+    'server:clear-auth': () => serverClearAuth(),
+    'server:verify-pairing': async (_event, payload) => {
+      const auth = await permissions.authorize('server:verify-pairing');
+      if (!auth.allowed) return denied('server:verify-pairing', auth.reason);
+      const syncKey = validateString(payload?.syncKey, { allowEmpty: false, maxLen: 512 });
+      if (!syncKey) return invalidResult('server:verify-pairing', 'sync-key-required');
+      return serverVerifyPairing(syncKey);
+    },
+    'server:get-runtime-status': () => serverGetRuntimeStatus(),
+    'server:set-permission-level': async (_event, payload) => {
+      const auth = await permissions.authorize('server:set-permission-level');
+      if (!auth.allowed) return denied('server:set-permission-level', auth.reason);
+      const body = validatePlainObject(payload) || {};
+      const level = validateString(body.level, { allowEmpty: false, maxLen: 20 }) || 'default';
+      const fullControlConsent = Boolean(body.fullControlConsent);
+      return serverSetPermissionLevel(level, fullControlConsent);
+    },
+    'server:kill-switch': async () => {
+      const auth = await permissions.authorize('server:kill-switch');
+      if (!auth.allowed) return denied('server:kill-switch', auth.reason);
+      return serverKillSwitch();
+    },
+    'server:get-config': () => serverGetConfig(),
+    'server:set-config': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const runtimeMode = validateString(body.runtimeMode, { allowEmpty: true, maxLen: 64 }) || undefined;
+      const remoteRuntimeApiUrl = validateString(body.remoteRuntimeApiUrl, { allowEmpty: true, maxLen: 500 }) || undefined;
+      const remoteRuntimeWsUrl = validateString(body.remoteRuntimeWsUrl, { allowEmpty: true, maxLen: 500 }) || undefined;
+      return serverSetConfig({ runtimeMode, remoteRuntimeApiUrl, remoteRuntimeWsUrl });
+    },
+    'local-server:list': () => ({ ok: true, servers: localServerList() }),
+    'local-server:add': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('local-server:add', 'payload-must-be-object');
+      const label = validateString(body.label, { allowEmpty: false, maxLen: 120 });
+      const baseUrl = validateString(body.baseUrl, { allowEmpty: false, maxLen: 500 });
+      const apiType = validateString(body.apiType, { allowEmpty: false, maxLen: 40 }) || 'ollama';
+      if (!label || !baseUrl) return invalidResult('local-server:add', 'label-and-base-url-required');
+      return localServerAdd({ label, baseUrl, apiType, enabled: body.enabled !== false });
+    },
+    'local-server:update': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('local-server:update', 'payload-must-be-object');
+      const id = validateString(body.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:update', 'id-required');
+      return localServerUpdate(id, validatePlainObject(body.patch) || {});
+    },
+    'local-server:remove': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const id = validateString(body?.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:remove', 'id-required');
+      return localServerRemove(id);
+    },
+    'local-server:scan': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const id = validateString(body?.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:scan', 'id-required');
+      return localServerScan(id);
+    },
+    'local-server:get-model-assignment': () => ({ ok: true, ...localServerGetAssignment() }),
+    'local-server:set-model-assignment': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      return localServerSetAssignment(body);
+    },
+
+    // ── MCP server management ──────────────────────────────────────────────
+    'mcp:list-servers': () => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      return { ok: true, servers: mcpManager.listServers() };
+    },
+
+    'mcp:install-server': async (_event, payload) => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      const body = validatePlainObject(payload);
+      const serverId = validateString(body?.serverId, { allowEmpty: false, maxLen: 60 });
+      if (!serverId) return invalidResult('mcp:install-server', 'server-id-required');
+      return mcpManager.installServer(serverId);
+    },
+
+    'mcp:uninstall-server': (_event, payload) => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      const body = validatePlainObject(payload);
+      const serverId = validateString(body?.serverId, { allowEmpty: false, maxLen: 60 });
+      if (!serverId) return invalidResult('mcp:uninstall-server', 'server-id-required');
+      return mcpManager.uninstallServer(serverId);
+    },
+
+    'mcp:call-tool': async (_event, payload) => {
+      if (!mcpManager || !mcpRouter) return { ok: false, error: 'mcp-unavailable' };
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('mcp:call-tool', 'payload-must-be-object');
+      const toolName = validateString(body.toolName, { allowEmpty: false, maxLen: 120 });
+      const params = validatePlainObject(body.params) || {};
+      if (!toolName) return invalidResult('mcp:call-tool', 'tool-name-required');
+      securityAudit({ action: 'mcp:call-tool', target: toolName });
+      return mcpRouter.route(toolName, params);
+    },
+
+    'mcp:get-server-status': (_event, payload) => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      const body = validatePlainObject(payload);
+      const serverId = validateString(body?.serverId, { allowEmpty: false, maxLen: 60 });
+      if (!serverId) return invalidResult('mcp:get-server-status', 'server-id-required');
+      return { ok: true, status: mcpManager.getServerStatus(serverId) };
+    },
+
+    'mcp:google-auth-status': () => {
+      return googleClient.auth.getStatus();
+    },
+
+    'mcp:google-start-auth': async () => {
+      return googleClient.auth.initiateDeviceFlow();
+    },
+
+    'mcp:google-poll-auth': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const deviceCode = validateString(body?.deviceCode, { allowEmpty: false, maxLen: 500 });
+      if (!deviceCode) return invalidResult('mcp:google-poll-auth', 'device-code-required');
+      return googleClient.auth.pollForToken(deviceCode);
+    },
+
+    'mcp:set-api-key': (_event, payload) => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('mcp:set-api-key', 'payload-must-be-object');
+      const serverId = validateString(body.serverId, { allowEmpty: false, maxLen: 60 });
+      const value = validateString(body.value, { allowEmpty: false, maxLen: 5000 });
+      if (!serverId || !value) return invalidResult('mcp:set-api-key', 'server-id-and-value-required');
+      securityAudit({ action: 'mcp:set-api-key', target: serverId });
+      return mcpManager.setApiKey(serverId, value);
+    },
+
+    'mcp:list-tools': () => {
+      if (!mcpRouter) return { ok: false, error: 'mcp-unavailable' };
+      return { ok: true, tools: mcpRouter.listTools() };
     },
   };
 

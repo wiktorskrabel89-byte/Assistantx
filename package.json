@@ -9,6 +9,7 @@
     "dev": "concurrently --names \"NEXT,FASTAPI\" --prefix-colors \"blue,green\" \"node server.js\" \"cd \\\"ai agent\\\" && python -m uvicorn main:app --host 127.0.0.1 --port 8000\"",
     "dev:next": "node server.js",
     "dev:api": "cd \"ai agent\" && python -m uvicorn main:app --host 127.0.0.1 --port 8000",
+    "dev:worker": "cd \"ai-agent\" && python worker.py",
     "build": "next build",
     "start": "node server.js",
     "lint": "eslint",

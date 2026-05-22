@@ -322,8 +322,17 @@ export function createSettings(): WorkspaceSettings {
     syncAutomations: true,
     syncLocalFiles: false,
     localOnlyMode: false,
+    localServers: [],
+    localModelAssignment: {
+      chatModelId: null,
+      codeModelId: null,
+      externalApiModelId: null,
+      serverId: null,
+    },
+    preferLocalWhenAvailable: false,
     encryptedSync: false,
     pauseSync: false,
+    postPrReviewCommentsToGitHub: false,
   };
 }
 
@@ -534,6 +543,47 @@ export function upgradeState(value: StoredState | null): StoredState | null {
         ? rawSettings.activeActionModeId
         : null;
 
+    const localServers = Array.isArray(rawSettings.localServers)
+      ? rawSettings.localServers
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return null;
+          const candidate = entry as Record<string, unknown>;
+          const apiType = candidate.apiType === "ollama" || candidate.apiType === "lmstudio" || candidate.apiType === "openai-compat"
+            ? candidate.apiType
+            : "ollama";
+          const baseUrl = typeof candidate.baseUrl === "string" ? candidate.baseUrl.trim() : "";
+          if (!baseUrl) return null;
+          return {
+            id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : createId(),
+            label: typeof candidate.label === "string" && candidate.label.trim() ? candidate.label : "Local server",
+            baseUrl,
+            apiType,
+            enabled: Boolean(candidate.enabled),
+            discoveredModels: Array.isArray(candidate.discoveredModels)
+              ? candidate.discoveredModels.map((model) => String(model)).filter(Boolean)
+              : [],
+            lastScannedAt: typeof candidate.lastScannedAt === "number" ? candidate.lastScannedAt : null,
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+      : [];
+
+    const rawLocalModelAssignment = rawSettings.localModelAssignment && typeof rawSettings.localModelAssignment === "object"
+      ? rawSettings.localModelAssignment as Record<string, unknown>
+      : {};
+    const localModelAssignment = {
+      chatModelId: typeof rawLocalModelAssignment.chatModelId === "string" ? rawLocalModelAssignment.chatModelId : null,
+      codeModelId: typeof rawLocalModelAssignment.codeModelId === "string" ? rawLocalModelAssignment.codeModelId : null,
+      externalApiModelId: typeof rawLocalModelAssignment.externalApiModelId === "string" ? rawLocalModelAssignment.externalApiModelId : null,
+      serverId: typeof rawLocalModelAssignment.serverId === "string" ? rawLocalModelAssignment.serverId : null,
+    };
+    if (localModelAssignment.serverId && !localServers.some((server) => server.id === localModelAssignment.serverId)) {
+      localModelAssignment.serverId = null;
+      localModelAssignment.chatModelId = null;
+      localModelAssignment.codeModelId = null;
+      localModelAssignment.externalApiModelId = null;
+    }
+
     const settings = {
       ...createSettings(),
       ...rawSettings,
@@ -551,6 +601,9 @@ export function upgradeState(value: StoredState | null): StoredState | null {
       activeJarvisModeId,
       actionModes,
       activeActionModeId,
+      localServers,
+      localModelAssignment,
+      preferLocalWhenAvailable: Boolean(rawSettings.preferLocalWhenAvailable),
     };
 
     return {
