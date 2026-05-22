@@ -25,14 +25,17 @@ describe("GET /api/jarvis/download", () => {
     global.fetch = originalFetch;
   });
 
-  it("redirects to the deterministic GitHub release URL when no token is configured", async () => {
+  it("returns actionable 503 when no GitHub token is configured for private releases", async () => {
     const res = await GET(new Request("http://localhost/api/jarvis/download?arch=x64"));
+    const payload = await res.json() as {
+      reason?: string;
+      instructions?: string;
+    };
 
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe(
-      "https://github.com/wiktorskrabel89-byte/Assistantx/releases/download/jarvis-latest/JarvisSetup-x64.exe"
-    );
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(503);
+    expect(payload.reason).toBe("private_release_requires_server_token");
+    expect(payload.instructions).toContain("JARVIS_GITHUB_TOKEN");
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("proxies the private release asset when a GitHub token is configured", async () => {
@@ -84,17 +87,20 @@ describe("GET /api/jarvis/download", () => {
     );
   });
 
-  it("falls back to deterministic release URL when authenticated release lookup finds no installer", async () => {
+  it("returns missing-installer 503 when authenticated release lookup finds no installer", async () => {
     process.env.JARVIS_GITHUB_TOKEN = "secret-token";
     const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
 
     fetchMock.mockResolvedValueOnce(Response.json({ assets: [] }));
 
     const res = await GET(new Request("http://localhost/api/jarvis/download?arch=arm64"));
+    const payload = await res.json() as {
+      error?: string;
+      instructions?: string;
+    };
 
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe(
-      "https://github.com/wiktorskrabel89-byte/Assistantx/releases/download/jarvis-latest/JarvisSetup-arm64.exe"
-    );
+    expect(res.status).toBe(503);
+    expect(payload.error).toBe("Installer not yet available");
+    expect(payload.instructions).toContain("Build and publish the installer first");
   });
 });
