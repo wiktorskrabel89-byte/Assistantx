@@ -1018,13 +1018,15 @@ export const POST = async (req: Request) => {
 
   const sendModelRequest = async (body: Record<string, unknown>) => {
     const targetModel = String(body.model ?? "");
-    const isLocalTarget = Boolean(localRouting && targetModel === localRouting.modelId);
-    if (isLocalTarget) {
+    const localRoute = localRouting && targetModel === localRouting.modelId
+      ? localRouting
+      : null;
+    if (localRoute) {
       const localBody: Record<string, unknown> = { ...body };
       delete localBody.plugins;
       delete localBody.reasoning_level;
       delete localBody.thinking_config;
-      const endpoint = `${localRouting.baseUrl}/v1/chat/completions`;
+      const endpoint = `${localRoute.baseUrl}/v1/chat/completions`;
       return fetch(endpoint, {
         method: "POST",
         signal: requestSignal,
