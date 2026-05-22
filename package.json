@@ -73,8 +73,11 @@
   "overrides": {
     "glob": "^13.0.0",
     "babel-plugin-istanbul": "^8.0.0",
+    "@grpc/proto-loader": {
+      "protobufjs": "7.5.9"
+    },
     "@opentelemetry/otlp-transformer": {
-      "protobufjs": "8.0.2"
+      "protobufjs": "8.4.2"
     },
     "dompurify": "3.4.0",
     "postcss": "8.5.10"
