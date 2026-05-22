@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
+const isVercelBuild = process.env.VERCEL === '1' || process.env.VERCEL === 'true'
+
 const nextConfig = {
-  output: 'standalone',
+  ...(isVercelBuild ? {} : { output: 'standalone' }),
   productionBrowserSourceMaps: true,
   generateEtags: false,
   images: {
