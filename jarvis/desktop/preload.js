@@ -13,6 +13,7 @@ const ALLOWED_INVOKE = new Set([
   'get-app-meta',
   'get-sidecar-status',
   'restart-sidecar',
+  'sidecar:send',
   'check-for-updates',
   'get-update-state',
   'download-update',
@@ -69,6 +70,7 @@ const ALLOWED_RECEIVE = new Set([
   'auto-update-status',
   'sidecar-status',
   'desktop-health',
+  'sidecar-message',
   'auth:session-changed',
   'auth:signed-out',
 ]);
@@ -160,6 +162,7 @@ try {
   const { SidecarBridge } = require('./sidecar-bridge');
   const runtimeMode = getRuntimeMode();
   sidecarBridge = new SidecarBridge({
+    ipcMode: runtimeMode === 'remote-linux-runtime' ? 'websocket' : 'stdio',
     url: runtimeMode === 'remote-linux-runtime' ? getRemoteRuntimeWsUrl() : undefined,
   });
 } catch {

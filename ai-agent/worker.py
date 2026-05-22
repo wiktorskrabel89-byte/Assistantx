@@ -16,6 +16,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    import psutil
+except Exception:  # pragma: no cover - optional dependency during partial env setup
+    psutil = None
+
 WEB_SEARCH_TRIGGERS = (
     "szukaj w sieci",
     "poszukaj w internecie",
@@ -51,6 +56,26 @@ LIGHT_MODEL_HINTS = (
     "szybki czat",
 )
 
+DANGEROUS_ACTION_TYPES = {
+    "delete_file",
+    "delete_folder",
+    "format_drive",
+    "rm_rf",
+    "terminate_process",
+    "uninstall_app",
+}
+
+DANGEROUS_PROMPT_PATTERNS = (
+    r"\busuń\b",
+    r"\bdelete\b",
+    r"\bremove\b",
+    r"\bformat\b",
+    r"\bwymaż\b",
+    r"\bkill\b",
+    r"\brm\s+-rf\b",
+    r"\buninstall\b",
+)
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -77,6 +102,10 @@ def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
         return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
 
 
 def _env_str(name: str, default: str) -> str:
@@ -85,10 +114,6 @@ def _env_str(name: str, default: str) -> str:
         return default
     value = raw.strip()
     return value or default
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return default
 
 
 def clamp_temperature(value: float) -> float:
@@ -178,6 +203,13 @@ class WorkerConfig:
     default_temperature: float
     local_enabled: bool
     worker_device_id: str
+    cpu_throttle_threshold_pct: float = 85.0
+    cpu_throttle_sleep_seconds: float = 15.0
+    workspace_root: str = str(Path(__file__).resolve().parents[1])
+    action_roots: tuple[str, ...] = ()
+    searxng_url: str = "http://127.0.0.1:8080"
+    web_search_timeout_seconds: int = 5
+    web_search_max_results: int = 5
 
 
 def load_config() -> WorkerConfig:
@@ -190,13 +222,22 @@ def load_config() -> WorkerConfig:
     )
     light_model = os.getenv("LOCAL_OLLAMA_LIGHT_MODEL") or os.getenv("LOCAL_OLLAMA_MODEL") or "qwen2.5:14b"
     heavy_model = os.getenv("LOCAL_OLLAMA_HEAVY_MODEL") or "qwen2.5-coder:32b"
+    workspace_root = os.path.abspath(
+        os.path.expanduser(
+            os.getenv("LOCAL_WORKER_WORKSPACE_ROOT")
+            or str(Path(__file__).resolve().parents[1])
+        )
+    )
     return WorkerConfig(
         supabase_url=supabase_url.rstrip("/"),
         supabase_key=supabase_key,
         supabase_auth_token=os.getenv("SUPABASE_AUTH_TOKEN", "").strip(),
         ollama_base_url=(os.getenv("LOCAL_OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/"),
-        ollama_light_model=os.getenv("LOCAL_OLLAMA_MODEL") or "qwen2.5:14b",
-        ollama_heavy_model=os.getenv("LOCAL_OLLAMA_CODER_MODEL") or "qwen2.5-coder:32b",
+        ollama_model=light_model,
+        ollama_light_model=light_model,
+        ollama_heavy_model=os.getenv("LOCAL_OLLAMA_CODER_MODEL") or heavy_model,
+        ollama_light_keep_alive=_env_str("LOCAL_OLLAMA_LIGHT_KEEP_ALIVE", "10m"),
+        ollama_heavy_keep_alive=_env_str("LOCAL_OLLAMA_HEAVY_KEEP_ALIVE", "20m"),
         ollama_timeout_seconds=max(5, _env_int("LOCAL_OLLAMA_TIMEOUT_SECONDS", 120)),
         ollama_retries=max(1, _env_int("LOCAL_OLLAMA_RETRIES", 2)),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
@@ -210,7 +251,39 @@ def load_config() -> WorkerConfig:
         default_temperature=clamp_temperature(_env_float("LOCAL_WORKER_DEFAULT_TEMPERATURE", 0.0)),
         local_enabled=_env_bool("LOCAL_WORKER_ENABLED", True),
         worker_device_id=os.getenv("LOCAL_WORKER_DEVICE_ID", "").strip(),
+        cpu_throttle_threshold_pct=max(1.0, min(100.0, _env_float("LOCAL_WORKER_CPU_THROTTLE_PCT", 85.0))),
+        cpu_throttle_sleep_seconds=max(1.0, _env_float("LOCAL_WORKER_CPU_THROTTLE_SLEEP_SECONDS", 15.0)),
+        workspace_root=workspace_root,
+        action_roots=(workspace_root,),
+        searxng_url=(os.getenv("LOCAL_SEARXNG_URL") or "http://127.0.0.1:8080").rstrip("/"),
+        web_search_timeout_seconds=max(1, _env_int("LOCAL_WEB_SEARCH_TIMEOUT_SECONDS", 5)),
+        web_search_max_results=max(1, _env_int("LOCAL_WEB_SEARCH_MAX_RESULTS", 5)),
     )
+
+
+class ResourceGuard:
+    def __init__(self, cpu_threshold_pct: float, throttle_sleep_seconds: float):
+        self.cpu_threshold_pct = max(1.0, float(cpu_threshold_pct))
+        self.throttle_sleep_seconds = max(1.0, float(throttle_sleep_seconds))
+
+    def current_cpu_pct(self) -> float:
+        if psutil is None:
+            return 0.0
+        try:
+            return float(psutil.cpu_percent(interval=1))
+        except Exception:
+            return 0.0
+
+    def check_and_throttle(self) -> tuple[bool, float]:
+        cpu_pct = self.current_cpu_pct()
+        if cpu_pct <= self.cpu_threshold_pct:
+            return False, cpu_pct
+        print(
+            f"[Worker][throttle] CPU {cpu_pct:.1f}% exceeded threshold "
+            f"{self.cpu_threshold_pct:.1f}%; sleeping {self.throttle_sleep_seconds:.1f}s."
+        )
+        time.sleep(self.throttle_sleep_seconds)
+        return True, cpu_pct
 
 
 class SupabaseRestClient:
@@ -270,7 +343,7 @@ class SupabaseRestClient:
 
     def fetch_pending_local_tasks(self, *, limit: int = 25, device_id: str | None = None) -> list[dict[str, Any]]:
         params = {
-            "select": "task_id,user_id,device_id,prompt,temperature,created_at,status,routing,category,action_type,payload",
+            "select": "task_id,user_id,device_id,prompt,temperature,created_at,status,routing,category,action_type,payload,approval_required,approval_decision,approved_by,approval_at",
             "status": "eq.pending",
             "routing": "eq.local",
             "order": "created_at.asc",
@@ -283,6 +356,19 @@ class SupabaseRestClient:
             "/rest/v1/ai_tasks",
             params=params,
         )
+        return list(rows or [])
+
+    def fetch_approved_tasks(self, *, limit: int = 10, device_id: str | None = None) -> list[dict[str, Any]]:
+        params = {
+            "select": "task_id,user_id,device_id,prompt,temperature,created_at,status,routing,category,action_type,payload,approval_required,approval_decision,approved_by,approval_at",
+            "status": "eq.approved",
+            "routing": "eq.local",
+            "order": "approval_at.asc.nullsfirst,created_at.asc",
+            "limit": str(max(1, limit)),
+        }
+        if device_id:
+            params["device_id"] = f"eq.{device_id}"
+        rows = self._request("GET", "/rest/v1/ai_tasks", params=params)
         return list(rows or [])
 
     def claim_task(
@@ -380,6 +466,103 @@ class SupabaseRestClient:
             },
         )
 
+    def claim_approved_task(self, task_id: str) -> dict[str, Any] | None:
+        rows = self._request(
+            "PATCH",
+            "/rest/v1/ai_tasks",
+            params={"task_id": f"eq.{task_id}", "status": "eq.approved", "select": "*"},
+            body={"status": "processing", "started_at": _utc_now_iso()},
+            prefer="return=representation",
+        )
+        if not rows:
+            return None
+        return rows[0]
+
+    def require_approval(self, task: dict[str, Any], *, prompt_summary: str) -> None:
+        task_id = str(task.get("task_id") or "")
+        user_id = str(task.get("user_id") or "")
+        action_type = str(task.get("action_type") or "").strip().lower() or None
+        self._request(
+            "PATCH",
+            "/rest/v1/ai_tasks",
+            params={"task_id": f"eq.{task_id}"},
+            body={
+                "status": "pending_approval",
+                "approval_required": True,
+                "approval_decision": None,
+                "approved_by": None,
+                "approval_at": None,
+                "started_at": None,
+            },
+        )
+        self.insert_notification(
+            user_id=user_id,
+            kind="warning",
+            title="Approval required",
+            body=prompt_summary,
+            task_id=task_id,
+            metadata={"actionType": action_type, "approvalRequired": True},
+            source="worker",
+            dedup_key=f"ai-task-approval:{task_id}",
+        )
+
+    def insert_notification(
+        self,
+        *,
+        user_id: str,
+        kind: str,
+        title: str,
+        body: str,
+        task_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        source: str | None = None,
+        dedup_key: str | None = None,
+    ) -> None:
+        if not user_id:
+            return
+        self._request(
+            "POST",
+            "/rest/v1/notifications",
+            body=[{
+                "user_id": user_id,
+                "kind": kind,
+                "title": title,
+                "body": body,
+                "task_id": task_id,
+                "metadata": metadata or {},
+                "source": source,
+                "dedup_key": dedup_key,
+                "created_at": _utc_now_iso(),
+            }],
+            prefer="resolution=merge-duplicates",
+        )
+
+    def insert_audit_log(
+        self,
+        *,
+        event_type: str,
+        user_id: str | None,
+        target_type: str | None,
+        target_id: str | None,
+        payload: dict[str, Any],
+        organization_id: str | None = None,
+        execution_id: str | None = None,
+    ) -> None:
+        self._request(
+            "POST",
+            "/rest/v1/audit_logs",
+            body=[{
+                "event_type": event_type,
+                "user_id": user_id,
+                "organization_id": organization_id,
+                "execution_id": execution_id,
+                "target_type": target_type,
+                "target_id": target_id,
+                "payload": payload,
+                "created_at": _utc_now_iso(),
+            }],
+        )
+
     def get_device(self, device_id: str) -> dict[str, Any] | None:
         rows = self._request(
             "GET",
@@ -438,6 +621,51 @@ def _build_system_instruction(source_code: str, web_context: str = "") -> str:
     if web_context:
         return f"{base}\n\nKontekst z lokalnego SearXNG:\n{web_context}"
     return base
+
+
+def _system_status_ping() -> str:
+    memory = {"available": psutil is not None}
+    if psutil is not None:
+        try:
+            vm = psutil.virtual_memory()
+            memory = {
+                "available": True,
+                "total_mb": round(vm.total / (1024 * 1024), 1),
+                "used_mb": round(vm.used / (1024 * 1024), 1),
+                "percent": float(vm.percent),
+            }
+        except Exception:
+            pass
+    payload = {
+        "platform": platform.platform(),
+        "hostname": socket.gethostname(),
+        "memory": memory,
+        "gpu": {"available": False},
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _prompt_is_dangerous(prompt: str) -> bool:
+    lowered = str(prompt or "").lower()
+    return any(re.search(pattern, lowered) for pattern in DANGEROUS_PROMPT_PATTERNS)
+
+
+def _task_requires_approval(task: dict[str, Any]) -> bool:
+    status = str(task.get("status") or "").strip().lower()
+    if status in {"approved", "rejected", "pending_approval", "processing", "completed", "failed", "cancelled"}:
+        return False
+    action_type = str(task.get("action_type") or "").strip().lower()
+    if action_type in DANGEROUS_ACTION_TYPES:
+        return True
+    return _prompt_is_dangerous(str(task.get("prompt") or ""))
+
+
+def _summarize_approval_prompt(task: dict[str, Any]) -> str:
+    action_type = str(task.get("action_type") or "system_action").strip() or "system_action"
+    prompt = str(task.get("prompt") or "").strip()
+    if len(prompt) > 180:
+        prompt = f"{prompt[:177]}..."
+    return f"Task `{action_type}` is waiting for approval: {prompt or 'No prompt summary available.'}"
 
 
 def _choose_local_model(config: WorkerConfig, prompt: str) -> str:
@@ -851,7 +1079,7 @@ def sync_worker_device_registration(config: WorkerConfig, supabase: SupabaseRest
     )
 
 
-def execute_system_action(task: dict[str, Any]) -> str:
+def execute_system_action(task: dict[str, Any], config: WorkerConfig) -> str:
     action_type = str(task.get("action_type") or "").strip().lower()
     payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
     if action_type == "launch_roblox":
@@ -867,6 +1095,18 @@ def execute_system_action(task: dict[str, Any]) -> str:
             stderr=subprocess.DEVNULL,
         )
         return f"Roblox launch requested for placeId={game_id}."
+    if action_type == "system_file_list":
+        target_path = _resolve_system_action_path(config, str(payload.get("path") or "."))
+        entries = []
+        for entry in sorted(os.listdir(target_path))[:100]:
+            full_path = os.path.join(target_path, entry)
+            entries.append({
+                "name": entry,
+                "type": "directory" if os.path.isdir(full_path) else "file",
+            })
+        return json.dumps({"path": target_path, "entries": entries}, ensure_ascii=False)
+    if action_type == "system_status_ping":
+        return _system_status_ping()
     raise RuntimeError(f"Unsupported system_action: {action_type or 'unknown'}")
 
 
@@ -881,12 +1121,27 @@ def process_task(
     task_id = str(task.get("task_id"))
     user_id = str(task.get("user_id") or "")
     raw_prompt = str(task.get("prompt") or "")
-    category = str(task.get("category") or "assistant").strip().lower()
+    category = str(task.get("category") or "ai_request").strip().lower()
     if not task_id or not user_id or not raw_prompt:
         return
 
+    if category == "system_action" and _task_requires_approval(task):
+        supabase.require_approval(task, prompt_summary=_summarize_approval_prompt(task))
+        try:
+            supabase.insert_audit_log(
+                event_type="ai_task_pending_approval",
+                user_id=user_id,
+                target_type="ai_task",
+                target_id=task_id,
+                payload={"action_type": task.get("action_type"), "status": "pending_approval"},
+            )
+        except Exception:
+            pass
+        print(f"[Worker] Task requires approval task={task_id} action={task.get('action_type')}")
+        return
+
     if category == "system_action":
-        response_text = execute_system_action(task)
+        response_text = execute_system_action(task, config)
         supabase.complete_task(
             task_id,
             response_text=response_text,
@@ -932,90 +1187,47 @@ def process_task(
             print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
 
     system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
-
     output_text = ""
     provider = "local_worker"
-    model = action_type or "ai_request"
+    model = "ai_request"
     routing = "local"
-    changed = False
-    current_temp = config.default_temperature
 
     try:
-        if category == "system_action":
-            output_text = handle_system_action(config, action_type=action_type, payload=payload)
+        if route_to_cloud:
+            output_text = generate_with_cloud_fallback(
+                config,
+                raw_prompt=raw_prompt,
+                temperature=current_temp,
+                system_instruction=system_instruction,
+            )
+            provider = "openrouter"
+            model = config.cloud_model
+            routing = "cloud"
         else:
-            try:
-                profile_default = supabase.get_user_profile_temperature(user_id, config.default_temperature)
-            except Exception as exc:
-                print(f"[Worker][warn] Could not read user profile temperature for {user_id}: {exc}")
-                profile_default = config.default_temperature
-
-            task_temperature = task.get("temperature")
-            if task_temperature is None:
-                current_temp = profile_default
-                try:
-                    supabase.update_task_temperature(task_id, current_temp)
-                except Exception as exc:
-                    print(f"[Worker][warn] Failed to freeze task temperature for {task_id}: {exc}")
-            else:
-                try:
-                    current_temp = clamp_temperature(float(task_temperature))
-                except (TypeError, ValueError):
-                    current_temp = profile_default
-                    try:
-                        supabase.update_task_temperature(task_id, current_temp)
-                    except Exception:
-                        pass
-
-            parsed_temp, changed = parse_temperature_command(raw_prompt, current_temp)
-            if changed:
-                current_temp = parsed_temp
-                try:
-                    supabase.update_task_temperature(task_id, current_temp)
-                    supabase.upsert_user_profile_temperature(user_id, current_temp)
-                    print(f"[Worker][config] Temperature updated to {current_temp:.2f} for task {task_id}")
-                except Exception as exc:
-                    print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
-
-            system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
+            model = _detect_local_model(config, raw_prompt)
+            output_text = generate_with_ollama(
+                config,
+                model_name=model,
+                raw_prompt=raw_prompt,
+                temperature=current_temp,
+                system_instruction=system_instruction,
+                keep_alive=_get_keep_alive_for_model(config, model),
+            )
             provider = "ollama"
-            model = config.ollama_model
-
-            try:
-                if route_to_cloud:
-                    output_text = generate_with_cloud_fallback(
-                        config,
-                        raw_prompt=raw_prompt,
-                        temperature=current_temp,
-                        system_instruction=system_instruction,
-                    )
-                    provider = "openrouter"
-                    model = config.cloud_model
-                    routing = "cloud"
-                else:
-                    output_text = generate_with_ollama(
-                        config,
-                        raw_prompt=raw_prompt,
-                        temperature=current_temp,
-                        system_instruction=system_instruction,
-                    )
-            except Exception as local_exc:
-                if not route_to_cloud:
-                    print(f"[Worker][warn] Local generation failed for {task_id}, trying cloud fallback: {local_exc}")
-                    output_text = generate_with_cloud_fallback(
-                        config,
-                        raw_prompt=raw_prompt,
-                        temperature=current_temp,
-                        system_instruction=system_instruction,
-                    )
-                    provider = "openrouter"
-                    model = config.cloud_model
-                    routing = "cloud"
-                    fallback_reason = "local_generation_failed"
-                else:
-                    raise
-    except Exception:
-        raise
+    except Exception as local_exc:
+        if route_to_cloud:
+            raise
+        print(f"[Worker][warn] Local generation failed for {task_id}, trying cloud fallback: {local_exc}")
+        output_text = generate_with_cloud_fallback(
+            config,
+            raw_prompt=raw_prompt,
+            temperature=current_temp,
+            system_instruction=system_instruction,
+        )
+        provider = "openrouter"
+        model = config.cloud_model
+        routing = "cloud"
+        fallback_reason = "local_generation_failed"
 
     if changed:
         output_text = f"🔧 [System: Temperatura została zmieniona na {current_temp:.2f}]\n\n{output_text}"
@@ -1043,11 +1255,19 @@ def process_task(
 
 def fetch_next_task(config: WorkerConfig, supabase: SupabaseRestClient) -> tuple[dict[str, Any] | None, bool, str | None]:
     local_available = is_ollama_available(config)
+    approved = supabase.fetch_approved_tasks(limit=10, device_id=config.worker_device_id or None)
+    for candidate in approved:
+        claimed = supabase.claim_approved_task(str(candidate.get("task_id") or ""))
+        if claimed:
+            return claimed, False, None
+
     processing_count = supabase.fetch_processing_count(device_id=config.worker_device_id or None)
     pending = supabase.fetch_pending_local_tasks(limit=10, device_id=config.worker_device_id or None)
     if not pending:
         return None, False, None
 
+    fallback = False
+    fallback_reason = None
     if not local_available:
         if not config.openrouter_api_key:
             return None, False, None
@@ -1058,7 +1278,7 @@ def fetch_next_task(config: WorkerConfig, supabase: SupabaseRestClient) -> tuple
         fallback_reason = "local_queue_overflow"
 
     claimed = supabase.claim_next_task(
-        device_id=config.device_id or None,
+        device_id=config.worker_device_id or None,
         include_unassigned=True,
         route_to_cloud=fallback,
         fallback_reason=fallback_reason,
@@ -1071,9 +1291,10 @@ def fetch_next_task(config: WorkerConfig, supabase: SupabaseRestClient) -> tuple
 def run_worker_forever() -> None:
     config = load_config()
     supabase = SupabaseRestClient(config.supabase_url, config.supabase_key, auth_token=config.supabase_auth_token)
+    resource_guard = ResourceGuard(config.cpu_throttle_threshold_pct, config.cpu_throttle_sleep_seconds)
     print(
         "[Worker] Started with "
-        f"local_model={config.ollama_model} cloud_model={config.cloud_model} "
+        f"local_model={config.ollama_light_model} cloud_model={config.cloud_model} "
         f"max_processing={config.local_max_processing} pick_timeout={config.task_pick_timeout_seconds}s "
         f"device_id={config.worker_device_id or 'none'} auth_mode={'user_jwt' if config.supabase_auth_token else 'service_key'}"
     )
@@ -1081,6 +1302,22 @@ def run_worker_forever() -> None:
 
     while True:
         try:
+            throttled, cpu_pct = resource_guard.check_and_throttle()
+            if throttled:
+                try:
+                    supabase.insert_audit_log(
+                        event_type="worker_cpu_throttled",
+                        user_id=None,
+                        target_type="worker",
+                        target_id=config.worker_device_id or "local-worker",
+                        payload={
+                            "cpu_percent": round(cpu_pct, 2),
+                            "threshold_percent": config.cpu_throttle_threshold_pct,
+                            "sleep_seconds": config.cpu_throttle_sleep_seconds,
+                        },
+                    )
+                except Exception:
+                    pass
             if config.worker_device_id and time.time() - last_device_sync_at >= 60.0:
                 sync_worker_device_registration(config, supabase)
                 last_device_sync_at = time.time()

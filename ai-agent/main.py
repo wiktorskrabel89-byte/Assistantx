@@ -33,6 +33,7 @@ Events emitted to client:
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import base64
 import json
@@ -315,25 +316,25 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
 
             # ~0.4 s silence threshold for end-of-utterance with 100 ms chunks.
                 if state.speech_active and state.trailing_silence_frames >= 4:
-                segment = b"".join(state.command_audio_buffer).strip()
-                await _send(ws, {
-                    "type": "vad_event",
-                    "phase": "speech_end",
-                    "sampleRate": state.sample_rate,
-                }, state)
-                if segment:
-                    encoded = base64.b64encode(segment).decode("ascii")
+                    segment = b"".join(state.command_audio_buffer).strip()
                     await _send(ws, {
-                        "type": "audio_segment",
-                        "data": encoded,
-                        "format": "audio/raw",
+                        "type": "vad_event",
+                        "phase": "speech_end",
                         "sampleRate": state.sample_rate,
                     }, state)
-                state.command_audio_buffer.clear()
-                state.speech_active = False
-                state.trailing_silence_frames = 0
-                state.listening_for_command = False
-                state.runtime_state = "idle"
+                    if segment:
+                        encoded = base64.b64encode(segment).decode("ascii")
+                        await _send(ws, {
+                            "type": "audio_segment",
+                            "data": encoded,
+                            "format": "audio/raw",
+                            "sampleRate": state.sample_rate,
+                        }, state)
+                    state.command_audio_buffer.clear()
+                    state.speech_active = False
+                    state.trailing_silence_frames = 0
+                    state.listening_for_command = False
+                    state.runtime_state = "idle"
         except Exception as exc:
             logger.debug("VAD processing error: %s", exc)
 
@@ -596,12 +597,7 @@ async def handle_connection(ws: WebSocketServerProtocol) -> None:
             except Exception:
                 continue
 
-            msg_type = str(msg.get("type", ""))
-            handler = HANDLERS.get(msg_type)
-            if handler:
-                await handler(ws, state, msg)
-            else:
-                logger.debug("Unknown message type: %s", msg_type)
+            await _dispatch_message(ws, state, msg)
     except websockets.exceptions.ConnectionClosedOK:
         pass
     except websockets.exceptions.ConnectionClosedError as exc:
@@ -622,6 +618,15 @@ async def _sender_loop(ws: WebSocketServerProtocol, state: ConnectionState) -> N
             await ws.send(json.dumps(payload))
         except Exception:
             return
+
+
+async def _dispatch_message(endpoint: Any, state: ConnectionState, msg: dict) -> None:
+    msg_type = str(msg.get("type", ""))
+    handler = HANDLERS.get(msg_type)
+    if handler:
+        await handler(endpoint, state, msg)
+    else:
+        logger.debug("Unknown message type: %s", msg_type)
 
 
 def _emit_rms(state: ConnectionState, pcm_bytes: bytes, source: str, sample_rate: int) -> None:
@@ -704,8 +709,47 @@ async def main_async() -> None:
     logger.info("Sidecar shutting down.")
 
 
-if __name__ == "__main__":
+class StdioEndpoint:
+    async def send(self, payload: str) -> None:
+        sys.stdout.write(f"{payload}\n")
+        sys.stdout.flush()
+
+
+async def main_stdio_async() -> None:
+    logger.info("Starting Jarvis AI-Agent sidecar in stdio mode")
+    endpoint = StdioEndpoint()
+    state = ConnectionState()
+    sender_task = asyncio.create_task(_sender_loop(endpoint, state))
+    await _send(endpoint, {
+        "type": "status",
+        "phase": "connected",
+        "message": "Jarvis AI-Agent sidecar ready.",
+    }, state)
+
     try:
-        asyncio.run(main_async())
+        while True:
+            raw = await asyncio.to_thread(sys.stdin.readline)
+            if raw == "":
+                break
+            try:
+                msg = json.loads(raw)
+            except Exception:
+                continue
+            await _dispatch_message(endpoint, state, msg)
+    finally:
+        sender_task.cancel()
+        try:
+            await sender_task
+        except BaseException:
+            pass
+        logger.info("Sidecar stdio loop shutting down.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("websocket", "stdio"), default="websocket")
+    args = parser.parse_args()
+    try:
+        asyncio.run(main_stdio_async() if args.mode == "stdio" else main_async())
     except KeyboardInterrupt:
         pass

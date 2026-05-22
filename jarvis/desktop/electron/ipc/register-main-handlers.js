@@ -27,6 +27,7 @@ function createMainIpcHandlers(deps) {
     launcherService,
     ensureDbReady,
     getSidecarStatus,
+    sendSidecarMessage,
     checkLocalAiAvailability,
     routeAiRequest,
     installLocalAiEngine,
@@ -89,6 +90,10 @@ function createMainIpcHandlers(deps) {
       restartSidecar();
       return { ok: true };
     },
+
+    'sidecar:send': withSchema('sidecar:send', (payload) => validatePlainObject(payload), async (_event, payload) => (
+      sendSidecarMessage(payload || {})
+    )),
 
     'open-url': withSchema('open-url', (payload) => validateString(payload, { maxLen: 2000 }), async (_event, url) => {
       const auth = await permissions.authorize('open-url', { url });

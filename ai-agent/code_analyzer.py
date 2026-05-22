@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+import pathspec
+
 SUPPORTED_EXTENSIONS = {
     ".py",
     ".js",
@@ -60,11 +62,67 @@ def clone_or_update_repo(repo_url: str, root_dir: str, token: str | None = None)
     return repo_dir
 
 
-def _iter_code_files(repo_dir: Path) -> Iterable[Path]:
+def _normalize_gitignore_pattern(pattern: str, base_relative: str) -> str:
+    stripped = pattern.strip()
+    if not stripped or stripped.startswith("#"):
+        return stripped
+
+    negated = stripped.startswith("!")
+    body = stripped[1:] if negated else stripped
+    anchored = body.startswith("/")
+    body = body.lstrip("/")
+
+    if not base_relative:
+        normalized = f"/{body}" if anchored else body
+        return f"!{normalized}" if negated else normalized
+
+    if anchored:
+        normalized = f"{base_relative}/{body}" if body else base_relative
+    elif "/" in body:
+        normalized = f"{base_relative}/{body}"
+    else:
+        normalized = f"{base_relative}/**/{body}"
+
+    return f"!{normalized}" if negated else normalized
+
+
+def _load_gitignore_spec(repo_dir: Path) -> pathspec.PathSpec:
+    combined_patterns: list[str] = []
+    for gitignore_path in sorted(repo_dir.rglob(".gitignore")):
+        if any(part == ".git" for part in gitignore_path.parts):
+            continue
+        try:
+            lines = gitignore_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            continue
+        base_relative = gitignore_path.parent.relative_to(repo_dir).as_posix()
+        combined_patterns.extend(
+            _normalize_gitignore_pattern(line, base_relative)
+            for line in lines
+        )
+    return pathspec.PathSpec.from_lines("gitignore", combined_patterns)
+
+
+def _is_ignored(path: Path, repo_dir: Path, ignore_spec: pathspec.PathSpec, *, is_dir: bool = False) -> bool:
+    relative = path.relative_to(repo_dir).as_posix()
+    if is_dir and relative:
+        relative = f"{relative}/"
+    return bool(relative) and ignore_spec.match_file(relative)
+
+
+def _iter_code_files(repo_dir: Path, ignore_spec: pathspec.PathSpec | None = None) -> Iterable[Path]:
+    ignore_spec = ignore_spec or pathspec.PathSpec.from_lines("gitignore", [])
     for root, dirs, files in os.walk(repo_dir):
-        dirs[:] = [d for d in dirs if d not in {".git", "node_modules", ".next", "__pycache__", "dist", "build"}]
+        root_path = Path(root)
+        dirs[:] = [
+            d for d in dirs
+            if d not in {".git", "node_modules", ".next", "__pycache__", "dist", "build"}
+            and not _is_ignored(root_path / d, repo_dir, ignore_spec, is_dir=True)
+        ]
         for file_name in files:
-            path = Path(root) / file_name
+            path = root_path / file_name
+            if _is_ignored(path, repo_dir, ignore_spec):
+                continue
             if path.suffix.lower() in SUPPORTED_EXTENSIONS:
                 yield path
 
@@ -91,8 +149,9 @@ def build_index(repo_dir: Path, index_dir: Path, *, max_lines: int = 80, overlap
     chunks_file = index_dir / "chunks.jsonl"
     total_files = 0
     total_chunks = 0
+    ignore_spec = _load_gitignore_spec(repo_dir)
     with chunks_file.open("w", encoding="utf-8") as handle:
-        for file_path in _iter_code_files(repo_dir):
+        for file_path in _iter_code_files(repo_dir, ignore_spec=ignore_spec):
             total_files += 1
             relative = str(file_path.relative_to(repo_dir)).replace("\\", "/")
             try:
