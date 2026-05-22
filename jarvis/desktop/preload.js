@@ -70,6 +70,16 @@ const ALLOWED_INVOKE = new Set([
   'google:status',
   'google:calendar-today',
   'google:gmail-unread',
+  'mcp:list-servers',
+  'mcp:install-server',
+  'mcp:uninstall-server',
+  'mcp:call-tool',
+  'mcp:get-server-status',
+  'mcp:google-auth-status',
+  'mcp:google-start-auth',
+  'mcp:google-poll-auth',
+  'mcp:set-api-key',
+  'mcp:list-tools',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -297,6 +307,18 @@ function buildJarvisApiV2() {
       launchGame: (payload) => invokeAllowed('tools:launch-game', payload || {}),
       launchApp: (payload) => invokeAllowed('tools:launch-app', payload || {}),
     },
+    mcp: {
+      listServers: () => invokeAllowed('mcp:list-servers'),
+      installServer: (serverId) => invokeAllowed('mcp:install-server', { serverId }),
+      uninstallServer: (serverId) => invokeAllowed('mcp:uninstall-server', { serverId }),
+      callTool: (toolName, params) => invokeAllowed('mcp:call-tool', { toolName, params: params || {} }),
+      getServerStatus: (serverId) => invokeAllowed('mcp:get-server-status', { serverId }),
+      googleAuthStatus: () => invokeAllowed('mcp:google-auth-status'),
+      googleStartAuth: () => invokeAllowed('mcp:google-start-auth'),
+      googlePollAuth: (deviceCode) => invokeAllowed('mcp:google-poll-auth', { deviceCode }),
+      setApiKey: (serverId, value) => invokeAllowed('mcp:set-api-key', { serverId, value }),
+      listTools: () => invokeAllowed('mcp:list-tools'),
+    },
     voice: {
       sidecar: buildSidecarApi(),
       gateway: buildVoiceGatewayApi(),
@@ -413,6 +435,18 @@ contextBridge.exposeInMainWorld('jarvisApi', {
   tools: {
     launchGame: (payload) => invokeAllowed('tools:launch-game', payload || {}),
     launchApp: (payload) => invokeAllowed('tools:launch-app', payload || {}),
+  },
+  mcp: {
+    listServers: () => invokeAllowed('mcp:list-servers'),
+    installServer: (serverId) => invokeAllowed('mcp:install-server', { serverId }),
+    uninstallServer: (serverId) => invokeAllowed('mcp:uninstall-server', { serverId }),
+    callTool: (toolName, params) => invokeAllowed('mcp:call-tool', { toolName, params: params || {} }),
+    getServerStatus: (serverId) => invokeAllowed('mcp:get-server-status', { serverId }),
+    googleAuthStatus: () => invokeAllowed('mcp:google-auth-status'),
+    googleStartAuth: () => invokeAllowed('mcp:google-start-auth'),
+    googlePollAuth: (deviceCode) => invokeAllowed('mcp:google-poll-auth', { deviceCode }),
+    setApiKey: (serverId, value) => invokeAllowed('mcp:set-api-key', { serverId, value }),
+    listTools: () => invokeAllowed('mcp:list-tools'),
   },
   auth: {
     ...authApi,

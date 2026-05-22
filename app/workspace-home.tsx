@@ -92,6 +92,10 @@ const JarvisTab = dynamic(
   () => import("./components/tabs/JarvisTab"),
   { ssr: false, loading: () => <TabSkeleton /> },
 );
+const MarketplaceTab = dynamic(
+  () => import("./components/tabs/MarketplaceTab").then((m) => m.MarketplaceTab),
+  { ssr: false, loading: () => <TabSkeleton /> },
+);
 
 const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
   "sandbox", "codebase", "projects",
@@ -159,6 +163,8 @@ function TabContent({
       return <NotificationsTab dark={state.dark} notificationsHook={notificationsHook} />;
     case "ai-learning":
       return <AILearningTab dark={state.dark} />;
+    case "marketplace":
+      return <MarketplaceTab dark={state.dark} />;
     default:
       return null;
   }
