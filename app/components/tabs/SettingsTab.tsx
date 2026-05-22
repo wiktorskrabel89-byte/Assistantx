@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart2, Bot, Cloud, Globe, LogOut, MessageSquareText, Mic, MoonStar, Sparkles, Sun, Theater, Volume2, Zap } from "lucide-react";
+import { BarChart2, Bot, Cloud, Globe, LogOut, MessageSquareText, Mic, MoonStar, RefreshCcw, Server, Sparkles, Sun, Theater, Trash2, Volume2, Zap } from "lucide-react";
 import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MemorySummaryCard } from "../MemorySummaryCard";
 import { getTranslations, UI_LANGUAGES } from "@/app/lib/i18n";
+import { useJarvisDeviceStatus } from "@/app/hooks/useJarvisDeviceStatus";
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
@@ -85,6 +86,7 @@ export function SettingsTab() {
   const [newServerApiType, setNewServerApiType] = useState<"ollama" | "lmstudio" | "openai-compat">("ollama");
   const [localServerError, setLocalServerError] = useState("");
   const [scanBusyServerId, setScanBusyServerId] = useState<string | null>(null);
+  const { primaryDevice, hasTrustedOnlineDesktop } = useJarvisDeviceStatus();
 
   const [serverStats, setServerStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -569,6 +571,217 @@ export function SettingsTab() {
             </div>
           </div>
 
+        </div>
+
+        <div className={`rounded-3xl border p-6 backdrop-blur sm:p-8 ${cardClass}`}>
+          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${chipClass}`}>
+            <Server className="h-3.5 w-3.5" />
+            Local model routing
+          </div>
+          <h2 className="mt-5 text-2xl font-semibold tracking-tight">Local servers & model assignment</h2>
+          <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>
+            Hosted AssistantX cannot reach your localhost directly. Local server routing is only enabled while a trusted Jarvis desktop is online.
+          </p>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">Paired desktop status</p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>
+                  {hasTrustedOnlineDesktop
+                    ? `Connected to ${primaryDevice?.label ?? "Jarvis Desktop"}`
+                    : "No trusted online Jarvis desktop detected. Local commands and local model routing are disabled on web."}
+                </p>
+              </div>
+              <div className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                hasTrustedOnlineDesktop
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  : "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+              }`}>
+                {hasTrustedOnlineDesktop ? "PC online" : "PC offline"}
+              </div>
+            </div>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">Prefer local models when available</p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>
+                  When a lane has a scanned local model assigned, AssistantX will try the local runtime before cloud fallback.
+                </p>
+              </div>
+              <Switch
+                checked={activeWorkspace.settings.preferLocalWhenAvailable ?? false}
+                onCheckedChange={setPreferLocalWhenAvailable}
+                aria-label="Prefer local models when available"
+                disabled={!hasTrustedOnlineDesktop}
+              />
+            </div>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Input
+                value={newServerLabel}
+                onChange={(event) => setNewServerLabel(event.target.value)}
+                placeholder="Server label"
+                disabled={!hasTrustedOnlineDesktop}
+              />
+              <Input
+                value={newServerBaseUrl}
+                onChange={(event) => setNewServerBaseUrl(event.target.value)}
+                placeholder="http://127.0.0.1:11434"
+                disabled={!hasTrustedOnlineDesktop}
+              />
+              <Select
+                value={newServerApiType}
+                onValueChange={(value: "ollama" | "lmstudio" | "openai-compat") => setNewServerApiType(value)}
+                disabled={!hasTrustedOnlineDesktop}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="API type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ollama">Ollama</SelectItem>
+                  <SelectItem value="lmstudio">LM Studio</SelectItem>
+                  <SelectItem value="openai-compat">OpenAI-compatible</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" onClick={() => void handleAddLocalServer()} disabled={!hasTrustedOnlineDesktop}>
+                Add local server
+              </Button>
+            </div>
+            {localServerError ? (
+              <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
+                {localServerError}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {localServers.length === 0 ? (
+              <div className={`rounded-2xl border p-4 text-sm ${softSurfaceClass}`}>
+                No local servers configured yet.
+              </div>
+            ) : (
+              localServers.map((server) => (
+                <div key={server.id} className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">{server.label}</div>
+                      <div className={`mt-1 text-xs ${mutedClass}`}>{server.baseUrl} · {server.apiType}</div>
+                      <div className={`mt-1 text-xs ${mutedClass}`}>
+                        {server.lastScannedAt ? `Last scanned ${new Date(server.lastScannedAt).toLocaleString()}` : "Not scanned yet"}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Switch
+                        checked={server.enabled}
+                        onCheckedChange={(enabled) => updateLocalServer(server.id, { enabled })}
+                        aria-label={`Toggle ${server.label}`}
+                        disabled={!hasTrustedOnlineDesktop}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleScanServer(server.id)}
+                        disabled={!hasTrustedOnlineDesktop || scanBusyServerId === server.id}
+                      >
+                        <RefreshCcw className={`mr-1 h-3.5 w-3.5 ${scanBusyServerId === server.id ? "animate-spin" : ""}`} />
+                        Scan
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeLocalServer(server.id)}
+                        disabled={!hasTrustedOnlineDesktop}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(server.discoveredModels ?? []).length > 0 ? (
+                      server.discoveredModels.map((modelId) => (
+                        <span
+                          key={modelId}
+                          className={`rounded-full border px-2.5 py-1 text-[11px] ${dark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-200 bg-white text-slate-700"}`}
+                        >
+                          {modelId}
+                        </span>
+                      ))
+                    ) : (
+                      <span className={`text-xs ${mutedClass}`}>No discovered models yet.</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label className={`mb-2 block text-xs ${mutedClass}`}>Chat lane</label>
+                <Select
+                  value={selectedChatOption}
+                  onValueChange={(value) => handleRoleModelSelect("chatModelId", value)}
+                  disabled={!hasTrustedOnlineDesktop || !hasLocalModelOptions}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Cloud default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__cloud__">Cloud default</SelectItem>
+                    {localModelOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className={`mb-2 block text-xs ${mutedClass}`}>Code lane</label>
+                <Select
+                  value={selectedCodeOption}
+                  onValueChange={(value) => handleRoleModelSelect("codeModelId", value)}
+                  disabled={!hasTrustedOnlineDesktop || !hasLocalModelOptions}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Cloud default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__cloud__">Cloud default</SelectItem>
+                    {localModelOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className={`mb-2 block text-xs ${mutedClass}`}>External/API lane</label>
+                <Select
+                  value={selectedExternalOption}
+                  onValueChange={(value) => handleRoleModelSelect("externalApiModelId", value)}
+                  disabled={!hasTrustedOnlineDesktop || !hasLocalModelOptions}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Cloud default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__cloud__">Cloud default</SelectItem>
+                    {localModelOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Profile card */}

@@ -84,6 +84,16 @@ export type ChatComposerProps = {
   wakeWordEnabled?: boolean;
   wakeWordPhrase?: string;
   externalVoiceActivationSignal?: number;
+  slashSuggestions?: Array<{
+    id: string;
+    slash: string;
+    title: string;
+    description: string;
+    disabled?: boolean;
+    disabledReason?: string;
+  }>;
+  showSlashSuggestions?: boolean;
+  onSelectSlashSuggestion?: (slash: string) => void;
 };
 
 const DEFAULT_THINKING_EFFORT = 2;
@@ -118,6 +128,9 @@ export function ChatComposer({
   wakeWordEnabled = true,
   wakeWordPhrase = DEFAULT_WEB_WAKE_PHRASE,
   externalVoiceActivationSignal = 0,
+  slashSuggestions = [],
+  showSlashSuggestions = false,
+  onSelectSlashSuggestion,
 }: ChatComposerProps) {
   // Auto-resize textarea
   const resizeComposer = useCallback(() => {
@@ -307,6 +320,43 @@ export function ChatComposer({
         {composerPreview && message.trim() ? (
           <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
             <ComposerMarkdownPreview text={message} />
+          </div>
+        ) : null}
+
+        {showSlashSuggestions && slashSuggestions.length > 0 ? (
+          <div className="rounded-xl border border-border bg-background shadow-sm">
+            <div className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Slash commands
+            </div>
+            <div className="max-h-72 overflow-y-auto p-2">
+              {slashSuggestions.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={item.disabled}
+                  onClick={() => onSelectSlashSuggestion?.(item.slash)}
+                  className={cn(
+                    "flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors",
+                    item.disabled
+                      ? "cursor-not-allowed opacity-55"
+                      : "hover:bg-accent"
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground">{item.slash}</span>
+                      <span className="text-xs text-muted-foreground">{item.title}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">{item.description}</div>
+                  </div>
+                  {item.disabledReason ? (
+                    <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
+                      {item.disabledReason}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
 

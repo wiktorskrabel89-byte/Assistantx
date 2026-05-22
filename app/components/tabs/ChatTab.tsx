@@ -36,6 +36,8 @@ import { executeActionModeSteps } from "../tabs/ModesTab";
 import { isEditableElementTarget } from "../../lib/keyboard";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
+import { filterAssistantCommandsForQuery, shouldShowSlashSuggestions } from "@/src/core/commands/parser";
+import { useJarvisDeviceStatus } from "@/app/hooks/useJarvisDeviceStatus";
 
 /** Poll interval for the model health endpoint (ms). */
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
@@ -252,6 +254,7 @@ export function ChatTab({
     updateChat,
     updateLastMessage,
   });
+  const { hasTrustedOnlineDesktop } = useJarvisDeviceStatus();
 
   // Check if a composer message is a mode activation voice command.
   // If so, run the mode steps and swallow the message (don't send to AI).
@@ -338,6 +341,17 @@ export function ChatTab({
   });
 
   const { installedCount: mcpInstalledCount } = useMCPInstallations();
+  const showSlashSuggestions = shouldShowSlashSuggestions(message);
+  const slashSuggestions = useMemo(() => (
+    filterAssistantCommandsForQuery(message).map((command) => ({
+      id: command.id,
+      slash: `${command.slash}${command.argsPlaceholder ? ` ${command.argsPlaceholder}` : ""}`,
+      title: command.title,
+      description: command.description,
+      disabled: command.requiresDesktop && !hasTrustedOnlineDesktop,
+      disabledReason: command.requiresDesktop && !hasTrustedOnlineDesktop ? "Wymaga PC" : undefined,
+    }))
+  ), [hasTrustedOnlineDesktop, message]);
 
 
   useEffect(() => {
@@ -942,6 +956,9 @@ export function ChatTab({
             wakeWordEnabled={voiceSettings.wakeWordEnabled}
             wakeWordPhrase={voiceSettings.wakeWordPhrase}
             externalVoiceActivationSignal={wakeActivationSignal}
+            slashSuggestions={slashSuggestions}
+            showSlashSuggestions={showSlashSuggestions}
+            onSelectSlashSuggestion={(slash) => setComposerText(`${slash} `)}
             premiumLimitReached={(() => {
               const limit = state.userPlan === "pro"
                 ? PRO_PLAN.premiumRequestsPerMonth
