@@ -6,7 +6,13 @@ const RISK_BY_ACTION = {
   'launcher-launch': 'medium',
   'jarvis-ai-request': 'medium',
   'open-account-login': 'medium',
+  'tools:launch-game': 'medium',
+  'tools:launch-app': 'medium',
   'install-everything-search': 'low',
+  'setup:install-local': 'medium',
+  'server:verify-pairing': 'medium',
+  'server:set-permission-level': 'high',
+  'server:kill-switch': 'medium',
 };
 
 function createPermissionPolicy({ onAudit } = {}) {

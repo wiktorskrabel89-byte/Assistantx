@@ -1,29 +1,7 @@
-import { getProviderTokenCookieName } from "@/lib/integrations";
-import { cookies } from "next/headers";
+import { getGitHubToken, githubFetch, isValidRepo, isValidRepoPath } from "../shared";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-type GitHubApiError = { message?: string };
-
-async function githubFetch(url: string, token: string, options?: RequestInit) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: "application/vnd.github+json",
-      "Content-Type": "application/json",
-      "User-Agent": "AssistantX",
-      "X-GitHub-Api-Version": "2022-11-28",
-      Authorization: `Bearer ${token}`,
-      ...(options?.headers as Record<string, string> ?? {}),
-    },
-  });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}) as GitHubApiError);
-    throw new Error(data.message ?? `GitHub request failed (${response.status}).`);
-  }
-  return response;
-}
 
 /**
  * POST /api/integrations/github/commit
@@ -32,8 +10,7 @@ async function githubFetch(url: string, token: string, options?: RequestInit) {
  */
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(getProviderTokenCookieName("github"))?.value ?? null;
+    const token = await getGitHubToken();
 
     if (!token) {
       return Response.json({ error: "GitHub is not connected. Connect your GitHub account first." }, { status: 401 });
@@ -58,12 +35,12 @@ export async function POST(request: Request) {
     }
 
     // Validate repo format (owner/name) to prevent URL injection
-    if (!/^[\w.\-]+\/[\w.\-]+$/.test(repo)) {
+    if (!isValidRepo(repo)) {
       return Response.json({ error: "Invalid repo format. Use owner/repo." }, { status: 400 });
     }
 
     // Validate path doesn't traverse directories or start with slash
-    if (path.startsWith("/") || path.includes("..")) {
+    if (!isValidRepoPath(path)) {
       return Response.json({ error: "Invalid file path." }, { status: 400 });
     }
 

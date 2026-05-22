@@ -1,0 +1,221 @@
+'use strict';
+
+const { analyzeRequest } = require('./analyzer');
+const { decideRoute } = require('./policy');
+const { OllamaProvider } = require('../providers/ollama');
+const { CloudApiProvider } = require('../providers/cloud-api');
+const { OpenAICompatProvider } = require('../providers/openai-compat');
+
+const ROUTING_PROFILES = {
+  chat: {
+    local: 'gemma4:e4b',
+  },
+  coding: {
+    local: 'qwen2.5-coder:14b',
+  },
+  tool: {
+    local: 'qwen2.5-coder:14b',
+  },
+};
+
+const REQUIRED_LOCAL_MODELS = ['gemma4:e4b', 'qwen2.5-coder:14b'];
+const DEFAULT_CLOUD_PROVIDER_ORDER = ['groq', 'openrouter'];
+
+class AIRouter {
+  constructor(options = {}) {
+    this.ollama = options.ollama || new OllamaProvider(options.ollamaConfig || {});
+    this.cloud = options.cloud || new CloudApiProvider(options.cloudConfig || {});
+    this.getLocalServerConfig = typeof options.getLocalServerConfig === 'function' ? options.getLocalServerConfig : null;
+    this.requiredModels = Array.isArray(options.requiredModels) && options.requiredModels.length > 0
+      ? options.requiredModels
+      : REQUIRED_LOCAL_MODELS;
+    this.cloudProviderOrder = normalizeProviderOrder(
+      options.cloudProviderOrder || process.env.JARVIS_CLOUD_PROVIDER_ORDER || DEFAULT_CLOUD_PROVIDER_ORDER,
+    );
+  }
+
+  async getAvailability() {
+    const localConfig = this.getLocalServerConfig ? this.getLocalServerConfig() : null;
+    const localServers = Array.isArray(localConfig?.localServers) ? localConfig.localServers : [];
+    const enabledLocalServers = localServers.filter((server) => server?.enabled);
+    const localServerStates = await Promise.all(enabledLocalServers.map(async (server) => {
+      const provider = createLocalProvider(server);
+      const healthy = await provider.isHealthy();
+      const installedModels = healthy ? await provider.listModels() : [];
+      return {
+        id: String(server.id || ''),
+        label: String(server.label || 'Local server'),
+        baseUrl: String(server.baseUrl || ''),
+        apiType: server.apiType,
+        healthy,
+        installedModels,
+      };
+    }));
+    const ollamaHealth = await this.ollama.getHealth(this.requiredModels);
+    const cloudReadiness = await this.cloud.getReadiness();
+    const ollamaAvailable = Boolean(ollamaHealth.healthy && ollamaHealth.requiredModelsPresent);
+    const anyLocalServerAvailable = localServerStates.some((server) => server.healthy && server.installedModels.length > 0);
+    return {
+      ollama_available: Boolean(ollamaAvailable || anyLocalServerAvailable),
+      ollama_healthy: Boolean(ollamaHealth.healthy),
+      required_models: ollamaHealth.requiredModels,
+      installed_models: ollamaHealth.installedModels,
+      missing_models: ollamaHealth.missingModels,
+      required_models_present: ollamaHealth.requiredModelsPresent,
+      local_servers: localServerStates,
+      cloud: cloudReadiness,
+      cloud_provider_order: this.cloudProviderOrder,
+      mode: ollamaAvailable || anyLocalServerAvailable ? 'local' : 'cloud-fallback',
+    };
+  }
+
+  async routeRequest(request = {}, onChunk = () => {}) {
+    const profile = normalizeProfile(request?.profile || inferProfile(request));
+    const analysis = analyzeRequest({
+      message: request?.message || extractLastMessage(request?.messages),
+      contextSize: request?.contextSize,
+      codingDepth: request?.contextType === 'code' ? 'architecture' : request?.codingDepth,
+      retryCount: request?.retryCount || 0,
+      confidence: request?.confidence,
+    });
+    const availability = await this.getAvailability();
+    const localConfig = this.getLocalServerConfig ? this.getLocalServerConfig() : null;
+    const localRoute = resolveConfiguredLocalRoute(localConfig, profile, availability);
+    const route = decideRoute(analysis, {
+      availability,
+      profile,
+      cloudProviderOrder: this.cloudProviderOrder,
+    });
+    const effectiveRoute = localRoute || route;
+    const resolvedRequest = {
+      ...request,
+      messages: normalizeMessages(request),
+      model: effectiveRoute.model,
+      provider: effectiveRoute.provider,
+      options: {
+        temperature: effectiveRoute.reason === 'escalation' ? 0.2 : 0.7,
+        ...(request.options || {}),
+      },
+      keepAlive: effectiveRoute.keepAlive,
+    };
+
+    if (effectiveRoute.provider === 'ollama' && availability.ollama_available) {
+      const provider = localRoute?.server ? createLocalProvider(localRoute.server) : this.ollama;
+      const response = await provider.stream(resolvedRequest, onChunk);
+      return {
+        ...response,
+        route: effectiveRoute,
+        profile,
+        availability,
+      };
+    }
+
+    if (effectiveRoute.provider === 'openai-compat' && localRoute?.server) {
+      const provider = createLocalProvider(localRoute.server);
+      const response = await provider.stream(resolvedRequest, onChunk);
+      return {
+        ...response,
+        route: effectiveRoute,
+        profile,
+        availability,
+      };
+    }
+
+    const response = await this.cloud.stream({
+      ...resolvedRequest,
+      provider: effectiveRoute.provider,
+      model: effectiveRoute.model,
+    }, onChunk);
+    return {
+      ...response,
+      route: effectiveRoute,
+      profile,
+      availability,
+    };
+  }
+}
+
+function extractLastMessage(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return '';
+  const last = messages[messages.length - 1];
+  return String(last?.content || '');
+}
+
+function normalizeMessages(request = {}) {
+  if (Array.isArray(request.messages) && request.messages.length > 0) {
+    return request.messages.map((entry) => ({
+      role: String(entry?.role || 'user'),
+      content: String(entry?.content || ''),
+    }));
+  }
+  return [{ role: 'user', content: String(request.message || '') }];
+}
+
+function inferProfile(request = {}) {
+  const explicitContext = String(request?.contextType || '').toLowerCase();
+  if (explicitContext === 'code') return 'coding';
+  if (explicitContext === 'tool') return 'tool';
+  const content = `${request?.message || ''} ${extractLastMessage(request?.messages)}`.toLowerCase();
+  if (/(code|refactor|debug|architecture|typescript|python|javascript|sql)/i.test(content)) return 'coding';
+  if (/(search|tool|web|browser|retrieve|memory)/i.test(content)) return 'tool';
+  return 'chat';
+}
+
+function normalizeProfile(profile) {
+  const normalized = String(profile || '').toLowerCase().trim();
+  if (normalized === 'coding' || normalized === 'tool') return normalized;
+  return 'chat';
+}
+
+function normalizeProviderOrder(input) {
+  const values = Array.isArray(input) ? input : String(input || '').split(',');
+  const normalized = values
+    .map((item) => String(item || '').toLowerCase().trim())
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index);
+  return normalized.length > 0 ? normalized : [...DEFAULT_CLOUD_PROVIDER_ORDER];
+}
+
+function createLocalProvider(server) {
+  const apiType = String(server?.apiType || 'ollama');
+  const baseUrl = String(server?.baseUrl || '');
+  if (apiType === 'ollama') return new OllamaProvider({ baseUrl });
+  return new OpenAICompatProvider({ baseUrl });
+}
+
+function resolveConfiguredLocalRoute(localConfig, profile, availability) {
+  if (!localConfig || typeof localConfig !== 'object') return null;
+  const assignment = localConfig.localModelAssignment || {};
+  const serverId = assignment.serverId ? String(assignment.serverId) : '';
+  if (!serverId) return null;
+  const roleModelId = profile === 'coding'
+    ? assignment.codeModelId
+    : profile === 'tool'
+      ? assignment.externalApiModelId
+      : assignment.chatModelId;
+  if (!roleModelId) return null;
+  const server = Array.isArray(localConfig.localServers)
+    ? localConfig.localServers.find((entry) => entry?.id === serverId && entry?.enabled)
+    : null;
+  if (!server) return null;
+  const scannedState = Array.isArray(availability?.local_servers)
+    ? availability.local_servers.find((entry) => entry?.id === serverId)
+    : null;
+  const availableModels = Array.isArray(scannedState?.installedModels) ? scannedState.installedModels : [];
+  if (!availableModels.includes(String(roleModelId))) return null;
+  return {
+    provider: server.apiType === 'ollama' ? 'ollama' : 'openai-compat',
+    model: String(roleModelId),
+    keepAlive: null,
+    reason: 'configured-local-model',
+    profile,
+    server,
+  };
+}
+
+module.exports = {
+  AIRouter,
+  ROUTING_PROFILES,
+  REQUIRED_LOCAL_MODELS,
+  DEFAULT_CLOUD_PROVIDER_ORDER,
+};

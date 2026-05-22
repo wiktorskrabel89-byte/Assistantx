@@ -36,6 +36,7 @@ export function IntegrationsPanel({
   onCopyVsCodePrompt,
   onDownloadVsCodeBundle,
   onSendGoogleContext,
+  highlightGitHubCard = false,
 }: {
   dark: boolean;
   linkedProviders: OAuthProvider[];
@@ -49,6 +50,7 @@ export function IntegrationsPanel({
   onDownloadVsCodeBundle: () => void;
   /** Called with a context string to inject into the next chat message */
   onSendGoogleContext?: (context: string) => void;
+  highlightGitHubCard?: boolean;
 }) {
   return (
     <section className={`rounded-3xl border p-4 ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
@@ -94,6 +96,7 @@ export function IntegrationsPanel({
           linkedProviders={linkedProviders}
           authProvider={authProvider}
           onImportFile={onImportFile}
+          highlightCard={highlightGitHubCard}
         />
 
         <DriveIntegration

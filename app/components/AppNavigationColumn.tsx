@@ -16,6 +16,7 @@ import {
   Search,
   Settings2,
   Share2,
+  ShoppingBag,
   SquareTerminal,
   Stethoscope,
   X,
@@ -45,7 +46,8 @@ export type AppNavigationTab =
   | "settings"
   | "notifications"
   | "ai-learning"
-  | "website-creator";
+  | "website-creator"
+  | "marketplace";
 
 type AppNavigationColumnProps = {
   activeTab: AppNavigationTab;
@@ -61,6 +63,7 @@ type AppNavigationColumnProps = {
   isAdmin?: boolean;
   desktopAccessory?: ReactNode;
   mobileAccessory?: ReactNode;
+  highlightCodebase?: boolean;
 };
 
 type AddOnItem = {
@@ -75,6 +78,7 @@ type AddOnItem = {
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "jarvis",           label: "Jarvis App Settings", description: "Desktop + mobile setup",      icon: Laptop },
+  { id: "marketplace",     label: "MCP Marketplace",     description: "Install MCP server tools",     icon: ShoppingBag },
   { id: "clinical",         label: "Clinical",        description: "Clinical tools",                   icon: Stethoscope },
   { id: "learning",         label: "Learning",        description: "Learning materials",               icon: BookOpen },
   { id: "prompt-library",   label: "Prompt Library",  description: "Prompt library",                   icon: LibraryBig },
@@ -113,6 +117,7 @@ export function AppNavigationColumn({
   isAdmin = false,
   desktopAccessory,
   mobileAccessory,
+  highlightCodebase = false,
 }: AppNavigationColumnProps) {
   const [appsOpen, setAppsOpen] = useState(false);
   const [appsSearch, setAppsSearch] = useState("");
@@ -209,6 +214,11 @@ export function AppNavigationColumn({
     }`;
   }
 
+  function codebaseHighlightClass(tabId: AppNavigationTab) {
+    if (!(highlightCodebase && tabId === "codebase")) return "";
+    return " ring-2 ring-sky-400 ring-offset-2 ring-offset-sidebar animate-pulse";
+  }
+
   return (
     <>
     <aside className={`hidden min-h-0 overflow-hidden rounded-lg border xl:flex xl:w-[212px] xl:flex-col ${shellClassName}`}>
@@ -293,7 +303,7 @@ export function AppNavigationColumn({
                 onClick={() => onSelectTab(id)}
                 aria-current={activeTab === id ? "page" : undefined}
                 title={`${label} (Ctrl+Shift+${shortcutNumber})`}
-                className={navButtonClass(activeTab === id)}
+                className={`${navButtonClass(activeTab === id)}${codebaseHighlightClass(id)}`}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate">{label}</span>

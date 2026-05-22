@@ -13,17 +13,24 @@ const ALLOWED_INVOKE = new Set([
   'get-app-meta',
   'get-sidecar-status',
   'restart-sidecar',
+  'sidecar:send',
   'check-for-updates',
   'get-update-state',
   'download-update',
   'install-update',
   'defer-update',
+  'updater:get-auth-status',
+  'updater:set-token',
+  'updater:clear-token',
   'get-jarvis-web-url',
   'set-jarvis-web-url',
   'open-account-login',
   'open-url',
   'open-path',
   'jarvis-ai-request',
+  'jarvis-ai-route',
+  'setup:check-local-ai',
+  'setup:install-local',
   'get-displays',
   'get-desktop-diagnostics',
   'get-local-telemetry',
@@ -32,6 +39,47 @@ const ALLOWED_INVOKE = new Set([
   'auth:sign-out',
   'auth:get-profile',
   'auth:get-device-token',
+  'server:get-auth-status',
+  'server:clear-auth',
+  'server:verify-pairing',
+  'server:get-runtime-status',
+  'server:set-permission-level',
+  'server:kill-switch',
+  'server:get-config',
+  'server:set-config',
+  'local-server:list',
+  'local-server:add',
+  'local-server:update',
+  'local-server:remove',
+  'local-server:scan',
+  'local-server:get-model-assignment',
+  'local-server:set-model-assignment',
+  'tools:launch-game',
+  'tools:launch-app',
+  'github:set-token',
+  'github:clear-token',
+  'github:status',
+  'github:list-repos',
+  'github:get-tree',
+  'github:read-file',
+  'github:list-commits',
+  'github:get-diff',
+  'google:login-start',
+  'google:login-poll',
+  'google:logout',
+  'google:status',
+  'google:calendar-today',
+  'google:gmail-unread',
+  'mcp:list-servers',
+  'mcp:install-server',
+  'mcp:uninstall-server',
+  'mcp:call-tool',
+  'mcp:get-server-status',
+  'mcp:google-auth-status',
+  'mcp:google-start-auth',
+  'mcp:google-poll-auth',
+  'mcp:set-api-key',
+  'mcp:list-tools',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -39,6 +87,7 @@ const ALLOWED_RECEIVE = new Set([
   'auto-update-status',
   'sidecar-status',
   'desktop-health',
+  'sidecar-message',
   'auth:session-changed',
   'auth:signed-out',
 ]);
@@ -72,6 +121,8 @@ const {
 const {
   getJarvisApiUrl,
   getJarvisWebUrl,
+  getRemoteRuntimeWsUrl,
+  getRuntimeMode,
   setJarvisWebUrl,
 } = require('./runtime-config');
 
@@ -126,7 +177,11 @@ const localState = {
 let sidecarBridge = null;
 try {
   const { SidecarBridge } = require('./sidecar-bridge');
-  sidecarBridge = new SidecarBridge();
+  const runtimeMode = getRuntimeMode();
+  sidecarBridge = new SidecarBridge({
+    ipcMode: runtimeMode === 'remote-linux-runtime' ? 'websocket' : 'stdio',
+    url: runtimeMode === 'remote-linux-runtime' ? getRemoteRuntimeWsUrl() : undefined,
+  });
 } catch {
   // Python sidecar not packaged or sidecar-bridge unavailable — browser fallback.
 }
@@ -156,7 +211,11 @@ function buildSidecarApi() {
     disconnect: () => sidecarBridge.disconnect(),
     requestIntentParse: (text, requestId) => sidecarBridge.requestIntentParse(text, requestId),
     requestTts: (text, requestId) => sidecarBridge.requestTts(text, requestId),
+    requestMemorySearch: (query, requestId, topK) => sidecarBridge.requestMemorySearch(query, requestId, topK),
+    requestMemoryUpsert: (text, metadata, requestId) => sidecarBridge.requestMemoryUpsert(text, metadata, requestId),
+    requestToolCall: (tool, query, requestId) => sidecarBridge.requestToolCall(tool, query, requestId),
     connect: () => sidecarBridge.connect(),
+    setConnection: (connection) => sidecarBridge.setConnection(connection),
     isCapturing: () => Boolean(sidecarBridge._capturing),
   };
 }
@@ -203,7 +262,62 @@ function buildJarvisApiV2() {
     runtime: {
       getJarvisApiUrl,
       getJarvisWebUrl,
+      getRemoteRuntimeWsUrl,
+      getRuntimeMode,
       setJarvisWebUrl,
+    },
+    server: {
+      getAuthStatus: () => invokeAllowed('server:get-auth-status'),
+      clearAuth: () => invokeAllowed('server:clear-auth'),
+      verifyPairing: (syncKey) => invokeAllowed('server:verify-pairing', { syncKey }),
+      getRuntimeStatus: () => invokeAllowed('server:get-runtime-status'),
+      setPermissionLevel: (level, fullControlConsent = false) => invokeAllowed('server:set-permission-level', { level, fullControlConsent }),
+      killSwitch: () => invokeAllowed('server:kill-switch'),
+      getConfig: () => invokeAllowed('server:get-config'),
+      setConfig: (payload) => invokeAllowed('server:set-config', payload || {}),
+    },
+    localServer: {
+      list: () => invokeAllowed('local-server:list'),
+      add: (payload) => invokeAllowed('local-server:add', payload || {}),
+      update: (payload) => invokeAllowed('local-server:update', payload || {}),
+      remove: (id) => invokeAllowed('local-server:remove', { id }),
+      scan: (id) => invokeAllowed('local-server:scan', { id }),
+      getModelAssignment: () => invokeAllowed('local-server:get-model-assignment'),
+      setModelAssignment: (payload) => invokeAllowed('local-server:set-model-assignment', payload || {}),
+    },
+    github: {
+      setToken: (token) => invokeAllowed('github:set-token', token),
+      clearToken: () => invokeAllowed('github:clear-token'),
+      getStatus: () => invokeAllowed('github:status'),
+      listRepos: (payload) => invokeAllowed('github:list-repos', payload || {}),
+      getTree: (payload) => invokeAllowed('github:get-tree', payload || {}),
+      readFile: (payload) => invokeAllowed('github:read-file', payload || {}),
+      listCommits: (payload) => invokeAllowed('github:list-commits', payload || {}),
+      getDiff: (payload) => invokeAllowed('github:get-diff', payload || {}),
+    },
+    google: {
+      loginStart: () => invokeAllowed('google:login-start'),
+      loginPoll: (payload) => invokeAllowed('google:login-poll', payload || {}),
+      logout: () => invokeAllowed('google:logout'),
+      getStatus: () => invokeAllowed('google:status'),
+      getCalendarToday: () => invokeAllowed('google:calendar-today'),
+      getGmailUnread: (payload) => invokeAllowed('google:gmail-unread', payload || {}),
+    },
+    tools: {
+      launchGame: (payload) => invokeAllowed('tools:launch-game', payload || {}),
+      launchApp: (payload) => invokeAllowed('tools:launch-app', payload || {}),
+    },
+    mcp: {
+      listServers: () => invokeAllowed('mcp:list-servers'),
+      installServer: (serverId) => invokeAllowed('mcp:install-server', { serverId }),
+      uninstallServer: (serverId) => invokeAllowed('mcp:uninstall-server', { serverId }),
+      callTool: (toolName, params) => invokeAllowed('mcp:call-tool', { toolName, params: params || {} }),
+      getServerStatus: (serverId) => invokeAllowed('mcp:get-server-status', { serverId }),
+      googleAuthStatus: () => invokeAllowed('mcp:google-auth-status'),
+      googleStartAuth: () => invokeAllowed('mcp:google-start-auth'),
+      googlePollAuth: (deviceCode) => invokeAllowed('mcp:google-poll-auth', { deviceCode }),
+      setApiKey: (serverId, value) => invokeAllowed('mcp:set-api-key', { serverId, value }),
+      listTools: () => invokeAllowed('mcp:list-tools'),
     },
     voice: {
       sidecar: buildSidecarApi(),
@@ -223,6 +337,35 @@ function buildJarvisApiV2() {
 contextBridge.exposeInMainWorld('jarvisIpc', {
   invoke: invokeAllowed,
   on: subscribeAllowed,
+});
+
+contextBridge.exposeInMainWorld('updaterX', {
+  onStatus: (listener) => subscribeAllowed('auto-update-status', listener),
+  onAvailable: (listener) => subscribeAllowed('auto-update-status', (payload) => {
+    if (payload?.status === 'available') listener(payload);
+  }),
+  onProgress: (listener) => subscribeAllowed('auto-update-status', (payload) => {
+    if (payload?.status === 'downloading') {
+      listener({
+        percent: Number(payload?.downloadProgress || 0),
+        detail: payload?.detail || '',
+      });
+    }
+  }),
+  onDownloaded: (listener) => subscribeAllowed('auto-update-status', (payload) => {
+    if (payload?.status === 'install-ready') listener(payload);
+  }),
+  onError: (listener) => subscribeAllowed('auto-update-status', (payload) => {
+    if (payload?.status === 'error' || payload?.status === 'unavailable') listener(payload);
+  }),
+  check: () => invokeAllowed('check-for-updates'),
+  getState: () => invokeAllowed('get-update-state'),
+  download: () => invokeAllowed('download-update'),
+  install: () => invokeAllowed('install-update'),
+  defer: (reason = 'later', source = 'updaterX') => invokeAllowed('defer-update', { reason, source }),
+  getAuthStatus: () => invokeAllowed('updater:get-auth-status'),
+  setToken: (token) => invokeAllowed('updater:set-token', token),
+  clearToken: () => invokeAllowed('updater:clear-token'),
 });
 
 contextBridge.exposeInMainWorld('jarvisApi', {
@@ -247,7 +390,64 @@ contextBridge.exposeInMainWorld('jarvisApi', {
   refreshSessionIfNeeded: authApi.refresh,
   getJarvisApiUrl,
   getJarvisWebUrl,
+  getRemoteRuntimeWsUrl,
+  getRuntimeMode,
   setJarvisWebUrl,
+  checkLocalAiSetup: () => invokeAllowed('setup:check-local-ai'),
+  installLocalAiEngine: () => invokeAllowed('setup:install-local'),
+  server: {
+    getAuthStatus: () => invokeAllowed('server:get-auth-status'),
+    clearAuth: () => invokeAllowed('server:clear-auth'),
+    verifyPairing: (syncKey) => invokeAllowed('server:verify-pairing', { syncKey }),
+    getRuntimeStatus: () => invokeAllowed('server:get-runtime-status'),
+    setPermissionLevel: (level, fullControlConsent = false) => invokeAllowed('server:set-permission-level', { level, fullControlConsent }),
+    killSwitch: () => invokeAllowed('server:kill-switch'),
+    getConfig: () => invokeAllowed('server:get-config'),
+    setConfig: (payload) => invokeAllowed('server:set-config', payload || {}),
+  },
+  localServer: {
+    list: () => invokeAllowed('local-server:list'),
+    add: (payload) => invokeAllowed('local-server:add', payload || {}),
+    update: (payload) => invokeAllowed('local-server:update', payload || {}),
+    remove: (id) => invokeAllowed('local-server:remove', { id }),
+    scan: (id) => invokeAllowed('local-server:scan', { id }),
+    getModelAssignment: () => invokeAllowed('local-server:get-model-assignment'),
+    setModelAssignment: (payload) => invokeAllowed('local-server:set-model-assignment', payload || {}),
+  },
+  github: {
+    setToken: (token) => invokeAllowed('github:set-token', token),
+    clearToken: () => invokeAllowed('github:clear-token'),
+    getStatus: () => invokeAllowed('github:status'),
+    listRepos: (payload) => invokeAllowed('github:list-repos', payload || {}),
+    getTree: (payload) => invokeAllowed('github:get-tree', payload || {}),
+    readFile: (payload) => invokeAllowed('github:read-file', payload || {}),
+    listCommits: (payload) => invokeAllowed('github:list-commits', payload || {}),
+    getDiff: (payload) => invokeAllowed('github:get-diff', payload || {}),
+  },
+  google: {
+    loginStart: () => invokeAllowed('google:login-start'),
+    loginPoll: (payload) => invokeAllowed('google:login-poll', payload || {}),
+    logout: () => invokeAllowed('google:logout'),
+    getStatus: () => invokeAllowed('google:status'),
+    getCalendarToday: () => invokeAllowed('google:calendar-today'),
+    getGmailUnread: (payload) => invokeAllowed('google:gmail-unread', payload || {}),
+  },
+  tools: {
+    launchGame: (payload) => invokeAllowed('tools:launch-game', payload || {}),
+    launchApp: (payload) => invokeAllowed('tools:launch-app', payload || {}),
+  },
+  mcp: {
+    listServers: () => invokeAllowed('mcp:list-servers'),
+    installServer: (serverId) => invokeAllowed('mcp:install-server', { serverId }),
+    uninstallServer: (serverId) => invokeAllowed('mcp:uninstall-server', { serverId }),
+    callTool: (toolName, params) => invokeAllowed('mcp:call-tool', { toolName, params: params || {} }),
+    getServerStatus: (serverId) => invokeAllowed('mcp:get-server-status', { serverId }),
+    googleAuthStatus: () => invokeAllowed('mcp:google-auth-status'),
+    googleStartAuth: () => invokeAllowed('mcp:google-start-auth'),
+    googlePollAuth: (deviceCode) => invokeAllowed('mcp:google-poll-auth', { deviceCode }),
+    setApiKey: (serverId, value) => invokeAllowed('mcp:set-api-key', { serverId, value }),
+    listTools: () => invokeAllowed('mcp:list-tools'),
+  },
   auth: {
     ...authApi,
     getLinkedAccounts,

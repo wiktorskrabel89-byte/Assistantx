@@ -6,11 +6,11 @@ annotated-types==0.7.0
 anthropic==0.100.0
 anyio==4.13.0
 attrs==26.1.0
-cachetools==7.1.1
+cachetools==7.1.2
 certifi==2026.4.22
 cffi==2.0.0
 charset-normalizer==3.4.7
-click==8.3.3
+click==8.4.0
 cryptography==48.0.0
 dataclasses-json==0.6.7
 deprecation==2.1.0
@@ -29,7 +29,7 @@ httptools==0.7.1
 httpx==0.28.1
 httpx-sse==0.4.3
 hyperframe==6.1.0
-idna==3.13
+idna==3.15
 jiter==0.14.0
 jsonpatch==1.33
 jsonpointer==3.1.1
@@ -52,7 +52,7 @@ mdurl==0.1.2
 mmh3==5.2.1
 multidict==6.7.1
 mypy_extensions==1.1.0
-numpy==2.4.4
+numpy==2.4.5
 openai==2.36.0
 orjson==3.11.9
 ormsgpack==1.12.2
@@ -88,7 +88,7 @@ supabase==2.30.0
 supabase-auth==2.30.0
 supabase-functions==2.30.0
 tenacity==9.1.4
-tiktoken==0.12.0
+tiktoken==0.13.0
 tqdm==4.67.3
 typing-inspect==0.9.0
 typing-inspection==0.4.2
