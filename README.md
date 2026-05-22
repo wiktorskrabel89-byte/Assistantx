@@ -58,6 +58,14 @@ SUPABASE_SERVICE_ROLE_KEY=...
 OPENROUTER_API_KEY=... # required for cloud fallback
 ```
 
+Optional worker/device auth vars:
+
+```bash
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_AUTH_TOKEN=...   # desktop user's JWT; enables RLS-safe paired-device mode
+LOCAL_WORKER_DEVICE_ID=... # restricts worker polling to one paired desktop device
+```
+
 Useful worker tuning vars:
 
 ```bash

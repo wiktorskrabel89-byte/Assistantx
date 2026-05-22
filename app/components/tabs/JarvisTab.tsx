@@ -1,194 +1,79 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, Gamepad2, GitBranch, Laptop, Link2, Loader2, Mail, Power, ShieldCheck, Smartphone, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Download, GitBranch, Link2, Loader2, Mail, Mic, Smartphone, Sparkles, Volume2, Wifi, WifiOff } from "lucide-react";
+import { getDeviceType } from "@/lib/device-detection";
 
-type DeviceStatus = {
+type LinkedAccount = { provider: string; label: string; metadata?: Record<string, string | null> };
+
+type RuntimeDevice = {
   id: string;
   label: string;
-  platform: string;
-  role: string;
   trustState: string;
-  usesVpn: boolean;
+  setupState: string;
+  lastSeenAt: string | null;
+  online: boolean;
+  biosManufacturer: string | null;
+  biosModel: string | null;
   wakeMethodLastSuccess: string | null;
   wakeFailCount: number;
-  status: string;
-  rawStatus: string;
-  isOnline: boolean;
-  freshnessAgeMs: number | null;
-  freshnessState: string;
-  lastSeenAt: string | null;
-  lastHeartbeatAt: string | null;
-  cpuPercent: number | null;
-  ramPercent: number | null;
-  activeApps: string[];
+  lastKnownIpv6: string | null;
+  lastKnownMac: string | null;
+  lastLocalBroadcast: string | null;
+  lastPublicIpv6DiscoveredAt: string | null;
+  eligibleForWake: boolean;
+  wakeCandidates: number;
+  metadata?: {
+    setupHint?: string | null;
+    setupSource?: string | null;
+    publicIpv6?: string | null;
+  };
 };
 
-type WakeRouteResponse = {
-  ok?: boolean;
-  error?: string;
-  mode?: "router" | "ipv6" | "rtc_wait";
-  method?: string | null;
-  nextAction?: string;
-};
-
-function formatFreshness(ageMs: number | null) {
-  if (ageMs === null) return "no heartbeat yet";
-  if (ageMs < 1000) return "just now";
-  const seconds = Math.round(ageMs / 1000);
-  return `${seconds}s ago`;
-}
-
-function useJarvisControlPlane() {
-  const [devices, setDevices] = useState<DeviceStatus[]>([]);
-  const [primaryDeviceId, setPrimaryDeviceId] = useState<string | null>(null);
-  const [statusError, setStatusError] = useState<string | null>(null);
-  const [isStatusLoading, setIsStatusLoading] = useState(true);
-  const [isBetaTester, setIsBetaTester] = useState(false);
-  const [isWaking, setIsWaking] = useState(false);
-  const [isQueueing, setIsQueueing] = useState(false);
-  const [wakeResponse, setWakeResponse] = useState<WakeRouteResponse | null>(null);
-  const [queuedTaskId, setQueuedTaskId] = useState<string | null>(null);
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const response = await fetch("/api/jarvis/devices/status", { cache: "no-store" });
-      const payload = await response.json().catch(() => ({})) as {
-        devices?: DeviceStatus[];
-        primaryDeviceId?: string | null;
-        isBetaTester?: boolean;
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to load Jarvis device status.");
-      }
-      setDevices(payload.devices ?? []);
-      setPrimaryDeviceId((current) => current ?? payload.primaryDeviceId ?? payload.devices?.[0]?.id ?? null);
-      setIsBetaTester(Boolean(payload.isBetaTester));
-      setStatusError(null);
-    } catch (error) {
-      setStatusError(error instanceof Error ? error.message : "Failed to load Jarvis device status.");
-    } finally {
-      setIsStatusLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void fetchStatus();
-    }, 0);
-    const intervalId = window.setInterval(() => {
-      void fetchStatus();
-    }, 10000);
-    return () => {
-      window.clearTimeout(timeoutId);
-      window.clearInterval(intervalId);
-    };
-  }, [fetchStatus]);
-
-  const primaryDevice = useMemo(
-    () => devices.find((device) => device.id === primaryDeviceId) ?? devices[0] ?? null,
-    [devices, primaryDeviceId],
-  );
-
-  const wakeJarvis = useCallback(async () => {
-    if (!primaryDevice?.id) return;
-    setIsWaking(true);
-    setQueuedTaskId(null);
-    try {
-      const response = await fetch("/api/wake", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId: primaryDevice.id,
-          reason: "launch_jarvis",
-        }),
-      });
-      const payload = await response.json().catch(() => ({})) as WakeRouteResponse;
-      setWakeResponse(payload);
-      if (response.ok || response.status === 202) {
-        void fetchStatus();
-        return;
-      }
-      throw new Error(payload.error ?? "Wake request failed.");
-    } catch (error) {
-      setWakeResponse({
-        ok: false,
-        error: error instanceof Error ? error.message : "Wake request failed.",
-        mode: "rtc_wait",
-        nextAction: "wait_for_bios_rtc",
-      });
-    } finally {
-      setIsWaking(false);
-    }
-  }, [fetchStatus, primaryDevice]);
-
-  const queueRobloxLaunch = useCallback(async () => {
-    if (!primaryDevice?.id) return;
-    setIsQueueing(true);
-    setQueuedTaskId(null);
-    try {
-      const wakeResult = await fetch("/api/wake", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId: primaryDevice.id,
-          reason: "beta_launch_roblox",
-        }),
-      });
-      const wakePayload = await wakeResult.json().catch(() => ({})) as WakeRouteResponse;
-      setWakeResponse(wakePayload);
-
-      const response = await fetch("/api/jarvis/system-actions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId: primaryDevice.id,
-          actionType: "launch_roblox",
-          payload: { gameId: "185655149" },
-        }),
-      });
-      const payload = await response.json().catch(() => ({})) as { taskId?: string; error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to queue Roblox launch.");
-      }
-      setQueuedTaskId(payload.taskId ?? null);
-    } catch (error) {
-      setStatusError(error instanceof Error ? error.message : "Failed to queue Roblox launch.");
-    } finally {
-      setIsQueueing(false);
-    }
-  }, [primaryDevice]);
+function buildControlDevicePayload() {
+  const deviceType = getDeviceType();
+  const label = deviceType === "phone" ? "AssistantX Phone" : "AssistantX Web";
+  const fingerprint = [
+    navigator.userAgent,
+    navigator.language,
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+  ].filter(Boolean).join("|");
 
   return {
-    devices,
-    primaryDevice,
-    setPrimaryDeviceId,
-    isBetaTester,
-    isStatusLoading,
-    statusError,
-    wakeResponse,
-    isWaking,
-    wakeJarvis,
-    isQueueing,
-    queueRobloxLaunch,
-    queuedTaskId,
+    platform: deviceType === "phone" ? "android" : "web",
+    role: "control",
+    label,
+    fingerprint,
+    metadata: {
+      source: "assistantx-web",
+      userAgent: navigator.userAgent,
+    },
   };
 }
 
-// ── Linked accounts ──────────────────────────────────────────────────────────
-type LinkedAccount = { provider: string; label: string; metadata?: Record<string, string | null> };
+function formatRelativeLastSeen(value: string | null) {
+  if (!value) return "No heartbeat yet";
+  const deltaMs = Date.now() - new Date(value).getTime();
+  if (deltaMs < 60_000) return "Seen just now";
+  const minutes = Math.floor(deltaMs / 60_000);
+  if (minutes < 60) return `Seen ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Seen ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `Seen ${days}d ago`;
+}
 
 function useLinkedAccounts() {
   const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/jarvis/linked-accounts')
+    fetch("/api/jarvis/linked-accounts")
       .then((r) => r.json())
       .then((data: { accounts?: LinkedAccount[] }) => setAccounts(data.accounts ?? []))
       .catch(() => null)
@@ -196,14 +81,14 @@ function useLinkedAccounts() {
   }, []);
 
   const link = async (provider: string) => {
-    const res = await fetch(`/api/jarvis/linked-accounts/${provider}?action=initiate`, { method: 'POST' });
+    const res = await fetch(`/api/jarvis/linked-accounts/${provider}?action=initiate`, { method: "POST" });
     const data = await res.json() as { authUrl?: string; error?: string };
-    if (data.authUrl) window.open(data.authUrl, '_blank', 'width=480,height=680');
-    else alert(data.error ?? 'Failed to initiate linking');
+    if (data.authUrl) window.open(data.authUrl, "_blank", "width=480,height=680");
+    else alert(data.error ?? "Failed to initiate linking");
   };
 
   const unlink = async (provider: string) => {
-    await fetch(`/api/jarvis/linked-accounts/${provider}`, { method: 'DELETE' });
+    await fetch(`/api/jarvis/linked-accounts/${provider}`, { method: "DELETE" });
     setAccounts((prev) => prev.filter((a) => a.provider !== provider));
   };
 
@@ -211,43 +96,41 @@ function useLinkedAccounts() {
 }
 
 export default function JarvisTab() {
-  const [latestGithubVersion, setLatestGithubVersion] = useState<string | null>(null);
-  const {
-    devices,
-    primaryDevice,
-    setPrimaryDeviceId,
-    isBetaTester,
-    isStatusLoading,
-    statusError,
-    wakeResponse,
-    isWaking,
-    wakeJarvis,
-    isQueueing,
-    queueRobloxLaunch,
-    queuedTaskId,
-  } = useJarvisControlPlane();
   const { accounts, loading: accountsLoading, link, unlink } = useLinkedAccounts();
+  const [devices, setDevices] = useState<RuntimeDevice[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(true);
+  const [devicesError, setDevicesError] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState("");
+  const [pairingBusy, setPairingBusy] = useState(false);
+  const [pairingMessage, setPairingMessage] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [gameIds, setGameIds] = useState<Record<string, string>>({});
+
+  const refreshDevices = useCallback(async () => {
+    setDevicesLoading(true);
+    try {
+      const response = await fetch("/api/jarvis/devices", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as { devices?: RuntimeDevice[]; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Failed to load Jarvis devices.");
+      setDevices(payload.devices ?? []);
+      setDevicesError(null);
+    } catch (error) {
+      setDevicesError(error instanceof Error ? error.message : "Failed to load Jarvis devices.");
+    } finally {
+      setDevicesLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    void refreshDevices();
+  }, [refreshDevices]);
 
-    (async () => {
-      try {
-        const res = await fetch("/api/jarvis/version");
-        if (!res.ok) return;
-
-        const payload = (await res.json()) as { version?: string };
-        if (cancelled) return;
-        if (payload.version) setLatestGithubVersion(payload.version);
-      } catch {
-        // Keep download actions available even if version lookup fails.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const runtimeSummary = useMemo(() => {
+    const online = devices.filter((device) => device.online).length;
+    const ready = devices.filter((device) => device.setupState === "ready" || device.setupState === "paired").length;
+    return { online, ready, total: devices.length };
+  }, [devices]);
 
   async function downloadForWindows() {
     let arch = "x64";
@@ -268,144 +151,267 @@ export default function JarvisTab() {
     window.location.href = `/api/jarvis/download?arch=${arch}`;
   }
 
-  function downloadForAndroid() {
-    window.location.href = "/api/jarvis/download?platform=android";
-  }
+  const handleConfirmPairing = useCallback(async () => {
+    setPairingBusy(true);
+    setPairingMessage(null);
+    try {
+      const response = await fetch("/api/pairing/v2/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: pairingCode,
+          device: buildControlDevicePayload(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Failed to pair computer.");
+      setPairingCode("");
+      setPairingMessage("Computer paired successfully.");
+      await refreshDevices();
+    } catch (error) {
+      setPairingMessage(error instanceof Error ? error.message : "Failed to pair computer.");
+    } finally {
+      setPairingBusy(false);
+    }
+  }, [pairingCode, refreshDevices]);
 
-  const pcOnline = Boolean(primaryDevice?.isOnline);
-  const pcStatusText = primaryDevice
-    ? [
-        `${primaryDevice.label}${pcOnline ? " online" : " offline"}`,
-        primaryDevice.status !== "offline" ? primaryDevice.status : null,
-        primaryDevice.cpuPercent !== null ? `CPU ${primaryDevice.cpuPercent}%` : null,
-        primaryDevice.ramPercent !== null ? `RAM ${primaryDevice.ramPercent}%` : null,
-        primaryDevice.activeApps.length > 0 ? primaryDevice.activeApps.slice(0, 2).join(", ") : null,
-        `heartbeat ${formatFreshness(primaryDevice.freshnessAgeMs)}`,
-      ].filter(Boolean).join(" · ")
-    : (isStatusLoading ? "Loading Jarvis devices..." : "No trusted Jarvis desktop paired yet.");
+  const runWake = useCallback(async (deviceId: string) => {
+    const response = await fetch("/api/wake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, reason: "assistantx_manual_wake" }),
+    });
+    const payload = await response.json().catch(() => ({})) as { error?: string; method?: string };
+    if (!response.ok) throw new Error(payload.error ?? "Wake request failed.");
+    return payload.method ?? "wake_chain";
+  }, []);
 
-  const highlights = [
-    {
-      title: "New chat models",
-      description: "Jarvis Desktop supports auto-smart routing (Qwen 3 32B for fast prompts, GPT OSS 120B for harder prompts) with Gemini 2.5 Flash fallback.",
-      icon: Sparkles,
-    },
-    {
-      title: "Speech-to-text",
-      description: "STT support with default model selection whisper-large-v3-turbo.",
-      icon: Mic,
-    },
-    {
-      title: "Text-to-speech",
-      description: "Automatic response playback (TTS) using the orpheus-english profile.",
-      icon: Volume2,
-    },
-  ];
+  const handleWake = useCallback(async (deviceId: string) => {
+    const key = `wake:${deviceId}`;
+    setBusyKey(key);
+    setActionStatus((prev) => ({ ...prev, [deviceId]: "Waking desktop…" }));
+    try {
+      const method = await runWake(deviceId);
+      setActionStatus((prev) => ({ ...prev, [deviceId]: `Wake sent via ${method}.` }));
+      await refreshDevices();
+    } catch (error) {
+      setActionStatus((prev) => ({ ...prev, [deviceId]: error instanceof Error ? error.message : "Wake failed." }));
+    } finally {
+      setBusyKey(null);
+    }
+  }, [refreshDevices, runWake]);
+
+  const handleLaunchRoblox = useCallback(async (deviceId: string) => {
+    const key = `roblox:${deviceId}`;
+    setBusyKey(key);
+    setActionStatus((prev) => ({ ...prev, [deviceId]: "Queueing Roblox launch…" }));
+    try {
+      const response = await fetch(`/api/jarvis/devices/${deviceId}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionType: "launch_roblox",
+          wakeBeforeAction: true,
+          payload: { gameId: gameIds[deviceId] },
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; taskId?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Failed to queue Roblox launch.");
+      setActionStatus((prev) => ({ ...prev, [deviceId]: `Roblox queued on desktop (task ${payload.taskId ?? "pending"}).` }));
+      await refreshDevices();
+    } catch (error) {
+      setActionStatus((prev) => ({ ...prev, [deviceId]: error instanceof Error ? error.message : "Failed to queue Roblox." }));
+    } finally {
+      setBusyKey(null);
+    }
+  }, [gameIds, refreshDevices]);
 
   const SUPPORTED_PROVIDERS = [
-    { id: 'github', label: 'GitHub', icon: GitBranch, description: 'Push commits, create PRs, manage repos' },
-    { id: 'google', label: 'Gmail & Drive', icon: Mail, description: 'Read/send email, access Google Drive files' },
+    { id: "github", label: "GitHub", icon: GitBranch, description: "Push commits, create PRs, manage repos" },
+    { id: "google", label: "Gmail & Drive", icon: Mail, description: "Read/send email, access Google Drive files" },
   ];
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-auto bg-[radial-gradient(circle_at_12%_14%,rgba(14,165,233,0.16),transparent_34%),radial-gradient(circle_at_88%_82%,rgba(251,146,60,0.14),transparent_36%),linear-gradient(140deg,#f8fafc,#e2e8f0_48%,#dbeafe)] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4">
-
-        {/* Live PC Status Banner */}
-        <Card className={`border ${pcOnline ? 'border-green-200/70 bg-green-50/80' : 'border-slate-200/70 bg-white/80'}`}>
-          <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
-            {pcOnline
-              ? <Wifi className="h-4 w-4 shrink-0 text-green-600" />
-              : <WifiOff className="h-4 w-4 shrink-0 text-slate-400" />}
-            <span className={`text-sm font-medium ${pcOnline ? 'text-green-800' : 'text-slate-500'}`}>
-              {pcStatusText}
-            </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-              {devices.length > 1 && (
-                <select
-                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                  value={primaryDevice?.id ?? ""}
-                  onChange={(event) => setPrimaryDeviceId(event.target.value)}
-                >
-                  {devices.map((device) => (
-                    <option key={device.id} value={device.id}>
-                      {device.label} · {device.platform} · {device.trustState}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <Button
-                size="sm"
-                onClick={wakeJarvis}
-                disabled={!primaryDevice?.id || isWaking}
-                className="gap-2"
-              >
-                {isWaking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
-                Uruchom Jarvisa
-              </Button>
-              {isBetaTester && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={queueRobloxLaunch}
-                  disabled={!primaryDevice?.id || isQueueing}
-                  className="gap-2"
-                >
-                  {isQueueing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  Wake + queue Roblox
-                </Button>
-              )}
-            </div>
-            {statusError && (
-              <span className="text-xs text-amber-700">{statusError}</span>
-            )}
-            {wakeResponse?.mode && (
-              <span className={`text-xs ${wakeResponse.mode === "rtc_wait" ? "text-amber-700" : "text-sky-700"}`}>
-                Wake mode: {wakeResponse.mode} {wakeResponse.nextAction ? `· ${wakeResponse.nextAction}` : ""}
-              </span>
-            )}
-            {queuedTaskId && (
-              <span className="text-xs text-emerald-700">Queued Roblox task: {queuedTaskId}</span>
-            )}
-          </CardContent>
-        </Card>
-
         <Card className="border-sky-200/70 bg-white/90 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)]">
           <CardHeader className="gap-4">
-            <Badge className="w-fit bg-sky-100 text-sky-800 hover:bg-sky-100">Jarvis app settings</Badge>
+            <Badge className="w-fit bg-sky-100 text-sky-800 hover:bg-sky-100">AssistantX workspace control</Badge>
             <CardTitle className="text-3xl text-slate-900 sm:text-4xl">
-              Manage Jarvis for desktop and mobile
+              Pair, wake, and control your Windows workspace
             </CardTitle>
             <CardDescription className="max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-              Download Jarvis, link your devices, and keep your desktop/mobile voice setup in sync from one place.
+              Sign in on Jarvis Desktop with the same AssistantX account, generate a pairing code on the PC, then confirm it here.
+              AssistantX is now the only mobile control surface — the old Android Jarvis client is no longer required.
             </CardDescription>
-            {latestGithubVersion && (
-              <p className="text-xs font-medium text-sky-700">
-                Latest Jarvis release on GitHub: {latestGithubVersion}
-              </p>
-            )}
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Button onClick={downloadForWindows} className="h-11 gap-2" title="Download Jarvis for Windows">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="mb-3 flex items-center gap-2 text-slate-900">
+                <Laptop className="h-4 w-4" />
+                <span className="text-sm font-semibold">Windows desktop</span>
+              </div>
+              <Button onClick={downloadForWindows} className="h-11 w-full gap-2" title="Download Jarvis for Windows">
                 <Download className="h-4 w-4" />
-                Download for Windows
+                Download Jarvis Desktop
               </Button>
-              <p className="text-center text-xs font-medium text-green-600">✅ Auto-detects x64 or ARM64</p>
+              <p className="mt-3 text-xs leading-6 text-slate-600">
+                Install Jarvis on Windows, sign in with the same account, and let the desktop generate a short pairing code.
+              </p>
             </div>
-            <div className="flex flex-col gap-2">
-              <Button onClick={downloadForAndroid} variant="secondary" className="h-11 gap-2" title="Download Jarvis for Android">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="mb-3 flex items-center gap-2 text-slate-900">
                 <Smartphone className="h-4 w-4" />
-                Download for Android
-              </Button>
-              <p className="text-center text-xs font-medium text-emerald-600">✅ Direct APK download</p>
+                <span className="text-sm font-semibold">Phone control in AssistantX</span>
+              </div>
+              <p className="text-xs leading-6 text-slate-600">
+                Open AssistantX on your phone, enter the code from your PC, then use the same app to wake the desktop and launch Roblox remotely.
+              </p>
+              <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                No separate mobile Jarvis app. One account, one app, one device list.
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Linked Accounts Panel */}
+        <Card className="border-slate-200/80 bg-white/90">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-slate-600" />
+              <CardTitle className="text-base text-slate-900">Add a new computer</CardTitle>
+            </div>
+            <CardDescription className="text-slate-600">
+              Enter the pairing code shown in Jarvis Desktop. Both devices must already be signed into the same AssistantX account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row">
+            <Input
+              value={pairingCode}
+              onChange={(event) => setPairingCode(event.target.value.toUpperCase().replace(/\s+/g, ""))}
+              placeholder="AX-XXXXXXX"
+              className="font-mono tracking-[0.2em]"
+              maxLength={10}
+            />
+            <Button onClick={() => void handleConfirmPairing()} disabled={pairingBusy || pairingCode.trim().length < 10}>
+              {pairingBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Pair this computer
+            </Button>
+          </CardContent>
+          {pairingMessage ? (
+            <CardContent className="pt-0">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                {pairingMessage}
+              </div>
+            </CardContent>
+          ) : null}
+        </Card>
+
+        <Card className={`border ${runtimeSummary.online > 0 ? "border-green-200/70 bg-green-50/80" : "border-slate-200/70 bg-white/80"}`}>
+          <CardContent className="flex flex-wrap items-center gap-3 py-3">
+            {runtimeSummary.online > 0
+              ? <Wifi className="h-4 w-4 shrink-0 text-green-600" />
+              : <WifiOff className="h-4 w-4 shrink-0 text-slate-400" />}
+            <span className={`text-sm font-medium ${runtimeSummary.online > 0 ? "text-green-800" : "text-slate-500"}`}>
+              {runtimeSummary.total === 0
+                ? "No paired desktops yet."
+                : `${runtimeSummary.online}/${runtimeSummary.total} desktops online · ${runtimeSummary.ready} setup-ready`}
+            </span>
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => void refreshDevices()} disabled={devicesLoading}>
+              Refresh
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200/80 bg-white/90">
+          <CardHeader>
+            <CardTitle className="text-base text-slate-900">Your desktops</CardTitle>
+            <CardDescription className="text-slate-600">
+              Wake your workspace, verify wake readiness, and queue Roblox from the same AssistantX dashboard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {devicesError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {devicesError}
+              </div>
+            ) : null}
+            {devicesLoading ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading desktops…
+              </div>
+            ) : null}
+            {!devicesLoading && devices.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+                No desktop devices yet. Sign into Jarvis Desktop on Windows, generate a code there, then confirm it above.
+              </div>
+            ) : null}
+            {devices.map((device) => (
+              <div key={device.id} className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+                <div className="flex flex-wrap items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-900">{device.label}</span>
+                      <Badge className={device.online ? "bg-green-100 text-green-800 hover:bg-green-100" : "bg-slate-100 text-slate-700 hover:bg-slate-100"}>
+                        {device.online ? "Online" : "Offline"}
+                      </Badge>
+                      <Badge className={device.trustState === "trusted" ? "bg-sky-100 text-sky-800 hover:bg-sky-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100"}>
+                        {device.trustState}
+                      </Badge>
+                      <Badge variant="outline">{device.setupState}</Badge>
+                    </div>
+                    <p className="mt-2 text-xs leading-6 text-slate-600">
+                      {formatRelativeLastSeen(device.lastSeenAt)}
+                      {" · "}
+                      {device.eligibleForWake ? `${device.wakeCandidates} wake candidates` : "Wake needs a fresh network snapshot"}
+                      {device.wakeMethodLastSuccess ? ` · Last wake: ${device.wakeMethodLastSuccess}` : ""}
+                    </p>
+                    <p className="mt-1 text-xs leading-6 text-slate-500">
+                      BIOS: {device.biosManufacturer ?? "Unknown"} {device.biosModel ?? ""}
+                      {device.metadata?.setupHint ? ` · ${device.metadata.setupHint}` : ""}
+                    </p>
+                    <p className="mt-1 text-xs leading-6 text-slate-500">
+                      IPv6: {device.lastKnownIpv6 ?? device.metadata?.publicIpv6 ?? "missing"} · MAC: {device.lastKnownMac ?? "missing"}
+                    </p>
+                  </div>
+                  <div className="flex w-full flex-col gap-2 sm:w-auto">
+                    <Button
+                      variant="outline"
+                      onClick={() => void handleWake(device.id)}
+                      disabled={busyKey !== null}
+                      className="gap-2"
+                    >
+                      {busyKey === `wake:${device.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+                      Wake desktop
+                    </Button>
+                    <div className="flex gap-2">
+                      <Input
+                        value={gameIds[device.id] ?? ""}
+                        onChange={(event) => setGameIds((prev) => ({ ...prev, [device.id]: event.target.value.trim() }))}
+                        placeholder="Roblox game ID"
+                        className="h-9 min-w-0 text-xs"
+                      />
+                      <Button
+                        onClick={() => void handleLaunchRoblox(device.id)}
+                        disabled={busyKey !== null || device.trustState !== "trusted"}
+                        className="gap-2"
+                      >
+                        {busyKey === `roblox:${device.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gamepad2 className="h-4 w-4" />}
+                        Launch Roblox
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                {actionStatus[device.id] ? (
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                    {actionStatus[device.id]}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
         <Card className="border-slate-200/80 bg-white/90">
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -413,7 +419,7 @@ export default function JarvisTab() {
               <CardTitle className="text-base text-slate-900">Linked accounts</CardTitle>
             </div>
             <CardDescription className="text-slate-600">
-              Link your accounts so Jarvis can push to GitHub, send emails, access Google Drive, and more — all on your behalf.
+              Link your cloud accounts once and reuse them across AssistantX and Jarvis Desktop.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -422,90 +428,65 @@ export default function JarvisTab() {
               return (
                 <div key={id} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white/80 p-4">
                   <Icon className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2">
                       <span className="text-sm font-semibold text-slate-900">{label}</span>
-                      {linked && (
-                        <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-100">
-                          ✅ {linked.label || 'linked'}
-                        </Badge>
-                      )}
+                      {linked ? (
+                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">linked</Badge>
+                      ) : null}
                     </div>
-                    <p className="text-xs text-slate-500 leading-5">{description}</p>
+                    <p className="text-xs leading-5 text-slate-500">{description}</p>
                   </div>
-                  {!accountsLoading && (
+                  {!accountsLoading ? (
                     linked ? (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
+                        className="shrink-0 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
                         onClick={() => unlink(id)}
                       >
                         Unlink
                       </Button>
                     ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs shrink-0"
-                        onClick={() => link(id)}
-                      >
+                      <Button variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => link(id)}>
                         Link
                       </Button>
                     )
-                  )}
+                  ) : null}
                 </div>
               );
             })}
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/80 bg-white/85">
-          <CardHeader>
-            <CardTitle className="text-base text-slate-900">Jarvis Desktop voice + model upgrades</CardTitle>
-            <CardDescription className="text-slate-600">
-              Desktop build now supports selecting chat/STT/TTS model profiles and includes speech-to-text + auto text-to-speech controls.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
-            {highlights.map(({ title, description, icon: Icon }) => (
-              <div key={title} className="rounded-xl border border-slate-200 bg-white/80 p-4">
-                <div className="mb-2 flex items-center gap-2 text-slate-900">
-                  <Icon className="h-4 w-4" />
-                  <span className="text-sm font-semibold">{title}</span>
-                </div>
-                <Separator className="mb-2" />
-                <p className="text-xs leading-6 text-slate-600">{description}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
         <div className="grid gap-3 sm:grid-cols-3">
           <Card className="border-sky-200/70 bg-white/85">
             <CardHeader>
-              <CardTitle className="text-sm text-slate-900">Fast install</CardTitle>
+              <CardTitle className="text-sm text-slate-900">Pair by code</CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-xs leading-6 text-slate-600">
-              Get up and running in minutes with a direct installer and APK package.
+              Desktop and phone both use Supabase Auth first. The code is only a one-time handshake between your own signed-in devices.
             </CardContent>
           </Card>
           <Card className="border-amber-200/70 bg-white/85">
             <CardHeader>
-              <CardTitle className="text-sm text-slate-900">Same ecosystem</CardTitle>
+              <CardTitle className="text-sm text-slate-900">Wake-ready metadata</CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-xs leading-6 text-slate-600">
-              Continue using your AssistantX flows, tools, and integrations across platforms.
+              Jarvis Desktop reports MAC, IPv6, BIOS hints, and setup state so AssistantX can wake your workspace without manual router setup.
             </CardContent>
           </Card>
           <Card className="border-slate-200 bg-white/85">
             <CardHeader>
-              <CardTitle className="text-sm text-slate-900">Private workflow</CardTitle>
+              <CardTitle className="text-sm text-slate-900">Single mobile UX</CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-xs leading-6 text-slate-600">
-              Use your own account context and keep your work sessions organized per device.
+              Wake, pair, and launch games directly from AssistantX. No second mobile app and no manual WoL settings screen.
             </CardContent>
           </Card>
         </div>
+
+        <Separator />
       </div>
     </section>
   );

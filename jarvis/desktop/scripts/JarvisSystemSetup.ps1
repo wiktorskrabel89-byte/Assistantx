@@ -126,6 +126,9 @@ Write-Host "Installer URL         : $DownloadUrl" -ForegroundColor DarkCyan
 $brand = ""
 $model = ""
 $hasEthernet = $false
+$setupState = "waiting_for_pairing"
+$setupHint = "Sign into Jarvis Desktop, generate a pairing code, and confirm it in AssistantX on your phone."
+$localMacAddress = ""
 try {
     $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
     $brand = [string]$computerSystem.Manufacturer
@@ -138,6 +141,10 @@ try {
         $_.PhysicalMediaType -eq "802.3" -or $_.NdisPhysicalMedium -eq "802.3"
     }
     $hasEthernet = @($ethernetAdapters).Count -gt 0
+    $primaryMac = @($ethernetAdapters | Select-Object -First 1 -ExpandProperty MacAddress)
+    if ($primaryMac) {
+        $localMacAddress = [string]$primaryMac
+    }
 } catch {
     $hasEthernet = $false
 }
@@ -221,14 +228,22 @@ if ($hasEthernet) {
         }
         if ($wolEnabledCount -gt 0) {
             Write-Host "Jarvis: Funkcja budzenia przez telefon (WOL) została aktywowana." -ForegroundColor Green
+            $setupState = "paired"
+            $setupHint = "Wake-on-LAN is enabled in Windows. Pair Jarvis Desktop in AssistantX to finish remote wake."
         } else {
             Write-Host "Jarvis: Nie udało się aktywować WOL na wykrytych kartach." -ForegroundColor Yellow
+            $setupState = "needs_bios_manual_step"
+            $setupHint = "Wake-on-LAN could not be enabled automatically. Check BIOS power settings after pairing."
         }
     } catch {
         Write-Host "Jarvis: Nie udało się automatycznie skonfigurować karty, sprawdź sterowniki." -ForegroundColor Red
+        $setupState = "needs_bios_manual_step"
+        $setupHint = "Network wake configuration failed. Update network drivers and verify BIOS Wake on LAN."
     }
 } else {
     Write-Host "Jarvis: Brak aktywnej karty Ethernet. Funkcja budzenia przez telefon będzie niedostępna." -ForegroundColor Gray
+    $setupState = "needs_bios_manual_step"
+    $setupHint = "No Ethernet adapter detected. Remote wake will stay unavailable until a compatible adapter is enabled."
 }
 
 # [2/4] Disable Fast Boot and hibernation
@@ -284,8 +299,11 @@ switch -wildcard ($brand) {
         }
         if ($dellSuccessCount -gt 0) {
             Write-Host "Jarvis: BIOS Dell został skonfigurowany automatycznie." -ForegroundColor Green
+            $setupHint = "Dell BIOS Wake-on-LAN settings were applied automatically."
         } else {
             Write-Host "Jarvis: Nie udało się potwierdzić zmian BIOS Dell automatycznie." -ForegroundColor Yellow
+            $setupState = "needs_bios_manual_step"
+            $setupHint = "Open Dell BIOS (F2) and enable Wake on LAN manually."
         }
     }
     "*HP*" {
@@ -306,11 +324,16 @@ switch -wildcard ($brand) {
             }
             if ($hpSuccessCount -gt 0) {
                 Write-Host "Jarvis: BIOS HP został skonfigurowany automatycznie." -ForegroundColor Green
+                $setupHint = "HP BIOS Wake-on-LAN settings were applied automatically."
             } else {
                 Write-Host "Jarvis: Nie udało się potwierdzić zmian BIOS HP automatycznie." -ForegroundColor Yellow
+                $setupState = "needs_bios_manual_step"
+                $setupHint = "Open HP BIOS and enable Wake on LAN manually."
             }
         } else {
             Write-Host "Jarvis: Cmdlet Set-HPBIOSSettingValue jest niedostępny po instalacji HPCMSL." -ForegroundColor Yellow
+            $setupState = "needs_bios_manual_step"
+            $setupHint = "HP BIOS tools were unavailable. Enable Wake on LAN manually after pairing."
         }
     }
     "*Lenovo*" {
@@ -329,19 +352,28 @@ switch -wildcard ($brand) {
                 }
                 if ($lenovoResults.Count -gt 0 -and ($lenovoResults -notcontains $false)) {
                     Write-Host "Jarvis: BIOS Lenovo został skonfigurowany automatycznie." -ForegroundColor Green
+                    $setupHint = "Lenovo BIOS Wake-on-LAN settings were applied automatically."
                 } else {
                     Write-Host "Jarvis: Część ustawień BIOS Lenovo nie została zapisana automatycznie." -ForegroundColor Yellow
+                    $setupState = "needs_bios_manual_step"
+                    $setupHint = "Open Lenovo BIOS power settings and verify Wake on LAN manually."
                 }
             } else {
                 Write-Host "Jarvis: Nie udało się zapisać ustawień BIOS Lenovo (brak klasy SaveBiosSettings)." -ForegroundColor Yellow
+                $setupState = "needs_bios_manual_step"
+                $setupHint = "Lenovo BIOS save interface was unavailable. Verify Wake on LAN manually."
             }
         } else {
             Write-Host "Jarvis: Interfejs WMI Lenovo niedostępny, pomijam auto-konfigurację BIOS." -ForegroundColor Yellow
+            $setupState = "needs_bios_manual_step"
+            $setupHint = "Lenovo BIOS WMI bridge was unavailable. Enable Wake on LAN manually."
         }
     }
     Default {
         Write-Host "Jarvis: Marka $brand nie wspiera auto-konfiguracji." -ForegroundColor Gray
         Write-Host "ZALECENIE: Wejdź do BIOS i włącz: 'Wake on LAN' oraz 'Restore on AC Power Loss'." -ForegroundColor Yellow
+        $setupState = "needs_bios_manual_step"
+        $setupHint = "Open BIOS manually and enable Wake on LAN plus Restore on AC Power Loss."
     }
 }
 
@@ -373,6 +405,19 @@ if (-not $SkipAutostart -and (Test-Path $finalAppPath)) {
 if (Test-Path $setupPath) {
     Remove-Item $setupPath -Force
 }
+
+$setupContextPath = Join-Path $InstallDir "setup-context.json"
+$setupContext = [ordered]@{
+    generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+    manufacturer = $brand
+    model = $model
+    hasEthernet = $hasEthernet
+    macAddress = $localMacAddress
+    setupState = $setupState
+    setupHint = $setupHint
+}
+$setupContext | ConvertTo-Json -Depth 5 | Set-Content -Path $setupContextPath -Encoding UTF8
+Write-Host "Jarvis: Zapisano lokalny kontekst instalacji do $setupContextPath" -ForegroundColor DarkCyan
 
 Write-Host "`n----------------------------------------------" -ForegroundColor Cyan
 Write-Host "        JARVIS SETUP COMPLETED SUCCESSFULLY     " -ForegroundColor Cyan

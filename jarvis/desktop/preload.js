@@ -13,6 +13,7 @@ const ALLOWED_INVOKE = new Set([
   'get-app-meta',
   'get-sidecar-status',
   'restart-sidecar',
+  'sidecar:send',
   'check-for-updates',
   'get-update-state',
   'download-update',
@@ -46,6 +47,13 @@ const ALLOWED_INVOKE = new Set([
   'server:kill-switch',
   'server:get-config',
   'server:set-config',
+  'local-server:list',
+  'local-server:add',
+  'local-server:update',
+  'local-server:remove',
+  'local-server:scan',
+  'local-server:get-model-assignment',
+  'local-server:set-model-assignment',
   'tools:launch-game',
   'tools:launch-app',
   'github:set-token',
@@ -62,6 +70,16 @@ const ALLOWED_INVOKE = new Set([
   'google:status',
   'google:calendar-today',
   'google:gmail-unread',
+  'mcp:list-servers',
+  'mcp:install-server',
+  'mcp:uninstall-server',
+  'mcp:call-tool',
+  'mcp:get-server-status',
+  'mcp:google-auth-status',
+  'mcp:google-start-auth',
+  'mcp:google-poll-auth',
+  'mcp:set-api-key',
+  'mcp:list-tools',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -69,6 +87,7 @@ const ALLOWED_RECEIVE = new Set([
   'auto-update-status',
   'sidecar-status',
   'desktop-health',
+  'sidecar-message',
   'auth:session-changed',
   'auth:signed-out',
 ]);
@@ -160,6 +179,7 @@ try {
   const { SidecarBridge } = require('./sidecar-bridge');
   const runtimeMode = getRuntimeMode();
   sidecarBridge = new SidecarBridge({
+    ipcMode: runtimeMode === 'remote-linux-runtime' ? 'websocket' : 'stdio',
     url: runtimeMode === 'remote-linux-runtime' ? getRemoteRuntimeWsUrl() : undefined,
   });
 } catch {
@@ -256,6 +276,15 @@ function buildJarvisApiV2() {
       getConfig: () => invokeAllowed('server:get-config'),
       setConfig: (payload) => invokeAllowed('server:set-config', payload || {}),
     },
+    localServer: {
+      list: () => invokeAllowed('local-server:list'),
+      add: (payload) => invokeAllowed('local-server:add', payload || {}),
+      update: (payload) => invokeAllowed('local-server:update', payload || {}),
+      remove: (id) => invokeAllowed('local-server:remove', { id }),
+      scan: (id) => invokeAllowed('local-server:scan', { id }),
+      getModelAssignment: () => invokeAllowed('local-server:get-model-assignment'),
+      setModelAssignment: (payload) => invokeAllowed('local-server:set-model-assignment', payload || {}),
+    },
     github: {
       setToken: (token) => invokeAllowed('github:set-token', token),
       clearToken: () => invokeAllowed('github:clear-token'),
@@ -277,6 +306,18 @@ function buildJarvisApiV2() {
     tools: {
       launchGame: (payload) => invokeAllowed('tools:launch-game', payload || {}),
       launchApp: (payload) => invokeAllowed('tools:launch-app', payload || {}),
+    },
+    mcp: {
+      listServers: () => invokeAllowed('mcp:list-servers'),
+      installServer: (serverId) => invokeAllowed('mcp:install-server', { serverId }),
+      uninstallServer: (serverId) => invokeAllowed('mcp:uninstall-server', { serverId }),
+      callTool: (toolName, params) => invokeAllowed('mcp:call-tool', { toolName, params: params || {} }),
+      getServerStatus: (serverId) => invokeAllowed('mcp:get-server-status', { serverId }),
+      googleAuthStatus: () => invokeAllowed('mcp:google-auth-status'),
+      googleStartAuth: () => invokeAllowed('mcp:google-start-auth'),
+      googlePollAuth: (deviceCode) => invokeAllowed('mcp:google-poll-auth', { deviceCode }),
+      setApiKey: (serverId, value) => invokeAllowed('mcp:set-api-key', { serverId, value }),
+      listTools: () => invokeAllowed('mcp:list-tools'),
     },
     voice: {
       sidecar: buildSidecarApi(),
@@ -364,6 +405,15 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     getConfig: () => invokeAllowed('server:get-config'),
     setConfig: (payload) => invokeAllowed('server:set-config', payload || {}),
   },
+  localServer: {
+    list: () => invokeAllowed('local-server:list'),
+    add: (payload) => invokeAllowed('local-server:add', payload || {}),
+    update: (payload) => invokeAllowed('local-server:update', payload || {}),
+    remove: (id) => invokeAllowed('local-server:remove', { id }),
+    scan: (id) => invokeAllowed('local-server:scan', { id }),
+    getModelAssignment: () => invokeAllowed('local-server:get-model-assignment'),
+    setModelAssignment: (payload) => invokeAllowed('local-server:set-model-assignment', payload || {}),
+  },
   github: {
     setToken: (token) => invokeAllowed('github:set-token', token),
     clearToken: () => invokeAllowed('github:clear-token'),
@@ -385,6 +435,18 @@ contextBridge.exposeInMainWorld('jarvisApi', {
   tools: {
     launchGame: (payload) => invokeAllowed('tools:launch-game', payload || {}),
     launchApp: (payload) => invokeAllowed('tools:launch-app', payload || {}),
+  },
+  mcp: {
+    listServers: () => invokeAllowed('mcp:list-servers'),
+    installServer: (serverId) => invokeAllowed('mcp:install-server', { serverId }),
+    uninstallServer: (serverId) => invokeAllowed('mcp:uninstall-server', { serverId }),
+    callTool: (toolName, params) => invokeAllowed('mcp:call-tool', { toolName, params: params || {} }),
+    getServerStatus: (serverId) => invokeAllowed('mcp:get-server-status', { serverId }),
+    googleAuthStatus: () => invokeAllowed('mcp:google-auth-status'),
+    googleStartAuth: () => invokeAllowed('mcp:google-start-auth'),
+    googlePollAuth: (deviceCode) => invokeAllowed('mcp:google-poll-auth', { deviceCode }),
+    setApiKey: (serverId, value) => invokeAllowed('mcp:set-api-key', { serverId, value }),
+    listTools: () => invokeAllowed('mcp:list-tools'),
   },
   auth: {
     ...authApi,

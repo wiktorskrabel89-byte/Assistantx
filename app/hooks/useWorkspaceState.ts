@@ -24,6 +24,8 @@ import type {
   ChatThread,
   CustomAgent,
   JarvisMode,
+  LocalModelAssignment,
+  LocalServerEntry,
   Mode,
   SharePayload,
   StoredState,

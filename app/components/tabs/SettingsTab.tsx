@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart2, Bot, Cloud, Globe, LogOut, MessageSquareText, Mic, MoonStar, Sparkles, Sun, Theater, Volume2, Zap } from "lucide-react";
 import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
@@ -10,6 +10,7 @@ import { DEFAULT_WEB_WAKE_PHRASE, VOICE_PROFILES } from "@/app/lib/voice";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MemorySummaryCard } from "../MemorySummaryCard";
 import { getTranslations, UI_LANGUAGES } from "@/app/lib/i18n";
 
@@ -62,6 +63,11 @@ export function SettingsTab() {
     setPersonalityMode,
     setLocalOnlyMode,
     setPostPrReviewCommentsToGitHub,
+    addLocalServer,
+    removeLocalServer,
+    updateLocalServer,
+    setLocalModelAssignment,
+    setPreferLocalWhenAvailable,
   } = useWorkspace();
 
   const tr = getTranslations(state.uiLanguage ?? "en");
@@ -74,6 +80,11 @@ export function SettingsTab() {
   });
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [newServerLabel, setNewServerLabel] = useState("");
+  const [newServerBaseUrl, setNewServerBaseUrl] = useState("http://127.0.0.1:11434");
+  const [newServerApiType, setNewServerApiType] = useState<"ollama" | "lmstudio" | "openai-compat">("ollama");
+  const [localServerError, setLocalServerError] = useState("");
+  const [scanBusyServerId, setScanBusyServerId] = useState<string | null>(null);
 
   const [serverStats, setServerStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -187,6 +198,118 @@ export function SettingsTab() {
   const softSurfaceClass = dark
     ? "border-slate-800 bg-slate-900/60"
     : "border-slate-200 bg-slate-50/80";
+  const localServers = activeWorkspace.settings.localServers;
+  const localAssignment = activeWorkspace.settings.localModelAssignment ?? {
+    chatModelId: null,
+    codeModelId: null,
+    externalApiModelId: null,
+    serverId: null,
+  };
+  const localModelOptions = useMemo(() => {
+    const options: Array<{ serverId: string; label: string; modelId: string; value: string }> = [];
+    for (const server of localServers) {
+      if (!server.enabled) continue;
+      for (const modelId of server.discoveredModels ?? []) {
+        options.push({
+          serverId: server.id,
+          label: `${server.label} · ${modelId}`,
+          modelId,
+          value: `${server.id}::${modelId}`,
+        });
+      }
+    }
+    return options;
+  }, [localServers]);
+  const hasLocalModelOptions = localModelOptions.length > 0;
+  const selectedChatOption = localAssignment.serverId && localAssignment.chatModelId
+    ? `${localAssignment.serverId}::${localAssignment.chatModelId}`
+    : "__cloud__";
+  const selectedCodeOption = localAssignment.serverId && localAssignment.codeModelId
+    ? `${localAssignment.serverId}::${localAssignment.codeModelId}`
+    : "__cloud__";
+  const selectedExternalOption = localAssignment.serverId && localAssignment.externalApiModelId
+    ? `${localAssignment.serverId}::${localAssignment.externalApiModelId}`
+    : "__cloud__";
+
+  async function handleAddLocalServer() {
+    const label = newServerLabel.trim() || "Local server";
+    const baseUrl = newServerBaseUrl.trim();
+    if (!baseUrl) {
+      setLocalServerError("Base URL is required.");
+      return;
+    }
+    addLocalServer({
+      label,
+      baseUrl,
+      apiType: newServerApiType,
+      enabled: true,
+      discoveredModels: [],
+      lastScannedAt: null,
+    });
+    setLocalServerError("");
+    setNewServerLabel("");
+  }
+
+  async function handleScanServer(serverId: string) {
+    const server = localServers.find((entry) => entry.id === serverId);
+    if (!server) return;
+    setLocalServerError("");
+    setScanBusyServerId(serverId);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+      const res = await fetch("/api/local-server/probe", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ baseUrl: server.baseUrl, apiType: server.apiType }),
+      });
+      const data = await res.json().catch(() => ({})) as { models?: string[]; error?: string };
+      if (!res.ok) {
+        setLocalServerError(data.error ?? `Probe failed (${res.status}).`);
+        return;
+      }
+      updateLocalServer(serverId, {
+        discoveredModels: Array.isArray(data.models) ? data.models : [],
+        lastScannedAt: Date.now(),
+      });
+    } catch (error) {
+      setLocalServerError(error instanceof Error ? error.message : "Probe failed.");
+    } finally {
+      setScanBusyServerId(null);
+    }
+  }
+
+  function handleRoleModelSelect(
+    role: "chatModelId" | "codeModelId" | "externalApiModelId",
+    value: string,
+  ) {
+    if (value === "__cloud__") {
+      const next = {
+        ...localAssignment,
+        [role]: null,
+      };
+      setLocalModelAssignment({
+        [role]: null,
+        serverId: next.chatModelId || next.codeModelId || next.externalApiModelId ? next.serverId : null,
+      });
+      return;
+    }
+    const [serverId, modelId] = value.split("::");
+    const serverChanged = localAssignment.serverId && localAssignment.serverId !== serverId;
+    setLocalModelAssignment({
+      serverId,
+      ...(serverChanged
+        ? {
+            chatModelId: role === "chatModelId" ? modelId ?? null : null,
+            codeModelId: role === "codeModelId" ? modelId ?? null : null,
+            externalApiModelId: role === "externalApiModelId" ? modelId ?? null : null,
+          }
+        : {}),
+      [role]: modelId ?? null,
+    });
+  }
 
   return (
     <section className={`h-full min-h-0 overflow-auto p-4 sm:p-6 lg:p-8 ${sectionBackground}`}>

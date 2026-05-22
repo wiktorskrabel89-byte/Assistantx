@@ -1,70 +1,47 @@
 'use strict';
 
-/**
- * sidecar-bridge.js — Electron renderer-side bridge to the Python AI-Agent sidecar.
- *
- * Responsibilities:
- *  - Open and maintain a WebSocket connection to ws://127.0.0.1:8765
- *  - Capture microphone audio via Web Audio API and stream PCM to the sidecar
- *  - Emit events: connected | disconnected | wake_word | vad_event | audio_segment |
- *                 stt_result | tts_audio | intent_parsed | rms_level | error | status
- *  - Expose API: configure(settings) | startAudioCapture() | stopAudioCapture() | requestTts(text, requestId)
- *                requestIntentParse(text, requestId) | isConnected()
- *
- * Falls back gracefully when the sidecar is not running.
- */
-
 const EventEmitter = require('events');
+
+let electronIpcRenderer = null;
+try {
+  ({ ipcRenderer: electronIpcRenderer } = require('electron'));
+} catch {
+  electronIpcRenderer = null;
+}
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
+const DEFAULT_IPC_MODE = 'stdio';
 const RECONNECT_BASE_DELAY_MS = 2000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const AUDIO_SAMPLE_RATE = 16000;
-const AUDIO_CHUNK_MS = 100; // send 100 ms chunks
-const AUDIO_CHUNK_SIZE = (AUDIO_SAMPLE_RATE * AUDIO_CHUNK_MS) / 1000; // samples per chunk
+const AUDIO_CHUNK_MS = 100;
+const AUDIO_CHUNK_SIZE = (AUDIO_SAMPLE_RATE * AUDIO_CHUNK_MS) / 1000;
 
-class SidecarBridge extends EventEmitter {
-  constructor({ host = DEFAULT_HOST, port = DEFAULT_PORT, url = '', token = '' } = {}) {
-    super();
-    this._baseUrl = String(url || '').trim() || `ws://${host}:${port}`;
-    this._token = String(token || '').trim();
-    this._url = this._buildUrl();
+class WebSocketTransport {
+  constructor({ url, onOpen, onClose, onMessage, onUnavailable }) {
+    this._url = url;
+    this._onOpen = onOpen;
+    this._onClose = onClose;
+    this._onMessage = onMessage;
+    this._onUnavailable = onUnavailable;
     this._ws = null;
     this._reconnectAttempts = 0;
     this._reconnectTimer = null;
-    this._connected = false;
     this._wasEverConnected = false;
-    this._audioContext = null;
-    this._audioSource = null;
-    this._audioWorklet = null;
-    this._scriptProcessor = null;
-    this._mediaStream = null;
-    this._capturing = false;
-    this._pendingSettings = null;
   }
-
-  _buildUrl() {
-    if (!this._token) return this._baseUrl;
-    const separator = this._baseUrl.includes('?') ? '&' : '?';
-    return `${this._baseUrl}${separator}token=${encodeURIComponent(this._token)}`;
-  }
-
-  // ── Connection management ────────────────────────────────────────────────
 
   connect() {
     if (this._ws && (this._ws.readyState === WebSocket.OPEN || this._ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
-    this._url = this._buildUrl();
     this._openSocket();
   }
 
   disconnect() {
     clearTimeout(this._reconnectTimer);
-    this._reconnectAttempts = MAX_RECONNECT_ATTEMPTS; // prevent auto-reconnect
-    this.stopAudioCapture();
+    this._reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
     if (this._ws) {
       try {
         this._ws.close();
@@ -73,27 +50,15 @@ class SidecarBridge extends EventEmitter {
       }
       this._ws = null;
     }
-    this._connected = false;
   }
 
-  isConnected() {
-    return this._connected;
-  }
-
-  setConnection({ url, token } = {}) {
-    if (typeof url === 'string' && url.trim()) {
-      this._baseUrl = url.trim();
-    }
-    if (typeof token === 'string') {
-      this._token = token.trim();
-    }
-    this._url = this._buildUrl();
-    if (this._ws && this._ws.readyState === WebSocket.OPEN) {
-      try {
-        this._ws.close();
-      } catch {
-        // ignore close errors
-      }
+  send(payload) {
+    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      this._ws.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -106,47 +71,26 @@ class SidecarBridge extends EventEmitter {
     }
 
     this._ws.onopen = () => {
-      this._connected = true;
       this._wasEverConnected = true;
       this._reconnectAttempts = 0;
-      this.emit('connected');
-      if (this._pendingSettings) {
-        this._send({ type: 'configure', ...this._pendingSettings });
-        this._pendingSettings = null;
-      }
+      this._onOpen();
     };
-
     this._ws.onclose = () => {
-      const wasConnected = this._connected;
-      this._connected = false;
-      // Only emit 'disconnected' when transitioning from connected → disconnected,
-      // not on every failed reconnect attempt, to avoid log spam.
-      if (wasConnected) {
-        this.emit('disconnected');
-      }
+      this._onClose();
       this._scheduleReconnect();
     };
-
-    this._ws.onerror = () => {
-      // onclose fires after onerror; reconnect is handled there
-    };
-
-    this._ws.onmessage = (event) => {
-      this._handleMessage(event.data);
-    };
+    this._ws.onerror = () => {};
+    this._ws.onmessage = (event) => this._onMessage(event.data);
   }
 
   _scheduleReconnect() {
     if (this._reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      // All attempts exhausted — emit a single final notification only if the
-      // sidecar was never reachable (i.e. it's not installed / not running).
       if (!this._wasEverConnected) {
-        this.emit('unavailable');
+        this._onUnavailable();
       }
       return;
     }
     this._reconnectAttempts += 1;
-    // Exponential back-off: 2 s, 4 s, 8 s … capped at 30 s
     const delay = Math.min(
       RECONNECT_BASE_DELAY_MS * (2 ** (this._reconnectAttempts - 1)),
       RECONNECT_MAX_DELAY_MS,
@@ -154,26 +98,214 @@ class SidecarBridge extends EventEmitter {
     clearTimeout(this._reconnectTimer);
     this._reconnectTimer = setTimeout(() => this._openSocket(), delay);
   }
+}
 
-  // ── Message handling ─────────────────────────────────────────────────────
+class StdioTransport {
+  constructor({ ipcRenderer, onOpen, onClose, onMessage, onUnavailable }) {
+    this._ipcRenderer = ipcRenderer;
+    this._onOpen = onOpen;
+    this._onClose = onClose;
+    this._onMessage = onMessage;
+    this._onUnavailable = onUnavailable;
+    this._unsubscribeMessage = null;
+    this._unsubscribeStatus = null;
+    this._connected = false;
+    this._wasEverConnected = false;
+  }
 
-  _send(payload) {
-    if (!this._connected || !this._ws) return false;
-    try {
-      this._ws.send(JSON.stringify(payload));
-      return true;
-    } catch {
-      return false;
+  connect() {
+    if (!this._ipcRenderer) {
+      this._onUnavailable();
+      return;
+    }
+    if (!this._unsubscribeMessage) {
+      const messageListener = (_event, payload) => {
+        if (!this._connected) {
+          this._connected = true;
+          this._wasEverConnected = true;
+          this._onOpen();
+        }
+        this._onMessage(payload);
+      };
+      this._ipcRenderer.on('sidecar-message', messageListener);
+      this._unsubscribeMessage = () => this._ipcRenderer.removeListener('sidecar-message', messageListener);
+    }
+    if (!this._unsubscribeStatus) {
+      const statusListener = (_event, payload) => {
+        const status = payload?.status;
+        if (status === 'running' && !this._connected) {
+          this._connected = true;
+          this._wasEverConnected = true;
+          this._onOpen();
+          return;
+        }
+        if (['stopped', 'error'].includes(status) && this._connected) {
+          this._connected = false;
+          this._onClose();
+          return;
+        }
+        if (status === 'unavailable' && !this._wasEverConnected) {
+          this._onUnavailable();
+        }
+      };
+      this._ipcRenderer.on('sidecar-status', statusListener);
+      this._unsubscribeStatus = () => this._ipcRenderer.removeListener('sidecar-status', statusListener);
+    }
+    void this._ipcRenderer.invoke('get-sidecar-status').then((payload) => {
+      const status = payload?.status;
+      if (status === 'running' && !this._connected) {
+        this._connected = true;
+        this._wasEverConnected = true;
+        this._onOpen();
+      } else if (status === 'unavailable' && !this._wasEverConnected) {
+        this._onUnavailable();
+      }
+    }).catch(() => {
+      this._onUnavailable();
+    });
+  }
+
+  disconnect() {
+    if (this._unsubscribeMessage) {
+      this._unsubscribeMessage();
+      this._unsubscribeMessage = null;
+    }
+    if (this._unsubscribeStatus) {
+      this._unsubscribeStatus();
+      this._unsubscribeStatus = null;
+    }
+    if (this._connected) {
+      this._connected = false;
+      this._onClose();
     }
   }
 
-  _handleMessage(raw) {
-    let msg;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
+  send(payload) {
+    if (!this._ipcRenderer) return false;
+    void this._ipcRenderer.invoke('sidecar:send', payload).catch(() => {
+      if (this._connected) {
+        this._connected = false;
+        this._onClose();
+      }
+    });
+    return true;
+  }
+}
+
+class SidecarBridge extends EventEmitter {
+  constructor({ host = DEFAULT_HOST, port = DEFAULT_PORT, url = '', token = '', ipcMode = DEFAULT_IPC_MODE } = {}) {
+    super();
+    this._baseUrl = String(url || '').trim() || `ws://${host}:${port}`;
+    this._token = String(token || '').trim();
+    this._ipcMode = String(ipcMode || DEFAULT_IPC_MODE).trim().toLowerCase();
+    this._connected = false;
+    this._audioContext = null;
+    this._audioSource = null;
+    this._audioWorklet = null;
+    this._scriptProcessor = null;
+    this._mediaStream = null;
+    this._capturing = false;
+    this._pendingSettings = null;
+    this._transport = null;
+    this._ws = null;
+  }
+
+  _buildUrl() {
+    if (!this._token) return this._baseUrl;
+    const separator = this._baseUrl.includes('?') ? '&' : '?';
+    return `${this._baseUrl}${separator}token=${encodeURIComponent(this._token)}`;
+  }
+
+  _createTransport() {
+    if (this._ipcMode === 'stdio' && electronIpcRenderer) {
+      return new StdioTransport({
+        ipcRenderer: electronIpcRenderer,
+        onOpen: () => this._handleConnected(),
+        onClose: () => this._handleDisconnected(),
+        onMessage: (payload) => this._handleMessage(payload),
+        onUnavailable: () => this.emit('unavailable'),
+      });
     }
+    const transport = new WebSocketTransport({
+      url: this._buildUrl(),
+      onOpen: () => this._handleConnected(),
+      onClose: () => this._handleDisconnected(),
+      onMessage: (payload) => this._handleMessage(payload),
+      onUnavailable: () => this.emit('unavailable'),
+    });
+    this._ws = transport._ws;
+    return transport;
+  }
+
+  _handleConnected() {
+    if (this._connected) return;
+    this._connected = true;
+    this.emit('connected');
+    if (this._pendingSettings) {
+      this._send({ type: 'configure', ...this._pendingSettings });
+      this._pendingSettings = null;
+    }
+  }
+
+  _handleDisconnected() {
+    if (!this._connected) return;
+    this._connected = false;
+    this.emit('disconnected');
+  }
+
+  connect() {
+    if (!this._transport) {
+      this._transport = this._createTransport();
+    }
+    this._transport.connect();
+  }
+
+  disconnect() {
+    this.stopAudioCapture();
+    if (this._transport) {
+      this._transport.disconnect();
+      this._transport = null;
+    }
+    this._connected = false;
+  }
+
+  isConnected() {
+    return this._connected;
+  }
+
+  setConnection({ url, token, ipcMode } = {}) {
+    if (typeof url === 'string' && url.trim()) {
+      this._baseUrl = url.trim();
+    }
+    if (typeof token === 'string') {
+      this._token = token.trim();
+    }
+    if (typeof ipcMode === 'string' && ipcMode.trim()) {
+      this._ipcMode = ipcMode.trim().toLowerCase();
+    }
+    if (this._transport) {
+      this._transport.disconnect();
+      this._transport = null;
+      this._connected = false;
+    }
+  }
+
+  _send(payload) {
+    if (!this._transport) return false;
+    return this._transport.send(payload);
+  }
+
+  _handleMessage(raw) {
+    const msg = typeof raw === 'string'
+      ? (() => {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      })()
+      : raw;
+    if (!msg || typeof msg !== 'object') return;
 
     const { type, ...rest } = msg;
     switch (type) {
@@ -228,12 +360,24 @@ class SidecarBridge extends EventEmitter {
           ok: Boolean(rest.ok),
         });
         break;
-       case 'tool_result':
+      case 'tool_result':
         this.emit('tool_result', {
           requestId: rest.requestId || '',
           tool: rest.tool || '',
           results: Array.isArray(rest.results) ? rest.results : [],
           ok: rest.ok !== false,
+        });
+        break;
+      case 'llm_route_result':
+        this.emit('llm_route_result', {
+          requestId: rest.requestId || '',
+          ok: rest.ok !== false,
+          intent: rest.intent || '',
+          provider: rest.provider || '',
+          model: rest.model || '',
+          text: rest.text || '',
+          error: rest.error || '',
+          modelMode: rest.modelMode || '',
         });
         break;
       case 'rms_level':
@@ -251,8 +395,6 @@ class SidecarBridge extends EventEmitter {
         break;
     }
   }
-
-  // ── API ──────────────────────────────────────────────────────────────────
 
   configure(settings) {
     if (this._connected) {
@@ -286,8 +428,6 @@ class SidecarBridge extends EventEmitter {
     this._send({ type: 'configure', listeningForCommand: listening });
   }
 
-  // ── Audio capture ────────────────────────────────────────────────────────
-
   async startAudioCapture() {
     if (this._capturing) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) return;
@@ -312,8 +452,6 @@ class SidecarBridge extends EventEmitter {
 
       this._audioContext = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
       this._audioSource = this._audioContext.createMediaStreamSource(this._mediaStream);
-
-      // Use ScriptProcessorNode (deprecated but universally supported in Electron)
       const bufferSize = AUDIO_CHUNK_SIZE;
       this._scriptProcessor = this._audioContext.createScriptProcessor(bufferSize, 1, 1);
 
@@ -359,8 +497,6 @@ class SidecarBridge extends EventEmitter {
     this._capturing = false;
     this.emit('audio_capture_stopped');
   }
-
-  // ── Audio helpers ────────────────────────────────────────────────────────
 
   _float32ToPcmInt16(float32Array) {
     const int16 = new Int16Array(float32Array.length);

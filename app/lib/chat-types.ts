@@ -94,6 +94,25 @@ export type CustomAgent = {
   updatedAt: number;
 };
 
+export type LocalServerApiType = "ollama" | "lmstudio" | "openai-compat";
+
+export type LocalServerEntry = {
+  id: string;
+  label: string;
+  baseUrl: string;
+  apiType: LocalServerApiType;
+  enabled: boolean;
+  discoveredModels: string[];
+  lastScannedAt: number | null;
+};
+
+export type LocalModelAssignment = {
+  chatModelId: string | null;
+  codeModelId: string | null;
+  externalApiModelId: string | null;
+  serverId: string | null;
+};
+
 export type WorkspaceSettings = {
   activeAgentId: string;
   customAgents: CustomAgent[];
@@ -131,6 +150,9 @@ export type WorkspaceSettings = {
   syncAutomations: boolean;
   syncLocalFiles: boolean;
   localOnlyMode: boolean;
+  localServers: LocalServerEntry[];
+  localModelAssignment: LocalModelAssignment;
+  preferLocalWhenAvailable: boolean;
   encryptedSync: boolean;
   pauseSync: boolean;
   postPrReviewCommentsToGitHub: boolean;

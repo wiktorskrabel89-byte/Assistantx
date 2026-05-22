@@ -136,19 +136,6 @@ function resolveWakeMode(method: WakeMethod | null): WakeMode {
   return "router";
 }
 
-function resolveWakeOrder(preferTailscale: boolean) {
-  const configured = String(process.env.JARVIS_WAKE_FALLBACK_POLICY || "").trim();
-  const defaults: WakeMethod[] = ["router_api", "udp_path_probe", "ipv6_magic_packet", "lan_broadcast"];
-  const parsed = configured
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item): item is WakeMethod =>
-      ["router_api", "udp_path_probe", "ipv6_magic_packet", "lan_broadcast"].includes(item),
-    );
-  const ordered = parsed.length > 0 ? parsed : defaults;
-  return preferTailscale ? ["tailscale_direct", ...ordered] as WakeMethod[] : ordered;
-}
-
 export async function executeWakeChain(params: {
   candidate: WakeCandidate;
   broadcastAddress?: string | null;
@@ -164,13 +151,16 @@ export async function executeWakeChain(params: {
     if (udpAttempt.ok) {
       return { ok: true, method: "udp_path_probe", attempts };
     }
-    if (!attempt) continue;
-    attempts.push(attempt);
-    if (attempt.ok) {
+  }
+
+  if (candidate.macAddress) {
+    const lanAttempt = await attemptLanBroadcast(candidate, params.broadcastAddress ?? undefined);
+    attempts.push(lanAttempt);
+    if (lanAttempt.ok) {
       return {
         ok: true,
-        method: attempt.method,
-        mode: resolveWakeMode(attempt.method),
+        method: "lan_broadcast",
+        mode: resolveWakeMode("lan_broadcast"),
         nextAction: "wait_for_presence",
         attempts,
       };

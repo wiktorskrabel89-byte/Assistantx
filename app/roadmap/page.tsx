@@ -12,6 +12,9 @@ export default function RoadmapPage() {
           <p className="mt-3 text-sm text-slate-700">
             Strategic rollout for AssistantX as a full developer platform (PaaS), starting with Phase A quick wins.
           </p>
+          <p className="mt-2 text-sm text-slate-700">
+            Web AI assistants can review shared app code and files to answer questions about what AssistantX can do for your project.
+          </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/pricing" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:border-blue-200 hover:text-blue-700">
               View pricing
@@ -48,6 +51,7 @@ export default function RoadmapPage() {
             <li>Primary coding profile: GPT OSS 120B with strict deterministic mode for critical tasks.</li>
             <li>Fallback 1: Gemini long-context profile.</li>
             <li>Fallback 2: Low-cost reasoning profile (DeepSeek/Llama class).</li>
+            <li>Web AI can inspect your shared code context to explain current app capabilities and next implementation options.</li>
             <li>Repo-wide changes are always plan-first with explicit user approval before commit/PR.</li>
           </ul>
         </section>

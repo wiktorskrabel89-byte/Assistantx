@@ -27,6 +27,7 @@ function createMainIpcHandlers(deps) {
     launcherService,
     ensureDbReady,
     getSidecarStatus,
+    sendSidecarMessage,
     checkLocalAiAvailability,
     routeAiRequest,
     installLocalAiEngine,
@@ -57,6 +58,13 @@ function createMainIpcHandlers(deps) {
     serverKillSwitch,
     serverGetConfig,
     serverSetConfig,
+    localServerList,
+    localServerAdd,
+    localServerUpdate,
+    localServerRemove,
+    localServerScan,
+    localServerGetAssignment,
+    localServerSetAssignment,
     githubClient,
     googleClient,
     appsTool,
@@ -67,6 +75,8 @@ function createMainIpcHandlers(deps) {
     resetQuitAndInstallPreparation,
     permissions,
     securityAudit,
+    mcpManager,
+    mcpRouter,
   } = deps;
 
   const handlers = {
@@ -89,6 +99,10 @@ function createMainIpcHandlers(deps) {
       restartSidecar();
       return { ok: true };
     },
+
+    'sidecar:send': withSchema('sidecar:send', (payload) => validatePlainObject(payload), async (_event, payload) => (
+      sendSidecarMessage(payload || {})
+    )),
 
     'open-url': withSchema('open-url', (payload) => validateString(payload, { maxLen: 2000 }), async (_event, url) => {
       const auth = await permissions.authorize('open-url', { url });
@@ -476,6 +490,112 @@ function createMainIpcHandlers(deps) {
       const remoteRuntimeApiUrl = validateString(body.remoteRuntimeApiUrl, { allowEmpty: true, maxLen: 500 }) || undefined;
       const remoteRuntimeWsUrl = validateString(body.remoteRuntimeWsUrl, { allowEmpty: true, maxLen: 500 }) || undefined;
       return serverSetConfig({ runtimeMode, remoteRuntimeApiUrl, remoteRuntimeWsUrl });
+    },
+    'local-server:list': () => ({ ok: true, servers: localServerList() }),
+    'local-server:add': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('local-server:add', 'payload-must-be-object');
+      const label = validateString(body.label, { allowEmpty: false, maxLen: 120 });
+      const baseUrl = validateString(body.baseUrl, { allowEmpty: false, maxLen: 500 });
+      const apiType = validateString(body.apiType, { allowEmpty: false, maxLen: 40 }) || 'ollama';
+      if (!label || !baseUrl) return invalidResult('local-server:add', 'label-and-base-url-required');
+      return localServerAdd({ label, baseUrl, apiType, enabled: body.enabled !== false });
+    },
+    'local-server:update': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('local-server:update', 'payload-must-be-object');
+      const id = validateString(body.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:update', 'id-required');
+      return localServerUpdate(id, validatePlainObject(body.patch) || {});
+    },
+    'local-server:remove': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const id = validateString(body?.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:remove', 'id-required');
+      return localServerRemove(id);
+    },
+    'local-server:scan': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const id = validateString(body?.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:scan', 'id-required');
+      return localServerScan(id);
+    },
+    'local-server:get-model-assignment': () => ({ ok: true, ...localServerGetAssignment() }),
+    'local-server:set-model-assignment': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      return localServerSetAssignment(body);
+    },
+
+    // ── MCP server management ──────────────────────────────────────────────
+    'mcp:list-servers': () => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      return { ok: true, servers: mcpManager.listServers() };
+    },
+
+    'mcp:install-server': async (_event, payload) => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      const body = validatePlainObject(payload);
+      const serverId = validateString(body?.serverId, { allowEmpty: false, maxLen: 60 });
+      if (!serverId) return invalidResult('mcp:install-server', 'server-id-required');
+      return mcpManager.installServer(serverId);
+    },
+
+    'mcp:uninstall-server': (_event, payload) => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      const body = validatePlainObject(payload);
+      const serverId = validateString(body?.serverId, { allowEmpty: false, maxLen: 60 });
+      if (!serverId) return invalidResult('mcp:uninstall-server', 'server-id-required');
+      return mcpManager.uninstallServer(serverId);
+    },
+
+    'mcp:call-tool': async (_event, payload) => {
+      if (!mcpManager || !mcpRouter) return { ok: false, error: 'mcp-unavailable' };
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('mcp:call-tool', 'payload-must-be-object');
+      const toolName = validateString(body.toolName, { allowEmpty: false, maxLen: 120 });
+      const params = validatePlainObject(body.params) || {};
+      if (!toolName) return invalidResult('mcp:call-tool', 'tool-name-required');
+      securityAudit({ action: 'mcp:call-tool', target: toolName });
+      return mcpRouter.route(toolName, params);
+    },
+
+    'mcp:get-server-status': (_event, payload) => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      const body = validatePlainObject(payload);
+      const serverId = validateString(body?.serverId, { allowEmpty: false, maxLen: 60 });
+      if (!serverId) return invalidResult('mcp:get-server-status', 'server-id-required');
+      return { ok: true, status: mcpManager.getServerStatus(serverId) };
+    },
+
+    'mcp:google-auth-status': () => {
+      return googleClient.auth.getStatus();
+    },
+
+    'mcp:google-start-auth': async () => {
+      return googleClient.auth.initiateDeviceFlow();
+    },
+
+    'mcp:google-poll-auth': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const deviceCode = validateString(body?.deviceCode, { allowEmpty: false, maxLen: 500 });
+      if (!deviceCode) return invalidResult('mcp:google-poll-auth', 'device-code-required');
+      return googleClient.auth.pollForToken(deviceCode);
+    },
+
+    'mcp:set-api-key': (_event, payload) => {
+      if (!mcpManager) return { ok: false, error: 'mcp-manager-unavailable' };
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('mcp:set-api-key', 'payload-must-be-object');
+      const serverId = validateString(body.serverId, { allowEmpty: false, maxLen: 60 });
+      const value = validateString(body.value, { allowEmpty: false, maxLen: 5000 });
+      if (!serverId || !value) return invalidResult('mcp:set-api-key', 'server-id-and-value-required');
+      securityAudit({ action: 'mcp:set-api-key', target: serverId });
+      return mcpManager.setApiKey(serverId, value);
+    },
+
+    'mcp:list-tools': () => {
+      if (!mcpRouter) return { ok: false, error: 'mcp-unavailable' };
+      return { ok: true, tools: mcpRouter.listTools() };
     },
   };
 
