@@ -211,14 +211,25 @@ function HomeContent() {
 
   // Global keyboard shortcuts for workspace tab navigation.
   // Ctrl/Cmd+Shift+1 → Chat, 2-4 → AI Code tabs (ai-code mode only),
-  // , → Settings, . → Notifications.
+  // Ctrl/Cmd+, → Settings, Ctrl/Cmd+. → Notifications.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey;
-      if (!mod || !event.shiftKey) return;
+      if (!mod) return;
       // Don't fire when the user is typing in an input or editable area.
       if (isEditableElementTarget(event.target)) return;
+      if (event.key === "," || event.key === "<") {
+        event.preventDefault();
+        handleSelectAppTab("settings");
+        return;
+      }
+      if (event.key === "." || event.key === ">") {
+        event.preventDefault();
+        handleSelectAppTab("notifications");
+        return;
+      }
+      if (!event.shiftKey) return;
       switch (event.key) {
         case "1":
           event.preventDefault();
@@ -241,14 +252,6 @@ function HomeContent() {
             event.preventDefault();
             handleSelectAppTab("codebase");
           }
-          break;
-        case ",":
-          event.preventDefault();
-          handleSelectAppTab("settings");
-          break;
-        case ".":
-          event.preventDefault();
-          handleSelectAppTab("notifications");
           break;
       }
     };
