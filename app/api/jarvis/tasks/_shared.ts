@@ -10,8 +10,17 @@ export type JarvisTaskCategory = "ai_request" | "system_action";
 
 export const JARVIS_SYSTEM_ACTION_ALLOWLIST = [
   "launch_roblox",
+  "open_app",
+  "system_screenshot",
+  "system_sleep",
   "system_file_list",
+  "system_file_read",
+  "system_file_search",
   "system_status_ping",
+  "system_repo_status",
+  "system_repo_index",
+  "system_ignore_update",
+  "system_db_query",
 ] as const;
 
 export type JarvisSystemAction = (typeof JARVIS_SYSTEM_ACTION_ALLOWLIST)[number];
@@ -60,8 +69,17 @@ export function mapTaskStatusToUiLabel(task: {
   if (task.status === "processing") {
     if (task.category === "system_action") {
       if (task.action_type === "launch_roblox") return "Launching Roblox on local device...";
+      if (task.action_type === "open_app") return "Opening app on local device...";
+      if (task.action_type === "system_screenshot") return "Capturing screenshot on local device...";
+      if (task.action_type === "system_sleep") return "Putting local device to sleep...";
       if (task.action_type === "system_file_list") return "Listing files on local device...";
+      if (task.action_type === "system_file_read") return "Reading file on local device...";
+      if (task.action_type === "system_file_search") return "Searching local workspace...";
       if (task.action_type === "system_status_ping") return "Reading local device status...";
+      if (task.action_type === "system_repo_status") return "Inspecting local repository...";
+      if (task.action_type === "system_repo_index") return "Refreshing local repository index...";
+      if (task.action_type === "system_ignore_update") return "Updating local ignore rules...";
+      if (task.action_type === "system_db_query") return "Running local database query...";
     }
     return "Processing on local device...";
   }

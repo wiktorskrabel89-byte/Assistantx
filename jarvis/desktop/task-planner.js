@@ -39,6 +39,23 @@ function planSegment(segment, options = {}) {
   const text = normalizeText(segment);
   if (!text) return null;
 
+   const slashMatch = text.match(/^\/([a-z]+)(?:\s+(.+))?$/i);
+   if (slashMatch) {
+     const slashCommand = slashMatch[1].toLowerCase();
+     const slashArgs = (slashMatch[2] || '').trim();
+     if (slashCommand === 'open' && slashArgs) return createStep('openApp', { app: slashArgs }, `Open ${slashArgs}`);
+     if (slashCommand === 'game' && slashArgs) return createStep('openApp', { app: slashArgs }, `Launch ${slashArgs}`);
+     if (slashCommand === 'screenshot') return createStep('screenshot', {}, 'Capture screenshot');
+     if (slashCommand === 'sleep') return createStep('sleep', {}, 'Put PC to sleep');
+     if (slashCommand === 'os') return createStep('sysinfo', {}, 'Collect system info');
+     if (slashCommand === 'file' && slashArgs) return createStep('readFile', { targetPath: buildFilePath(slashArgs) }, `Read file ${buildFilePath(slashArgs)}`);
+     if (slashCommand === 'search' && slashArgs) return createStep('searchWeb', { query: slashArgs }, `Search the web for ${slashArgs}`);
+     if (slashCommand === 'db' && slashArgs) return createStep('typeText', { text: slashArgs }, 'Insert DB query text');
+     if (slashCommand === 'repo') return createStep('listFiles', { targetPath: buildFilePath(slashArgs) }, `List files ${slashArgs ? `in ${buildFilePath(slashArgs)}` : 'in the default folder'}`);
+     if (slashCommand === 'index') return createStep('refreshAppCatalog', {}, 'Refresh local catalog');
+     if (slashCommand === 'ignore' && slashArgs) return createStep('typeText', { text: slashArgs }, 'Type ignore pattern');
+   }
+
   const favoriteApp = options.favoriteApp;
   const favoriteAwareText = favoriteApp
     ? text.replace(/\b(?:(?:my|moja|moją|moj[aąę]?)\s+)?(?:favorite|ulubion[aey])\s+(app|game|aplikacj[aeę]?|gr[aeę])\b/gi, favoriteApp)

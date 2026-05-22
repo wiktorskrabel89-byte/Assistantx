@@ -5,6 +5,7 @@ import os
 import platform
 import re
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -852,8 +853,17 @@ def should_force_cloud_fallback(
 
 ALLOWED_SYSTEM_ACTIONS = {
     "launch_roblox",
+    "open_app",
+    "system_screenshot",
+    "system_sleep",
     "system_file_list",
+    "system_file_read",
+    "system_file_search",
     "system_status_ping",
+    "system_repo_status",
+    "system_repo_index",
+    "system_ignore_update",
+    "system_db_query",
 }
 
 
@@ -898,6 +908,68 @@ def _list_allowed_directory(config: WorkerConfig, payload: dict[str, Any]) -> st
     })
 
 
+def _read_allowed_file(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    requested_path = str(payload.get("path") or "").strip()
+    if not requested_path:
+        raise RuntimeError("File path is required.")
+    resolved = _resolve_allowed_path(config, requested_path)
+    if not resolved.exists():
+        raise RuntimeError(f"Requested file does not exist: {resolved}")
+    if not resolved.is_file():
+        raise RuntimeError(f"Requested path is not a file: {resolved}")
+    raw = resolved.read_text(encoding="utf-8", errors="ignore")
+    preview = raw[:4000]
+    return _safe_json_dumps({
+        "path": str(resolved),
+        "size": len(raw),
+        "preview": preview,
+        "truncated": len(raw) > len(preview),
+    })
+
+
+def _search_allowed_files(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    query = str(payload.get("query") or "").strip().lower()
+    if not query:
+        raise RuntimeError("Search query is required.")
+    base = Path(config.allowed_directory).resolve()
+    results: list[dict[str, Any]] = []
+    for path in base.rglob("*"):
+        if len(results) >= 20:
+            break
+        if not path.is_file():
+            continue
+        try:
+            if query in path.name.lower():
+                results.append({"path": str(path), "match": "filename"})
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            index = text.lower().find(query)
+            if index >= 0:
+                snippet_start = max(0, index - 120)
+                snippet_end = min(len(text), index + 240)
+                results.append({
+                    "path": str(path),
+                    "match": "content",
+                    "snippet": text[snippet_start:snippet_end].replace("\n", " "),
+                })
+        except Exception:
+            continue
+    return _safe_json_dumps({"query": query, "results": results})
+
+
+def _open_app(payload: dict[str, Any]) -> str:
+    app = str(payload.get("app") or payload.get("target") or "").strip()
+    if not app:
+        raise RuntimeError("App target is required.")
+    if len(app) > 240:
+        raise RuntimeError("App target is too long.")
+    if platform.system().lower().startswith("win"):
+        os.startfile(app)  # type: ignore[attr-defined]
+        return f"Otworzono lokalny cel: {app}"
+    subprocess.Popen([app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return f"Opened local target: {app}"
+
+
 def _launch_roblox(payload: dict[str, Any]) -> str:
     game_id = str(payload.get("game_id") or "").strip() or "185655149"
     if not re.fullmatch(r"\d{3,20}", game_id):
@@ -913,6 +985,47 @@ def _launch_roblox(payload: dict[str, Any]) -> str:
         return f"Uruchomiono Roblox na lokalnym komputerze (placeId={game_id})."
 
     raise RuntimeError("launch_roblox is currently supported only on Windows workers.")
+
+
+def _capture_screenshot() -> str:
+    if not platform.system().lower().startswith("win"):
+        raise RuntimeError("system_screenshot is currently supported only on Windows workers.")
+    screenshot_path = Path(tempfile.gettempdir()) / f"assistantx_screenshot_{int(time.time())}.png"
+    script = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "Add-Type -AssemblyName System.Drawing; "
+        "$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; "
+        "$bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height; "
+        "$graphics = [System.Drawing.Graphics]::FromImage($bitmap); "
+        "$graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); "
+        f"$bitmap.Save('{str(screenshot_path).replace(\"'\", \"''\")}', [System.Drawing.Imaging.ImageFormat]::Png); "
+        "$graphics.Dispose(); "
+        "$bitmap.Dispose();"
+    )
+    subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+        timeout=15,
+    )
+    return _safe_json_dumps({
+        "path": str(screenshot_path),
+        "capturedAt": _utc_now_iso(),
+    })
+
+
+def _system_sleep() -> str:
+    if platform.system().lower().startswith("win"):
+        subprocess.run(
+            ["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+            timeout=10,
+        )
+        return "Sleep requested on the local device."
+    raise RuntimeError("system_sleep is currently supported only on Windows workers.")
 
 
 def _read_gpu_metrics() -> list[dict[str, Any]]:
@@ -980,16 +1093,111 @@ def _system_status_ping() -> str:
     })
 
 
+def _repo_status(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    root = _resolve_allowed_path(config, str(payload.get("path") or "."))
+    if not root.exists():
+        raise RuntimeError(f"Repository path does not exist: {root}")
+    if not root.is_dir():
+        raise RuntimeError(f"Repository path is not a directory: {root}")
+    file_count = 0
+    dir_count = 0
+    for item in root.rglob("*"):
+        if item.is_dir():
+            dir_count += 1
+        elif item.is_file():
+            file_count += 1
+    return _safe_json_dumps({
+        "path": str(root),
+        "files": file_count,
+        "directories": dir_count,
+    })
+
+
+def _repo_index(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    root = _resolve_allowed_path(config, str(payload.get("path") or "."))
+    if not root.exists() or not root.is_dir():
+        raise RuntimeError(f"Repository path is invalid: {root}")
+    manifest_path = Path(config.allowed_directory).resolve() / ".assistantx-index.json"
+    indexed_files = []
+    for item in root.rglob("*"):
+        if len(indexed_files) >= 500:
+            break
+        if item.is_file():
+            indexed_files.append(str(item.relative_to(root)))
+    manifest_path.write_text(
+        _safe_json_dumps({
+            "root": str(root),
+            "indexedAt": _utc_now_iso(),
+            "fileCount": len(indexed_files),
+            "files": indexed_files,
+        }),
+        encoding="utf-8",
+    )
+    return _safe_json_dumps({
+        "root": str(root),
+        "manifest": str(manifest_path),
+        "fileCount": len(indexed_files),
+    })
+
+
+def _update_ignore_rules(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    pattern = str(payload.get("pattern") or "").strip()
+    if not pattern:
+        raise RuntimeError("Ignore pattern is required.")
+    ignore_path = Path(config.allowed_directory).resolve() / ".assistantx-ignore"
+    existing = ignore_path.read_text(encoding="utf-8", errors="ignore").splitlines() if ignore_path.exists() else []
+    if pattern not in existing:
+        existing.append(pattern)
+        ignore_path.write_text("\n".join(existing) + "\n", encoding="utf-8")
+    return _safe_json_dumps({
+        "ignoreFile": str(ignore_path),
+        "pattern": pattern,
+        "entries": existing,
+    })
+
+
+def _db_query(payload: dict[str, Any]) -> str:
+    query = str(payload.get("query") or "").strip()
+    if not query:
+        raise RuntimeError("Database query is required.")
+    database_url = os.getenv("LOCAL_WORKER_DATABASE_URL", "").strip()
+    if not database_url:
+        raise RuntimeError("LOCAL_WORKER_DATABASE_URL is not configured on this local worker.")
+    return _safe_json_dumps({
+        "query": query,
+        "databaseUrlConfigured": True,
+        "note": "Database execution is intentionally disabled until a local DB adapter is configured on this worker.",
+    })
+
+
 def handle_system_action(config: WorkerConfig, *, action_type: str | None, payload: dict[str, Any]) -> str:
     if action_type not in ALLOWED_SYSTEM_ACTIONS:
         raise RuntimeError(f"Unsupported system_action '{action_type or ''}'.")
 
     if action_type == "launch_roblox":
         return _launch_roblox(payload)
+    if action_type == "open_app":
+        return _open_app(payload)
+    if action_type == "system_screenshot":
+        return _capture_screenshot()
+    if action_type == "system_sleep":
+        return _system_sleep()
     if action_type == "system_file_list":
         return _list_allowed_directory(config, payload)
+    if action_type == "system_file_read":
+        return _read_allowed_file(config, payload)
+    if action_type == "system_file_search":
+        return _search_allowed_files(config, payload)
     if action_type == "system_status_ping":
         return _system_status_ping()
+    if action_type == "system_repo_status":
+        return _repo_status(config, payload)
+    if action_type == "system_repo_index":
+        return _repo_index(config, payload)
+    if action_type == "system_ignore_update":
+        return _update_ignore_rules(config, payload)
+    if action_type == "system_db_query":
+        return _db_query(payload)
 
     raise RuntimeError(f"Unsupported system_action '{action_type or ''}'.")
 

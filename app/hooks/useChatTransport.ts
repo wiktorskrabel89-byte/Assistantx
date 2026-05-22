@@ -36,8 +36,17 @@ function mapLocalTaskStatus(task: {
   if (task.status === "processing") {
     if (task.category === "system_action") {
       if (task.action_type === "launch_roblox") return "Launching Roblox on local device...";
+      if (task.action_type === "open_app") return "Opening app on local device...";
+      if (task.action_type === "system_screenshot") return "Capturing screenshot on local device...";
+      if (task.action_type === "system_sleep") return "Putting local device to sleep...";
       if (task.action_type === "system_file_list") return "Listing files on local device...";
+      if (task.action_type === "system_file_read") return "Reading file on local device...";
+      if (task.action_type === "system_file_search") return "Searching local workspace...";
       if (task.action_type === "system_status_ping") return "Reading local device status...";
+      if (task.action_type === "system_repo_status") return "Inspecting local repository...";
+      if (task.action_type === "system_repo_index") return "Refreshing local repository index...";
+      if (task.action_type === "system_ignore_update") return "Updating local ignore rules...";
+      if (task.action_type === "system_db_query") return "Running local database query...";
     }
     return "Processing on local device...";
   }
@@ -603,6 +612,68 @@ export function useChatTransport({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (session?.access_token) {
         headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+
+      const commandResponse = await fetch("/api/commands/execute", {
+        method: "POST",
+        headers,
+        signal: requestAbortController.signal,
+        body: JSON.stringify({
+          message: userMsg,
+          conversationId: chatId,
+        }),
+      });
+      const commandPayload = await commandResponse.json().catch(() => ({})) as {
+        handled?: boolean;
+        ok?: boolean;
+        taskId?: string | null;
+        task?: { status?: string | null; category?: string | null; action_type?: string | null } | null;
+        status?: string | null;
+        routeReason?: string | null;
+        message?: string | null;
+        error?: string;
+      };
+
+      if (commandPayload.handled) {
+        if (!commandPayload.ok) {
+          updateMessageById(workspaceId, chatId, pending.id, (entry) => ({
+            ...entry,
+            ai: commandPayload.message ?? commandPayload.error ?? "Command failed.",
+            status: undefined,
+            routeReason: commandPayload.routeReason ?? "Command dispatcher",
+          }));
+          return;
+        }
+
+        if (commandPayload.taskId) {
+          updateMessageById(workspaceId, chatId, pending.id, (entry) => ({
+            ...entry,
+            ai: commandPayload.message ?? "",
+            status: commandPayload.status
+              ?? mapLocalTaskStatus({
+                status: commandPayload.task?.status ?? "pending",
+                category: commandPayload.task?.category ?? "system_action",
+                action_type: commandPayload.task?.action_type ?? null,
+              }),
+            routeReason: commandPayload.routeReason ?? "Queued via command dispatcher",
+          }));
+          void pollLocalTask({
+            taskId: commandPayload.taskId,
+            messageId: pending.id,
+            workspaceId,
+            chatId,
+            headers,
+          });
+          return;
+        }
+
+        updateMessageById(workspaceId, chatId, pending.id, (entry) => ({
+          ...entry,
+          ai: commandPayload.message ?? "Command completed.",
+          status: undefined,
+          routeReason: commandPayload.routeReason ?? "Command dispatcher",
+        }));
+        return;
       }
 
       if (activeSettings.localOnlyMode) {
