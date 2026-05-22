@@ -2,7 +2,11 @@
 const isVercelBuild = process.env.VERCEL === '1' || process.env.VERCEL === 'true'
 
 const nextConfig = {
-  ...(isVercelBuild ? {} : { output: 'standalone' }),
+  output: 'standalone',
+  outputFileTracingRoot: process.cwd(),
+  turbopack: {
+    root: process.cwd(),
+  },
   productionBrowserSourceMaps: true,
   generateEtags: false,
   images: {
