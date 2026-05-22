@@ -2,8 +2,32 @@
 
 const DEFAULT_MODELS = [
   {
+    provider: 'ollama',
+    model: 'gemma4:e4b',
+    supportsTools: true,
+    supportsVision: false,
+    supportsStreaming: true,
+    contextWindow: 32000,
+    reasoningTier: 'fast',
+    pricingTier: 'low',
+    latencyTier: 'fast',
+    bootstrapOnly: true,
+  },
+  {
+    provider: 'ollama',
+    model: 'qwen2.5-coder:14b',
+    supportsTools: true,
+    supportsVision: false,
+    supportsStreaming: true,
+    contextWindow: 128000,
+    reasoningTier: 'deep',
+    pricingTier: 'low',
+    latencyTier: 'medium',
+    bootstrapOnly: true,
+  },
+  {
     provider: 'groq',
-    model: 'qwen-32b',
+    model: 'qwen-2.5-32b-instruct',
     supportsTools: true,
     supportsVision: false,
     supportsStreaming: true,
@@ -14,7 +38,7 @@ const DEFAULT_MODELS = [
   },
   {
     provider: 'openrouter',
-    model: 'gpt-120b',
+    model: 'openai/gpt-4o',
     supportsTools: true,
     supportsVision: true,
     supportsStreaming: true,
@@ -44,6 +68,7 @@ function createModelCapabilityRegistry({ models = DEFAULT_MODELS } = {}) {
 
   function list(filters = {}) {
     return [...map.values()].filter((entry) => {
+      if (!filters.includeBootstrapLocal && entry.bootstrapOnly) return false;
       if (filters.supportsTools !== undefined && Boolean(entry.supportsTools) !== Boolean(filters.supportsTools)) return false;
       if (filters.supportsStreaming !== undefined && Boolean(entry.supportsStreaming) !== Boolean(filters.supportsStreaming)) return false;
       if (filters.reasoningTier && entry.reasoningTier !== filters.reasoningTier) return false;
@@ -57,8 +82,9 @@ function createModelCapabilityRegistry({ models = DEFAULT_MODELS } = {}) {
     prefersLowCost = false,
     prefersLowLatency = false,
     minContext = 0,
+    includeBootstrapLocal = false,
   } = {}) {
-    const candidates = list().filter((entry) => {
+    const candidates = list({ includeBootstrapLocal }).filter((entry) => {
       if (requiresTools && !entry.supportsTools) return false;
       if (requiresVision && !entry.supportsVision) return false;
       if (minContext && Number(entry.contextWindow || 0) < Number(minContext)) return false;

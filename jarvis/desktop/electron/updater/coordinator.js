@@ -8,6 +8,8 @@ const DEFAULT_DEFER_MINOR_PATCH_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DEFER_MAJOR_SECURITY_MS = 6 * 60 * 60 * 1000;
 const STARTUP_CHECK_DELAY_MS = 15_000;
 const FEED_SELF_TEST_TIMEOUT_MS = 8_000;
+const PRIVATE_TOKEN_WAIT_TIMEOUT_MS = 4_000;
+const PRIVATE_TOKEN_STORE_FILE = 'updater-github-token.bin';
 
 function safeJsonParse(raw, fallback = null) {
   try {
@@ -121,6 +123,7 @@ class UpdateCoordinator {
         source: 'none',
         highlights: [],
         details: '',
+        markdown: '',
         hasNotes: false,
       },
       policy: {
@@ -134,7 +137,25 @@ class UpdateCoordinator {
       diagnostics: null,
       deferred: null,
       lastCheckedAt: null,
+      requiresTokenSetup: false,
+      auth: {
+        token: {
+          required: false,
+          available: false,
+          source: 'none',
+          error: null,
+        },
+      },
     };
+
+    this.privateTokenPath = path.join(this.app.getPath('userData'), PRIVATE_TOKEN_STORE_FILE);
+    this.privateTokenReady = Promise.resolve({
+      available: false,
+      source: 'none',
+      error: null,
+      required: false,
+      encryptionAvailable: false,
+    });
   }
 
   log(event, payload = {}) {
@@ -299,6 +320,15 @@ class UpdateCoordinator {
         severity: 'error',
         reason: 'feed-auth-or-permission',
         detail: 'Update feed authentication/permission failed. Verify feed visibility and credentials.',
+      };
+    }
+    if (errorMeta.statusCode === 404) {
+      return {
+        status: 'error',
+        health: 'unavailable',
+        severity: 'error',
+        reason: 'feed-not-found-or-private',
+        detail: 'Update feed returned 404 (private feed usually requires valid credentials).',
       };
     }
     if (errorMeta.isMetadataIssue || errorMeta.statusCode === 404) {
@@ -521,44 +551,356 @@ class UpdateCoordinator {
     }
   }
 
-  _injectGitHubToken(autoUpdater) {
-    // Try GH_TOKEN env first (injected at build-time in CI, or set by admin).
-    // Fall back to keytar for end-user machines where the token was stored
-    // in the OS credential vault during a previous privileged setup flow.
-    const envToken = process.env.GH_TOKEN || '';
-    if (envToken) {
-      autoUpdater.requestHeaders = { Authorization: `token ${envToken}` };
-      this.log('updater:github-token-injected', { source: 'env' });
-      return;
-    }
-
-    let keytar = null;
+  getSafeStorage() {
     try {
-      keytar = require('keytar');
+      const { safeStorage } = require('electron');
+      return safeStorage || null;
     } catch {
-      keytar = null;
+      return null;
+    }
+  }
+
+  isPrivateGithubProvider() {
+    const publish = this.getPublishConfig();
+    return publish.provider === 'github' && publish.private === true;
+  }
+
+  emitTokenDiagnostics({ severity = 'info', detail = '', reason = '', source = 'none', error = null, available = false } = {}) {
+    const status = available ? 'healthy' : (error ? 'degraded' : 'degraded');
+    const resolvedDetail = detail || (available
+      ? 'Private updater token is configured.'
+      : 'Private updater token is missing.');
+    this.startupDiagnostics.setComponent('updater', status, {
+      detail: resolvedDetail,
+      reason: reason || (available ? 'private-token-present' : 'private-token-missing'),
+      details: {
+        tokenSource: source,
+        hasToken: available,
+        error: error ? String(error) : null,
+      },
+      phase: 'auth',
+    });
+    this.startupDiagnostics.pushEvent('updater', severity, 'Updater private token state updated.', {
+      ...this.buildContext(),
+      tokenSource: source,
+      hasToken: available,
+      reason: reason || null,
+      error: error ? String(error) : null,
+    });
+    this.onHealth();
+  }
+
+  readPrivateTokenFromSafeStorage() {
+    const safeStorage = this.getSafeStorage();
+    if (!safeStorage) {
+      return {
+        token: '',
+        source: 'safeStorage',
+        error: 'safeStorage-unavailable',
+        encryptionAvailable: false,
+      };
     }
 
-    if (!keytar) {
-      this.log('updater:github-token-missing', { source: 'none', detail: 'keytar unavailable and GH_TOKEN not set' });
-      return;
+    if (!safeStorage.isEncryptionAvailable()) {
+      return {
+        token: '',
+        source: 'safeStorage',
+        error: 'safeStorage-encryption-unavailable',
+        encryptionAvailable: false,
+      };
     }
 
-    // Inject asynchronously; electron-updater picks up requestHeaders before the
-    // first checkForUpdates call which is delayed by STARTUP_CHECK_DELAY_MS.
-    keytar
-      .getPassword('AssistantX', 'github-updater-token')
-      .then((token) => {
-        if (token) {
-          autoUpdater.requestHeaders = { Authorization: `token ${token}` };
-          this.log('updater:github-token-injected', { source: 'keytar' });
-        } else {
-          this.log('updater:github-token-missing', { source: 'keytar', detail: 'no token stored' });
-        }
-      })
-      .catch((err) => {
-        this.log('updater:github-token-error', { message: String(err?.message || err) });
+    if (!fs.existsSync(this.privateTokenPath)) {
+      return {
+        token: '',
+        source: 'safeStorage',
+        error: null,
+        encryptionAvailable: true,
+      };
+    }
+
+    try {
+      const encoded = String(fs.readFileSync(this.privateTokenPath, 'utf8') || '').trim();
+      if (!encoded) {
+        return {
+          token: '',
+          source: 'safeStorage',
+          error: null,
+          encryptionAvailable: true,
+        };
+      }
+      const encryptedBuffer = Buffer.from(encoded, 'base64');
+      const token = String(safeStorage.decryptString(encryptedBuffer) || '').trim();
+      return {
+        token,
+        source: 'safeStorage',
+        error: null,
+        encryptionAvailable: true,
+      };
+    } catch (error) {
+      return {
+        token: '',
+        source: 'safeStorage',
+        error: String(error?.message || error),
+        encryptionAvailable: true,
+      };
+    }
+  }
+
+  describePrivateTokenState() {
+    if (!this.isPrivateGithubProvider()) {
+      return {
+        required: false,
+        available: false,
+        source: 'none',
+        error: null,
+        encryptionAvailable: false,
+      };
+    }
+
+    const envToken = String(process.env.GH_TOKEN || '').trim();
+    if (envToken) {
+      return {
+        required: true,
+        available: true,
+        source: 'env',
+        error: null,
+        encryptionAvailable: Boolean(this.getSafeStorage()?.isEncryptionAvailable?.()),
+      };
+    }
+
+    const fromSafeStorage = this.readPrivateTokenFromSafeStorage();
+    return {
+      required: true,
+      available: Boolean(fromSafeStorage.token),
+      source: fromSafeStorage.source,
+      error: fromSafeStorage.error || null,
+      encryptionAvailable: Boolean(fromSafeStorage.encryptionAvailable),
+    };
+  }
+
+  getPrivateTokenStatus() {
+    const tokenState = this.describePrivateTokenState();
+    return {
+      ok: true,
+      ...tokenState,
+      requiresSetup: Boolean(tokenState.required && !tokenState.available),
+    };
+  }
+
+  setPrivateToken(rawToken) {
+    if (!this.isPrivateGithubProvider()) {
+      return { ok: false, reason: 'private-token-not-required' };
+    }
+
+    const token = String(rawToken || '').trim();
+    if (!token) {
+      return { ok: false, reason: 'token-required' };
+    }
+
+    if (token.length > 5000) {
+      return { ok: false, reason: 'token-too-long' };
+    }
+
+    const safeStorage = this.getSafeStorage();
+    if (!safeStorage) {
+      return { ok: false, reason: 'safeStorage-unavailable' };
+    }
+
+    if (!safeStorage.isEncryptionAvailable()) {
+      return { ok: false, reason: 'safeStorage-encryption-unavailable' };
+    }
+
+    try {
+      const encrypted = safeStorage.encryptString(token);
+      fs.writeFileSync(this.privateTokenPath, encrypted.toString('base64'), 'utf8');
+
+      if (this.autoUpdater && !String(process.env.GH_TOKEN || '').trim()) {
+        this.autoUpdater.requestHeaders = { Authorization: `token ${token}` };
+      }
+
+      this.emitTokenDiagnostics({
+        severity: 'info',
+        detail: 'Private updater token saved securely.',
+        reason: 'private-token-saved',
+        source: 'safeStorage',
+        available: true,
       });
+
+      this.emitState(this.state.status, this.state.detail, {
+        requiresTokenSetup: false,
+        auth: {
+          token: {
+            required: true,
+            available: true,
+            source: 'safeStorage',
+            error: null,
+          },
+        },
+      });
+      return { ok: true };
+    } catch (error) {
+      this.emitTokenDiagnostics({
+        severity: 'warn',
+        detail: 'Failed to save private updater token.',
+        reason: 'private-token-save-failed',
+        source: 'safeStorage',
+        error: error?.message || error,
+        available: false,
+      });
+      return { ok: false, reason: String(error?.message || error) };
+    }
+  }
+
+  clearPrivateToken() {
+    try {
+      if (fs.existsSync(this.privateTokenPath)) {
+        fs.unlinkSync(this.privateTokenPath);
+      }
+    } catch (error) {
+      return { ok: false, reason: String(error?.message || error) };
+    }
+
+    if (this.autoUpdater && !String(process.env.GH_TOKEN || '').trim()) {
+      this.autoUpdater.requestHeaders = {};
+    }
+
+    this.emitTokenDiagnostics({
+      severity: 'warn',
+      detail: 'Private updater token removed. Update checks now require token setup.',
+      reason: 'private-token-cleared',
+      source: 'safeStorage',
+      available: false,
+    });
+
+    this.emitState('error', 'Private update access token is required to check updates.', {
+      downloaded: false,
+      reason: 'updater-token-missing',
+      requiresTokenSetup: true,
+      auth: {
+        token: {
+          required: true,
+          available: false,
+          source: 'safeStorage',
+          error: null,
+        },
+      },
+    });
+
+    return { ok: true };
+  }
+
+  _injectGitHubToken(autoUpdater) {
+    const resolution = Promise.resolve().then(() => {
+      const tokenState = this.describePrivateTokenState();
+      const token = tokenState.source === 'env'
+        ? String(process.env.GH_TOKEN || '').trim()
+        : String(this.readPrivateTokenFromSafeStorage().token || '').trim();
+
+      if (token) {
+        autoUpdater.requestHeaders = { Authorization: `token ${token}` };
+        this.log('updater:github-token-injected', { source: tokenState.source });
+        this.emitTokenDiagnostics({
+          severity: 'info',
+          detail: `Private updater token loaded from ${tokenState.source}.`,
+          reason: 'private-token-present',
+          source: tokenState.source,
+          available: true,
+        });
+      } else if (tokenState.error) {
+        this.log('updater:github-token-error', { source: tokenState.source, message: tokenState.error });
+        this.emitTokenDiagnostics({
+          severity: 'warn',
+          detail: 'Private updater token could not be loaded.',
+          reason: 'private-token-read-failed',
+          source: tokenState.source,
+          error: tokenState.error,
+          available: false,
+        });
+      } else {
+        this.log('updater:github-token-missing', { source: tokenState.source, detail: 'token not configured' });
+        this.emitTokenDiagnostics({
+          severity: 'warn',
+          detail: 'Private updater token is missing. Configure token to enable private updates.',
+          reason: 'private-token-missing',
+          source: tokenState.source,
+          available: false,
+        });
+      }
+
+      this.emitState(this.state.status, this.state.detail, {
+        requiresTokenSetup: Boolean(tokenState.required && !tokenState.available),
+        auth: {
+          token: {
+            required: Boolean(tokenState.required),
+            available: Boolean(tokenState.available),
+            source: tokenState.source || 'none',
+            error: tokenState.error || null,
+          },
+        },
+      });
+
+      return tokenState;
+    }).catch((error) => {
+      const failure = {
+        required: true,
+        available: false,
+        source: 'safeStorage',
+        error: String(error?.message || error),
+        encryptionAvailable: Boolean(this.getSafeStorage()?.isEncryptionAvailable?.()),
+      };
+      this.log('updater:github-token-error', { source: failure.source, message: failure.error });
+      this.emitTokenDiagnostics({
+        severity: 'warn',
+        detail: 'Private updater token resolution failed.',
+        reason: 'private-token-resolution-failed',
+        source: failure.source,
+        error: failure.error,
+        available: false,
+      });
+      return failure;
+    });
+
+    this.privateTokenReady = resolution;
+    return resolution;
+  }
+
+  async waitForPrivateTokenReady() {
+    if (!this.isPrivateGithubProvider()) {
+      return {
+        required: false,
+        available: false,
+        source: 'none',
+        error: null,
+        encryptionAvailable: false,
+      };
+    }
+
+    const timeoutResult = {
+      required: true,
+      available: false,
+      source: 'timeout',
+      error: 'token-resolution-timeout',
+      encryptionAvailable: Boolean(this.getSafeStorage()?.isEncryptionAvailable?.()),
+    };
+
+    const ready = await Promise.race([
+      this.privateTokenReady,
+      new Promise((resolve) => setTimeout(() => resolve(timeoutResult), PRIVATE_TOKEN_WAIT_TIMEOUT_MS)),
+    ]);
+
+    if (ready === timeoutResult) {
+      this.emitTokenDiagnostics({
+        severity: 'warn',
+        detail: 'Private updater token resolution timed out.',
+        reason: 'private-token-resolution-timeout',
+        source: 'timeout',
+        error: 'token-resolution-timeout',
+        available: false,
+      });
+    }
+
+    return ready;
   }
 
   getAutoUpdater() {
@@ -575,7 +917,7 @@ class UpdateCoordinator {
       }
 
       if (publish.provider === 'github' && publish.private) {
-        this._injectGitHubToken(autoUpdater);
+        this.privateTokenReady = this._injectGitHubToken(autoUpdater);
       }
 
       this.startupDiagnostics.setComponent('updater', 'healthy', 'Updater initialized.');
@@ -802,6 +1144,7 @@ class UpdateCoordinator {
     const version = String(info?.version || '').trim();
     const selected = this.selectReleaseMetadata(metadata, version);
     const rawDetails = sanitizeText(selected?.notesMarkdown || selected?.details || fromUpdater || '', 4000);
+    const markdownSource = sanitizeText(selected?.notesMarkdown || fromUpdater || '', 20_000);
     const highlights = Array.isArray(selected?.highlights)
       ? selected.highlights.map((item) => sanitizeText(item, 220)).filter(Boolean).slice(0, 6)
       : normalizeHighlights(rawDetails, 6);
@@ -811,6 +1154,7 @@ class UpdateCoordinator {
       source: selected ? 'release-notes.json' : (fromUpdater ? 'updater' : 'fallback'),
       highlights: highlights.length > 0 ? highlights : ['Performance and stability improvements.'],
       details,
+      markdown: markdownSource,
       hasNotes: Boolean(details),
       metadata: selected || {},
     };
@@ -946,6 +1290,29 @@ class UpdateCoordinator {
     const updater = this.getAutoUpdater();
     if (!updater) return { ok: false, reason: 'updater-unavailable' };
 
+    if (this.isPrivateGithubProvider()) {
+      const tokenState = await this.waitForPrivateTokenReady();
+      if (!tokenState.available) {
+        const reason = tokenState.error ? 'updater-token-error' : 'updater-token-missing';
+        this.emitState('error', tokenState.error
+          ? 'Unable to load the private updater token. Reconfigure update credentials.'
+          : 'Private update access token is required before checking for updates.', {
+          downloaded: false,
+          reason,
+          requiresTokenSetup: true,
+          auth: {
+            token: {
+              required: true,
+              available: false,
+              source: tokenState.source || 'none',
+              error: tokenState.error || null,
+            },
+          },
+        });
+        return { ok: false, reason };
+      }
+    }
+
     try {
       const context = this.buildContext();
       this.log('check-for-updates:requested', { ...context, source });
@@ -1031,7 +1398,9 @@ class UpdateCoordinator {
     void this.runFeedSelfTest();
     this.getAutoUpdater();
     setTimeout(() => {
-      void this.check({ source: 'startup' });
+      void this.waitForPrivateTokenReady()
+        .catch(() => null)
+        .finally(() => this.check({ source: 'startup' }));
     }, STARTUP_CHECK_DELAY_MS);
   }
 }

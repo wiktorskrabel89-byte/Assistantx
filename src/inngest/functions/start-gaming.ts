@@ -41,19 +41,89 @@ export const startGamingFunction = inngest.createFunction(
     });
 
     await step.run("checkpoint-wake", async () => {
-      const { upsertWorkflowCheckpoint } = await import("@/src/core/persistence/runtime-db");
+      const targetDeviceId = typeof input.targetDeviceId === "string" ? input.targetDeviceId : null;
+      const {
+        listDeviceWakeCandidates,
+        upsertWorkflowCheckpoint,
+        updateDeviceWakeResult,
+      } = await import("@/src/core/persistence/runtime-db");
+      const { executeWakeChain } = await import("@/src/core/wake/coordinator");
+
+      if (!targetDeviceId) {
+        await upsertWorkflowCheckpoint({
+          execution_id: executionId,
+          workflow_id: "start_gaming",
+          user_id: actorUserId,
+          organization_id: organizationId,
+          step_key: "wake_target_device",
+          status: "failed",
+          payload: {
+            action: "wake_on_lan",
+            reason: "missing_target_device_id",
+          },
+          error: "targetDeviceId is required for wake flow.",
+        });
+        throw new Error("targetDeviceId is required.");
+      }
+
+      const candidates = await listDeviceWakeCandidates({ deviceId: targetDeviceId });
+      const candidate = candidates[0];
+      if (!candidate) {
+        await upsertWorkflowCheckpoint({
+          execution_id: executionId,
+          workflow_id: "start_gaming",
+          user_id: actorUserId,
+          organization_id: organizationId,
+          step_key: "wake_target_device",
+          status: "failed",
+          payload: {
+            action: "wake_on_lan",
+            reason: "no_wake_candidate",
+          },
+          error: "No wake candidate available.",
+        });
+        throw new Error("No wake candidate available for target device.");
+      }
+
+      const wakeResult = await executeWakeChain({
+        candidate: {
+          deviceId: targetDeviceId,
+          macAddress: candidate.mac_address,
+          ipv6: candidate.ipv6,
+          udpPort: candidate.udp_port,
+          provider: candidate.provider,
+          eligibleForWake: candidate.eligible_for_wake,
+          lastSeenAt: candidate.last_seen_at,
+        },
+      });
+
+      const persistedMethod = wakeResult.method && wakeResult.method !== "rtc_wait"
+        ? wakeResult.method
+        : null;
+      await updateDeviceWakeResult({
+        deviceId: targetDeviceId,
+        method: persistedMethod,
+        success: wakeResult.ok,
+      }).catch(() => null);
+
       await upsertWorkflowCheckpoint({
         execution_id: executionId,
         workflow_id: "start_gaming",
         user_id: actorUserId,
         organization_id: organizationId,
         step_key: "wake_target_device",
-        status: "completed",
+        status: wakeResult.ok ? "completed" : "failed",
         payload: {
-          action: "wake_on_lan",
-          note: "Placeholder in sprint-1 skeleton. Replace with policy-gated wake tool.",
+          action: "wake_chain",
+          attempts: wakeResult.attempts,
+          selectedMethod: wakeResult.method,
         },
+        error: wakeResult.ok ? null : "Wake chain failed for all methods.",
       });
+
+      if (!wakeResult.ok) {
+        throw new Error("Wake chain failed for target device.");
+      }
     });
 
     await step.run("wait-for-runtime-online", async () => {

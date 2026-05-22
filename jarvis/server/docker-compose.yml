@@ -1,0 +1,70 @@
+version: "3.8"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: jarvis-ollama
+    ports:
+      - "11434:11434"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${JARVIS_OLLAMA_GPU_DEVICE:-0}
+    volumes:
+      - ./data/ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids:
+                - "${JARVIS_OLLAMA_GPU_DEVICE:-0}"
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: jarvis-searxng
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/searxng:/etc/searxng
+    restart: unless-stopped
+
+  netdata:
+    image: netdata/netdata:stable
+    container_name: jarvis-netdata
+    ports:
+      - "19999:19999"
+    volumes:
+      - ./data/netdata/cache:/var/cache/netdata
+      - ./data/netdata/lib:/var/lib/netdata
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor=unconfined
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: jarvis-server-agent
+    env_file:
+      - .env
+    environment:
+      JARVIS_SEARXNG_URL: ${JARVIS_SEARXNG_URL:-http://searxng:8080}
+      JARVIS_OLLAMA_BASE_URL: ${JARVIS_OLLAMA_BASE_URL:-http://ollama:11434}
+      JARVIS_NETDATA_BASE_URL: ${JARVIS_NETDATA_BASE_URL:-http://netdata:19999}
+    ports:
+      - "${JARVIS_AGENT_WS_PORT:-9000}:9000"
+      - "127.0.0.1:${JARVIS_AGENT_HTTP_PORT:-9001}:9001"
+    volumes:
+      - ./data/managed:${JARVIS_ALLOWED_DIRECTORY:-/srv/jarvis/managed}
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - ollama
+      - searxng
+      - netdata
+    restart: unless-stopped

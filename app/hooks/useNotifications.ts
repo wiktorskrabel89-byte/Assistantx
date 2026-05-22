@@ -10,6 +10,20 @@ export type AppNotification = {
   body: string;
   read: boolean;
   createdAt: string;
+  /** Which system component emitted the notification. */
+  source?: string | null;
+  /** workflow_runs.execution_id — links to the run that triggered this notification. */
+  executionId?: string | null;
+  /** agent_tasks.task_id — links to the sub-task detail. */
+  taskId?: string | null;
+  /** Relative URL the UI can navigate to for run/task detail. */
+  deepLink?: string | null;
+  /**
+   * Short TTS text.  Non-null means the client should speak it aloud using
+   * the browser Web Speech API or the Electron/desktop sidecar.
+   * Null means the notification is inbox-only (silent).
+   */
+  speechText?: string | null;
 };
 
 export type UseNotificationsReturn = {
@@ -32,6 +46,11 @@ function rowToNotification(row: Record<string, unknown>): AppNotification {
     body: String(row.body ?? ""),
     read: Boolean(row.read),
     createdAt: String(row.created_at ?? ""),
+    source: typeof row.source === "string" ? row.source : null,
+    executionId: typeof row.execution_id === "string" ? row.execution_id : null,
+    taskId: typeof row.task_id === "string" ? row.task_id : null,
+    deepLink: typeof row.deep_link === "string" ? row.deep_link : null,
+    speechText: typeof row.speech_text === "string" ? row.speech_text : null,
   };
 }
 

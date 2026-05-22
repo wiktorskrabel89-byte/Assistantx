@@ -2,24 +2,25 @@
 
 ## Prerequisites
 
-The source repository is public, and production desktop updates are served
+The source repository is private, and production desktop updates are served
 from GitHub Releases metadata/assets:
 
-```
-Public GitHub repo (CI/CD) -> GitHub Releases -> electron-updater clients
+``` 
+Private GitHub repo (CI/CD) -> GitHub Releases -> electron-updater clients
 ```
 
-electron-updater is configured with `"private": false` in `build.publish`, so
-runtime update checks can read release metadata/assets from the public repo
-without requiring end-user credentials.
+electron-updater is configured with `"private": true` in `build.publish`.
+Runtime update checks on user machines therefore require authenticated access
+to private GitHub release metadata/assets.
 
 ## Source of truth (updater topology)
 
 - **Permanent production updater source**: GitHub Releases (`jarvis-latest`)
 - **Desktop updater provider**: `github` with `owner=wiktorskrabel89-byte`,
-  `repo=Assistantx`, and `private=false`.
+  `repo=Assistantx`, and `private=true`.
 - **Authentication**: `GH_TOKEN` Fine-Grained PAT in CI for publishing, never
-  hardcoded in the app.
+  hardcoded in the app; runtime private-feed access token stored locally via
+  Electron `safeStorage` (or `GH_TOKEN` env when set by admin).
 
 ## Installer identity + NSIS requirements (must stay stable)
 
@@ -59,11 +60,11 @@ Create at: <https://github.com/settings/personal-access-tokens>
 Keys may be stored as PEM text, PEM with escaped `\n`, base64-encoded PEM, or
 base64-encoded DER.
 
-### End-user machines (keytar vault, optional/private repos only)
+### End-user machines (private updater auth)
 
-For this public-repo topology, end-user updater tokens are not required.
-Keytar token storage (`AssistantX / github-updater-token`) is only relevant if
-you intentionally switch updater visibility back to a private GitHub repo.
+For private-repo topology, end-user updater tokens are required unless
+`GH_TOKEN` is provided by environment policy. AssistantX stores the updater PAT
+encrypted with Electron `safeStorage` in userData.
 
 ## Required artifacts in the GitHub release
 
@@ -113,7 +114,7 @@ Post-publish CI verifies `jarvis-latest` contains all required updater assets
 - [ ] Packaged app (not dev mode) shows real app version.
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
 - [ ] Startup check is silent (no native updater popups when already up to date).
-- [ ] Public GitHub release metadata/assets are reachable on update check.
+- [ ] Private GitHub release metadata/assets are reachable on update check with valid auth.
 - [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection, rollback floor).
 - [ ] Detached `latest.yml` signature is verified before updater execution.
 - [ ] `minimumAllowedVersion` / `stagingPercentage` are present and correct for the release policy.

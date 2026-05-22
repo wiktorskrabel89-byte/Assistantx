@@ -19,6 +19,7 @@ import { workflowExecuteFunction } from "@/src/inngest/functions/workflow-execut
 import { approvalRequestedFunction } from "@/src/inngest/functions/approval-lifecycle";
 import { agentTaskFunction } from "@/src/inngest/functions/agent-task";
 import { startGamingFunction } from "@/src/inngest/functions/start-gaming";
+import { runtimeNotificationHandlerFunction } from "@/src/inngest/functions/runtime-notification-handler";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,6 +31,7 @@ const handler = serve({
     approvalRequestedFunction,
     agentTaskFunction,
     startGamingFunction,
+    runtimeNotificationHandlerFunction,
   ],
 });
 
