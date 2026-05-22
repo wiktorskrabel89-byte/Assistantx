@@ -58,6 +58,13 @@ function createMainIpcHandlers(deps) {
     serverKillSwitch,
     serverGetConfig,
     serverSetConfig,
+    localServerList,
+    localServerAdd,
+    localServerUpdate,
+    localServerRemove,
+    localServerScan,
+    localServerGetAssignment,
+    localServerSetAssignment,
     githubClient,
     googleClient,
     appsTool,
@@ -481,6 +488,40 @@ function createMainIpcHandlers(deps) {
       const remoteRuntimeApiUrl = validateString(body.remoteRuntimeApiUrl, { allowEmpty: true, maxLen: 500 }) || undefined;
       const remoteRuntimeWsUrl = validateString(body.remoteRuntimeWsUrl, { allowEmpty: true, maxLen: 500 }) || undefined;
       return serverSetConfig({ runtimeMode, remoteRuntimeApiUrl, remoteRuntimeWsUrl });
+    },
+    'local-server:list': () => ({ ok: true, servers: localServerList() }),
+    'local-server:add': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('local-server:add', 'payload-must-be-object');
+      const label = validateString(body.label, { allowEmpty: false, maxLen: 120 });
+      const baseUrl = validateString(body.baseUrl, { allowEmpty: false, maxLen: 500 });
+      const apiType = validateString(body.apiType, { allowEmpty: false, maxLen: 40 }) || 'ollama';
+      if (!label || !baseUrl) return invalidResult('local-server:add', 'label-and-base-url-required');
+      return localServerAdd({ label, baseUrl, apiType, enabled: body.enabled !== false });
+    },
+    'local-server:update': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('local-server:update', 'payload-must-be-object');
+      const id = validateString(body.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:update', 'id-required');
+      return localServerUpdate(id, validatePlainObject(body.patch) || {});
+    },
+    'local-server:remove': (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const id = validateString(body?.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:remove', 'id-required');
+      return localServerRemove(id);
+    },
+    'local-server:scan': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      const id = validateString(body?.id, { allowEmpty: false, maxLen: 120 });
+      if (!id) return invalidResult('local-server:scan', 'id-required');
+      return localServerScan(id);
+    },
+    'local-server:get-model-assignment': () => ({ ok: true, ...localServerGetAssignment() }),
+    'local-server:set-model-assignment': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      return localServerSetAssignment(body);
     },
   };
 

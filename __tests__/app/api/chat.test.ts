@@ -217,6 +217,51 @@ describe("POST /api/chat — web_search tool enables OpenRouter web plugin", () 
     ({ POST } = await import("@/app/api/chat/route"));
   });
 
+  describe("POST /api/chat — local server proxy routing", () => {
+    let POST: (req: Request) => Promise<Response>;
+
+    beforeAll(async () => {
+      ({ POST } = await import("@/app/api/chat/route"));
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    function makeRequest(body: Record<string, unknown>): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    }
+
+    it("uses local OpenAI-compatible endpoint when local routing fields are provided", async () => {
+      const mockFetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Local hello" } }] })}\ndata: [DONE]\n`,
+          { status: 200, headers: { "Content-Type": "text/event-stream" } }
+        )
+      );
+
+      const req = makeRequest({
+        message: "Say hello",
+        mode: "chat",
+        localBaseUrl: "http://127.0.0.1:11434",
+        localApiType: "ollama",
+        localModelId: "qwen2.5:14b",
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      await res.text();
+
+      expect(mockFetch).toHaveBeenCalled();
+      expect(String(mockFetch.mock.calls[0][0])).toBe("http://127.0.0.1:11434/v1/chat/completions");
+      const calledBody = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string) as { model: string };
+      expect(calledBody.model).toBe("qwen2.5:14b");
+    });
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
   });

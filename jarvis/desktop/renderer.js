@@ -29,6 +29,7 @@ const authApi = window.jarvisApi.auth || {};
 const githubApi = window.jarvisApi.github || {};
 const googleApi = window.jarvisApi.google || {};
 const toolsApi = window.jarvisApi.tools || {};
+const localServerApi = window.jarvisApi.localServer || window.jarvisApiV2?.localServer || null;
 const {
 	getSession: getAccountSession,
 	refresh: refreshSessionIfNeeded,
@@ -190,6 +191,16 @@ window.addEventListener('DOMContentLoaded', () => {
 	const scheduleCron = document.getElementById('schedule-cron');
 	const scheduleAddButton = document.getElementById('schedule-add');
 	const chatModelSelect = document.getElementById('chat-model');
+	const localServerLabelInput = document.getElementById('local-server-label');
+	const localServerBaseUrlInput = document.getElementById('local-server-base-url');
+	const localServerApiTypeSelect = document.getElementById('local-server-api-type');
+	const localServerAddButton = document.getElementById('local-server-add');
+	const localServerListNode = document.getElementById('local-server-list');
+	const localChatModelSelect = document.getElementById('local-chat-model');
+	const localCodeModelSelect = document.getElementById('local-code-model');
+	const localExternalModelSelect = document.getElementById('local-external-model');
+	const localPreferEnabledToggle = document.getElementById('local-prefer-enabled');
+	const localServerSaveAssignmentButton = document.getElementById('local-server-save-assignment');
 	const sttModelSelect = document.getElementById('stt-model');
 	const ttsModelSelect = document.getElementById('tts-model');
 	const ttsVoiceProfileSelect = document.getElementById('tts-voice-profile');
@@ -638,6 +649,14 @@ window.addEventListener('DOMContentLoaded', () => {
 	let speechToTextActive = false;
 	let speechPlaybackActive = false;
 	let voiceSettings = readVoiceSettings();
+	let desktopLocalServers = [];
+	let desktopLocalAssignment = {
+		chatModelId: null,
+		codeModelId: null,
+		externalApiModelId: null,
+		serverId: null,
+		preferLocalWhenAvailable: false,
+	};
 
 	function applyVoiceSettings(nextSettings, { persist = true } = {}) {
 		voiceSettings = { ...defaultVoiceSettings, ...nextSettings };
@@ -666,7 +685,162 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (persist) writeVoiceSettings(voiceSettings);
 	}
 
+	function localAssignmentValue(role) {
+		if (!desktopLocalAssignment.serverId) return '';
+		const modelId = desktopLocalAssignment[role];
+		if (!modelId) return '';
+		return `${desktopLocalAssignment.serverId}::${modelId}`;
+	}
+
+	function fillLocalModelSelect(selectNode, selectedValue) {
+		if (!selectNode) return;
+		const entries = ['<option value="">Use cloud auto-router</option>'];
+		for (const server of desktopLocalServers) {
+			if (!server?.enabled) continue;
+			const models = Array.isArray(server.discoveredModels) ? server.discoveredModels : [];
+			for (const model of models) {
+				const value = `${server.id}::${model}`;
+				const selected = value === selectedValue ? ' selected' : '';
+				entries.push(`<option value="${value.replace(/"/g, '&quot;')}"${selected}>${server.label} · ${model}</option>`);
+			}
+		}
+		selectNode.innerHTML = entries.join('');
+	}
+
+	function renderLocalServers() {
+		if (localServerListNode) {
+			if (!desktopLocalServers.length) {
+				localServerListNode.textContent = 'No local servers configured.';
+			} else {
+				localServerListNode.innerHTML = desktopLocalServers.map((server) => {
+					const models = Array.isArray(server.discoveredModels) && server.discoveredModels.length
+						? server.discoveredModels.join(', ')
+						: 'no scanned models';
+					return `
+						<div style="border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;margin-bottom:8px;">
+							<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+								<div>
+									<div style="font-weight:600;">${server.label}</div>
+									<div style="font-size:11px;opacity:.8;">${server.baseUrl} · ${server.apiType}</div>
+									<div style="font-size:11px;opacity:.7;">${models}</div>
+								</div>
+								<div style="display:flex;gap:6px;flex-wrap:wrap;">
+									<button type="button" class="secondary sm" data-local-scan="${server.id}">Scan</button>
+									<button type="button" class="secondary sm" data-local-toggle="${server.id}">${server.enabled ? 'Disable' : 'Enable'}</button>
+									<button type="button" class="danger sm" data-local-remove="${server.id}">Remove</button>
+								</div>
+							</div>
+						</div>
+					`;
+				}).join('');
+			}
+		}
+
+		fillLocalModelSelect(localChatModelSelect, localAssignmentValue('chatModelId'));
+		fillLocalModelSelect(localCodeModelSelect, localAssignmentValue('codeModelId'));
+		fillLocalModelSelect(localExternalModelSelect, localAssignmentValue('externalApiModelId'));
+		if (localPreferEnabledToggle) {
+			localPreferEnabledToggle.checked = Boolean(desktopLocalAssignment.preferLocalWhenAvailable);
+		}
+	}
+
+	async function loadLocalServersState() {
+		if (!localServerApi) return;
+		try {
+			const [listRes, assignmentRes] = await Promise.all([
+				localServerApi.list(),
+				localServerApi.getModelAssignment(),
+			]);
+			desktopLocalServers = Array.isArray(listRes?.servers) ? listRes.servers : [];
+			desktopLocalAssignment = {
+				chatModelId: assignmentRes?.localModelAssignment?.chatModelId || null,
+				codeModelId: assignmentRes?.localModelAssignment?.codeModelId || null,
+				externalApiModelId: assignmentRes?.localModelAssignment?.externalApiModelId || null,
+				serverId: assignmentRes?.localModelAssignment?.serverId || null,
+				preferLocalWhenAvailable: Boolean(assignmentRes?.preferLocalWhenAvailable),
+			};
+			renderLocalServers();
+		} catch (error) {
+			appendMessage(log, 'Local servers', `Failed to load local servers: ${error?.message || error}`, 'error');
+		}
+	}
+
 	applyVoiceSettings(voiceSettings, { persist: false });
+	void loadLocalServersState();
+	localServerAddButton?.addEventListener('click', async () => {
+		if (!localServerApi) return;
+		const label = String(localServerLabelInput?.value || '').trim() || 'Local server';
+		const baseUrl = String(localServerBaseUrlInput?.value || '').trim();
+		const apiType = String(localServerApiTypeSelect?.value || 'ollama');
+		if (!baseUrl) {
+			appendMessage(log, 'Local servers', 'Base URL is required.', 'error');
+			return;
+		}
+		const result = await localServerApi.add({ label, baseUrl, apiType, enabled: true });
+		if (!result?.ok) {
+			appendMessage(log, 'Local servers', `Failed to add server: ${result?.reason || result?.error || 'unknown error'}`, 'error');
+			return;
+		}
+		if (localServerLabelInput) localServerLabelInput.value = '';
+		await loadLocalServersState();
+	});
+
+	localServerListNode?.addEventListener('click', async (event) => {
+		if (!localServerApi) return;
+		const target = event.target;
+		if (!(target instanceof HTMLElement)) return;
+		const scanId = target.getAttribute('data-local-scan');
+		if (scanId) {
+			const scanResult = await localServerApi.scan(scanId);
+			if (!scanResult?.ok) {
+				appendMessage(log, 'Local servers', `Scan failed: ${scanResult?.error || scanResult?.reason || 'unknown error'}`, 'error');
+			}
+			await loadLocalServersState();
+			return;
+		}
+		const toggleId = target.getAttribute('data-local-toggle');
+		if (toggleId) {
+			const server = desktopLocalServers.find((entry) => entry.id === toggleId);
+			if (!server) return;
+			await localServerApi.update({ id: toggleId, patch: { enabled: !server.enabled } });
+			await loadLocalServersState();
+			return;
+		}
+		const removeId = target.getAttribute('data-local-remove');
+		if (removeId) {
+			await localServerApi.remove(removeId);
+			await loadLocalServersState();
+		}
+	});
+
+	localServerSaveAssignmentButton?.addEventListener('click', async () => {
+		if (!localServerApi) return;
+		const parseSelection = (value) => {
+			const raw = String(value || '');
+			if (!raw.includes('::')) return { serverId: null, modelId: null };
+			const [serverId, modelId] = raw.split('::');
+			return { serverId: serverId || null, modelId: modelId || null };
+		};
+		const chat = parseSelection(localChatModelSelect?.value);
+		const code = parseSelection(localCodeModelSelect?.value);
+		const external = parseSelection(localExternalModelSelect?.value);
+		const resolvedServerId = chat.serverId || code.serverId || external.serverId || null;
+		const result = await localServerApi.setModelAssignment({
+			localModelAssignment: {
+				serverId: resolvedServerId,
+				chatModelId: chat.modelId,
+				codeModelId: code.modelId,
+				externalApiModelId: external.modelId,
+			},
+			preferLocalWhenAvailable: Boolean(localPreferEnabledToggle?.checked),
+		});
+		if (!result?.ok) {
+			appendMessage(log, 'Local servers', `Failed to save local routing: ${result?.reason || result?.error || 'unknown error'}`, 'error');
+			return;
+		}
+		appendMessage(log, 'Local servers', 'Local model assignment saved.', 'system');
+		await loadLocalServersState();
+	});
 	setVoiceVisualizer('idle');
 	['mousemove', 'keydown', 'click', 'focus'].forEach((eventName) => {
 		window.addEventListener(eventName, () => touchAgentActivity(), { passive: true });

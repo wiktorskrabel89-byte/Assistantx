@@ -234,6 +234,14 @@ describe("createSettings", () => {
     expect(Array.isArray(s.actionModes)).toBe(true);
     expect(s.actionModes).toHaveLength(5);
     expect(s.activeActionModeId).toBeNull();
+    expect(s.localServers).toEqual([]);
+    expect(s.localModelAssignment).toEqual({
+      chatModelId: null,
+      codeModelId: null,
+      externalApiModelId: null,
+      serverId: null,
+    });
+    expect(s.preferLocalWhenAvailable).toBe(false);
   });
 });
 
@@ -731,5 +739,57 @@ describe("upgradeState", () => {
     expect(upgraded.pinnedAddOns).toEqual([]);
     expect(upgraded.workspaces[0].settings.ttsVoiceId).toBe("default");
     expect(upgraded.workspaces[0].settings.personalityMode).toBe("default");
+  });
+
+  it("migrates local server settings and resets orphaned local assignment", () => {
+    const legacyState = {
+      workspaces: [
+        {
+          id: "ws-local",
+          name: "Local",
+          chats: [{ id: "ch1", title: "Chat", messages: [], createdAt: 1, updatedAt: 1 }],
+          activeChatId: "ch1",
+          settings: {
+            ...createSettings(),
+            localServers: [
+              {
+                id: "srv-1",
+                label: "My Ollama",
+                baseUrl: "http://127.0.0.1:11434",
+                apiType: "ollama",
+                enabled: true,
+                discoveredModels: ["qwen2.5:14b"],
+                lastScannedAt: 123,
+              },
+            ],
+            localModelAssignment: {
+              serverId: "srv-missing",
+              chatModelId: "foo",
+              codeModelId: "bar",
+              externalApiModelId: "baz",
+            },
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceId: "ws-local",
+      dark: false,
+      userPlan: "free",
+      premiumRequestsUsed: 0,
+      appMode: "ai-chat",
+      pinnedAddOns: [],
+      uiLanguage: "en",
+    };
+
+    const upgraded = upgradeState(legacyState as unknown as StoredState)!;
+    expect(upgraded.workspaces[0].settings.localServers).toHaveLength(1);
+    expect(upgraded.workspaces[0].settings.localServers[0].id).toBe("srv-1");
+    expect(upgraded.workspaces[0].settings.localModelAssignment).toEqual({
+      chatModelId: null,
+      codeModelId: null,
+      externalApiModelId: null,
+      serverId: null,
+    });
   });
 });

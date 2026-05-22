@@ -127,6 +127,38 @@ function buildInteractionProfile({
   return profile.join(" ");
 }
 
+function resolveLocalRoutePayload(
+  settings: StoredState["workspaces"][number]["settings"],
+  mode: Mode,
+): {
+  localBaseUrl?: string;
+  localApiType?: "ollama" | "lmstudio" | "openai-compat";
+  localModelId?: string;
+  preferLocalWhenAvailable?: boolean;
+} {
+  if (settings.preferredModelId) return {};
+  const assignment = settings.localModelAssignment;
+  if (!assignment?.serverId) return {};
+
+  const server = (settings.localServers ?? []).find((entry) => entry.id === assignment.serverId && entry.enabled);
+  if (!server) return {};
+
+  const roleModelId = mode === "code"
+    ? assignment.codeModelId
+    : mode === "search"
+      ? assignment.externalApiModelId
+      : assignment.chatModelId;
+  if (!roleModelId) return {};
+  if (!server.discoveredModels?.includes(roleModelId)) return {};
+
+  return {
+    localBaseUrl: server.baseUrl,
+    localApiType: server.apiType,
+    localModelId: roleModelId,
+    preferLocalWhenAvailable: Boolean(settings.preferLocalWhenAvailable),
+  };
+}
+
 type UseChatTransportArgs = {
   activeWorkspaceId: string;
   activeChatId: string;
@@ -657,6 +689,7 @@ export function useChatTransport({
         personalityMode: activeSettings.personalityMode ?? "default",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,
+        ...resolveLocalRoutePayload(activeSettings, queuedMessage.mode),
       };
 
       const doChatFetch = async (bodyOverride?: Partial<typeof chatBody>) => {
