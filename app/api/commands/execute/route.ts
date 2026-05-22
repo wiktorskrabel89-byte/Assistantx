@@ -286,7 +286,7 @@ async function executeCloudCommand(request: Request, commandId: AssistantCommand
         }),
       });
       return response.ok
-        ? { ok: true, message: `Created calendar event: ${String((data as { title?: string }).title ?? argsText || "New Event")}` }
+        ? { ok: true, message: `Created calendar event: ${String((data as { title?: string }).title ?? argsText ?? "New Event")}` }
         : { ok: false, message: String((data as { error?: string }).error ?? "Failed to create calendar event.") };
     }
     case "gmail": {
