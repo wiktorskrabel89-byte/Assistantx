@@ -1,6 +1,7 @@
 import { sendWakeOnLanPacket } from "@/src/core/wake/magic-packet";
 
-export type WakeMethod = "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast";
+export type WakeMethod = "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | "rtc_wait";
+export type WakeMode = "router" | "ipv6" | "rtc_wait";
 
 export type WakeCandidate = {
   deviceId: string;
@@ -136,19 +137,6 @@ function resolveWakeMode(method: WakeMethod | null): WakeMode {
   return "router";
 }
 
-function resolveWakeOrder(preferTailscale: boolean) {
-  const configured = String(process.env.JARVIS_WAKE_FALLBACK_POLICY || "").trim();
-  const defaults: WakeMethod[] = ["router_api", "udp_path_probe", "ipv6_magic_packet", "lan_broadcast"];
-  const parsed = configured
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item): item is WakeMethod =>
-      ["router_api", "udp_path_probe", "ipv6_magic_packet", "lan_broadcast"].includes(item),
-    );
-  const ordered = parsed.length > 0 ? parsed : defaults;
-  return preferTailscale ? ["tailscale_direct", ...ordered] as WakeMethod[] : ordered;
-}
-
 export async function executeWakeChain(params: {
   candidate: WakeCandidate;
   broadcastAddress?: string | null;
@@ -162,15 +150,38 @@ export async function executeWakeChain(params: {
     const udpAttempt = await attemptUdpPathProbe(candidate);
     attempts.push(udpAttempt);
     if (udpAttempt.ok) {
-      return { ok: true, method: "udp_path_probe", attempts };
-    }
-    if (!attempt) continue;
-    attempts.push(attempt);
-    if (attempt.ok) {
       return {
         ok: true,
-        method: attempt.method,
-        mode: resolveWakeMode(attempt.method),
+        method: "udp_path_probe",
+        mode: resolveWakeMode("udp_path_probe"),
+        nextAction: "wait_for_presence",
+        attempts,
+      };
+    }
+  }
+
+  if (candidate.ipv6) {
+    const ipv6Attempt = await attemptIpv6Magic(candidate);
+    attempts.push(ipv6Attempt);
+    if (ipv6Attempt.ok) {
+      return {
+        ok: true,
+        method: "ipv6_magic_packet",
+        mode: resolveWakeMode("ipv6_magic_packet"),
+        nextAction: "wait_for_presence",
+        attempts,
+      };
+    }
+  }
+
+  if (candidate.macAddress) {
+    const lanAttempt = await attemptLanBroadcast(candidate, params.broadcastAddress ?? undefined);
+    attempts.push(lanAttempt);
+    if (lanAttempt.ok) {
+      return {
+        ok: true,
+        method: "lan_broadcast",
+        mode: resolveWakeMode("lan_broadcast"),
         nextAction: "wait_for_presence",
         attempts,
       };
