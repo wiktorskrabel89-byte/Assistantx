@@ -19,6 +19,7 @@ import type {
   ChatThread,
   CloudSyncErrorPayload,
   JarvisMode,
+  LocalServerEntry,
   Mode,
   PromptTemplate,
   StoredState,
@@ -543,12 +544,12 @@ export function upgradeState(value: StoredState | null): StoredState | null {
         ? rawSettings.activeActionModeId
         : null;
 
-    const localServers = Array.isArray(rawSettings.localServers)
+    const localServers: LocalServerEntry[] = Array.isArray(rawSettings.localServers)
       ? rawSettings.localServers
         .map((entry) => {
           if (!entry || typeof entry !== "object") return null;
           const candidate = entry as Record<string, unknown>;
-          const apiType = candidate.apiType === "ollama" || candidate.apiType === "lmstudio" || candidate.apiType === "openai-compat"
+          const apiType: LocalServerEntry["apiType"] = candidate.apiType === "ollama" || candidate.apiType === "lmstudio" || candidate.apiType === "openai-compat"
             ? candidate.apiType
             : "ollama";
           const baseUrl = typeof candidate.baseUrl === "string" ? candidate.baseUrl.trim() : "";
