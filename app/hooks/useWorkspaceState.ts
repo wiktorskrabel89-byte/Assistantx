@@ -467,6 +467,76 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const addLocalServer = useCallback((server: Omit<LocalServerEntry, "id">) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        localServers: [
+          ...workspace.settings.localServers,
+          { ...server, id: createId() },
+        ],
+      },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const updateLocalServer = useCallback((serverId: string, updates: Partial<Omit<LocalServerEntry, "id">>) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        localServers: workspace.settings.localServers.map((server) => (
+          server.id === serverId
+            ? { ...server, ...updates }
+            : server
+        )),
+      },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const removeLocalServer = useCallback((serverId: string) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => {
+      const localServers = workspace.settings.localServers.filter((server) => server.id !== serverId);
+      const currentAssignment = workspace.settings.localModelAssignment;
+      const localModelAssignment = currentAssignment.serverId === serverId
+        ? {
+            chatModelId: null,
+            codeModelId: null,
+            externalApiModelId: null,
+            serverId: null,
+          }
+        : currentAssignment;
+      return {
+        ...workspace,
+        settings: {
+          ...workspace.settings,
+          localServers,
+          localModelAssignment,
+        },
+      };
+    });
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setLocalModelAssignment = useCallback((assignment: Partial<LocalModelAssignment>) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        localModelAssignment: {
+          ...workspace.settings.localModelAssignment,
+          ...assignment,
+        },
+      },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setPreferLocalWhenAvailable = useCallback((preferLocalWhenAvailable: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, preferLocalWhenAvailable },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const setWakeWordEnabled = useCallback((wakeWordEnabled: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -882,6 +952,11 @@ export function useWorkspaceState() {
     setSystemPrompt,
     setEnabledTools,
     setLocalOnlyMode,
+    addLocalServer,
+    updateLocalServer,
+    removeLocalServer,
+    setLocalModelAssignment,
+    setPreferLocalWhenAvailable,
     setWakeWordEnabled,
     setWakeWordPhrase,
     setSttEnabled,

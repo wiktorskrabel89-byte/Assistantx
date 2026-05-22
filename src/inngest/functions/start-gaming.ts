@@ -97,9 +97,7 @@ export const startGamingFunction = inngest.createFunction(
         },
       });
 
-      const persistedMethod = wakeResult.method && wakeResult.method !== "rtc_wait"
-        ? wakeResult.method
-        : null;
+      const persistedMethod = wakeResult.method ?? null;
       await updateDeviceWakeResult({
         deviceId: targetDeviceId,
         method: persistedMethod,
