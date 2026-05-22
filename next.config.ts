@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const isVercelBuild = process.env.VERCEL === '1' || process.env.VERCEL === 'true'
+
 const nextConfig = {
   output: 'standalone',
   outputFileTracingRoot: process.cwd(),
