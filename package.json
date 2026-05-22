@@ -31,7 +31,7 @@
     "geist": "^1.7.0",
     "inngest": "^4.4.0",
     "jszip": "^3.10.1",
-    "lucide-react": "^1.7.0",
+    "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
