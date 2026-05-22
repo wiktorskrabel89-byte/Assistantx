@@ -44,6 +44,36 @@ Artifacts are written to `jarvis/desktop/dist/`:
 
 > Windows is the recommended build platform for NSIS installers.
 
+## Build macOS DMG installers
+
+```bash
+cd jarvis/desktop
+npm ci
+npm run dist:mac
+```
+
+Artifacts are written to `jarvis/desktop/dist/`:
+- `JarvisSetup-x64.dmg`
+- `JarvisSetup-arm64.dmg`
+
+> Note: Code signing/notarization is optional for local builds. Unsigned builds still compile.
+
+## Build Linux AppImage installers
+
+```bash
+cd jarvis/desktop
+npm ci
+npm run dist:linux
+```
+
+Artifacts are written to `jarvis/desktop/dist/`:
+- `Jarvis-x64.AppImage`
+
+Linux runtime notes:
+- Some desktops require `libappindicator` for tray icon support.
+- AppImage may require FUSE support (`libfuse2`/`libfuse2t64`) on some distributions.
+- Headless Linux dev runs already use `xvfb-run` fallback in `scripts/run-electron-dev.js` when `DISPLAY` is not set.
+
 ## Update model (current)
 
 Jarvis Desktop uses `electron-updater` in `main.js` with GitHub Releases provider

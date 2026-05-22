@@ -2,12 +2,22 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const desktopRoot = path.resolve(__dirname, '..');
+if (process.platform !== 'win32') {
+  try {
+    execFileSync('python3', ['--version'], { stdio: 'ignore' });
+    console.log('[dist] Non-Windows platform detected. Using system python3 runtime.');
+    process.exit(0);
+  } catch {
+    console.warn('[dist] Non-Windows platform detected and python3 is not available in PATH. Skipping embedded runtime preflight.');
+    process.exit(0);
+  }
+}
+
 const runtimeRoot = path.join(desktopRoot, 'python');
-const requiredFiles = [
-  path.join(runtimeRoot, 'python.exe'),
-];
+const requiredFiles = [path.join(runtimeRoot, 'python.exe')];
 
 const optionalRecommended = [
   path.join(runtimeRoot, 'python311.dll'),

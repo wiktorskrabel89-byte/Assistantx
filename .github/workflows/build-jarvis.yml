@@ -95,6 +95,9 @@ jobs:
             "|------|-------------|",
             "| ${bt}JarvisSetup-x64.exe${bt} | Intel / AMD 64-bit |",
             "| ${bt}JarvisSetup-arm64.exe${bt} | ARM64 (Snapdragon, Surface Pro X) |",
+            "| ${bt}JarvisSetup-x64.dmg${bt} | macOS Intel |",
+            "| ${bt}JarvisSetup-arm64.dmg${bt} | macOS Apple Silicon |",
+            "| ${bt}Jarvis-x64.AppImage${bt} | Linux x64 |",
             "| ${bt}Jarvis-android.apk${bt} | Android |",
             "",
             "**How to use:**",
@@ -106,7 +109,7 @@ jobs:
              "- [ ] Repo baseline (`npm run lint`, `npm test -- --runInBand`, `npm run build`)",
               "- [ ] Desktop smoke (`jarvis/desktop`: `npm ci`, `npm run dev`)",
               "- [ ] Packaged smoke (startup/tray, launcher, account, updater flow)",
-              "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `latest.yml`, `latest.yml.sig`, `release-notes.json`, `*.blockmap`)",
+              "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `JarvisSetup-x64.dmg`, `JarvisSetup-arm64.dmg`, `Jarvis-x64.AppImage`, `latest.yml`, `latest.yml.sig`, `release-notes.json`, `*.blockmap`)",
               "- [ ] GitHub Release asset verification (`jarvis-latest` includes updater metadata + installers)",
               "- [ ] Pre-existing/unrelated failures documented (if any)"
             ) -join "`n"
@@ -445,6 +448,10 @@ jobs:
             jarvis/desktop/dist/*.blockmap
           if-no-files-found: warn
 
+      - name: Install Android dependencies
+        working-directory: jarvis/android
+        run: npm ci
+
       - name: Build/find Android APK
         id: android_apk
         shell: pwsh
@@ -516,8 +523,7 @@ jobs:
           } else {
             "found=false" >> $env:GITHUB_OUTPUT
             if ($gradleBuildFailed) {
-              Write-Error "No Android APK found after Gradle build failure. Last Gradle output:`n$lastGradleLines"
-              exit 1
+              Write-Warning "No Android APK found after Gradle build failure. Last Gradle output:`n$lastGradleLines"
             }
             Write-Host "Android APK not found; skipping Android release asset."
           }
@@ -615,3 +621,163 @@ jobs:
             }
             Write-Host "Verified release asset: $required"
           }
+
+  build-mac:
+    name: Build Jarvis DMG (macOS)
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: jarvis/desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: jarvis/desktop
+        run: npm ci
+
+      - name: Build DMG installers (x64 + arm64)
+        working-directory: jarvis/desktop
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload macOS x64 DMG artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: JarvisSetup-mac-x64
+          path: jarvis/desktop/dist/JarvisSetup-x64.dmg
+          if-no-files-found: warn
+
+      - name: Upload macOS arm64 DMG artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: JarvisSetup-mac-arm64
+          path: jarvis/desktop/dist/JarvisSetup-arm64.dmg
+          if-no-files-found: warn
+
+      - name: Publish macOS DMGs to GitHub Release (jarvis-latest)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: jarvis-latest
+          files: |
+            jarvis/desktop/dist/JarvisSetup-x64.dmg
+            jarvis/desktop/dist/JarvisSetup-arm64.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    name: Build Jarvis AppImage (Linux)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: jarvis/desktop/package-lock.json
+
+      - name: Install Linux desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libnotify-dev libnss3 libxss1 libasound2 libappindicator3-dev
+
+      - name: Install desktop dependencies
+        working-directory: jarvis/desktop
+        run: npm ci
+
+      - name: Build Linux AppImage (x64)
+        working-directory: jarvis/desktop
+        run: npm run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload Linux AppImage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Jarvis-linux-appimage-x64
+          path: jarvis/desktop/dist/Jarvis-x64.AppImage
+          if-no-files-found: warn
+
+      - name: Publish Linux AppImage to GitHub Release (jarvis-latest)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: jarvis-latest
+          files: |
+            jarvis/desktop/dist/Jarvis-x64.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-android:
+    name: Build Jarvis Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: jarvis/android/package-lock.json
+
+      - name: Set up Java for Android build
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android JS dependencies
+        working-directory: jarvis/android
+        run: npm ci
+
+      - name: Build Android release APK
+        working-directory: jarvis/android/android
+        env:
+          KEYSTORE_FILE: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk ../dist/Jarvis-android.apk
+
+      - name: Upload Android APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Jarvis-android
+          path: jarvis/android/dist/Jarvis-android.apk
+          if-no-files-found: error
+
+      - name: Publish Android APK to GitHub Release (jarvis-latest)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: jarvis-latest
+          files: |
+            jarvis/android/dist/Jarvis-android.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

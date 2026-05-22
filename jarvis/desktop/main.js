@@ -170,6 +170,7 @@ function getSetupScriptPath() {
 
 function resolvePythonExecutable() {
   const sidecarDir = path.dirname(getSidecarMainPath());
+  log('[sidecar] Resolving python executable for platform:', process.platform, 'packaged:', app.isPackaged);
   const packagedCandidates = [
     // Embedded runtime candidates for packaged Windows builds.
     path.join(process.resourcesPath || '', 'python', 'python.exe'),

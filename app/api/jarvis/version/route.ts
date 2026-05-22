@@ -25,6 +25,9 @@ function buildUnavailableVersionPayload(error: string) {
     publishedAt: null,
     updatedAt: null,
     downloadUrlWindows: `${RELEASE_DOWNLOAD_BASE}/JarvisSetup-x64.exe`,
+    downloadUrlMacIntel: `${RELEASE_DOWNLOAD_BASE}/JarvisSetup-x64.dmg`,
+    downloadUrlMacArm64: `${RELEASE_DOWNLOAD_BASE}/JarvisSetup-arm64.dmg`,
+    downloadUrlLinux: `${RELEASE_DOWNLOAD_BASE}/Jarvis-x64.AppImage`,
     downloadUrlAndroid: `${RELEASE_DOWNLOAD_BASE}/Jarvis-android.apk`,
   };
 }
@@ -83,6 +86,9 @@ export async function GET(): Promise<Response> {
         publishedAt: release.published_at,
         updatedAt: release.updated_at,
         downloadUrlWindows: `${RELEASE_DOWNLOAD_BASE}/JarvisSetup-x64.exe`,
+        downloadUrlMacIntel: `${RELEASE_DOWNLOAD_BASE}/JarvisSetup-x64.dmg`,
+        downloadUrlMacArm64: `${RELEASE_DOWNLOAD_BASE}/JarvisSetup-arm64.dmg`,
+        downloadUrlLinux: `${RELEASE_DOWNLOAD_BASE}/Jarvis-x64.AppImage`,
         downloadUrlAndroid: `${RELEASE_DOWNLOAD_BASE}/Jarvis-android.apk`,
       },
       {

@@ -21,6 +21,10 @@
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --publish never --win nsis --x64",
     "dist:win:arm64": "electron-builder --publish never --win nsis --arm64",
+    "dist:mac": "electron-builder --publish never --mac dmg --x64 --arm64",
+    "dist:mac:arm64": "electron-builder --publish never --mac dmg --arm64",
+    "dist:linux": "electron-builder --publish never --linux AppImage --x64",
+    "dist:linux:arm64": "electron-builder --publish never --linux AppImage --arm64",
     "_dist:win:all:native": "electron-builder --publish never --win nsis --x64 --arm64",
     "dist:win:all": "node scripts/dist-win-all.js",
     "setup:local-ai": "powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1",
@@ -62,14 +66,6 @@
       {
         "from": "python",
         "to": "python"
-      },
-      {
-        "from": "scripts/post-install.ps1",
-        "to": "post-install.ps1"
-      },
-      {
-        "from": "scripts/uninstall.ps1",
-        "to": "uninstall.ps1"
       }
     ],
     "win": {
@@ -83,7 +79,53 @@
           ]
         }
       ],
-      "artifactName": "JarvisSetup-${arch}.${ext}"
+      "artifactName": "JarvisSetup-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "scripts/post-install.ps1",
+          "to": "post-install.ps1"
+        },
+        {
+          "from": "scripts/uninstall.ps1",
+          "to": "uninstall.ps1"
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "JarvisSetup-${arch}.${ext}",
+      "category": "public.app-category.productivity",
+      "extraResources": [
+        {
+          "from": "scripts/post-install.sh",
+          "to": "post-install.sh"
+        },
+        {
+          "from": "scripts/uninstall.sh",
+          "to": "uninstall.sh"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "Jarvis-${arch}.${ext}",
+      "category": "Utility"
     },
     "protocols": [
       {
