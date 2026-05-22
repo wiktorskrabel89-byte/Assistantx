@@ -22,79 +22,36 @@ export const MCP_SERVER_CATALOG = [
   {
     serverId: "filesystem",
     pluginId: "mcp-filesystem",
-    name: "Filesystem",
+    name: "Local Workspace",
     description:
-      "Secure, read-only access to any project folder on the local disk for code analysis without network exposure.",
+      "Ideal for Giga-Repository local RAG analysis — reads any project folder without leaving your machine.",
     authMethod: "local_path" as const,
     category: "developer" as const,
     capabilities: ["read_file", "list_directory", "directory_tree", "search_files"],
     icon: "📁",
+    builtIn: true,
   },
   {
-    serverId: "google-calendar",
-    pluginId: "mcp-google-calendar",
-    name: "Google Calendar",
+    serverId: "google-suite",
+    pluginId: "mcp-google-suite",
+    name: "Google Suite",
     description:
-      "Analyses your schedule, detects conflicts, plans meetings, and retrieves the agenda on demand via Google Calendar.",
+      "One-click Google integration for Calendar, Gmail, and Drive with a shared OAuth session and unified productivity context.",
     authMethod: "google_oauth2" as const,
     category: "productivity" as const,
-    capabilities: ["list_events", "create_event", "update_event", "delete_event"],
-    icon: "📅",
+    capabilities: ["list_events", "search_messages", "read_drive_files", "create_event", "list_files", "draft_message"],
+    icon: "🔷",
   },
   {
-    serverId: "gmail",
-    pluginId: "mcp-gmail",
-    name: "Gmail",
+    serverId: "operating-system",
+    pluginId: "mcp-operating-system",
+    name: "Operating System",
     description:
-      "Searches and analyses email content, extracts key threads, categorises messages, and drafts replies.",
-    authMethod: "google_oauth2" as const,
-    category: "productivity" as const,
-    capabilities: ["list_messages", "get_message", "search_messages", "draft_message"],
-    icon: "📧",
-  },
-  {
-    serverId: "google-drive",
-    pluginId: "mcp-google-drive",
-    name: "Google Drive",
-    description:
-      "Searches the cloud structure and reads Google Docs, Sheets, and text files to extract knowledge.",
-    authMethod: "google_oauth2" as const,
-    category: "productivity" as const,
-    capabilities: ["search_files", "read_file", "list_files", "export_file"],
-    icon: "☁️",
-  },
-  {
-    serverId: "postgres",
-    pluginId: "mcp-postgres",
-    name: "PostgreSQL",
-    description:
-      "Analyses table structures and allows natural-language questions against local or cloud SQL databases.",
-    authMethod: "uri" as const,
-    category: "database" as const,
-    capabilities: ["query", "list_tables", "describe_table"],
-    icon: "🐘",
-  },
-  {
-    serverId: "fetch",
-    pluginId: "mcp-fetch",
-    name: "Web Fetch",
-    description:
-      "Fetches clean text from any URL so Jarvis can analyse articles, documentation, and web pages.",
+      "Local system control for app launching, hardware telemetry, screenshots, and guarded command execution.",
     authMethod: "none" as const,
-    category: "web" as const,
-    capabilities: ["fetch", "fetch_markdown", "fetch_html"],
-    icon: "🌐",
-  },
-  {
-    serverId: "brave-search",
-    pluginId: "mcp-brave-search",
-    name: "Brave Search",
-    description:
-      "Gives Jarvis direct access to live web search results to supplement its knowledge with the latest information.",
-    authMethod: "api_key" as const,
-    category: "web" as const,
-    capabilities: ["brave_web_search", "brave_news_search", "brave_image_search"],
-    icon: "🔍",
+    category: "system" as const,
+    capabilities: ["launch_app", "get_system_stats", "take_screenshot", "execute_command"],
+    icon: "🖥️",
   },
   {
     serverId: "slack",
@@ -108,6 +65,29 @@ export const MCP_SERVER_CATALOG = [
     icon: "💬",
   },
   {
+    serverId: "fetch",
+    pluginId: "mcp-fetch",
+    name: "Web Fetch",
+    description:
+      "Fetches clean text from any URL so Jarvis can analyse articles, documentation, and web pages.",
+    authMethod: "none" as const,
+    category: "web" as const,
+    capabilities: ["fetch", "fetch_markdown", "fetch_html"],
+    icon: "🌐",
+    builtIn: true,
+  },
+  {
+    serverId: "brave-search",
+    pluginId: "mcp-brave-search",
+    name: "Brave Search",
+    description:
+      "Gives Jarvis direct access to live web search results to supplement its knowledge with the latest information.",
+    authMethod: "api_key" as const,
+    category: "web" as const,
+    capabilities: ["brave_web_search", "brave_news_search", "brave_image_search"],
+    icon: "🔍",
+  },
+  {
     serverId: "memory",
     pluginId: "mcp-memory",
     name: "Memory",
@@ -117,6 +97,18 @@ export const MCP_SERVER_CATALOG = [
     category: "memory" as const,
     capabilities: ["create_entities", "search_nodes", "read_graph", "add_observations"],
     icon: "🧠",
+    builtIn: true,
+  },
+  {
+    serverId: "postgres",
+    pluginId: "mcp-postgres",
+    name: "PostgreSQL",
+    description:
+      "Analyses table structures and allows natural-language questions against local or cloud SQL databases.",
+    authMethod: "uri" as const,
+    category: "database" as const,
+    capabilities: ["query", "list_tables", "describe_table"],
+    icon: "🐘",
   },
 ] as const;
 
@@ -129,7 +121,8 @@ export type MCPCategory =
   | "database"
   | "web"
   | "communication"
-  | "memory";
+  | "memory"
+  | "system";
 
 const CATEGORIES: { id: MCPCategory; label: string }[] = [
   { id: "all", label: "All" },
@@ -139,6 +132,7 @@ const CATEGORIES: { id: MCPCategory; label: string }[] = [
   { id: "web", label: "Web" },
   { id: "communication", label: "Communication" },
   { id: "memory", label: "Memory" },
+  { id: "system", label: "System" },
 ];
 
 export function MarketplaceClient({ dark }: { dark: boolean }) {
@@ -148,7 +142,7 @@ export function MarketplaceClient({ dark }: { dark: boolean }) {
 
   const filtered =
     activeCategory === "all"
-      ? MCP_SERVER_CATALOG
+      ? MCP_SERVER_CATALOG.filter((s) => s.serverId !== "postgres")
       : MCP_SERVER_CATALOG.filter((s) => s.category === activeCategory);
 
   const shellBg = dark
@@ -166,7 +160,7 @@ export function MarketplaceClient({ dark }: { dark: boolean }) {
           <div>
             <h1 className="text-2xl font-bold">MCP Marketplace</h1>
             <p className={`text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>
-              Connect Jarvis to 10 official MCP servers — GitHub, Google, Slack, and more.
+              7 MCP servers plus 3 always-on built-in tools for local workspace, web fetch, and memory.
             </p>
           </div>
           {mcpHook.installedCount > 0 && (
@@ -203,7 +197,8 @@ export function MarketplaceClient({ dark }: { dark: boolean }) {
               key={server.serverId}
               server={server}
               dark={dark}
-              installed={mcpHook.isInstalled(server.serverId)}
+              installed={Boolean((server as { builtIn?: boolean }).builtIn) || mcpHook.isInstalled(server.serverId)}
+              builtIn={Boolean((server as { builtIn?: boolean }).builtIn)}
               onInstall={() => mcpHook.install(server.serverId)}
               onUninstall={() => mcpHook.uninstall(server.serverId)}
               onConfigure={() => setConfigServer(server)}

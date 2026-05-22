@@ -29,6 +29,7 @@ type MCPServerCardProps = {
   server: MCPServerMeta;
   dark: boolean;
   installed: boolean;
+  builtIn?: boolean;
   loading: boolean;
   onInstall: () => void;
   onUninstall: () => void;
@@ -39,6 +40,7 @@ export function MCPServerCard({
   server,
   dark,
   installed,
+  builtIn = false,
   loading,
   onInstall,
   onUninstall,
@@ -61,8 +63,13 @@ export function MCPServerCard({
             </span>
           </div>
         </div>
-        {installed && (
+        {installed && !builtIn && (
           <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-500 mt-0.5" />
+        )}
+        {builtIn && (
+          <span className={`mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${dark ? "bg-emerald-900/30 text-emerald-200" : "bg-emerald-100 text-emerald-700"}`}>
+            Built-in
+          </span>
         )}
       </div>
 
@@ -92,7 +99,27 @@ export function MCPServerCard({
 
       {/* Actions */}
       <div className="mt-auto flex gap-2">
-        {installed ? (
+        {builtIn ? (
+          server.authMethod === "none" ? (
+            <div className={`w-full rounded-xl px-3 py-2 text-center text-xs font-medium ${dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-700"}`}>
+              Always active
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onConfigure}
+              disabled={loading}
+              className={`flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition ${
+                dark
+                  ? "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                  : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+              } disabled:opacity-50`}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Configure
+            </button>
+          )
+        ) : installed ? (
           <>
             <button
               type="button"
