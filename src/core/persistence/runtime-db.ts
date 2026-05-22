@@ -110,7 +110,7 @@ export type DeviceRow = {
   setup_state?: "pending" | "waiting_for_pairing" | "paired" | "ready" | "needs_bios_manual_step" | "error";
   last_public_ipv6_discovered_at?: string | null;
   last_local_broadcast?: string | null;
-  wake_method_last_success?: "tailscale_direct" | "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
+  wake_method_last_success?: "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
   wake_fail_count?: number | null;
 };
 
