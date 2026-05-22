@@ -175,6 +175,8 @@ export function ChatTab({
   });
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const previousMessageCountRef = useRef(activeChat.messages.length);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importedShareRef = useRef(false);
@@ -462,7 +464,26 @@ export function ChatTab({
   }, [createChatAction]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const scrollElement = chatScrollRef.current;
+    if (!scrollElement) return;
+    const updateAutoScrollState = () => {
+      const distanceFromBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
+      shouldAutoScrollRef.current = distanceFromBottom <= 80;
+    };
+    updateAutoScrollState();
+    scrollElement.addEventListener("scroll", updateAutoScrollState, { passive: true });
+    return () => {
+      scrollElement.removeEventListener("scroll", updateAutoScrollState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const previousCount = previousMessageCountRef.current;
+    const currentCount = activeChat.messages.length;
+    previousMessageCountRef.current = currentCount;
+    if (shouldAutoScrollRef.current || currentCount > previousCount) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [activeChat.messages]);
 
   useEffect(() => {
