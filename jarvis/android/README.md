@@ -1,31 +1,67 @@
 # Jarvis Android
 
-Minimalny szkielet aplikacji mobilnej (React Native)
+React Native Android client for Jarvis remote control.
 
-## Pliki:
-- index.js — punkt wejścia React Native (AppRegistry)
-- App.js — główny komponent aplikacji
-- package.json — zależności
-- backend.js — połączenie WebSocket z backendem Jarvis
-- auth.js — token urządzenia w AsyncStorage
+## Structure
 
-## Obecny stan
+- `App.js` — Jarvis mobile UI and command workflows
+- `backend.js` — WebSocket connection + message protocol
+- `android/` — Native Android Gradle project
+- `index.js` + `app.json` — React Native entrypoint (`JarvisAndroid`) and display name (`Jarvis`)
 
-- Aplikacja rejestruje się do backendu jako `android` przez `ws://10.0.2.2:8000/ws`.
-- Używa tego samego protokołu wiadomości co desktop: `register`, `desktop_prompt`, `command`, `response`.
-- `10.0.2.2` jest poprawnym adresem hosta z emulatora Android do lokalnego backendu uruchomionego na komputerze.
+## Prerequisites
 
-## Uruchomienie
+- Node.js 22+
+- Android SDK + emulator/device
+- Java 17
+
+## Install
 
 ```bash
-npm install
+cd /home/runner/work/Assistantx/Assistantx/jarvis/android
+npm ci
+```
+
+## Run in development
+
+```bash
+cd /home/runner/work/Assistantx/Assistantx/jarvis/android
 npm start
 ```
 
-Jeśli nie używasz emulatora Android, tylko fizycznego telefonu, zmień adres backendu w `backend.js` na IP komputera w sieci lokalnej.
+In another terminal:
 
----
+```bash
+cd /home/runner/work/Assistantx/Assistantx/jarvis/android
+npm run android
+```
 
-Kolejne kroki:
-1. Dodaj plik App.js z kodem startowym React Native
-2. Dodaj package.json z zależnościami
+## Build release APK
+
+```bash
+cd /home/runner/work/Assistantx/Assistantx/jarvis/android
+npm run build:android:release
+```
+
+APK output:
+
+- `jarvis/android/android/app/build/outputs/apk/release/app-release.apk`
+
+## Signing configuration
+
+Release signing reads these values from Gradle properties or environment variables:
+
+- `KEYSTORE_FILE`
+- `KEYSTORE_PASSWORD`
+- `KEY_ALIAS`
+- `KEY_PASSWORD`
+
+If not provided, release builds fall back to debug signing (CI-safe default).
+
+## Android SDK local config
+
+Create `jarvis/android/android/local.properties` from `local.properties.template` and set:
+
+```properties
+sdk.dir=/path/to/Android/Sdk
+```

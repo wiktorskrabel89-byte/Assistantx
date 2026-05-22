@@ -77,6 +77,10 @@ For each release, publish these files to `jarvis-latest`:
 - `JarvisSetup-x64.exe.blockmap`
 - `JarvisSetup-arm64.exe`
 - `JarvisSetup-arm64.exe.blockmap`
+- `JarvisSetup-x64.dmg`
+- `JarvisSetup-arm64.dmg`
+- `Jarvis-x64.AppImage`
+- `Jarvis-android.apk`
 
 `latest.yml` must reference exact filenames that actually exist in release assets.
 `latest.yml` must also carry:

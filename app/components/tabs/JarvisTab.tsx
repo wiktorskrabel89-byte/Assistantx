@@ -132,6 +132,13 @@ export default function JarvisTab() {
     return { online, ready, total: devices.length };
   }, [devices]);
 
+  function downloadInstaller(platform: "windows" | "mac" | "linux" | "android", arch?: "x64" | "arm64") {
+    const params = new URLSearchParams();
+    params.set("platform", platform);
+    if (arch) params.set("arch", arch);
+    window.location.href = `/api/jarvis/download?${params.toString()}`;
+  }
+
   async function downloadForWindows() {
     let arch = "x64";
     try {
@@ -148,7 +155,35 @@ export default function JarvisTab() {
       // fall back to x64
     }
 
-    window.location.href = `/api/jarvis/download?arch=${arch}`;
+    downloadInstaller("windows", arch as "x64" | "arm64");
+  }
+
+  async function downloadForMac() {
+    let arch: "x64" | "arm64" = "x64";
+    try {
+      const nav = navigator as Navigator & {
+        userAgentData?: {
+          getHighEntropyValues: (hints: string[]) => Promise<{ architecture?: string }>;
+        };
+      };
+      if (nav.userAgentData) {
+        const data = await nav.userAgentData.getHighEntropyValues(["architecture"]);
+        if (data.architecture === "arm") arch = "arm64";
+      } else if (navigator.userAgent.toLowerCase().includes("arm")) {
+        arch = "arm64";
+      }
+    } catch {
+      // fall back to x64
+    }
+    downloadInstaller("mac", arch);
+  }
+
+  function downloadForLinux() {
+    downloadInstaller("linux");
+  }
+
+  function downloadForAndroid() {
+    downloadInstaller("android");
   }
 
   const handleConfirmPairing = useCallback(async () => {
@@ -237,15 +272,12 @@ export default function JarvisTab() {
         <Card className="border-sky-200/70 bg-white/90 shadow-[0_24px_80px_-28px_rgba(14,116,144,0.25)]">
           <CardHeader className="gap-4">
             <Badge className="w-fit bg-sky-100 text-sky-800 hover:bg-sky-100">AssistantX workspace control</Badge>
-            <CardTitle className="text-3xl text-slate-900 sm:text-4xl">
-              Pair, wake, and control your Windows workspace
-            </CardTitle>
+            <CardTitle className="text-3xl text-slate-900 sm:text-4xl">Pair, wake, and control your desktop workspace</CardTitle>
             <CardDescription className="max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-              Sign in on Jarvis Desktop with the same AssistantX account, generate a pairing code on the PC, then confirm it here.
-              AssistantX is now the only mobile control surface — the old Android Jarvis client is no longer required.
+              Sign in on Jarvis Desktop with the same AssistantX account, generate a pairing code on your computer, then confirm it here.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
               <div className="mb-3 flex items-center gap-2 text-slate-900">
                 <Laptop className="h-4 w-4" />
@@ -261,15 +293,42 @@ export default function JarvisTab() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
               <div className="mb-3 flex items-center gap-2 text-slate-900">
-                <Smartphone className="h-4 w-4" />
-                <span className="text-sm font-semibold">Phone control in AssistantX</span>
+                <Laptop className="h-4 w-4" />
+                <span className="text-sm font-semibold">macOS desktop</span>
               </div>
-              <p className="text-xs leading-6 text-slate-600">
-                Open AssistantX on your phone, enter the code from your PC, then use the same app to wake the desktop and launch Roblox remotely.
+              <Button onClick={() => void downloadForMac()} className="h-11 w-full gap-2" title="Download Jarvis for macOS">
+                <Download className="h-4 w-4" />
+                Download macOS DMG
+              </Button>
+              <p className="mt-3 text-xs leading-6 text-slate-600">
+                Download Intel or Apple Silicon DMG from the same release channel.
               </p>
-              <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-                No separate mobile Jarvis app. One account, one app, one device list.
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="mb-3 flex items-center gap-2 text-slate-900">
+                <Laptop className="h-4 w-4" />
+                <span className="text-sm font-semibold">Linux desktop</span>
               </div>
+              <Button onClick={downloadForLinux} className="h-11 w-full gap-2" title="Download Jarvis for Linux">
+                <Download className="h-4 w-4" />
+                Download AppImage
+              </Button>
+              <p className="mt-3 text-xs leading-6 text-slate-600">
+                Use the Linux AppImage build to run Jarvis without a distro-specific installer.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="mb-3 flex items-center gap-2 text-slate-900">
+                <Smartphone className="h-4 w-4" />
+                <span className="text-sm font-semibold">Android companion</span>
+              </div>
+              <Button onClick={downloadForAndroid} className="h-11 w-full gap-2" title="Download Jarvis Android APK">
+                <Download className="h-4 w-4" />
+                Download APK
+              </Button>
+              <p className="text-xs leading-6 text-slate-600">
+                Install the Android app directly from the latest Jarvis release if you want a dedicated mobile client.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -343,7 +402,7 @@ export default function JarvisTab() {
             ) : null}
             {!devicesLoading && devices.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
-                No desktop devices yet. Sign into Jarvis Desktop on Windows, generate a code there, then confirm it above.
+                No desktop devices yet. Sign into Jarvis Desktop, generate a code there, then confirm it above.
               </div>
             ) : null}
             {devices.map((device) => (

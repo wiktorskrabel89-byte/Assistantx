@@ -7,6 +7,8 @@ const RELEASE_TAG = "jarvis-latest";
 const RELEASE_DOWNLOAD_TIMEOUT_MS = 30_000;
 const BUILD_COMMAND =
   "cd jarvis/desktop && npm install && npm run dist:win:all && npm run publish:download";
+const BUILD_MAC_COMMAND = "cd jarvis/desktop && npm install && npm run dist:mac";
+const BUILD_LINUX_COMMAND = "cd jarvis/desktop && npm install && npm run dist:linux";
 const ANDROID_BUILD_COMMAND =
   "cd jarvis/android/android && ./gradlew assembleRelease";
 
@@ -82,7 +84,7 @@ async function proxyGithubReleaseAsset(asset: GithubReleaseAsset): Promise<Respo
 }
 
 type DownloadTarget = {
-  platform: "windows" | "android";
+  platform: "windows" | "mac" | "linux" | "android";
   arch?: "x64" | "arm64";
   filenames: string[];
   contentType: string;
@@ -92,28 +94,55 @@ type DownloadTarget = {
 
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
-  const platform = searchParams.get("platform") === "android" ? "android" : "windows";
+  const rawPlatform = searchParams.get("platform");
+  const platform =
+    rawPlatform === "android" || rawPlatform === "mac" || rawPlatform === "linux"
+      ? rawPlatform
+      : "windows";
 
-  const target: DownloadTarget = platform === "android"
-    ? {
+  const target: DownloadTarget = (() => {
+    if (platform === "android") {
+      return {
         platform: "android",
         filenames: ["Jarvis-android.apk", "JarvisAndroid.apk"],
         contentType: "application/vnd.android.package-archive",
         missingError: "Android installer not yet available",
         instructions: `Build and publish the Android APK first:\n  ${ANDROID_BUILD_COMMAND}\nThen upload/copy it as Jarvis-android.apk (or JarvisAndroid.apk) to the jarvis-latest release or public/jarvis/.`,
-      }
-    : (() => {
-        const rawArch = searchParams.get("arch");
-        const arch = rawArch === "arm64" ? "arm64" : "x64";
-        return {
-          platform: "windows" as const,
-          arch,
-          filenames: [`JarvisSetup-${arch}.exe`],
-          contentType: "application/octet-stream",
-          missingError: "Installer not yet available",
-          instructions: `Build and publish the installer first:\n  ${BUILD_COMMAND}\nOr trigger the "Build Jarvis Desktop" GitHub Actions workflow from the Actions tab.`,
-        };
-      })();
+      };
+    }
+    if (platform === "mac") {
+      const rawArch = searchParams.get("arch");
+      const arch = rawArch === "arm64" ? "arm64" : "x64";
+      return {
+        platform: "mac",
+        arch,
+        filenames: [`JarvisSetup-${arch}.dmg`],
+        contentType: "application/x-apple-diskimage",
+        missingError: "macOS installer not yet available",
+        instructions: `Build and publish the macOS installer first:\n  ${BUILD_MAC_COMMAND}\nOr trigger the "Build Jarvis Desktop" GitHub Actions workflow from the Actions tab.`,
+      };
+    }
+    if (platform === "linux") {
+      return {
+        platform: "linux",
+        arch: "x64",
+        filenames: ["Jarvis-x64.AppImage"],
+        contentType: "application/octet-stream",
+        missingError: "Linux installer not yet available",
+        instructions: `Build and publish the Linux AppImage first:\n  ${BUILD_LINUX_COMMAND}\nOr trigger the "Build Jarvis Desktop" GitHub Actions workflow from the Actions tab.`,
+      };
+    }
+    const rawArch = searchParams.get("arch");
+    const arch = rawArch === "arm64" ? "arm64" : "x64";
+    return {
+      platform: "windows",
+      arch,
+      filenames: [`JarvisSetup-${arch}.exe`],
+      contentType: "application/octet-stream",
+      missingError: "Installer not yet available",
+      instructions: `Build and publish the installer first:\n  ${BUILD_COMMAND}\nOr trigger the "Build Jarvis Desktop" GitHub Actions workflow from the Actions tab.`,
+    };
+  })();
 
   // 1. Try to serve a locally published file first (built via `npm run dist:win:public`)
   for (const filename of target.filenames) {
