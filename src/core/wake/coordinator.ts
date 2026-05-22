@@ -1,7 +1,6 @@
 import { sendWakeOnLanPacket } from "@/src/core/wake/magic-packet";
 
-export type WakeMethod = "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | "rtc_wait";
-export type WakeMode = "router" | "ipv6" | "rtc_wait";
+export type WakeMethod = "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast";
 
 export type WakeCandidate = {
   deviceId: string;
@@ -150,27 +149,7 @@ export async function executeWakeChain(params: {
     const udpAttempt = await attemptUdpPathProbe(candidate);
     attempts.push(udpAttempt);
     if (udpAttempt.ok) {
-      return {
-        ok: true,
-        method: "udp_path_probe",
-        mode: resolveWakeMode("udp_path_probe"),
-        nextAction: "wait_for_presence",
-        attempts,
-      };
-    }
-  }
-
-  if (candidate.ipv6) {
-    const ipv6Attempt = await attemptIpv6Magic(candidate);
-    attempts.push(ipv6Attempt);
-    if (ipv6Attempt.ok) {
-      return {
-        ok: true,
-        method: "ipv6_magic_packet",
-        mode: resolveWakeMode("ipv6_magic_packet"),
-        nextAction: "wait_for_presence",
-        attempts,
-      };
+      return { ok: true, method: "udp_path_probe", attempts };
     }
   }
 

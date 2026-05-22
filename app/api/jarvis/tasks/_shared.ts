@@ -57,18 +57,6 @@ export function mapTaskStatusToUiLabel(task: {
     return "Queued on local device...";
   }
 
-  if (task.status === "pending_approval") {
-    return "Waiting for your approval on this device action...";
-  }
-
-  if (task.status === "approved") {
-    return "Approved — waiting for local device execution...";
-  }
-
-  if (task.status === "rejected") {
-    return "Local device action was rejected.";
-  }
-
   if (task.status === "processing") {
     if (task.category === "system_action") {
       if (task.action_type === "launch_roblox") return "Launching Roblox on local device...";

@@ -104,12 +104,6 @@ export type DeviceRow = {
   last_known_mac?: string | null;
   last_udp_port?: number | null;
   last_seen_network_epoch?: number | null;
-  hardware_id?: string | null;
-  bios_manufacturer?: string | null;
-  bios_model?: string | null;
-  setup_state?: "pending" | "waiting_for_pairing" | "paired" | "ready" | "needs_bios_manual_step" | "error";
-  last_public_ipv6_discovered_at?: string | null;
-  last_local_broadcast?: string | null;
   wake_method_last_success?: "udp_path_probe" | "ipv6_magic_packet" | "lan_broadcast" | null;
   wake_fail_count?: number | null;
 };

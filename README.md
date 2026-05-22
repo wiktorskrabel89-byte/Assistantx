@@ -33,7 +33,6 @@ The repository now includes a dedicated Python worker process at:
 It is isolated from HTTP API servers and is designed to:
 
 - poll `public.ai_tasks` (`pending` + `routing=local`)
-- execute device-scoped `system_action` jobs (for example dynamic Roblox launch)
 - process tasks with local Ollama (`qwen2.5:14b` by default)
 - process async Jarvis queue tasks created by `/api/jarvis/tasks`
 - parse in-chat commands like `zmień temp na 0.7`
