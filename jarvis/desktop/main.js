@@ -30,6 +30,8 @@ const { generateOAuthState, parseAuthCallback, toSafeSessionView } = require('./
 const { createGitHubClient } = require('./electron/tools/github');
 const { createGoogleClient } = require('./electron/tools/google');
 const appsTool = require('./electron/tools/apps');
+const { createMCPServerManager } = require('./electron/mcp/server-manager');
+const { createMCPToolRouter } = require('./electron/mcp/tool-router');
 const {
   buildMetadataSignatureUrl,
   classifyInstallerBlocker,
@@ -70,6 +72,8 @@ wireLocalTelemetry(telemetryBus);
 const serverBridge = createServerBridge();
 const githubClient = createGitHubClient({ app });
 const googleClient = createGoogleClient({ app });
+const mcpManager = createMCPServerManager({ googleClient, githubClient, app });
+const mcpRouter = createMCPToolRouter({ serverManager: mcpManager });
 
 const permissions = createPermissionPolicy({
   onAudit(entry) {
@@ -1148,6 +1152,8 @@ createMainIpcHandlers({
   pendingLauncherConfirmations,
   permissions,
   securityAudit,
+  mcpManager,
+  mcpRouter,
 });
 
 module.exports = {

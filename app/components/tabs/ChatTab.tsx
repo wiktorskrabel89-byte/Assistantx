@@ -31,6 +31,7 @@ import type {
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
+import { useMCPInstallations } from "../../hooks/useMCPInstallations";
 import { executeActionModeSteps } from "../tabs/ModesTab";
 import { isEditableElementTarget } from "../../lib/keyboard";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
@@ -335,6 +336,8 @@ export function ChatTab({
     memoryNotes: activeWorkspace.settings.memoryNotes,
     setMemoryNotes,
   });
+
+  const { installedCount: mcpInstalledCount } = useMCPInstallations();
 
 
   useEffect(() => {
@@ -827,6 +830,7 @@ export function ChatTab({
             onExportMarkdown={exportMarkdown}
             activeJarvisMode={activeJarvisMode}
             onDeactivateActionMode={() => setActiveActionMode(null)}
+            mcpToolCount={mcpInstalledCount}
           />
 
           <div className="min-h-0 flex-1 px-3 py-4 bg-background transition-colors duration-200">

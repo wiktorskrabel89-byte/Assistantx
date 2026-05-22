@@ -16,6 +16,7 @@ import {
   Search,
   Settings2,
   Share2,
+  ShoppingBag,
   SquareTerminal,
   Stethoscope,
   X,
@@ -45,7 +46,8 @@ export type AppNavigationTab =
   | "settings"
   | "notifications"
   | "ai-learning"
-  | "website-creator";
+  | "website-creator"
+  | "marketplace";
 
 type AppNavigationColumnProps = {
   activeTab: AppNavigationTab;
@@ -76,6 +78,7 @@ type AddOnItem = {
 /** The exact set of add-ons — no more, no less */
 const ADD_ON_ITEMS: AddOnItem[] = [
   { id: "jarvis",           label: "Jarvis App Settings", description: "Desktop + mobile setup",      icon: Laptop },
+  { id: "marketplace",     label: "MCP Marketplace",     description: "Install MCP server tools",     icon: ShoppingBag },
   { id: "clinical",         label: "Clinical",        description: "Clinical tools",                   icon: Stethoscope },
   { id: "learning",         label: "Learning",        description: "Learning materials",               icon: BookOpen },
   { id: "prompt-library",   label: "Prompt Library",  description: "Prompt library",                   icon: LibraryBig },
