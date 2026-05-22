@@ -50,29 +50,34 @@ class WorkerTests(unittest.TestCase):
             worker_device_id="",
             workspace_root=root,
             action_roots=(root,),
+            allowed_directory=root,
         )
 
-    def test_system_file_list_stays_inside_workspace_root(self):
+    def test_handle_system_action_rejects_unknown_actions(self):
+        config = self.build_config()
+        with self.assertRaises(RuntimeError):
+            worker.handle_system_action(config, action_type="run_shell", payload={})
+
+    def test_system_file_list_stays_inside_allowed_directory(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base = Path(tmp_dir)
             (base / "allowed.txt").write_text("ok", encoding="utf-8")
             config = self.build_config(str(base))
 
-            output = worker.execute_system_action(
-                {
-                    "action_type": "system_file_list",
-                    "payload": {"path": "."},
-                },
+            output = worker.handle_system_action(
                 config,
+                action_type="system_file_list",
+                payload={"path": "."},
             )
             parsed = json.loads(output)
             self.assertEqual(parsed["path"], str(base.resolve()))
             self.assertEqual(parsed["entries"][0]["name"], "allowed.txt")
 
-            with self.assertRaises(PermissionError):
-                worker.execute_system_action(
-                    {"action_type": "system_file_list", "payload": {"path": "../"}},
+            with self.assertRaises(RuntimeError):
+                worker.handle_system_action(
                     config,
+                    action_type="system_file_list",
+                    payload={"path": "../"},
                 )
 
     def test_system_status_ping_returns_json_payload(self):

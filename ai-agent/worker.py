@@ -210,6 +210,7 @@ class WorkerConfig:
     searxng_url: str = "http://127.0.0.1:8080"
     web_search_timeout_seconds: int = 5
     web_search_max_results: int = 5
+    allowed_directory: str = str(Path(__file__).resolve().parents[1])
 
 
 def load_config() -> WorkerConfig:
@@ -258,6 +259,7 @@ def load_config() -> WorkerConfig:
         searxng_url=(os.getenv("LOCAL_SEARXNG_URL") or "http://127.0.0.1:8080").rstrip("/"),
         web_search_timeout_seconds=max(1, _env_int("LOCAL_WEB_SEARCH_TIMEOUT_SECONDS", 5)),
         web_search_max_results=max(1, _env_int("LOCAL_WEB_SEARCH_MAX_RESULTS", 5)),
+        allowed_directory=str(Path(_env_str("LOCAL_WORKER_ALLOWED_DIRECTORY", str(Path(__file__).resolve().parent.parent))).resolve()),
     )
 
 
@@ -371,7 +373,7 @@ class SupabaseRestClient:
         rows = self._request("GET", "/rest/v1/ai_tasks", params=params)
         return list(rows or [])
 
-    def claim_task(
+    def claim_next_task(
         self,
         *,
         device_id: str | None,
@@ -623,27 +625,6 @@ def _build_system_instruction(source_code: str, web_context: str = "") -> str:
     return base
 
 
-def _system_status_ping() -> str:
-    memory = {"available": psutil is not None}
-    if psutil is not None:
-        try:
-            vm = psutil.virtual_memory()
-            memory = {
-                "available": True,
-                "total_mb": round(vm.total / (1024 * 1024), 1),
-                "used_mb": round(vm.used / (1024 * 1024), 1),
-                "percent": float(vm.percent),
-            }
-        except Exception:
-            pass
-    payload = {
-        "platform": platform.platform(),
-        "hostname": socket.gethostname(),
-        "memory": memory,
-        "gpu": {"available": False},
-    }
-    return json.dumps(payload, ensure_ascii=False)
-
 
 def _prompt_is_dangerous(prompt: str) -> bool:
     lowered = str(prompt or "").lower()
@@ -703,33 +684,6 @@ def _extract_web_search_context(config: WorkerConfig, prompt: str) -> tuple[str,
         return cleaned, "\n".join(snippets)
     except Exception as exc:
         return cleaned, f"[SearXNG unavailable] {exc}"
-
-
-def _resolve_allowed_path(config: WorkerConfig, raw_path: str) -> str:
-    candidate = os.path.abspath(os.path.expanduser(raw_path))
-    for root in config.action_roots:
-        if candidate == root or candidate.startswith(f"{root}{os.sep}"):
-            return candidate
-    raise RuntimeError(f"Path outside allowed roots: {candidate}")
-
-
-def execute_system_action(config: WorkerConfig, action_type: str, payload: dict[str, Any]) -> str:
-    normalized_action = action_type.strip().lower()
-    if normalized_action == "launch_roblox":
-        game_id = str(payload.get("game_id") or payload.get("gameId") or "185655149").strip()
-        if not re.fullmatch(r"\d{3,20}", game_id):
-            raise RuntimeError("Invalid Roblox game id.")
-        roblox_url = f"roblox://placeId={game_id}"
-        if not webbrowser.open(roblox_url):
-            raise RuntimeError("Roblox URI handler did not acknowledge the launch request.")
-        return f"Roblox launch requested for placeId={game_id}."
-
-    if normalized_action == "system_file_list":
-        target = _resolve_allowed_path(config, str(payload.get("path") or ".").strip())
-        entries = sorted(os.listdir(target))[:100]
-        return json.dumps({"path": target, "entries": entries}, ensure_ascii=False)
-
-    raise RuntimeError(f"Unsupported system action: {action_type}")
 
 
 def _should_attach_map_code(prompt: str) -> bool:
@@ -825,40 +779,6 @@ def _build_web_search_context(config: WorkerConfig, raw_prompt: str) -> str:
         )
     return "\n\n".join(lines)
 
-
-def _resolve_system_action_path(config: WorkerConfig, requested_path: str) -> str:
-    root = os.path.realpath(config.workspace_root)
-    candidate = requested_path.strip() or "."
-    resolved = os.path.realpath(candidate if os.path.isabs(candidate) else os.path.join(root, candidate))
-    try:
-        if os.path.commonpath([root, resolved]) != root:
-            raise PermissionError("requested path escapes workspace root")
-    except ValueError as exc:
-        raise PermissionError("invalid workspace path") from exc
-    return resolved
-
-
-def execute_system_action(config: WorkerConfig, task: dict[str, Any]) -> tuple[str, str]:
-    action_type = str(task.get("action_type") or "").strip().lower()
-    payload = task.get("payload")
-    if not isinstance(payload, dict):
-        payload = {}
-
-    if action_type == "list_files":
-        target_path = _resolve_system_action_path(config, str(payload.get("path") or "."))
-        entries = sorted(os.listdir(target_path))[:100]
-        rendered = []
-        for entry in entries:
-            full_path = os.path.join(target_path, entry)
-            suffix = "/" if os.path.isdir(full_path) else ""
-            rendered.append(f"- {entry}{suffix}")
-        body = "\n".join(rendered) if rendered else "- (pusto)"
-        return action_type, f"📁 Zawartość katalogu `{target_path}`:\n{body}"
-
-    if action_type == "open_uri":
-        return action_type, "⚠️ Akcja `open_uri` wymaga dedykowanego wykonawcy hosta i nie jest obsługiwana przez worker HTTP-only."
-
-    return (action_type or "system_action"), f"⚠️ Nieobsługiwana akcja systemowa: `{action_type or 'unknown'}`."
 
 
 def generate_with_ollama(
@@ -1096,18 +1016,162 @@ def execute_system_action(task: dict[str, Any], config: WorkerConfig) -> str:
         )
         return f"Roblox launch requested for placeId={game_id}."
     if action_type == "system_file_list":
-        target_path = _resolve_system_action_path(config, str(payload.get("path") or "."))
+        target_path = _resolve_allowed_path(config, str(payload.get("path") or "."))
         entries = []
-        for entry in sorted(os.listdir(target_path))[:100]:
-            full_path = os.path.join(target_path, entry)
+        for entry in sorted(target_path.iterdir(), key=lambda value: value.name.lower())[:100]:
             entries.append({
-                "name": entry,
-                "type": "directory" if os.path.isdir(full_path) else "file",
+                "name": entry.name,
+                "type": "directory" if entry.is_dir() else "file",
             })
-        return json.dumps({"path": target_path, "entries": entries}, ensure_ascii=False)
+        return _safe_json_dumps({"path": str(target_path), "entries": entries})
     if action_type == "system_status_ping":
         return _system_status_ping()
     raise RuntimeError(f"Unsupported system_action: {action_type or 'unknown'}")
+
+
+ALLOWED_SYSTEM_ACTIONS = {
+    "launch_roblox",
+    "system_file_list",
+    "system_status_ping",
+}
+
+
+def _safe_json_dumps(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _coerce_payload(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    return {}
+
+
+def _resolve_allowed_path(config: WorkerConfig, requested_path: str) -> Path:
+    base = Path(config.allowed_directory).resolve()
+    candidate = Path(requested_path or ".")
+    resolved = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise RuntimeError("Requested path is outside the allowed local worker directory.") from exc
+    return resolved
+
+
+def _list_allowed_directory(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    resolved = _resolve_allowed_path(config, str(payload.get("path") or "."))
+    if not resolved.exists():
+        raise RuntimeError(f"Requested path does not exist: {resolved}")
+    if not resolved.is_dir():
+        raise RuntimeError(f"Requested path is not a directory: {resolved}")
+
+    entries = []
+    for item in sorted(resolved.iterdir(), key=lambda value: value.name.lower()):
+        entries.append({
+            "name": item.name,
+            "type": "directory" if item.is_dir() else "file",
+        })
+
+    return _safe_json_dumps({
+        "path": str(resolved),
+        "entries": entries,
+    })
+
+
+def _launch_roblox(payload: dict[str, Any]) -> str:
+    game_id = str(payload.get("game_id") or payload.get("gameId") or "").strip() or "185655149"
+    if not re.fullmatch(r"\d{3,20}", game_id):
+        raise RuntimeError("Invalid Roblox game_id.")
+
+    roblox_uri = f"roblox://placeId={game_id}"
+    if platform.system().lower().startswith("win"):
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", roblox_uri],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return f"Uruchomiono Roblox na lokalnym komputerze (placeId={game_id})."
+
+    raise RuntimeError("launch_roblox is currently supported only on Windows workers.")
+
+
+def _read_gpu_metrics() -> list[dict[str, Any]]:
+    try:
+        raw = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,name,temperature.gpu,utilization.gpu,memory.total,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        return []
+
+    devices: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) != 6:
+            continue
+        try:
+            devices.append({
+                "index": int(parts[0]),
+                "name": parts[1],
+                "temperatureC": int(parts[2]),
+                "utilizationPercent": int(parts[3]),
+                "memoryTotalMb": int(parts[4]),
+                "memoryFreeMb": int(parts[5]),
+            })
+        except ValueError:
+            continue
+    return devices
+
+
+def _system_status_ping() -> str:
+    cpu_percent: float | None = None
+    memory: dict[str, Any] = {"totalMb": None, "availableMb": None, "percentUsed": None}
+
+    try:
+        import psutil  # type: ignore
+
+        cpu_percent = float(psutil.cpu_percent(interval=0.2))
+        vm = psutil.virtual_memory()
+        memory = {
+            "totalMb": round(float(vm.total) / 1024 / 1024, 2),
+            "availableMb": round(float(vm.available) / 1024 / 1024, 2),
+            "percentUsed": round(float(vm.percent), 2),
+        }
+    except Exception:
+        if hasattr(os, "getloadavg"):
+            try:
+                load1, _, _ = os.getloadavg()
+                cpu_percent = round(float(load1), 2)
+            except Exception:
+                cpu_percent = None
+
+    return _safe_json_dumps({
+        "platform": platform.platform(),
+        "cpuPercent": cpu_percent,
+        "memory": memory,
+        "gpu": _read_gpu_metrics(),
+        "timestamp": _utc_now_iso(),
+    })
+
+
+def handle_system_action(config: WorkerConfig, *, action_type: str | None, payload: dict[str, Any]) -> str:
+    normalized_action = str(action_type or "").strip().lower()
+    if normalized_action not in ALLOWED_SYSTEM_ACTIONS:
+        raise RuntimeError(f"Unsupported system_action '{normalized_action}'.")
+
+    if normalized_action == "launch_roblox":
+        return _launch_roblox(payload)
+    if normalized_action == "system_file_list":
+        return _list_allowed_directory(config, payload)
+    if normalized_action == "system_status_ping":
+        return _system_status_ping()
+
+    raise RuntimeError(f"Unsupported system_action '{normalized_action}'.")
 
 
 def process_task(
