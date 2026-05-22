@@ -1,12 +1,13 @@
 'use strict';
 
 const ALLOWED = new Set(['healthy', 'starting', 'degraded', 'unavailable', 'crashed', 'stopped']);
-const NON_BLOCKING_COMPONENTS = new Set(['updater']);
+const NON_BLOCKING_COMPONENTS = new Set(['updater', 'ollama']);
 
 function createStartupDiagnostics() {
   const components = {
     db: { status: 'starting', detail: 'Validating database runtime.', reason: 'starting', details: {}, phase: 'validating-runtime', updatedAt: new Date().toISOString() },
     sidecar: { status: 'starting', detail: 'Waiting for AI runtime bootstrap.', reason: 'starting', details: {}, phase: 'starting', updatedAt: new Date().toISOString() },
+    ollama: { status: 'starting', detail: 'Checking local Ollama runtime.', reason: 'starting', details: {}, phase: 'probing', updatedAt: new Date().toISOString() },
     updater: { status: 'starting', detail: 'Initializing updater subsystem.', reason: 'starting', details: {}, phase: 'initializing', updatedAt: new Date().toISOString() },
     launcher: { status: 'starting', detail: 'Validating launcher runtime.', reason: 'starting', details: {}, phase: 'validating-runtime', updatedAt: new Date().toISOString() },
   };

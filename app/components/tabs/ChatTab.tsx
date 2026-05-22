@@ -31,6 +31,7 @@ import type {
 import { useWorkspace } from "../../providers/WorkspaceProvider";
 import { useMemorySummarizer } from "../../hooks/useMemorySummarizer";
 import { useChatTransport } from "../../hooks/useChatTransport";
+import { useMCPInstallations } from "../../hooks/useMCPInstallations";
 import { executeActionModeSteps } from "../tabs/ModesTab";
 import { isEditableElementTarget } from "../../lib/keyboard";
 import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
@@ -84,7 +85,15 @@ const UsageDashboard = dynamic(
 const MODE_ACTIVATE_PATTERN = /^(?:hey\s+jarvis[,]?\s+)?(?:start|turn\s+on|activate|enable|open)\s+(.+?)\s+mode\s*$/i;
 const MODE_DEACTIVATE_PATTERN = /^(?:hey\s+jarvis[,]?\s+)?(?:stop|turn\s+off|deactivate|disable|exit|close)\s+(?:(.+?)\s+)?mode\s*$/i;
 
-export function ChatTab() {
+export function ChatTab({
+  externalComposerSeed,
+  onConsumeExternalComposerSeed,
+  highlightGitHubCard = false,
+}: {
+  externalComposerSeed?: { text: string; mode?: Mode } | null;
+  onConsumeExternalComposerSeed?: () => void;
+  highlightGitHubCard?: boolean;
+} = {}) {
   const {
     state,
     loaded,
@@ -327,6 +336,8 @@ export function ChatTab() {
     memoryNotes: activeWorkspace.settings.memoryNotes,
     setMemoryNotes,
   });
+
+  const { installedCount: mcpInstalledCount } = useMCPInstallations();
 
 
   useEffect(() => {
@@ -636,6 +647,23 @@ export function ChatTab() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeChat.messages.length, exportMarkdown]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const openAppsPanel = () => setAppsOpen(true);
+    window.addEventListener("assistantx:open-apps-panel", openAppsPanel);
+    return () => window.removeEventListener("assistantx:open-apps-panel", openAppsPanel);
+  }, []);
+
+  useEffect(() => {
+    if (!externalComposerSeed?.text) return;
+    const frameId = window.requestAnimationFrame(() => {
+      setWorkspaceMode(externalComposerSeed.mode ?? "chat");
+      setComposerText(externalComposerSeed.text);
+      onConsumeExternalComposerSeed?.();
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [externalComposerSeed, onConsumeExternalComposerSeed, setComposerText, setWorkspaceMode]);
+
   const exportJson = useCallback(() => {
     const blob = new Blob([JSON.stringify(activeChat, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -802,6 +830,7 @@ export function ChatTab() {
             onExportMarkdown={exportMarkdown}
             activeJarvisMode={activeJarvisMode}
             onDeactivateActionMode={() => setActiveActionMode(null)}
+            mcpToolCount={mcpInstalledCount}
           />
 
           <div className="min-h-0 flex-1 px-3 py-4 bg-background transition-colors duration-200">
@@ -1055,6 +1084,7 @@ export function ChatTab() {
           onCopyVsCodePrompt={() => void copyVsCodePrompt()}
           onDownloadVsCodeBundle={downloadVsCodeBundle}
           onSendGoogleContext={(context) => { setGoogleContext(context); }}
+          highlightGitHubCard={highlightGitHubCard}
         />
       ) : null}
 

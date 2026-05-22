@@ -46,8 +46,8 @@ Artifacts are written to `jarvis/desktop/dist/`:
 
 ## Update model (current)
 
-Jarvis Desktop uses `electron-updater` in `main.js` with a generic public feed
-configured in desktop `package.json` (`https://updates.assistantx.pl/stable`).
+Jarvis Desktop uses `electron-updater` in `main.js` with GitHub Releases provider
+configured in desktop `package.json` (`provider: github`, `private: true`).
 
 - Dev mode: updates are disabled.
 - Packaged mode: updater does a silent startup check and uses custom in-app update modals (no native updater dialogs).
@@ -85,6 +85,32 @@ Release assets are published via:
 This keeps provider keys server-side by default for routing, billing, moderation, and failover.
 
 Sidecar process (`ai-agent/main.py`) is spawned by `main.js` and renderer voice APIs are bridged through `sidecar-bridge.js` via preload exposure.
+
+### Local AI bootstrapping (Ollama + cloud fallback)
+
+- Desktop startup probes local Ollama health and exposes status in `desktop-health`.
+- If Ollama is unavailable, cloud fallback remains active.
+- Install local AI engine and required models:
+
+```bash
+cd jarvis/desktop
+npm run setup:local-ai
+```
+
+This runs:
+- `scripts/setup-env.ps1` (install/start Ollama)
+- `scripts/ensure-ollama-models.ps1` (pull `gemma4:e4b`, `qwen2.5-coder:14b`)
+
+### Optional local web search stack (SearXNG)
+
+Start a local SearXNG endpoint for sidecar web search tool support:
+
+```bash
+cd jarvis/desktop
+docker compose -f docker-compose.searxng.yml up -d
+```
+
+Endpoint used by sidecar: `http://127.0.0.1:8888/search?format=json`
 
 ## Embedded Python runtime (packaged Windows)
 

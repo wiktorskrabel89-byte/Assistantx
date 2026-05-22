@@ -9,6 +9,7 @@ Write-Host "----------------------------------------------" -ForegroundColor Cya
 # ── 1. Remove Startup shortcut ────────────────────────────────────────────
 $startupDir   = [Environment]::GetFolderPath("Startup")
 $shortcutPath = Join-Path $startupDir "Jarvis.lnk"
+$guardShortcutPath = Join-Path $startupDir "Jarvis Power Guard.lnk"
 
 if (Test-Path $shortcutPath) {
     try {
@@ -19,6 +20,17 @@ if (Test-Path $shortcutPath) {
     }
 } else {
     Write-Host "[INFO] No startup shortcut found at: $shortcutPath" -ForegroundColor Gray
+}
+
+if (Test-Path $guardShortcutPath) {
+    try {
+        Remove-Item -Path $guardShortcutPath -Force -ErrorAction Stop
+        Write-Host "[OK] Power Guard startup shortcut removed: $guardShortcutPath" -ForegroundColor Green
+    } catch {
+        Write-Host "[WARN] Could not remove Power Guard shortcut: $_" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[INFO] No Power Guard shortcut found at: $guardShortcutPath" -ForegroundColor Gray
 }
 
 Write-Host "----------------------------------------------" -ForegroundColor Cyan

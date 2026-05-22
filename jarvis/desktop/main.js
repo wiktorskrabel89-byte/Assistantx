@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
 const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
+const { createServerBridge } = require('./electron/server/bridge');
 const { getToken: getDeviceToken } = require('./auth');
 const {
   getAccountProfile,
@@ -11,7 +12,7 @@ const {
   setAccountSession,
   signOutAccountSession,
 } = require('./accounts');
-const { spawn } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const launcherService = require('./launcher/launch-service');
 const launcherDb = require('./launcher/db');
 const { createStartupDiagnostics } = require('./services/startup-diagnostics');
@@ -26,6 +27,11 @@ const { emitSessionChanged } = require('./electron/auth/events');
 const { redactUrl } = require('./electron/auth/redaction');
 const { bindAuthEvents } = require('./electron/auth/sync');
 const { generateOAuthState, parseAuthCallback, toSafeSessionView } = require('./electron/auth/validators');
+const { createGitHubClient } = require('./electron/tools/github');
+const { createGoogleClient } = require('./electron/tools/google');
+const appsTool = require('./electron/tools/apps');
+const { createMCPServerManager } = require('./electron/mcp/server-manager');
+const { createMCPToolRouter } = require('./electron/mcp/tool-router');
 const {
   buildMetadataSignatureUrl,
   classifyInstallerBlocker,
@@ -36,6 +42,8 @@ const {
   validateLatestFeedMetadata,
   verifyDetachedMetadataSignature,
 } = require('./electron/updater/feed-metadata');
+const { AIRouter } = require('./electron/ai/router');
+const { createLocalServerStore } = require('./electron/ai/local-server-store');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
 // Ensures the launcher SQLite database is initialised before any IPC handler
@@ -49,12 +57,23 @@ function ensureDbReady() {
 let sidecarProcess = null;
 let sidecarStatus = 'idle';
 let sidecarHeartbeatInFlight = false;
+let sidecarStdoutBuffer = '';
+let sidecarReady = false;
 const SIDECAR_PORT = process.env.JARVIS_SIDECAR_PORT || '8765';
 const SIDECAR_HEALTH_TIMEOUT_MS = Number(process.env.JARVIS_SIDECAR_HEALTH_TIMEOUT_MS || 5000);
 const SIDECAR_HEALTH_RETRIES = Math.max(1, Number(process.env.JARVIS_SIDECAR_HEALTH_RETRIES || 3));
 const startupDiagnostics = createStartupDiagnostics();
+const localServerStore = createLocalServerStore();
+const aiRouter = new AIRouter({
+  getLocalServerConfig: () => localServerStore.getRouterConfig(),
+});
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
+const serverBridge = createServerBridge();
+const githubClient = createGitHubClient({ app });
+const googleClient = createGoogleClient({ app });
+const mcpManager = createMCPServerManager({ googleClient, githubClient, app });
+const mcpRouter = createMCPToolRouter({ serverManager: mcpManager });
 
 const permissions = createPermissionPolicy({
   onAudit(entry) {
@@ -121,6 +140,10 @@ function getSidecarMainPath() {
     return path.join(process.resourcesPath, 'ai-agent', 'main.py');
   }
   return path.join(__dirname, '..', '..', 'ai-agent', 'main.py');
+}
+
+function getSetupScriptPath() {
+  return path.join(__dirname, 'scripts', 'setup-env.ps1');
 }
 
 function resolvePythonExecutable() {
@@ -267,6 +290,57 @@ function markSidecarListeningForHeartbeat() {
   });
 }
 
+function markSidecarReady(details = {}) {
+  if (sidecarReady || !sidecarProcess) return;
+  sidecarReady = true;
+  sidecarStatus = 'running';
+  startupDiagnostics.setComponent('sidecar', 'healthy', {
+    detail: 'AI runtime stdio bridge is ready.',
+    reason: 'stdio_ready',
+    details,
+    phase: 'healthy',
+  });
+  startupDiagnostics.setComponent('launcher', 'healthy', {
+    detail: 'Launcher initialized AI runtime successfully.',
+    reason: 'sidecar_ready',
+    details,
+    phase: 'healthy',
+  });
+  startupDiagnostics.pushEvent('sidecar', 'info', 'Sidecar stdio bridge is healthy.', details);
+  telemetryBus.publish('sidecar.running');
+  telemetryBus.publish('startup.healthy');
+  emitDesktopHealth();
+  sendToRenderer('sidecar-status', { status: sidecarStatus });
+}
+
+function handleSidecarStdoutLine(line) {
+  if (!line) return;
+  let payload = null;
+  try {
+    payload = JSON.parse(line);
+  } catch {
+    log(`[sidecar] ${line}`);
+    return;
+  }
+  markSidecarReady({ messageType: payload?.type || 'unknown' });
+  sendToRenderer('sidecar-message', payload);
+}
+
+function sendSidecarMessage(payload) {
+  if (!sidecarProcess?.stdin || sidecarProcess.killed) {
+    return { ok: false, error: 'sidecar-not-running' };
+  }
+  try {
+    sidecarProcess.stdin.write(`${JSON.stringify(payload)}\n`);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'sidecar-write-failed',
+    };
+  }
+}
+
 function startSidecar() {
   const mainPy = getSidecarMainPath();
   setLauncherPhase('validating-runtime', 'Validating AI runtime paths.');
@@ -329,38 +403,30 @@ function startSidecar() {
   telemetryBus.publish('startup.starting');
   emitDesktopHealth();
   sidecarHeartbeatInFlight = false;
-  const sidecarArgs = [mainPy];
+  sidecarReady = false;
+  sidecarStdoutBuffer = '';
+  const sidecarArgs = [mainPy, '--mode', 'stdio'];
   log('[sidecar] Launching sidecar:', python);
   log('[sidecar] Args:', sidecarArgs);
   sidecarProcess = spawn(python, sidecarArgs, {
     cwd: path.dirname(mainPy),
-    env: {
-      ...process.env,
-      JARVIS_SIDECAR_PORT: SIDECAR_PORT,
-    },
+    env: process.env,
     windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
 
   sidecarStatus = 'starting';
 
   sidecarProcess.stdout?.on('data', (data) => {
-    const line = data.toString().trim();
-    if (line) log(`[sidecar] ${line}`);
-    if (line.includes('listening on')) {
-      sidecarStatus = 'running';
-      markSidecarListeningForHeartbeat();
-    }
-    sendToRenderer('sidecar-status', { status: sidecarStatus });
+    sidecarStdoutBuffer += data.toString();
+    const lines = sidecarStdoutBuffer.split(/\r?\n/);
+    sidecarStdoutBuffer = lines.pop() ?? '';
+    lines.forEach(handleSidecarStdoutLine);
   });
 
   sidecarProcess.stderr?.on('data', (data) => {
     const line = data.toString().trim();
     if (line) console.error(`[sidecar:err] ${line}`);
-    if (line.includes('listening on')) {
-      sidecarStatus = 'running';
-      markSidecarListeningForHeartbeat();
-    }
     if (/reconnect|retry|re-?connect/i.test(line)) {
       telemetryBus.publish('sidecar.reconnect');
     }
@@ -371,6 +437,8 @@ function startSidecar() {
     log(`[sidecar] process exited: code=${code} signal=${signal}`);
     sidecarProcess = null;
     sidecarHeartbeatInFlight = false;
+    sidecarReady = false;
+    sidecarStdoutBuffer = '';
     sidecarStatus = 'stopped';
     startupDiagnostics.setComponent('sidecar', code && code !== 0 ? 'crashed' : 'stopped', {
       detail: `AI runtime stopped (code=${code} signal=${signal}).`,
@@ -395,6 +463,7 @@ function startSidecar() {
     console.error('[sidecar] spawn error:', err.message);
     sidecarStatus = 'error';
     sidecarHeartbeatInFlight = false;
+    sidecarReady = false;
     startupDiagnostics.setComponent('sidecar', 'unavailable', {
       detail: `AI runtime spawn error: ${err.message}`,
       reason: 'spawn_error',
@@ -426,6 +495,8 @@ function stopSidecar() {
   }
   sidecarStatus = 'stopped';
   sidecarHeartbeatInFlight = false;
+  sidecarReady = false;
+  sidecarStdoutBuffer = '';
   startupDiagnostics.setComponent('sidecar', 'stopped', {
     detail: 'AI runtime stopped by desktop runtime.',
     reason: 'manual_stop',
@@ -467,6 +538,123 @@ function sendToRenderer(channel, payload) {
 
 function emitDesktopHealth() {
   sendToRenderer('desktop-health', startupDiagnostics.snapshot());
+}
+
+async function probeOllamaAvailability(source = 'startup') {
+  try {
+    const availability = await aiRouter.getAvailability();
+    const status = availability.ollama_available ? 'healthy' : (availability.ollama_healthy ? 'degraded' : 'unavailable');
+    const missingModels = Array.isArray(availability.missing_models) ? availability.missing_models : [];
+    const cloudProviders = availability?.cloud?.providers || {};
+    const readyCloudProviders = Object.entries(cloudProviders)
+      .filter(([, entry]) => Boolean(entry?.ready))
+      .map(([name]) => name);
+    startupDiagnostics.setComponent('ollama', status, {
+      detail: availability.ollama_available
+        ? 'Ollama server is reachable.'
+        : availability.ollama_healthy
+          ? `Ollama reachable, but missing required models: ${missingModels.join(', ') || 'unknown'}.`
+          : 'Ollama server is not reachable. Cloud fallback remains active.',
+      reason: availability.ollama_available
+        ? 'reachable'
+        : availability.ollama_healthy ? 'missing_required_models' : 'unreachable',
+      phase: 'probed',
+      details: {
+        source,
+        mode: availability.mode,
+        missingModels,
+        requiredModels: availability.required_models || [],
+        readyCloudProviders,
+      },
+    });
+    startupDiagnostics.pushEvent(
+      'ollama',
+      availability.ollama_available ? 'info' : (availability.ollama_healthy ? 'warn' : 'warn'),
+      availability.ollama_available
+        ? 'Local Ollama runtime detected.'
+        : availability.ollama_healthy
+          ? 'Local Ollama reachable but required models are missing; using cloud fallback.'
+          : 'Local Ollama runtime unavailable; using cloud fallback.',
+      {
+        source,
+        mode: availability.mode,
+        missingModels,
+        readyCloudProviders,
+      },
+    );
+    emitDesktopHealth();
+    return availability;
+  } catch (error) {
+    startupDiagnostics.setComponent('ollama', 'unavailable', {
+      detail: `Ollama probe failed: ${String(error?.message || error)}`,
+      reason: 'probe_failed',
+      phase: 'probed',
+      details: { source },
+    });
+    startupDiagnostics.pushEvent('ollama', 'warn', 'Ollama probe failed.', {
+      source,
+      error: String(error?.message || error),
+    });
+    emitDesktopHealth();
+    return { ollama_available: false, mode: 'cloud-fallback' };
+  }
+}
+
+async function installLocalAiEngine() {
+  const scriptPath = getSetupScriptPath();
+  if (!fs.existsSync(scriptPath)) {
+    return { success: false, error: `Setup script missing: ${scriptPath}` };
+  }
+  return new Promise((resolve) => {
+    execFile(
+      'powershell.exe',
+      ['-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+      { windowsHide: true },
+      async (error, stdout, stderr) => {
+        if (error) {
+          startupDiagnostics.pushEvent('ollama', 'error', 'Local AI setup script failed.', {
+            message: String(error?.message || error),
+            stderr: String(stderr || ''),
+          });
+          emitDesktopHealth();
+          resolve({
+            success: false,
+            error: String(stderr || error?.message || 'setup-failed'),
+            stdout: String(stdout || ''),
+          });
+          return;
+        }
+        const availability = await probeOllamaAvailability('post-install');
+        resolve({
+          success: true,
+          stdout: String(stdout || ''),
+          availability,
+        });
+      },
+    );
+  });
+}
+
+async function routeAiRequest(payload = {}) {
+  const request = payload && typeof payload === 'object' ? payload : {};
+  const response = await aiRouter.routeRequest({
+    message: request.message || '',
+    messages: Array.isArray(request.messages) ? request.messages : undefined,
+    profile: request.profile,
+    contextType: request.contextType,
+    contextSize: request.contextSize,
+    retryCount: request.retryCount,
+    options: request.options,
+  });
+  return {
+    ok: true,
+    text: String(response?.text || ''),
+    provider: response?.provider || response?.route?.provider || 'unknown',
+    model: response?.model || response?.route?.model || 'unknown',
+    route: response?.route || null,
+    profile: response?.profile || null,
+    availability: response?.availability || null,
+  };
 }
 
 function allowWindowCloseForQuit() {
@@ -708,6 +896,18 @@ function getUpdateState() {
   return updateState;
 }
 
+function getUpdaterAuthStatus() {
+  return ensureUpdateCoordinator().getPrivateTokenStatus();
+}
+
+function setUpdaterPrivateToken(token) {
+  return ensureUpdateCoordinator().setPrivateToken(token);
+}
+
+function clearUpdaterPrivateToken() {
+  return ensureUpdateCoordinator().clearPrivateToken();
+}
+
 function setupAutoUpdater() {
   ensureUpdateCoordinator().setup();
 }
@@ -727,6 +927,10 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 560,
+    frame: false,
+    transparent: true,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    backgroundColor: '#00000000',
     title: 'Jarvis Desktop',
     webPreferences: buildSecureWebPreferences({ preload: path.join(__dirname, 'preload.js') }),
   });
@@ -897,6 +1101,10 @@ createMainIpcHandlers({
   launcherService,
   ensureDbReady,
   getSidecarStatus,
+  sendSidecarMessage,
+  checkLocalAiAvailability: () => probeOllamaAvailability('ipc-check'),
+  routeAiRequest,
+  installLocalAiEngine,
   restartSidecar: restartSidecarNow,
   startupDiagnostics,
   getLocalTelemetrySnapshot,
@@ -905,6 +1113,9 @@ createMainIpcHandlers({
   installUpdate,
   deferUpdate,
   getUpdateState,
+  getUpdaterAuthStatus,
+  setUpdaterPrivateToken,
+  clearUpdaterPrivateToken,
   getJarvisWebUrl,
   setJarvisWebUrl,
   telemetryBus,
@@ -915,6 +1126,24 @@ createMainIpcHandlers({
   signOutAccountSession: async (meta) => signOutAccountSession(meta),
   getAccountProfile: async () => getAccountProfile(),
   beginDesktopLogin,
+  serverGetAuthStatus: () => serverBridge.getAuthStatus(),
+  serverClearAuth: () => serverBridge.clearAuth(),
+  serverVerifyPairing: (syncKey) => serverBridge.verifyPairing(syncKey),
+  serverGetRuntimeStatus: () => serverBridge.getRuntimeStatus(),
+  serverSetPermissionLevel: (level, fullControlConsent) => serverBridge.setPermissionLevel(level, fullControlConsent),
+  serverKillSwitch: () => serverBridge.killSwitch(),
+  serverGetConfig: () => serverBridge.getConfig(),
+  serverSetConfig: (payload) => serverBridge.setConfig(payload),
+  localServerList: () => localServerStore.list(),
+  localServerAdd: (payload) => localServerStore.add(payload),
+  localServerUpdate: (serverId, patch) => localServerStore.update(serverId, patch),
+  localServerRemove: (serverId) => localServerStore.remove(serverId),
+  localServerScan: (serverId) => localServerStore.scan(serverId),
+  localServerGetAssignment: () => localServerStore.getAssignment(),
+  localServerSetAssignment: (patch) => localServerStore.setAssignment(patch),
+  githubClient,
+  googleClient,
+  appsTool,
   getMainWindow: () => win,
   getOverlayWindow: () => overlayWin,
   createLauncherOverlayWindow,
@@ -923,6 +1152,8 @@ createMainIpcHandlers({
   pendingLauncherConfirmations,
   permissions,
   securityAudit,
+  mcpManager,
+  mcpRouter,
 });
 
 module.exports = {
@@ -931,6 +1162,9 @@ module.exports = {
   installUpdate,
   deferUpdate,
   getUpdateState,
+  getUpdaterAuthStatus,
+  setUpdaterPrivateToken,
+  clearUpdaterPrivateToken,
   getAutoUpdater,
   setupAutoUpdater,
   emitUpdateStatus,
@@ -953,8 +1187,38 @@ app.on('second-instance', (_event, argv) => {
   }
 });
 
+let shutdownPresenceSyncInFlight = null;
+async function syncShutdownPresence() {
+  if (shutdownPresenceSyncInFlight) return shutdownPresenceSyncInFlight;
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
+  const supabaseKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '').trim();
+  const deviceId = String(process.env.JARVIS_DEVICE_ID || '').trim();
+  if (!supabaseUrl || !supabaseKey || !deviceId) return null;
+  shutdownPresenceSyncInFlight = fetch(`${supabaseUrl}/rest/v1/device_presence?device_id=eq.${encodeURIComponent(deviceId)}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      status: 'offline',
+      is_online: false,
+      updated_at: new Date().toISOString(),
+      last_heartbeat_at: new Date().toISOString(),
+    }),
+  }).catch(() => null);
+  return shutdownPresenceSyncInFlight;
+}
+
+app.on('session-end', () => {
+  void syncShutdownPresence();
+});
+
 app.on('before-quit', () => {
   app.isQuitting = true;
+  void syncShutdownPresence();
 });
 
 nativeAutoUpdater?.on?.('before-quit-for-update', () => {
@@ -994,6 +1258,7 @@ app.whenReady().then(async () => {
   emitDesktopHealth();
   await restoreAuthSession();
   startSilentRefreshLoop();
+  await probeOllamaAvailability('startup');
   startSidecar();
   createWindow();
   createLauncherOverlayWindow();

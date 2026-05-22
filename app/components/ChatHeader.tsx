@@ -24,6 +24,8 @@ type ChatHeaderProps = {
   onExportMarkdown: () => void;
   activeJarvisMode?: ActionMode | null;
   onDeactivateActionMode?: () => void;
+  /** Number of active (installed) MCP servers for the badge */
+  mcpToolCount?: number;
 };
 
 export function ChatHeader({
@@ -44,6 +46,7 @@ export function ChatHeader({
   onExportMarkdown,
   activeJarvisMode,
   onDeactivateActionMode,
+  mcpToolCount = 0,
 }: ChatHeaderProps) {
   const iconBtnCn = "hidden h-10 w-10 border-border bg-background text-foreground/85 hover:bg-accent hover:text-foreground lg:flex";
 
@@ -78,6 +81,14 @@ export function ChatHeader({
                 <span className="hidden sm:inline">{activeJarvisMode.name}</span>
                 <X className="h-2.5 w-2.5 opacity-70" />
               </button>
+            )}
+            {mcpToolCount > 0 && (
+              <span
+                title={`${mcpToolCount} MCP server${mcpToolCount === 1 ? "" : "s"} active`}
+                className="ml-1 hidden items-center gap-1 rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800 sm:flex dark:border-violet-700 dark:bg-violet-950/60 dark:text-violet-300"
+              >
+                🔌 {mcpToolCount} MCP
+              </span>
             )}
           </div>
 

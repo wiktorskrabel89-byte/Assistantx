@@ -3,14 +3,227 @@ import { runAgentTask } from "@/src/agents/runtime/coordinator";
 import { runVerifier } from "@/src/agents/runtime/verifier";
 import { createEventBus } from "@/src/core/events/event-bus";
 import { RUNTIME_EVENT_TYPES } from "@/src/core/events/types";
+import { memoryService } from "@/src/memory/service/memory-service";
 import type {
   RuntimeExecutionRequest,
   RuntimeExecutionResult,
 } from "@/src/core/types/runtime";
 import { ToolRouter } from "@/src/tools/router/router";
+import { APP_FORCED_MODEL_ID, ROUTING_GEMINI_MODEL } from "@/lib/ai-config";
+import { executeSandboxCode, type SandboxExecutionLanguage } from "@/src/backend/runtime/sandbox-executor";
 
 function createExecutionId() {
   return randomUUID();
+}
+
+function getReflectionMaxIterations() {
+  const value = Number(process.env.REFLECTION_MAX_ITERATIONS ?? 3);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 3;
+}
+
+function getReflectionTokenBudget() {
+  const value = Number(process.env.REFLECTION_TOKEN_BUDGET ?? 32_000);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 32_000;
+}
+
+function estimateTokenUsage(value: unknown) {
+  return Math.ceil(JSON.stringify(value ?? {}).length / 4);
+}
+
+function isCodingWorkflow(request: RuntimeExecutionRequest) {
+  return request.workflow === "sandbox_execute"
+    || request.workflow === "pr_review"
+    || request.workflow.toLowerCase().includes("code")
+    || request.workflow.toLowerCase().includes("refactor");
+}
+
+function getGitHubRuntimeToken() {
+  return process.env.GITHUB_WEBHOOK_GITHUB_TOKEN
+    || process.env.GITHUB_TOKEN
+    || null;
+}
+
+function assertValidGitHubRepo(repo: string) {
+  if (!/^[\w.\-]+\/[\w.\-]+$/.test(repo)) {
+    throw new Error("Invalid GitHub repository format.");
+  }
+}
+
+function getGitHubRepoParts(repo: string) {
+  assertValidGitHubRepo(repo);
+  const [owner, name] = repo.split("/");
+  return { owner, name };
+}
+
+function buildGitHubApiUrl(repo: string, pathSuffix: string) {
+  const { owner, name } = getGitHubRepoParts(repo);
+  const url = new URL(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/${pathSuffix}`);
+  return url.toString();
+}
+
+async function fetchPullRequestDiff(repo: string, pullNumber: number, diffUrl?: string) {
+  const token = getGitHubRuntimeToken();
+  if (diffUrl) {
+    const parsed = new URL(diffUrl);
+    if (!new Set(["github.com", "api.github.com"]).has(parsed.hostname)) {
+      throw new Error("Pull request diff URL must point to GitHub.");
+    }
+  }
+  const url = buildGitHubApiUrl(repo, `pulls/${pullNumber}`);
+  const response = await fetch(url, {
+    headers: {
+      Accept: diffUrl ? "application/vnd.github.v3.diff" : "application/vnd.github.v3.diff",
+      "User-Agent": "AssistantX",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch pull request diff (${response.status}).`);
+  }
+  return response.text();
+}
+
+async function generatePrReview(diff: string, repo: string, pullNumber: number, headSha: string) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  const userPrompt = [
+    `Repository: ${repo}`,
+    `Pull request: #${pullNumber}`,
+    `Head SHA: ${headSha}`,
+    "Review the following GitHub pull request diff.",
+    "Return concise markdown with these sections only:",
+    "1. Summary",
+    "2. Risks",
+    "3. Suggested follow-ups",
+    "",
+    diff.slice(0, 20000),
+  ].join("\n");
+
+  if (!apiKey) {
+    return [
+      "## Summary",
+      `Automated PR review fallback for ${repo}#${pullNumber}.`,
+      "",
+      "## Risks",
+      "- OpenRouter is not configured, so this review used a non-LLM fallback.",
+      `- Diff length: ${diff.length} characters.`,
+      "",
+      "## Suggested follow-ups",
+      "- Re-run the PR review after OPENROUTER_API_KEY is configured.",
+    ].join("\n");
+  }
+
+  const models = [APP_FORCED_MODEL_ID, ROUTING_GEMINI_MODEL];
+  let lastError: string | null = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          top_p: 1,
+          messages: [
+            {
+              role: "system",
+              content: "You are a careful code reviewer. Focus on correctness, security, regressions, and maintainability. Keep the review concise and actionable.",
+            },
+            {
+              role: "user",
+              content: userPrompt,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Model ${model} failed: ${text}`);
+      }
+
+      const payload = await response.json() as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = payload.choices?.[0]?.message?.content?.trim();
+      if (content) return content;
+      throw new Error(`Model ${model} returned an empty review.`);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : `Model ${model} failed.`;
+    }
+  }
+
+  throw new Error(lastError ?? "PR review generation failed.");
+}
+
+async function maybePersistPrReviewArtifacts({
+  userId,
+  repo,
+  pullNumber,
+  review,
+}: {
+  userId: string | null;
+  repo: string;
+  pullNumber: number;
+  review: string;
+}) {
+  if (!userId) return;
+
+  await memoryService.write({
+    userId,
+    layer: "episodic",
+    content: `PR review for ${repo}#${pullNumber}\n\n${review}`,
+    tags: ["pr_review", repo, `pr:${pullNumber}`],
+  }).catch(() => undefined);
+
+  try {
+    const { createClient } = await import("@/lib/server");
+    const supabase = await createClient();
+    await supabase.from("notifications").insert({
+      user_id: userId,
+      kind: "info",
+      title: `PR review ready for ${repo}#${pullNumber}`,
+      body: review.slice(0, 8000),
+    });
+  } catch {
+    // best-effort notification insert
+  }
+}
+
+async function maybePublishGitHubPrComment({
+  repo,
+  pullNumber,
+  review,
+  enabled,
+}: {
+  repo: string;
+  pullNumber: number;
+  review: string;
+  enabled: boolean;
+}) {
+  if (!enabled) return false;
+  const token = getGitHubRuntimeToken();
+  if (!token) return false;
+
+  const response = await fetch(buildGitHubApiUrl(repo, `pulls/${pullNumber}/reviews`), {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "AssistantX",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({
+      event: "COMMENT",
+      body: review.slice(0, 65000),
+    }),
+  });
+
+  return response.ok;
 }
 
 export async function executeRuntimeRequest(
@@ -93,48 +306,165 @@ export async function executeRuntimeRequest(
   let finalError: string | null = null;
 
   try {
-    const agent = await runAgentTask({
-      id: `${executionId}:coordinator`,
-      role: "coordinator",
-      goal: request.workflow,
-      input: request.input,
-    });
+    if (request.workflow === "sandbox_execute") {
+      const language = request.input.language;
+      const code = request.input.code;
+      const supportedLanguages: SandboxExecutionLanguage[] = ["python", "bash", "sql", "typescript"];
+      if (typeof language !== "string" || !supportedLanguages.includes(language as SandboxExecutionLanguage)) {
+        throw new Error("sandbox_execute requires a supported language: python, bash, sql, or typescript.");
+      }
+      if (typeof code !== "string") {
+        throw new Error("sandbox_execute requires code.");
+      }
 
-    const toolResult = await toolRouter.execute(
-      {
-        toolId: "memory.read",
+      const result = await executeSandboxCode({
+        language: language as SandboxExecutionLanguage,
+        code,
+        timeoutMs: 10_000,
+      });
+
+      finalOutput = {
+        workflow: request.workflow,
+        ...result,
+      };
+    } else if (request.workflow === "pr_review") {
+      const repo = typeof request.input.repo === "string" ? request.input.repo : "";
+      const pullNumber = typeof request.input.pullNumber === "number" ? request.input.pullNumber : Number(request.input.pullNumber ?? 0);
+      const headSha = typeof request.input.headSha === "string" ? request.input.headSha : "";
+      const diffUrl = typeof request.input.diffUrl === "string" ? request.input.diffUrl : undefined;
+      const postGitHubComment = request.input.postGitHubComment === true;
+
+      if (!repo || !pullNumber || !headSha) {
+        throw new Error("pr_review requires repo, pullNumber, and headSha.");
+      }
+
+      const diff = await fetchPullRequestDiff(repo, pullNumber, diffUrl);
+      const review = await generatePrReview(diff, repo, pullNumber, headSha);
+      const publishedToGitHub = await maybePublishGitHubPrComment({
+        repo,
+        pullNumber,
+        review,
+        enabled: postGitHubComment,
+      });
+
+      await maybePersistPrReviewArtifacts({
+        userId: request.actor.userId,
+        repo,
+        pullNumber,
+        review,
+      });
+
+      finalOutput = {
+        workflow: request.workflow,
+        review,
+        repo,
+        pullNumber,
+        headSha,
+        publishedToGitHub,
+      };
+    } else {
+      const primaryRole = isCodingWorkflow(request) ? "coder" : "coordinator";
+      const reflectionMaxIterations = getReflectionMaxIterations();
+      const reflectionTokenBudget = getReflectionTokenBudget();
+      const fallbackModelChain = [ROUTING_GEMINI_MODEL, "deepseek/deepseek-r1"];
+      let consumedTokens = 0;
+      let attempt = 0;
+      let lastVerification: Awaited<ReturnType<typeof runVerifier>> | null = null;
+      let agent = await runAgentTask({
+        id: `${executionId}:${primaryRole}:0`,
+        role: primaryRole,
+        goal: request.workflow,
         input: request.input,
-      },
-      {
-        executionId,
-        workflowId: request.workflow,
-        actor: request.actor,
-        metadata: { source: "runtime-facade" },
-      },
-    );
+      });
+      consumedTokens += estimateTokenUsage(agent.output);
 
-    // Run the verifier gate on the coordinator output.
-    const verifierTask = {
-      id: `${executionId}:verifier`,
-      role: "verifier" as const,
-      goal: request.workflow,
-      input: agent.output,
-    };
-    const verification = await runVerifier(verifierTask, agent.output);
+      while (isCodingWorkflow(request)) {
+        const verifierTask = {
+          id: `${executionId}:verifier:${attempt}`,
+          role: "verifier" as const,
+          goal: request.workflow,
+          input: agent.output,
+        };
+        lastVerification = await runVerifier(verifierTask, agent.output);
+        consumedTokens += estimateTokenUsage(lastVerification.output);
 
-    finalOutput = {
-      workflow: request.workflow,
-      agent,
-      toolResult,
-      verification: {
-        safe: verification.safe,
-        reasons: verification.reasons,
-      },
-    };
+        if (lastVerification.safe) break;
+        if (attempt + 1 >= reflectionMaxIterations) break;
+        if (consumedTokens >= reflectionTokenBudget) {
+          await eventBus.publish({
+            type: RUNTIME_EVENT_TYPES.BUDGET_EXHAUSTED,
+            timestamp: new Date().toISOString(),
+            actorUserId: request.actor.userId,
+            organizationId: request.actor.organizationId,
+            executionId,
+            payload: {
+              workflow: request.workflow,
+              consumedTokens,
+              budget: reflectionTokenBudget,
+              fallbackModel: fallbackModelChain[0],
+              fallbackModelChain,
+            },
+          });
+          break;
+        }
 
-    if (!verification.safe) {
-      finalStatus = "failed";
-      finalError = `Verifier rejected output: ${verification.reasons.join("; ")}`;
+        attempt += 1;
+        agent = await runAgentTask({
+          id: `${executionId}:${primaryRole}:${attempt}`,
+          role: primaryRole,
+          goal: request.workflow,
+          input: {
+            ...request.input,
+            reflectionAttempt: attempt,
+            verifierReasons: lastVerification.reasons,
+            fallbackModel: fallbackModelChain[0],
+            fallbackModelChain,
+          },
+        });
+        consumedTokens += estimateTokenUsage(agent.output);
+      }
+
+      const toolResult = await toolRouter.execute(
+        {
+          toolId: "memory.read",
+          input: request.input,
+        },
+        {
+          executionId,
+          workflowId: request.workflow,
+          actor: request.actor,
+          metadata: { source: "runtime-facade" },
+        },
+      );
+
+      const verification = lastVerification ?? await runVerifier({
+        id: `${executionId}:verifier`,
+        role: "verifier" as const,
+        goal: request.workflow,
+        input: agent.output,
+      }, agent.output);
+
+      finalOutput = {
+        workflow: request.workflow,
+        agent,
+        toolResult,
+        verification: {
+          safe: verification.safe,
+          reasons: verification.reasons,
+        },
+        reflection: {
+          attempts: attempt + 1,
+          tokenBudget: reflectionTokenBudget,
+          consumedTokens,
+          usedFallbackModel: consumedTokens >= reflectionTokenBudget ? fallbackModelChain[0] : null,
+          fallbackModelChain,
+        },
+      };
+
+      if (!verification.safe) {
+        finalStatus = "failed";
+        finalError = `Verifier rejected output: ${verification.reasons.join("; ")}`;
+      }
     }
   } catch (err) {
     finalStatus = "failed";
