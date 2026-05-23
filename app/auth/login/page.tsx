@@ -121,6 +121,7 @@ export default function LoginPage() {
       redirectTo: sanitizeDesktopRedirect(params.get("redirect_to")),
     };
   });
+  const isDesktopLoginFlow = redirectContext.client === "jarvis-desktop" && Boolean(redirectContext.redirectTo);
   const [initialLocationError] = useState(() => {
     if (typeof window === "undefined") return "";
     return readOAuthErrorFromLocation(getPendingOAuthProvider());
@@ -207,11 +208,11 @@ export default function LoginPage() {
 
   function buildAuthCallbackUrl() {
     const redirectTo = new URL("/auth/callback", window.location.origin);
-    if (redirectContext.client) redirectTo.searchParams.set("client", redirectContext.client);
+    if (isDesktopLoginFlow) redirectTo.searchParams.set("client", "jarvis-desktop");
     const safeRedirectPath = sanitizeRedirectPath(redirectContext.next);
     if (safeRedirectPath !== "/") redirectTo.searchParams.set("next", safeRedirectPath);
-    if (redirectContext.state) redirectTo.searchParams.set("desktop_state", redirectContext.state);
-    if (redirectContext.redirectTo) redirectTo.searchParams.set("redirect_to", redirectContext.redirectTo);
+    if (isDesktopLoginFlow && redirectContext.state) redirectTo.searchParams.set("desktop_state", redirectContext.state);
+    if (isDesktopLoginFlow && redirectContext.redirectTo) redirectTo.searchParams.set("redirect_to", redirectContext.redirectTo);
     return redirectTo.toString();
   }
 
@@ -364,7 +365,7 @@ export default function LoginPage() {
       }
 
       if (
-        redirectContext.client === "jarvis-desktop"
+        isDesktopLoginFlow
         && handoffJarvisDesktopSession({
           access_token: data.session?.access_token ?? null,
           refresh_token: data.session?.refresh_token ?? null,
