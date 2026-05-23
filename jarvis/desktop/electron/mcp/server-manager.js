@@ -212,7 +212,6 @@ function createMCPServerManager({ googleClient, githubClient, app }) {
         command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
         args = ['--yes', component.package];
       }
-      // eslint-disable-next-line no-await-in-loop
       const env = await buildEnv('google-suite');
       const proc = createMCPServerProcess({ serverId: component.id, command, args, env });
       proc.on('log', (entry) => {

@@ -161,6 +161,20 @@ export async function executeWakeChain(params: {
     }
   }
 
+  if (candidate.ipv6 && candidate.macAddress) {
+    const ipv6Attempt = await attemptIpv6Magic(candidate);
+    attempts.push(ipv6Attempt);
+    if (ipv6Attempt.ok) {
+      return {
+        ok: true,
+        method: "ipv6_magic_packet",
+        mode: resolveWakeMode("ipv6_magic_packet"),
+        nextAction: "wait_for_presence",
+        attempts,
+      };
+    }
+  }
+
   if (candidate.macAddress) {
     const lanAttempt = await attemptLanBroadcast(candidate, params.broadcastAddress ?? undefined);
     attempts.push(lanAttempt);

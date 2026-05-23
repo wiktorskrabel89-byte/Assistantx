@@ -29,9 +29,7 @@ import {
 // Install with: npm install @react-native-voice/voice react-native-tts
 let Voice = null;
 let Tts = null;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 try { Voice = require('@react-native-voice/voice').default; } catch { /* not installed */ }
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 try { Tts = require('react-native-tts').default; } catch { /* not installed */ }
 
 const QUICK_ACTIONS_KEY = 'jarvis-quick-actions-v1';

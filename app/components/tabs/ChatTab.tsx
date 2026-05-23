@@ -238,7 +238,9 @@ export function ChatTab({
   const isFreePlan = state.userPlan === "free";
   const isProPlan = state.userPlan === "pro";
   const isProPlusPlan = state.userPlan === "pro+";
-  const cloudQuotaRemaining = cloudQuota ? Math.max(cloudQuota.maxPerDay - cloudQuota.usesToday, 0) : null;
+  const cloudQuotaEnabled = authReady && activeWorkspace.settings.multiAgentBeta && isProPlan;
+  const activeCloudQuota = cloudQuotaEnabled ? cloudQuota : null;
+  const cloudQuotaRemaining = activeCloudQuota ? Math.max(activeCloudQuota.maxPerDay - activeCloudQuota.usesToday, 0) : null;
   const activePipelineAgent = ((): AgentName | null => {
     const current = latestEntry?.agentLoopStatus;
     if (!current) return null;
@@ -280,10 +282,7 @@ export function ChatTab({
   const { hasTrustedOnlineDesktop } = useJarvisDeviceStatus();
 
   useEffect(() => {
-    if (!authReady || !activeWorkspace.settings.multiAgentBeta || !isProPlan) {
-      setCloudQuota(null);
-      return;
-    }
+    if (!cloudQuotaEnabled) return;
     const supabase = createClient();
     let cancelled = false;
     void supabase.auth.getUser()
@@ -309,7 +308,7 @@ export function ChatTab({
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspace.settings.multiAgentBeta, authReady, isProPlan, latestEntry?.agentAttempt, latestEntry?.status]);
+  }, [cloudQuotaEnabled, latestEntry?.agentAttempt, latestEntry?.status]);
 
   // Check if a composer message is a mode activation voice command.
   // If so, run the mode steps and swallow the message (don't send to AI).
@@ -1059,7 +1058,7 @@ export function ChatTab({
                   score: latestEntry?.criticScore ?? null,
                   attempt: latestEntry?.agentAttempt,
                   quotaRemaining: latestEntry?.quotaRemaining ?? cloudQuotaRemaining ?? null,
-                  quotaMax: latestEntry?.quotaMax ?? cloudQuota?.maxPerDay ?? null,
+                  quotaMax: latestEntry?.quotaMax ?? activeCloudQuota?.maxPerDay ?? null,
                   tokenEstimateK: latestEntry?.tokenEstimateK ?? null,
                 } : null}
               />

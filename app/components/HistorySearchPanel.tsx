@@ -30,7 +30,13 @@ const TYPE_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 function renderPreview(text: string) {
-  return text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
 
 export function HistorySearchPanel({
@@ -52,6 +58,11 @@ export function HistorySearchPanel({
   const [unavailable, setUnavailable] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebounce(query, 350);
+  const hasQuery = Boolean(debouncedQuery.trim());
+  const visibleHits = hasQuery ? hits : [];
+  const visibleLoading = hasQuery && loading;
+  const visibleError = hasQuery ? error : null;
+  const visibleUnavailable = hasQuery && unavailable;
 
   useEffect(() => {
     if (open) {
@@ -69,36 +80,36 @@ export function HistorySearchPanel({
   }, [onClose, open]);
 
   useEffect(() => {
-    if (!debouncedQuery.trim()) {
-      setHits([]);
-      setError(null);
-      return;
-    }
+    if (!debouncedQuery.trim()) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    const searchId = window.setTimeout(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
 
-    const params = new URLSearchParams({ q: debouncedQuery, type: typeFilter });
-    fetch(`/api/history/search?${params.toString()}`)
-      .then((res) => res.json())
-      .then((data: { hits: SearchHit[]; available: boolean; error?: string }) => {
-        if (cancelled) return;
-        if (!data.available) {
-          setUnavailable(true);
-          setHits([]);
-          return;
-        }
-        setHits(data.hits ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setError("Search failed. Try again.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      const params = new URLSearchParams({ q: debouncedQuery, type: typeFilter });
+      fetch(`/api/history/search?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data: { hits: SearchHit[]; available: boolean; error?: string }) => {
+          if (cancelled) return;
+          if (!data.available) {
+            setUnavailable(true);
+            setHits([]);
+            return;
+          }
+          setHits(data.hits ?? []);
+        })
+        .catch(() => {
+          if (!cancelled) setError("Search failed. Try again.");
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 0);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(searchId);
     };
   }, [debouncedQuery, typeFilter]);
 
@@ -162,38 +173,38 @@ export function HistorySearchPanel({
               {opt.label}
             </button>
           ))}
-          {!unavailable && !loading && hits.length > 0 && (
+          {!visibleUnavailable && !visibleLoading && visibleHits.length > 0 && (
             <span className={cn("ml-auto text-xs self-center", dark ? "text-slate-500" : "text-slate-400")}>
-              {hits.length} result{hits.length !== 1 ? "s" : ""}
+              {visibleHits.length} result{visibleHits.length !== 1 ? "s" : ""}
             </span>
           )}
         </div>
 
         {/* Results */}
         <div className="flex-1 overflow-y-auto">
-          {unavailable && (
+          {visibleUnavailable && (
             <div className="px-4 py-6 text-center text-sm text-slate-400">
               History search is not available (Supabase not configured).
             </div>
           )}
-          {error && (
-            <div className="px-4 py-6 text-center text-sm text-red-400">{error}</div>
+          {visibleError && (
+            <div className="px-4 py-6 text-center text-sm text-red-400">{visibleError}</div>
           )}
-          {!unavailable && !error && loading && (
+          {!visibleUnavailable && !visibleError && visibleLoading && (
             <div className="px-4 py-6 text-center text-sm text-slate-400">Searching…</div>
           )}
-          {!unavailable && !error && !loading && debouncedQuery && hits.length === 0 && (
+          {!visibleUnavailable && !visibleError && !visibleLoading && hasQuery && visibleHits.length === 0 && (
             <div className="px-4 py-6 text-center text-sm text-slate-400">
               No results for <strong>&ldquo;{debouncedQuery}&rdquo;</strong>
             </div>
           )}
-          {!unavailable && !error && !debouncedQuery && (
+          {!visibleUnavailable && !visibleError && !hasQuery && (
             <div className="flex flex-col items-center gap-2 px-4 py-8 text-center text-sm text-slate-400">
               <Command className="h-8 w-8 opacity-30" />
               <span>Type to search across chats, commands, and notifications.</span>
             </div>
           )}
-          {hits.map((hit, i) => (
+          {visibleHits.map((hit, i) => (
             <div
               key={`${hit.id}-${i}`}
               role={hit.type === "chat" && onJumpToChat ? "button" : "listitem"}
@@ -206,13 +217,11 @@ export function HistorySearchPanel({
               <div className="min-w-0 flex-1">
                 <div
                   className="text-sm font-medium leading-snug"
-                  // eslint-disable-next-line react/no-danger
                   dangerouslySetInnerHTML={{ __html: renderPreview(hit.title) }}
                 />
                 {hit.preview && (
                   <div
                     className={cn("mt-0.5 text-xs leading-relaxed line-clamp-2", dark ? "text-slate-400" : "text-slate-500")}
-                    // eslint-disable-next-line react/no-danger
                     dangerouslySetInnerHTML={{ __html: renderPreview(hit.preview) }}
                   />
                 )}

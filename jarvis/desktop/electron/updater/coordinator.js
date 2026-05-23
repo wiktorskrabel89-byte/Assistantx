@@ -565,6 +565,30 @@ class UpdateCoordinator {
     return publish.provider === 'github' && publish.private === true;
   }
 
+  getEnvPrivateToken() {
+    return String(process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '').trim();
+  }
+
+  buildPrivateGithubFeedOptions(token) {
+    const publish = this.getPublishConfig();
+    return {
+      provider: 'github',
+      owner: publish.owner,
+      repo: publish.repo,
+      private: true,
+      token,
+    };
+  }
+
+  applyPrivateGithubToken(autoUpdater, token) {
+    if (!autoUpdater || !this.isPrivateGithubProvider() || !token) return;
+    autoUpdater.setFeedURL(this.buildPrivateGithubFeedOptions(token));
+    autoUpdater.requestHeaders = { Authorization: `token ${token}` };
+    if (typeof autoUpdater.addAuthHeader === 'function') {
+      autoUpdater.addAuthHeader(`token ${token}`);
+    }
+  }
+
   emitTokenDiagnostics({ severity = 'info', detail = '', reason = '', source = 'none', error = null, available = false } = {}) {
     const status = available ? 'healthy' : (error ? 'degraded' : 'degraded');
     const resolvedDetail = detail || (available
@@ -658,7 +682,7 @@ class UpdateCoordinator {
       };
     }
 
-    const envToken = String(process.env.GH_TOKEN || '').trim();
+    const envToken = this.getEnvPrivateToken();
     if (envToken) {
       return {
         required: true,
@@ -715,8 +739,8 @@ class UpdateCoordinator {
       const encrypted = safeStorage.encryptString(token);
       fs.writeFileSync(this.privateTokenPath, encrypted.toString('base64'), 'utf8');
 
-      if (this.autoUpdater && !String(process.env.GH_TOKEN || '').trim()) {
-        this.autoUpdater.requestHeaders = { Authorization: `token ${token}` };
+      if (this.autoUpdater && !this.getEnvPrivateToken()) {
+        this.applyPrivateGithubToken(this.autoUpdater, token);
       }
 
       this.emitTokenDiagnostics({
@@ -761,7 +785,7 @@ class UpdateCoordinator {
       return { ok: false, reason: String(error?.message || error) };
     }
 
-    if (this.autoUpdater && !String(process.env.GH_TOKEN || '').trim()) {
+    if (this.autoUpdater && !this.getEnvPrivateToken()) {
       this.autoUpdater.requestHeaders = {};
     }
 
@@ -794,11 +818,11 @@ class UpdateCoordinator {
     const resolution = Promise.resolve().then(() => {
       const tokenState = this.describePrivateTokenState();
       const token = tokenState.source === 'env'
-        ? String(process.env.GH_TOKEN || '').trim()
+        ? this.getEnvPrivateToken()
         : String(this.readPrivateTokenFromSafeStorage().token || '').trim();
 
       if (token) {
-        autoUpdater.requestHeaders = { Authorization: `token ${token}` };
+        this.applyPrivateGithubToken(autoUpdater, token);
         this.log('updater:github-token-injected', { source: tokenState.source });
         this.emitTokenDiagnostics({
           severity: 'info',

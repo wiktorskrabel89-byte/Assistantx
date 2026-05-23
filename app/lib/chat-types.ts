@@ -193,7 +193,7 @@ export type StoredState = {
   activeWorkspaceId: string;
   dark: boolean;
   /** Active curated theme preset. Overrides `dark` for the preset themes. */
-  theme: AppTheme;
+  theme?: AppTheme;
   userPlan: UserPlan;
   premiumRequestsUsed: number;
   appMode: AppMode;

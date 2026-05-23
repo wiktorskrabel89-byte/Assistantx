@@ -20,6 +20,7 @@ const eslintConfig = defineConfig([
   {
     files: ["jarvis/android/**/*.js"],
     rules: {
+      "@typescript-eslint/no-require-imports": "off",
       "jsx-a11y/alt-text": "off",
     },
   },
