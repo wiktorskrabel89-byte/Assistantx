@@ -139,7 +139,8 @@ function parseAuthCallback(url, { expectedState = null } = {}) {
     const isWebCallback = isWebAuthCallbackPath(parsed.pathname);
     if (!isAssistantxCallback && !isWebCallback) return null;
 
-    const receivedState = allParams.get('state') || '';
+    const receivedDesktopState = allParams.get('desktop_state') || '';
+    const receivedState = receivedDesktopState || allParams.get('state') || '';
     if (expectedState && !matchesExpectedState(expectedState, receivedState)) {
       return { error: 'state-mismatch' };
     }
@@ -155,6 +156,7 @@ function parseAuthCallback(url, { expectedState = null } = {}) {
         signedInAt: allParams.get('signed_in_at') || allParams.get('signedInAt') || new Date().toISOString(),
       }),
       state: receivedState || null,
+      desktopState: receivedDesktopState || null,
     };
   } catch {
     return null;

@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   const client = requestUrl.searchParams.get("client");
   const desktopRedirectTarget = getDesktopRedirectTarget(requestUrl.searchParams.get("redirect_to"));
   const next = requestUrl.searchParams.get("next") ?? "/";
-  const state = requestUrl.searchParams.get("state") ?? "";
+  const desktopState = requestUrl.searchParams.get("desktop_state") ?? requestUrl.searchParams.get("state") ?? "";
 
   if (isAuthDebugEnabled()) {
     console.log("[auth-debug][callback] incoming callback params", {
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       client,
       next,
       hasDesktopRedirectTarget: Boolean(desktopRedirectTarget),
-      state,
+      hasDesktopState: Boolean(desktopState),
     });
   }
 
@@ -130,7 +130,10 @@ export async function GET(request: Request) {
       user_id: data.user?.id ?? "",
       signed_in_at: data.user?.last_sign_in_at ?? data.session?.user?.last_sign_in_at ?? new Date().toISOString(),
     });
-    if (state) queryParams.set("state", state);
+    if (desktopState) {
+      queryParams.set("desktop_state", desktopState);
+      queryParams.set("state", desktopState);
+    }
     target.search = queryParams.toString();
     console.log("[desktop-auth] redirect target:", target.toString());
     const response = NextResponse.redirect(target.toString());
