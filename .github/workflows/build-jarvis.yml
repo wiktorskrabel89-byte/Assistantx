@@ -215,6 +215,20 @@ jobs:
 
           Write-Host "Desktop publish config validated: GitHub provider => $actualOwner/$actualRepo (private)"
 
+      - name: Download Windows Python embeddable runtime
+        shell: pwsh
+        run: |
+          $pythonVersion = "3.11.9"
+          $pythonUrl = "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-embed-amd64.zip"
+          $zipPath = Join-Path $env:RUNNER_TEMP "python-embed-amd64.zip"
+          $extractPath = "jarvis/desktop/python"
+          Write-Host "Downloading Python $pythonVersion embeddable runtime..."
+          Invoke-WebRequest -Uri $pythonUrl -OutFile $zipPath -UseBasicParsing
+          Write-Host "Extracting to $extractPath..."
+          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+          Write-Host "Python embeddable runtime ready at $extractPath"
+          Get-ChildItem $extractPath | Select-Object -First 10
+
       - name: Build installers (x64 + ARM64)
         working-directory: jarvis/desktop
         run: npm run dist:win:all
@@ -553,7 +567,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish to GitHub Release (jarvis-latest)
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: jarvis-latest
           name: "Jarvis Desktop — v${{ steps.meta.outputs.version }}"
@@ -572,7 +586,7 @@ jobs:
 
       - name: Publish Android APK to GitHub Release (jarvis-latest)
         if: steps.android_apk.outputs.found == 'true'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: jarvis-latest
           files: |
@@ -673,7 +687,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish macOS DMGs to GitHub Release (jarvis-latest)
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: jarvis-latest
           files: |
@@ -743,7 +757,7 @@ jobs:
 
       - name: Publish Linux AppImage to GitHub Release (jarvis-latest)
         if: steps.linux_appimage.outputs.found == 'true'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: jarvis-latest
           files: |
@@ -802,7 +816,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish Android APK to GitHub Release (jarvis-latest)
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: jarvis-latest
           files: |
