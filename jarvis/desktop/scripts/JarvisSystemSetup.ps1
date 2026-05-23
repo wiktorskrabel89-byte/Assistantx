@@ -105,6 +105,65 @@ function Get-JarvisPowerGuardPath {
     return $null
 }
 
+function Get-InstallerSearchRoots {
+    param(
+        [string]$PrimaryRoot
+    )
+
+    $roots = @($PrimaryRoot)
+    $roots += Join-Path $env:LOCALAPPDATA "Programs\Jarvis"
+    $roots += Join-Path $env:ProgramFiles "Jarvis"
+    if (${env:ProgramFiles(x86)}) {
+        $roots += Join-Path ${env:ProgramFiles(x86)} "Jarvis"
+    }
+
+    return $roots |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique
+}
+
+function Resolve-InstalledJarvis {
+    param(
+        [string[]]$SearchRoots,
+        [string]$PreferredName
+    )
+
+    foreach ($root in $SearchRoots) {
+        if (-not (Test-Path $root)) {
+            continue
+        }
+
+        $candidate = Get-JarvisExecutablePath -SearchRoot $root -PreferredName $PreferredName
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+            return @{
+                ExecutablePath = $candidate
+                InstallRoot = $root
+            }
+        }
+    }
+
+    return $null
+}
+
+function Wait-ForInstalledJarvis {
+    param(
+        [string[]]$SearchRoots,
+        [string]$PreferredName,
+        [int]$TimeoutSeconds = 90
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $resolved = Resolve-InstalledJarvis -SearchRoots $SearchRoots -PreferredName $PreferredName
+        if ($resolved) {
+            return $resolved
+        }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+
+    return $null
+}
+
 if (-not (Test-IsAdministrator)) {
     Write-Host "ERROR: Run this script as Administrator." -ForegroundColor Red
     exit 1
@@ -164,6 +223,13 @@ try {
         Write-Host "Expected file at: $DownloadUrl" -ForegroundColor White
         exit 1
     }
+    $headerBytes = Get-Content -Path $setupPath -Encoding Byte -TotalCount 2
+    if ($headerBytes.Count -lt 2 -or $headerBytes[0] -ne 0x4D -or $headerBytes[1] -ne 0x5A) {
+        Write-Host "ERROR: Downloaded file is not a valid Windows executable (MZ header missing)." -ForegroundColor Red
+        Write-Host "URL: $DownloadUrl" -ForegroundColor White
+        Write-Host "The URL likely returned an HTML/JSON error instead of the installer binary." -ForegroundColor White
+        exit 1
+    }
     Write-Host "Download completed: $setupPath" -ForegroundColor Green
 } catch {
     Write-Host "ERROR: Could not download the installer." -ForegroundColor Red
@@ -191,11 +257,17 @@ if ($process.ExitCode -ne 0) {
 }
 
 Write-Stage "[4/4] Verifying installation"
-$finalAppPath = Get-JarvisExecutablePath -SearchRoot $InstallDir -PreferredName $AppName
+$searchRoots = Get-InstallerSearchRoots -PrimaryRoot $InstallDir
+$resolvedInstall = Wait-ForInstalledJarvis -SearchRoots $searchRoots -PreferredName $AppName -TimeoutSeconds 90
+$finalAppPath = if ($resolvedInstall) { [string]$resolvedInstall.ExecutablePath } else { $null }
+$resolvedInstallDir = if ($resolvedInstall) { [string]$resolvedInstall.InstallRoot } else { $InstallDir }
 
 if ([string]::IsNullOrWhiteSpace($finalAppPath)) {
     Write-Host "ERROR: Verification failed — installed application not found." -ForegroundColor Red
-    Write-Host "Expected executable somewhere under: $InstallDir" -ForegroundColor White
+    Write-Host "Searched install roots:" -ForegroundColor White
+    foreach ($root in $searchRoots) {
+        Write-Host "  - $root" -ForegroundColor White
+    }
     Write-Host "Installer exit code was: $($process.ExitCode)" -ForegroundColor Yellow
     Write-Host "" -ForegroundColor White
     Write-Host "Possible causes:" -ForegroundColor White
@@ -206,6 +278,9 @@ if ([string]::IsNullOrWhiteSpace($finalAppPath)) {
 }
 
 Write-Host "Verified application path: $finalAppPath" -ForegroundColor Green
+if ($resolvedInstallDir -ne $InstallDir) {
+    Write-Host "Detected actual install directory: $resolvedInstallDir" -ForegroundColor DarkCyan
+}
 
 Write-Host ""
 Write-Host "--------------------------------------------------" -ForegroundColor Cyan
@@ -253,7 +328,7 @@ try {
 } catch {
     Write-Host "Jarvis: Nie udało się wyłączyć Fast Boot." -ForegroundColor Yellow
 }
-$guardPath = Get-JarvisPowerGuardPath -SearchRoot $InstallDir
+$guardPath = Get-JarvisPowerGuardPath -SearchRoot $resolvedInstallDir
 $guardEnabled = (-not [string]::IsNullOrWhiteSpace($guardPath)) -or ($env:JARVIS_POWER_GUARD_ENABLED -match '^(1|true|yes|on)$')
 if ($guardEnabled) {
     try {
@@ -406,7 +481,7 @@ if (Test-Path $setupPath) {
     Remove-Item $setupPath -Force
 }
 
-$setupContextPath = Join-Path $InstallDir "setup-context.json"
+$setupContextPath = Join-Path $resolvedInstallDir "setup-context.json"
 $setupContext = [ordered]@{
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     manufacturer = $brand
