@@ -196,7 +196,7 @@ describe("GET /auth/callback", () => {
     expect(queryParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
   });
 
-  it("passes OAuth state through jarvis-desktop callback query params", async () => {
+  it("passes desktop_state through jarvis-desktop callback query params", async () => {
     mockCreateClient.mockResolvedValue(
       makeMockSupabase({
         user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
@@ -213,14 +213,39 @@ describe("GET /auth/callback", () => {
         },
       }),
     );
-    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop", state: "desktop-state-abc" }));
+    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop", desktop_state: "desktop-state-abc" }));
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("assistantx://auth/callback?");
     const queryParams = parseRedirectQuery(location);
+    expect(queryParams.get("desktop_state")).toBe("desktop-state-abc");
     expect(queryParams.get("state")).toBe("desktop-state-abc");
     expect(queryParams.get("email")).toBe("jarvis@example.com");
     expect(queryParams.get("user_id")).toBe("user-123");
     expect(queryParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
+  });
+
+  it("falls back to state when desktop_state is missing for jarvis-desktop callback", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeMockSupabase({
+        user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
+        session: {
+          access_token: "session-token-123",
+          provider_token: null,
+          expires_in: 3600,
+          refresh_token: "refresh-token-123",
+          user: {
+            id: "user-123",
+            email: "jarvis@example.com",
+            last_sign_in_at: "2026-05-16T08:00:00.000Z",
+          },
+        },
+      }),
+    );
+    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop", state: "desktop-state-legacy" }));
+    const location = res.headers.get("location") ?? "";
+    const queryParams = parseRedirectQuery(location);
+    expect(queryParams.get("desktop_state")).toBe("desktop-state-legacy");
+    expect(queryParams.get("state")).toBe("desktop-state-legacy");
   });
 
   it("does not redirect immediately after successful callback exchange when middleware sees fresh user session", async () => {

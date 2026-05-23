@@ -731,6 +731,7 @@ function getDesktopLoginUrl(state) {
   const loginUrl = new URL('/auth/login', getJarvisWebBaseUrl());
   loginUrl.searchParams.set('client', 'jarvis-desktop');
   loginUrl.searchParams.set('redirect_to', AUTH_CALLBACK_URL);
+  loginUrl.searchParams.set('desktop_state', state);
   loginUrl.searchParams.set('state', state);
   return loginUrl.toString();
 }

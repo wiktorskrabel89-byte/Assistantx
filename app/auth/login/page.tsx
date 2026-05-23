@@ -113,10 +113,11 @@ export default function LoginPage() {
     }
 
     const params = new URLSearchParams(window.location.search);
+    const desktopState = params.get("desktop_state");
     return {
       client: params.get("client") ?? "",
       next: sanitizeRedirectPath(params.get("next")),
-      state: params.get("state") ?? "",
+      state: desktopState ?? params.get("state") ?? "",
       redirectTo: sanitizeDesktopRedirect(params.get("redirect_to")),
     };
   });
@@ -209,7 +210,7 @@ export default function LoginPage() {
     if (redirectContext.client) redirectTo.searchParams.set("client", redirectContext.client);
     const safeRedirectPath = sanitizeRedirectPath(redirectContext.next);
     if (safeRedirectPath !== "/") redirectTo.searchParams.set("next", safeRedirectPath);
-    if (redirectContext.state) redirectTo.searchParams.set("state", redirectContext.state);
+    if (redirectContext.state) redirectTo.searchParams.set("desktop_state", redirectContext.state);
     if (redirectContext.redirectTo) redirectTo.searchParams.set("redirect_to", redirectContext.redirectTo);
     return redirectTo.toString();
   }
@@ -233,7 +234,10 @@ export default function LoginPage() {
       user_id: session.user?.id ?? "",
       signed_in_at: new Date().toISOString(),
     });
-    if (redirectContext.state) queryParams.set("state", redirectContext.state);
+    if (redirectContext.state) {
+      queryParams.set("desktop_state", redirectContext.state);
+      queryParams.set("state", redirectContext.state);
+    }
     callbackUrl.search = queryParams.toString();
     console.log("[desktop-auth] launching desktop callback");
     console.log("[desktop-auth] redirect target:", callbackUrl.toString());
