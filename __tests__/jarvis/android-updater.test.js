@@ -7,14 +7,14 @@ jest.mock('@react-native-async-storage/async-storage', () => {
     }),
     __reset: () => store.clear(),
   };
-});
+}, { virtual: true });
 
 jest.mock('react-native', () => ({
   Linking: {
     canOpenURL: jest.fn(async () => true),
     openURL: jest.fn(async () => true),
   },
-}));
+}), { virtual: true });
 
 const AsyncStorage = require('@react-native-async-storage/async-storage');
 const { checkForUpdate, dismissUpdate } = require('../../jarvis/android/updater');
