@@ -868,8 +868,8 @@ export function ChatTab({
             mcpToolCount={mcpInstalledCount}
           />
 
-          <div className="min-h-0 flex-1 px-3 py-4 bg-background transition-colors duration-200">
-            <div className="mx-auto flex h-full max-w-5xl flex-col">
+          <div className="min-h-0 flex-1 flex flex-col overflow-hidden px-3 py-4 bg-background transition-colors duration-200">
+            <div className="mx-auto flex min-h-0 h-full max-w-5xl flex-col">
               {!premiumBannerHidden ? (
                 <PremiumPlanBanner
                   dark={state.dark}

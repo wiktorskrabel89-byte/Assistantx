@@ -150,7 +150,7 @@ export function MarketplaceClient({ dark }: { dark: boolean }) {
     : "bg-white text-slate-900";
 
   return (
-    <div className={`min-h-screen ${shellBg}`}>
+    <div className={`h-full overflow-y-auto ${shellBg}`}>
       <div className="mx-auto max-w-6xl px-4 py-8">
         {/* Header */}
         <div className="mb-8 flex items-center gap-3">

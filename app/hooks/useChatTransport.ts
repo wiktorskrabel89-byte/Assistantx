@@ -676,6 +676,11 @@ export function useChatTransport({
         return;
       }
 
+      // When the command dispatcher did not handle the message but the user typed a
+      // slash command, inject a hint into the system prompt so the AI can explain
+      // the command and guide the user instead of responding with confusion.
+      const isUnhandledSlashCommand = !commandPayload.handled && userMsg.trim().startsWith("/");
+
       if (activeSettings.localOnlyMode) {
         updateMessageById(workspaceId, chatId, pending.id, (entry) => ({
           ...entry,
@@ -744,7 +749,7 @@ export function useChatTransport({
         userPlan: stateRef.current.userPlan,
         thinkingEffort: queuedMessage.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
         modelProfile: activeSettings.modelProfile ?? "default",
-        systemPrompt: buildSystemPromptWithMode(activeSettings),
+        systemPrompt: buildSystemPromptWithMode(activeSettings) + (isUnhandledSlashCommand ? `\n\nNote: The user sent the slash command "${userMsg.trim()}" but it was not intercepted by the command dispatcher. The required integration may not be connected, or the command was not recognized. Explain what this slash command does and guide the user on how to enable it.` : ""),
         personalityMode: activeSettings.personalityMode ?? "default",
         enabledTools: activeSettings.enabledTools ?? [],
         googleContext: googleContextRef.current || undefined,
