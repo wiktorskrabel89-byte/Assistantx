@@ -167,6 +167,9 @@ function resolvePythonExecutable() {
     path.join(process.resourcesPath || '', 'ai-agent', 'runtime', 'python', 'python.exe'),
     path.join(sidecarDir, 'venv', 'Scripts', 'python.exe'),
     path.join(sidecarDir, 'venv', 'bin', 'python'),
+    // System Python fallback (used when no embedded runtime is bundled).
+    'python3',
+    'python',
   ];
   const devCandidates = [
     path.join(__dirname, 'python', 'python.exe'),

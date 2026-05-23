@@ -316,8 +316,8 @@ class UpdateCoordinator {
     if (errorMeta.isAuth) {
       return {
         status: 'error',
-        health: 'unavailable',
-        severity: 'error',
+        health: 'degraded',
+        severity: 'warn',
         reason: 'feed-auth-or-permission',
         detail: 'Update feed authentication/permission failed. Verify feed visibility and credentials.',
       };
@@ -361,8 +361,8 @@ class UpdateCoordinator {
     }
     if (statusCode === 401 || statusCode === 403) {
       return {
-        health: 'unavailable',
-        severity: 'error',
+        health: 'degraded',
+        severity: 'warn',
         reason: 'feed-auth-or-permission',
         detail: 'Updater feed returned an authentication/permission error.',
       };

@@ -59,7 +59,7 @@ class OllamaProvider extends AiProvider {
   }
 
   async generate(request = {}) {
-    const model = String(request.model || 'gemma4:e4b');
+    const model = String(request.model || 'gemma3:4b');
     const body = {
       model,
       messages: normalizeMessages(request),
@@ -90,7 +90,7 @@ class OllamaProvider extends AiProvider {
   }
 
   async stream(request = {}, onEvent = () => {}) {
-    const model = String(request.model || 'gemma4:e4b');
+    const model = String(request.model || 'gemma3:4b');
     const body = {
       model,
       messages: normalizeMessages(request),

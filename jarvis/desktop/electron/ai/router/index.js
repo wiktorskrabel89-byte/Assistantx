@@ -8,7 +8,7 @@ const { OpenAICompatProvider } = require('../providers/openai-compat');
 
 const ROUTING_PROFILES = {
   chat: {
-    local: 'gemma4:e4b',
+    local: 'gemma3:4b',
   },
   coding: {
     local: 'qwen2.5-coder:14b',
@@ -18,7 +18,7 @@ const ROUTING_PROFILES = {
   },
 };
 
-const REQUIRED_LOCAL_MODELS = ['gemma4:e4b', 'qwen2.5-coder:14b'];
+const REQUIRED_LOCAL_MODELS = ['gemma3:4b', 'qwen2.5-coder:14b'];
 const DEFAULT_CLOUD_PROVIDER_ORDER = ['groq', 'openrouter'];
 
 class AIRouter {
