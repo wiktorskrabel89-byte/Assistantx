@@ -156,6 +156,10 @@ const taskQueue = [];
 // Shared across all callers of runAiPrompt so the AI retains context.
 const MAX_CONVERSATION_TURNS = 10; // 5 user + 5 assistant messages
 const conversationHistory = [];
+const GEO_CONTEXT_TTL_MS = 15 * 60 * 1000;
+let cachedGeoContext = null;
+let cachedGeoContextAt = 0;
+let geoContextPending = null;
 
 function recordConversationTurn(role, content) {
   conversationHistory.push({ role, content: String(content || '').trim() });
@@ -170,6 +174,101 @@ function getConversationHistory() {
 
 function toIsoNow() {
   return new Date().toISOString();
+}
+
+function getRuntimeLocale() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.language) {
+      return String(navigator.language).trim();
+    }
+  } catch {
+    // ignore
+  }
+  return Intl.DateTimeFormat().resolvedOptions().locale;
+}
+
+function getRuntimeTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+function getPreferredLanguage(locale) {
+  return String(locale || 'en').split('-')[0]?.toLowerCase() || 'en';
+}
+
+function getCachedGeoContext(nowMs) {
+  if (!cachedGeoContext || (nowMs - cachedGeoContextAt) > GEO_CONTEXT_TTL_MS) return null;
+  return cachedGeoContext;
+}
+
+async function fetchIpGeoContext() {
+  const nowMs = Date.now();
+  const cached = getCachedGeoContext(nowMs);
+  if (cached) return cached;
+  if (geoContextPending) return geoContextPending;
+
+  geoContextPending = (async () => {
+    if (typeof fetch !== 'function') return null;
+    try {
+      const response = await fetch('https://ipapi.co/json/', {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3500),
+      });
+      if (!response.ok) return null;
+      const payload = await response.json().catch(() => null);
+      if (!payload || typeof payload !== 'object') return null;
+      const city = String(payload.city || '').trim();
+      const region = String(payload.region || '').trim();
+      const country = String(payload.country_name || '').trim();
+      const countryCode = String(payload.country_code || '').trim().toUpperCase();
+      const timezone = String(payload.timezone || '').trim();
+      const latitude = Number(payload.latitude);
+      const longitude = Number(payload.longitude);
+      const languages = String(payload.languages || '').trim();
+      const preferredLanguage = languages ? String(languages.split(',')[0] || '').trim().split('-')[0]?.toLowerCase() : null;
+      const hasText = city || region || country;
+      const hasCoords = Number.isFinite(latitude) && Number.isFinite(longitude);
+      if (!hasText && !hasCoords && !timezone) return null;
+
+      return {
+        timezone: timezone || null,
+        preferredLanguage: preferredLanguage || null,
+        location: {
+          city: city || null,
+          region: region || null,
+          country: country || null,
+          countryCode: countryCode || null,
+          latitude: hasCoords ? latitude : null,
+          longitude: hasCoords ? longitude : null,
+          source: 'ipapi.co',
+        },
+      };
+    } catch {
+      return null;
+    }
+  })();
+
+  const resolved = await geoContextPending;
+  geoContextPending = null;
+  cachedGeoContext = resolved;
+  cachedGeoContextAt = Date.now();
+  return resolved;
+}
+
+async function buildAssistantTemporalContext() {
+  const locale = getRuntimeLocale();
+  const timezone = getRuntimeTimezone();
+  const geo = await fetchIpGeoContext();
+  return buildTemporalContext({
+    locale,
+    timezone: geo?.timezone || timezone,
+    preferredLanguage: geo?.preferredLanguage || getPreferredLanguage(locale),
+    location: geo?.location || null,
+  });
 }
 
 function emitStatus(status, detail) {
@@ -487,10 +586,11 @@ async function runAiPrompt(prompt, meta = {}) {
   const history = getConversationHistory();
   const routeHint = buildRouteHint(prompt);
   const routeProfile = deriveAiProfile(prompt);
+  const temporalContext = await buildAssistantTemporalContext();
   const composedPrompt = promptRegistry.composer.compose({
     taskPrompt: String(prompt || ''),
     memoryContext: history.map((item) => `${item.role}: ${item.content}`).join('\n'),
-    temporalContext: buildTemporalContext(),
+    temporalContext,
   });
 
   // Signal to the UI that a response is in flight.

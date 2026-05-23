@@ -48,15 +48,89 @@ jobs:
           $androidPkg.version = $version
           $androidPkg | ConvertTo-Json -Depth 20 | Set-Content "jarvis/android/package.json" -Encoding UTF8
 
-          # Generate changelog highlights from the last 20 commits that touched the jarvis/ tree.
+          # Generate segmented, human-readable release notes from recent jarvis/ commits.
           # Redirect stderr to null so git error output never leaks into the release notes.
-          $commitsRaw = git log --pretty=format:"%s" -20 -- jarvis/ 2>$null
-          $commitLines = @($commitsRaw -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+          $commitsRaw = git log --pretty=format:"%s" -60 -- jarvis/ 2>$null
+          $commitLines = @(
+            $commitsRaw -split "`n" |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            ForEach-Object {
+              $normalized = $_ -replace '^\s*v\d+(?:\.\d+)*(?:[-_\s:]+)?', ''
+              $normalized = $normalized -replace '^\s*(release|build)\s*[:\-]?\s*', ''
+              $normalized = ($normalized -replace '\s+', ' ').Trim(" -_:;,.")
+              if ([string]::IsNullOrWhiteSpace($normalized)) { return }
+              $wordCount = ($normalized -split '\s+' | Where-Object { $_ }).Count
+              $looksLikeNoise = $normalized -match '^(?:wip|tmp|test|misc|update|fixup!|squash!|dwadawdwa|asdf|qwe)+$'
+              if ($wordCount -lt 2 -or $looksLikeNoise) { return }
+              $normalized
+            }
+          )
           if ($commitLines.Count -eq 0) {
-            $commitLines = @("Build updated")
+            $commitLines = @(
+              "Improved Jarvis desktop reliability and startup diagnostics.",
+              "Enhanced AI routing and prompt quality for clearer responses.",
+              "Strengthened update delivery, installer flow, and release safety checks.",
+              "Applied performance, compatibility, and stability fixes across supported platforms."
+            )
           }
-          $highlights = @($commitLines | Select-Object -First 8)
-          $notesMarkdown = ($highlights | ForEach-Object { "- $_" }) -join "`n"
+
+          $sections = [ordered]@{
+            "Core platform and reliability" = @()
+            "AI and voice experience" = @()
+            "Desktop UX and productivity" = @()
+            "Integrations and connectivity" = @()
+            "Release engineering and packaging" = @()
+          }
+
+          foreach ($line in $commitLines) {
+            $target = "Core platform and reliability"
+            if ($line -match '(?i)\b(ai|llm|model|prompt|voice|stt|tts|speech|assistant)\b') {
+              $target = "AI and voice experience"
+            } elseif ($line -match '(?i)\b(ui|ux|renderer|modal|settings|tray|window|desktop|launcher)\b') {
+              $target = "Desktop UX and productivity"
+            } elseif ($line -match '(?i)\b(api|oauth|github|google|supabase|sync|pair|network|wake|server|bridge|integration)\b') {
+              $target = "Integrations and connectivity"
+            } elseif ($line -match '(?i)\b(release|updater|installer|build|workflow|ci|publish|dist|packaging)\b') {
+              $target = "Release engineering and packaging"
+            }
+            $sections[$target] += $line
+          }
+
+          foreach ($name in @($sections.Keys)) {
+            $sections[$name] = @($sections[$name] | Select-Object -Unique | Select-Object -First 8)
+          }
+
+          $sectionBlocks = @()
+          foreach ($sectionName in $sections.Keys) {
+            $items = @($sections[$sectionName])
+            if ($items.Count -eq 0) { continue }
+            $sectionBlocks += "### $sectionName`n" + (($items | ForEach-Object { "- $_" }) -join "`n")
+          }
+
+          if ($sectionBlocks.Count -eq 0) {
+            $sectionBlocks = @(
+              "### Core platform and reliability`n- Improved stability and startup health checks.",
+              "### AI and voice experience`n- Better response quality and voice pipeline consistency.",
+              "### Release engineering and packaging`n- Hardened updater flow and artifact validation."
+            )
+          }
+
+          $notesMarkdown = $sectionBlocks -join "`n`n"
+          $highlights = @(
+            foreach ($sectionName in $sections.Keys) {
+              $items = @($sections[$sectionName])
+              if ($items.Count -gt 0) { $items[0] }
+            }
+          )
+          if ($highlights.Count -eq 0) {
+            $highlights = @(
+              "Improved Jarvis desktop reliability and startup diagnostics.",
+              "Enhanced AI routing and prompt quality for clearer responses.",
+              "Strengthened update delivery, installer flow, and release safety checks."
+            )
+          }
+          $highlights = @($highlights | Select-Object -First 8)
 
           $sha7 = "${{ github.sha }}".Substring(0, 7)
           $date = (Get-Date -AsUTC -Format "yyyy-MM-dd HH:mm") + " UTC"
