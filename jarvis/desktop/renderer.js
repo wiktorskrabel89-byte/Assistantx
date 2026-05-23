@@ -713,88 +713,88 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (!speechToTextActive) {
 				voiceInputButton.textContent = voiceSettings.sttEnabled ? '🎙 Talk' : '🎙 STT off';
 			}
-
-			function clearTtsAudioQueue() {
-				ttsAudioChunkQueue.length = 0;
-				ttsAudioChunkPlaying = false;
-			}
-
-			function playNextTtsChunk() {
-				if (ttsAudioChunkPlaying) return;
-				const next = ttsAudioChunkQueue.shift();
-				if (!next) return;
-				ttsAudioChunkPlaying = true;
-				try {
-					const AudioContext = window.AudioContext || window.webkitAudioContext;
-					if (!AudioContext) {
-						ttsAudioChunkPlaying = false;
-						return;
-					}
-					const actx = new AudioContext();
-					const binary = atob(next.data);
-					const bytes = new Uint8Array(binary.length);
-					for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-					actx.decodeAudioData(bytes.buffer, (decoded) => {
-						const source = actx.createBufferSource();
-						source.buffer = decoded;
-						source.connect(actx.destination);
-						speechPlaybackActive = true;
-						setVoiceVisualizer('speaking');
-						source.onended = () => {
-							ttsAudioChunkPlaying = false;
-							speechPlaybackActive = false;
-							setVoiceVisualizer('idle');
-							actx.close().catch(() => null);
-							playNextTtsChunk();
-						};
-						source.start(0);
-					}, () => {
-						ttsAudioChunkPlaying = false;
-						speechPlaybackActive = false;
-						actx.close().catch(() => null);
-						playNextTtsChunk();
-					});
-				} catch {
-					ttsAudioChunkPlaying = false;
-					speechPlaybackActive = false;
-					playNextTtsChunk();
-				}
-			}
-
-			function enqueueTtsAudioChunk({ streamId, chunkIndex, data, format }) {
-				if (!data) return;
-				const normalizedStreamId = String(streamId || '');
-				if (normalizedStreamId && ttsAudioActiveStreamId && normalizedStreamId !== ttsAudioActiveStreamId) {
-					clearTtsAudioQueue();
-				}
-				if (normalizedStreamId) ttsAudioActiveStreamId = normalizedStreamId;
-				if (ttsAudioChunkQueue.length >= MAX_TTS_AUDIO_QUEUE) {
-					ttsAudioChunkQueue.shift();
-				}
-				ttsAudioChunkQueue.push({
-					streamId: normalizedStreamId,
-					chunkIndex: Number(chunkIndex || 0),
-					data,
-					format: format || 'wav',
-				});
-				ttsAudioChunkQueue.sort((a, b) => a.chunkIndex - b.chunkIndex);
-				playNextTtsChunk();
-			}
-
-			function resetActiveAiStream() {
-				if (activeAiStream.id && sidecar?.requestTtsStreamCancel) {
-					sidecar.requestTtsStreamCancel(activeAiStream.id);
-				}
-				activeAiStream = {
-					id: '',
-					segmentsSent: 0,
-					streamingEnabled: false,
-				};
-				ttsAudioActiveStreamId = '';
-				clearTtsAudioQueue();
-			}
 		}
 		if (persist) writeVoiceSettings(voiceSettings);
+	}
+
+	function clearTtsAudioQueue() {
+		ttsAudioChunkQueue.length = 0;
+		ttsAudioChunkPlaying = false;
+	}
+
+	function playNextTtsChunk() {
+		if (ttsAudioChunkPlaying) return;
+		const next = ttsAudioChunkQueue.shift();
+		if (!next) return;
+		ttsAudioChunkPlaying = true;
+		try {
+			const AudioContext = window.AudioContext || window.webkitAudioContext;
+			if (!AudioContext) {
+				ttsAudioChunkPlaying = false;
+				return;
+			}
+			const actx = new AudioContext();
+			const binary = atob(next.data);
+			const bytes = new Uint8Array(binary.length);
+			for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+			actx.decodeAudioData(bytes.buffer, (decoded) => {
+				const source = actx.createBufferSource();
+				source.buffer = decoded;
+				source.connect(actx.destination);
+				speechPlaybackActive = true;
+				setVoiceVisualizer('speaking');
+				source.onended = () => {
+					ttsAudioChunkPlaying = false;
+					speechPlaybackActive = false;
+					setVoiceVisualizer('idle');
+					actx.close().catch(() => null);
+					playNextTtsChunk();
+				};
+				source.start(0);
+			}, () => {
+				ttsAudioChunkPlaying = false;
+				speechPlaybackActive = false;
+				actx.close().catch(() => null);
+				playNextTtsChunk();
+			});
+		} catch {
+			ttsAudioChunkPlaying = false;
+			speechPlaybackActive = false;
+			playNextTtsChunk();
+		}
+	}
+
+	function enqueueTtsAudioChunk({ streamId, chunkIndex, data, format }) {
+		if (!data) return;
+		const normalizedStreamId = String(streamId || '');
+		if (normalizedStreamId && ttsAudioActiveStreamId && normalizedStreamId !== ttsAudioActiveStreamId) {
+			clearTtsAudioQueue();
+		}
+		if (normalizedStreamId) ttsAudioActiveStreamId = normalizedStreamId;
+		if (ttsAudioChunkQueue.length >= MAX_TTS_AUDIO_QUEUE) {
+			ttsAudioChunkQueue.shift();
+		}
+		ttsAudioChunkQueue.push({
+			streamId: normalizedStreamId,
+			chunkIndex: Number(chunkIndex || 0),
+			data,
+			format: format || 'wav',
+		});
+		ttsAudioChunkQueue.sort((a, b) => a.chunkIndex - b.chunkIndex);
+		playNextTtsChunk();
+	}
+
+	function resetActiveAiStream() {
+		if (activeAiStream.id && sidecar?.requestTtsStreamCancel) {
+			sidecar.requestTtsStreamCancel(activeAiStream.id);
+		}
+		activeAiStream = {
+			id: '',
+			segmentsSent: 0,
+			streamingEnabled: false,
+		};
+		ttsAudioActiveStreamId = '';
+		clearTtsAudioQueue();
 	}
 
 	function localAssignmentValue(role) {
