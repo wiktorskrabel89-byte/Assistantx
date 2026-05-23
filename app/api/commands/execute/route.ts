@@ -262,12 +262,15 @@ function buildSkillsMarkdown(params: {
   ].join("\n");
 }
 
-async function executeCloudCommand(request: Request, commandId: AssistantCommandId, argsText: string) {
+async function executeCloudCommand(request: Request, commandId: AssistantCommandId, argsText: string, cloud: Awaited<ReturnType<typeof readLinkedProviderStatus>>) {
   switch (commandId) {
     case "today": {
+      if (!cloud.googleCalendarConnected) {
+        return { ok: false, message: "⚠️ `/today` requires Google Calendar to be connected. Go to **Settings → Integrations** and connect your Google account to enable this command." };
+      }
       const { response, data } = await callInternalJson(request, "/api/integrations/google-calendar?maxResults=10&daysAhead=1");
       if (!response.ok) {
-        return { ok: false, message: String((data as { error?: string }).error ?? "Failed to load today's plan.") };
+        return { ok: false, message: `⚠️ Could not load today's calendar: ${String((data as { error?: string }).error ?? "Google Calendar returned an error. Try reconnecting your Google account.")}` };
       }
       const events = Array.isArray((data as { events?: Array<Record<string, unknown>> }).events)
         ? (data as { events: Array<Record<string, unknown>> }).events
@@ -278,6 +281,9 @@ async function executeCloudCommand(request: Request, commandId: AssistantCommand
       return { ok: true, message: ["# Today's plan", ...lines].join("\n") };
     }
     case "calendar": {
+      if (!cloud.googleCalendarConnected) {
+        return { ok: false, message: "⚠️ `/calendar` requires Google Calendar to be connected. Go to **Settings → Integrations** and connect your Google account to enable this command." };
+      }
       const { response, data } = await callInternalJson(request, "/api/integrations/google-calendar", {
         method: "POST",
         body: JSON.stringify({
@@ -287,12 +293,15 @@ async function executeCloudCommand(request: Request, commandId: AssistantCommand
       });
       return response.ok
         ? { ok: true, message: `Created calendar event: ${String((data as { title?: string }).title ?? argsText ?? "New Event")}` }
-        : { ok: false, message: String((data as { error?: string }).error ?? "Failed to create calendar event.") };
+        : { ok: false, message: `⚠️ Could not create calendar event: ${String((data as { error?: string }).error ?? "Google Calendar returned an error.")}` };
     }
     case "gmail": {
+      if (!cloud.gmailConnected) {
+        return { ok: false, message: "⚠️ `/gmail` requires Gmail to be connected. Go to **Settings → Integrations** and connect your Google account to enable this command." };
+      }
       const { response, data } = await callInternalJson(request, `/api/integrations/gmail?maxResults=${encodeURIComponent("10")}`);
       if (!response.ok) {
-        return { ok: false, message: String((data as { error?: string }).error ?? "Failed to load Gmail.") };
+        return { ok: false, message: `⚠️ Could not load Gmail: ${String((data as { error?: string }).error ?? "Gmail returned an error. Try reconnecting your Google account.")}` };
       }
       const messages = Array.isArray((data as { messages?: Array<Record<string, unknown>> }).messages)
         ? (data as { messages: Array<Record<string, unknown>> }).messages
@@ -306,15 +315,21 @@ async function executeCloudCommand(request: Request, commandId: AssistantCommand
       return { ok: true, message: ["# Gmail", ...lines].join("\n") };
     }
     case "draft":
+      if (!cloud.gmailConnected) {
+        return { ok: false, message: "⚠️ `/draft` requires Gmail to be connected. Go to **Settings → Integrations** and connect your Google account to enable this command." };
+      }
       return { ok: true, message: `Draft workflow ready: ${argsText || "Provide the recipient and purpose next."}` };
     case "drive": {
+      if (!cloud.driveConnected) {
+        return { ok: false, message: "⚠️ `/drive` requires Google Drive to be connected. Go to **Settings → Integrations** and connect your Google account to enable this command." };
+      }
       const { response, data } = await callInternalJson(request, "/api/integrations/google-drive", {
         method: "POST",
         body: JSON.stringify({ input: argsText }),
       });
       return response.ok
         ? { ok: true, message: `Imported Google Drive file: ${String((data as { name?: string }).name ?? "file")}` }
-        : { ok: false, message: String((data as { error?: string }).error ?? "Failed to access Google Drive.") };
+        : { ok: false, message: `⚠️ Could not access Google Drive: ${String((data as { error?: string }).error ?? "Google Drive returned an error.")}` };
     }
     case "web":
     case "google": {
@@ -324,11 +339,14 @@ async function executeCloudCommand(request: Request, commandId: AssistantCommand
         body: JSON.stringify({ query, forceFresh: commandId === "google" }),
       });
       if (!response.ok) {
-        return { ok: false, message: String((data as { error?: string }).error ?? "Search failed.") };
+        return { ok: false, message: `⚠️ Web search failed: ${String((data as { error?: string }).error ?? "The search service is temporarily unavailable.")}` };
       }
       return { ok: true, message: String((data as { context?: string; answer?: string }).context ?? (data as { answer?: string }).answer ?? "Search complete.") };
     }
     case "slack":
+      if (!cloud.slackConnected) {
+        return { ok: false, message: "⚠️ `/slack` requires Slack to be configured. Go to **MCP Marketplace → Slack** to install and connect your Slack workspace." };
+      }
       return { ok: true, message: argsText ? `Slack command queued for channel/query: ${argsText}` : "Slack is configured through MCP Marketplace. Connect Slack to enable channel history commands." };
     default:
       return { ok: false, message: "Unsupported cloud command." };
@@ -522,7 +540,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const cloudResult = await executeCloudCommand(request, parsed.id, parsed.argsText);
+  const cloudResult = await executeCloudCommand(request, parsed.id, parsed.argsText, cloud);
   await recordCommandHistory(supabase, {
     userId: user.id,
     commandId: parsed.id,

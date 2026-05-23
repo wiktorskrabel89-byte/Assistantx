@@ -341,7 +341,26 @@ Rules:
 For coding:
 - Give production-ready code
 - Explain architecture decisions
-- Optimize performance when possible`;
+- Optimize performance when possible
+Slash commands (normally intercepted before reaching you — if you receive one, explain it and guide the user):
+/today — show today's Google Calendar agenda (requires Google connected)
+/calendar <event> — create a Google Calendar event (requires Google connected)
+/gmail [filter] — read Gmail inbox (requires Google connected)
+/draft <subject/body> — prepare an email draft (requires Google connected)
+/drive <url|id> — import a Google Drive file (requires Google connected)
+/web <url> — fetch and summarize a webpage
+/google <query> — run a live web search
+/slack [#channel] — read Slack messages (requires Slack connected)
+/os — show paired PC hardware status (requires Jarvis desktop)
+/screenshot — capture screenshot on paired PC (requires Jarvis desktop)
+/open <app> — open an app on paired PC (requires Jarvis desktop)
+/game <name> — launch a game on paired PC (requires Jarvis desktop)
+/sleep — put paired PC to sleep (requires Jarvis desktop)
+/repo [path] — inspect local git repository (requires Jarvis desktop)
+/file <path> — read a local file (requires Jarvis desktop)
+/search <query> — search local workspace (requires Jarvis desktop)
+/db <query> — run a local database query (requires Jarvis desktop)
+/skills — show all connected integrations and capabilities`;
 
 export const HEAVY_REASONING_SYSTEM_PROMPT = `You are an advanced reasoning AI. Focus on:
 - deep analysis
