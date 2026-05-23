@@ -118,7 +118,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const isDesktop = client === "jarvis-desktop" && Boolean(desktopRedirectTarget) && Boolean(data.session?.access_token);
+  const isDesktop = Boolean(desktopRedirectTarget) && Boolean(data.session?.access_token);
 
   if (isDesktop) {
     const target = desktopRedirectTarget!;
