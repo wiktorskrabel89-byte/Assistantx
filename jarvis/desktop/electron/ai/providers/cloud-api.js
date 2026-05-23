@@ -22,6 +22,15 @@ const PROVIDER_CONFIG = {
     authHeader: 'Authorization',
     authPrefix: 'Bearer ',
   },
+  // DeepSeek-V3 via Groq (drop-in OpenAI-compat endpoint)
+  deepseek: {
+    baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1',
+    endpoint: '/chat/completions',
+    keyEnvs: ['DEEPSEEK_API_KEY', 'GROQ_API_KEY'],
+    keytarAccounts: ['deepseek-api-key', 'groq-api-key'],
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer ',
+  },
   anthropic: {
     baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
     endpoint: '/v1/messages',

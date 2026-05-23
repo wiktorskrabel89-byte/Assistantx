@@ -9,6 +9,13 @@ const {
 } = require('../../services/ipc-guards');
 const { withSchema } = require('./schema');
 const { registerIpcHandlers } = require('./channel-registry');
+const {
+  getEngineMode,
+  setEngineMode,
+  getJarvisModelConfig,
+  setJarvisModelConfig,
+  VALID_ENGINE_MODES,
+} = require('../../runtime-config');
 
 function denied(action, reason) {
   return {
@@ -76,6 +83,10 @@ function createMainIpcHandlers(deps) {
     securityAudit,
     mcpManager,
     mcpRouter,
+    // ── new: wizard + map fly-to ──────────────────────────────────────────────
+    onSetupComplete,
+    getSubscriptionStatus,
+    onMapFlyTo,
   } = deps;
 
   const handlers = {
@@ -130,6 +141,82 @@ function createMainIpcHandlers(deps) {
       return {
         accessToken: validateString(config.accessToken, { allowEmpty: true, maxLen: 4096 }) || '',
       };
+    },
+
+    // ── Map fly-to (triggered by voice pipeline map trigger) ─────────────────
+    'map:fly-to': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const lat = Number(body.lat) || 0;
+      const lon = Number(body.lon) || 0;
+      const label = validateString(body.label, { allowEmpty: true, maxLen: 200 }) || '';
+      if (typeof onMapFlyTo === 'function') {
+        onMapFlyTo({ lat, lon, label });
+      }
+      const win = getMainWindow?.();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('map:fly-to', { lat, lon, label });
+      }
+      return { ok: true };
+    },
+
+    // ── Setup Wizard IPC ─────────────────────────────────────────────────────
+    'setup:complete': async (_event, payload) => {
+      const body = validatePlainObject(payload);
+      if (!body) return invalidResult('setup:complete', 'payload-must-be-object');
+      const engine_mode = validateString(body.engine_mode, { allowEmpty: false, maxLen: 20 });
+      if (!engine_mode || !VALID_ENGINE_MODES.includes(engine_mode)) {
+        return invalidResult('setup:complete', 'invalid-engine-mode');
+      }
+      const hardware_profile = validateString(body.hardware_profile, { allowEmpty: true, maxLen: 20 }) || 'standard';
+      const language = validateString(body.language, { allowEmpty: true, maxLen: 10 }) || 'en';
+      const stt_model = validateString(body.stt_model, { allowEmpty: true, maxLen: 40 }) || 'base';
+      const llm_model = validateString(body.llm_model, { allowEmpty: true, maxLen: 80 }) || 'gemma3:4b';
+      const tts_model = validateString(body.tts_model, { allowEmpty: true, maxLen: 40 }) || 'kokoro';
+      try {
+        const config = setJarvisModelConfig({ engine_mode, hardware_profile, language, stt_model, llm_model, tts_model });
+        if (typeof onSetupComplete === 'function') {
+          await onSetupComplete(config);
+        }
+        return { ok: true, config };
+      } catch (err) {
+        return { ok: false, error: String(err?.message || err) };
+      }
+    },
+
+    'setup:get-subscription-status': async () => {
+      if (typeof getSubscriptionStatus === 'function') {
+        return getSubscriptionStatus();
+      }
+      return { ok: true, status: 'unknown' };
+    },
+
+    'setup:get-recommended-config': () => {
+      const config = getJarvisModelConfig();
+      return { ok: true, config };
+    },
+
+    // ── Config IPC (engine mode + model config) ──────────────────────────────
+    'config:get-engine-mode': () => {
+      const config = getJarvisModelConfig();
+      return { ok: true, engine_mode: config.engine_mode };
+    },
+
+    'config:set-engine-mode': async (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const mode = validateString(body.mode, { allowEmpty: false, maxLen: 20 });
+      if (!mode || !VALID_ENGINE_MODES.includes(mode)) {
+        return invalidResult('config:set-engine-mode', 'invalid-engine-mode');
+      }
+      try {
+        setEngineMode(mode);
+        return { ok: true, engine_mode: mode };
+      } catch (err) {
+        return { ok: false, error: String(err?.message || err) };
+      }
+    },
+
+    'config:get-model-config': () => {
+      return { ok: true, config: getJarvisModelConfig() };
     },
 
     'launcher-search': async (_event, payload) => {
