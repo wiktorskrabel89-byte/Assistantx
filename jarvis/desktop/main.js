@@ -1152,6 +1152,9 @@ createMainIpcHandlers({
   serverKillSwitch: () => serverBridge.killSwitch(),
   serverGetConfig: () => serverBridge.getConfig(),
   serverSetConfig: (payload) => serverBridge.setConfig(payload),
+  getMapConfig: () => ({
+    accessToken: String(process.env.JARVIS_MAPBOX_ACCESS_TOKEN || process.env.MAPBOX_ACCESS_TOKEN || '').trim(),
+  }),
   localServerList: () => localServerStore.list(),
   localServerAdd: (payload) => localServerStore.add(payload),
   localServerUpdate: (serverId, patch) => localServerStore.update(serverId, patch),

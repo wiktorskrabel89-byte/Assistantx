@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://www.openstreetmap.org; font-src 'self' data:; connect-src 'self' https: http: ws: wss: https://nominatim.openstreetmap.org https://api.github.com https://oauth2.googleapis.com https://www.googleapis.com https://gmail.googleapis.com; media-src 'self' data: blob:; frame-src https://www.openstreetmap.org; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.mapbox.com https://*.tiles.mapbox.com; font-src 'self' data:; connect-src 'self' https: http: ws: wss: https://api.mapbox.com https://api.github.com https://oauth2.googleapis.com https://www.googleapis.com https://gmail.googleapis.com; media-src 'self' data: blob:; frame-src https://api.mapbox.com; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Jarvis Desktop</title>
   <style>
     :root {
@@ -1033,7 +1033,7 @@
                   <p class="muted">Use commands like "pokaż mapę Tokio", "pokaż repo owner/repo", "status systemu".</p>
                 </div>
                 <div id="viewport-map" class="viewport-pane">
-                  <h3 style="margin:0;">Mapa OpenStreetMap</h3>
+                  <h3 style="margin:0;">Mapa Mapbox</h3>
                   <div id="viewport-map-canvas"></div>
                 </div>
                 <div id="viewport-repo" class="viewport-pane">

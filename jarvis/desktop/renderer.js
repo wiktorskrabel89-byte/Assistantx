@@ -273,6 +273,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	let visualizerEnergy = 0;
 	let inactivityTimer = null;
 	let mapWidget = null;
+	let mapWidgetInitPromise = null;
 	let currentRepoContext = null;
 	let googleDevicePollTimer = null;
 
@@ -298,13 +299,33 @@ window.addEventListener('DOMContentLoaded', () => {
 		workspaceApp?.classList.toggle('viewport-active', mode !== 'welcome');
 	}
 
-	function ensureMapWidget() {
+	async function ensureMapWidget() {
 		if (!viewportMapCanvas) return null;
-		if (!mapWidget && window.MapWidget) {
-			mapWidget = new window.MapWidget();
-			mapWidget.init(viewportMapCanvas);
+		if (mapWidget) return mapWidget;
+		if (mapWidgetInitPromise) return mapWidgetInitPromise;
+		mapWidgetInitPromise = (async () => {
+			let mapConfig = {};
+			try {
+				mapConfig = await window.jarvisApi?.map?.getConfig?.();
+			} catch (error) {
+				console.warn('[renderer] Failed to load map config:', error?.message || error);
+			}
+			if (!mapWidget && window.MapWidget) {
+				mapWidget = new window.MapWidget({
+					accessToken: mapConfig?.accessToken || '',
+				});
+				if (mapConfig?.accessToken) {
+					window.__JARVIS_MAPBOX_ACCESS_TOKEN__ = mapConfig.accessToken;
+				}
+				mapWidget.init(viewportMapCanvas);
+			}
+			return mapWidget;
+		})();
+		try {
+			return await mapWidgetInitPromise;
+		} finally {
+			mapWidgetInitPromise = null;
 		}
-		return mapWidget;
 	}
 
 	function extractMapPlace(text) {
@@ -425,7 +446,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (/map[ęe]|na mapie/i.test(normalized)) {
 			const place = extractMapPlace(normalized);
 			if (!place) return false;
-			const widget = ensureMapWidget();
+			const widget = await ensureMapWidget();
 			switchViewport('map');
 			try {
 				const loc = await widget?.goTo(place);

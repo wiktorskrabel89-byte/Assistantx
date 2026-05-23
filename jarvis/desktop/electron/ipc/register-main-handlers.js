@@ -58,6 +58,7 @@ function createMainIpcHandlers(deps) {
     serverKillSwitch,
     serverGetConfig,
     serverSetConfig,
+    getMapConfig,
     localServerList,
     localServerAdd,
     localServerUpdate,
@@ -123,6 +124,13 @@ function createMainIpcHandlers(deps) {
         error: result || null,
       };
     }),
+
+    'map:get-config': async () => {
+      const config = typeof getMapConfig === 'function' ? (getMapConfig() || {}) : {};
+      return {
+        accessToken: validateString(config.accessToken, { allowEmpty: true, maxLen: 4096 }) || '',
+      };
+    },
 
     'launcher-search': async (_event, payload) => {
       await ensureDbReady();

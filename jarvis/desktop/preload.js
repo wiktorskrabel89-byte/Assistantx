@@ -80,6 +80,7 @@ const ALLOWED_INVOKE = new Set([
   'mcp:google-poll-auth',
   'mcp:set-api-key',
   'mcp:list-tools',
+  'map:get-config',
   // Clipboard monitoring
   'clipboard:get-status',
   'clipboard:enable',
@@ -290,6 +291,9 @@ function buildJarvisApiV2() {
       getConfig: () => invokeAllowed('server:get-config'),
       setConfig: (payload) => invokeAllowed('server:set-config', payload || {}),
     },
+    map: {
+      getConfig: () => invokeAllowed('map:get-config'),
+    },
     localServer: {
       list: () => invokeAllowed('local-server:list'),
       add: (payload) => invokeAllowed('local-server:add', payload || {}),
@@ -418,6 +422,9 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     killSwitch: () => invokeAllowed('server:kill-switch'),
     getConfig: () => invokeAllowed('server:get-config'),
     setConfig: (payload) => invokeAllowed('server:set-config', payload || {}),
+  },
+  map: {
+    getConfig: () => invokeAllowed('map:get-config'),
   },
   localServer: {
     list: () => invokeAllowed('local-server:list'),
