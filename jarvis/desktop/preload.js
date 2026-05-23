@@ -226,11 +226,16 @@ function buildSidecarApi() {
     disconnect: () => sidecarBridge.disconnect(),
     requestIntentParse: (text, requestId) => sidecarBridge.requestIntentParse(text, requestId),
     requestTts: (text, requestId) => sidecarBridge.requestTts(text, requestId),
+    requestTtsStreamStart: (requestId) => sidecarBridge.requestTtsStreamStart(requestId),
+    requestTtsStreamChunk: (text, requestId, chunkIndex, isFinal) => sidecarBridge.requestTtsStreamChunk(text, requestId, chunkIndex, isFinal),
+    requestTtsStreamEnd: (requestId) => sidecarBridge.requestTtsStreamEnd(requestId),
+    requestTtsStreamCancel: (requestId) => sidecarBridge.requestTtsStreamCancel(requestId),
     requestMemorySearch: (query, requestId, topK) => sidecarBridge.requestMemorySearch(query, requestId, topK),
     requestMemoryUpsert: (text, metadata, requestId) => sidecarBridge.requestMemoryUpsert(text, metadata, requestId),
     requestToolCall: (tool, query, requestId) => sidecarBridge.requestToolCall(tool, query, requestId),
     connect: () => sidecarBridge.connect(),
     setConnection: (connection) => sidecarBridge.setConnection(connection),
+    getCapabilities: () => sidecarBridge.getCapabilities(),
     isCapturing: () => Boolean(sidecarBridge._capturing),
   };
 }

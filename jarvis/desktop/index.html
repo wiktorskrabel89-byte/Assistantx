@@ -1132,9 +1132,26 @@
                   </select>
                 </label>
                 <label class="field">
+                  <span>TTS backend</span>
+                  <select id="tts-backend">
+                    <optgroup label="Free plan (local)">
+                      <option value="kokoro-local">Kokoro-82M (local, fast, free)</option>
+                      <option value="piper-local">Piper (local fallback)</option>
+                      <option value="auto-local">Auto local (Kokoro → Piper)</option>
+                    </optgroup>
+                    <optgroup label="Pro / Pro+ (cloud)">
+                      <option value="groq-cloud">Groq TTS (cloud)</option>
+                      <option value="openai-cloud">OpenAI TTS (BYOK)</option>
+                      <option value="elevenlabs-cloud">ElevenLabs (BYOK)</option>
+                    </optgroup>
+                  </select>
+                </label>
+                <label class="field">
                   <span>Text-to-speech model</span>
                   <select id="tts-model">
-                    <option value="orpheus-english">orpheus-english</option>
+                    <option value="playai-tts">playai-tts (Groq default)</option>
+                    <option value="gpt-4o-mini-tts">gpt-4o-mini-tts (OpenAI)</option>
+                    <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
                   </select>
                 </label>
                 <label class="field">

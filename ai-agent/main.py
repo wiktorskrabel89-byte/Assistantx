@@ -7,9 +7,13 @@ so the server starts quickly even when optional ML models are still being
 downloaded.
 
 Message protocol (JSON lines sent by client → handled here):
-  { "type": "configure",    ...settings }
+  { "type": "configure",    ...settings, "ttsBackend": "kokoro|piper|auto" }
   { "type": "audio_chunk",  "data": "<base64 PCM int16 LE>" }
   { "type": "tts_speak",    "text": "...", "requestId": "..." }
+  { "type": "tts_stream_start", "requestId": "..." }
+  { "type": "tts_stream_chunk", "requestId": "...", "chunkIndex": 0, "text": "...", "isFinal": false }
+  { "type": "tts_stream_end", "requestId": "..." }
+  { "type": "tts_stream_cancel", "requestId": "..." }
   { "type": "parse_intent", "text": "...", "requestId": "..." }
   { "type": "memory_upsert", "text": "...", "metadata": {...}, "requestId": "..." }
   { "type": "memory_search", "query": "...", "topK": 5, "requestId": "..." }
@@ -23,6 +27,8 @@ Events emitted to client:
   { "type": "audio_segment",    "data": "<base64 PCM int16 LE>", "format": "audio/raw", "sampleRate": 16000 }
   { "type": "stt_result",       "text": "...", "isFinal": bool }
   { "type": "tts_audio",        "requestId": "...", "data": "<base64 WAV>", "format": "wav" }
+  { "type": "tts_audio_chunk",  "requestId": "...", "chunkIndex": 0, "data": "<base64 WAV>", "format": "wav", "isFinal": bool }
+  { "type": "tts_stream_done",  "requestId": "...", "chunks": 3, "backend": "kokoro-cpu" }
   { "type": "intent_parsed",    "requestId": "...", "intent": "...", "entities": {...}, "confidence": float }
   { "type": "memory_upsert_result", "requestId": "...", "ok": bool, "id": "..." }
   { "type": "memory_search_result", "requestId": "...", "results": [...] }
@@ -72,6 +78,40 @@ _tts_backend_name = "none"
 
 RUNTIME_STATES = {"idle", "listening", "thinking_fast", "coding_hardcore", "degraded", "killed"}
 MODEL_MODES = {"fast", "coding"}
+TTS_STREAMING_ENABLED = os.environ.get("JARVIS_TTS_STREAMING", "false").strip().lower() in {"1", "true", "yes", "on"}
+DEFAULT_TTS_PREFERRED_BACKEND = os.environ.get("JARVIS_TTS_BACKEND", "kokoro").strip().lower()
+TTS_STREAM_CHUNK_MAX_CHARS = int(os.environ.get("JARVIS_TTS_STREAM_CHUNK_MAX_CHARS", "320"))
+TTS_STREAM_CHUNK_TIMEOUT_SECONDS = float(os.environ.get("JARVIS_TTS_STREAM_CHUNK_TIMEOUT_SECONDS", "8"))
+TTS_WARMUP_ENABLED = os.environ.get("JARVIS_TTS_WARMUP", "true").strip().lower() in {"1", "true", "yes", "on"}
+_tts_warmup_done = False
+_tts_warmup_lock = asyncio.Lock()
+_tts_preferred_backend = "kokoro"
+
+
+def _normalize_tts_backend(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in {"kokoro-local", "kokoro"}:
+        return "kokoro"
+    if raw in {"piper-local", "piper"}:
+        return "piper"
+    return "auto"
+
+
+def _set_tts_preferred_backend(value: Any) -> None:
+    global _tts_engine
+    global _tts_backend_name
+    global _tts_preferred_backend
+    global _tts_warmup_done
+    preferred = _normalize_tts_backend(value)
+    if preferred == _tts_preferred_backend and _tts_engine is not None:
+        return
+    _tts_preferred_backend = preferred
+    _tts_engine = None
+    _tts_backend_name = "none"
+    _tts_warmup_done = False
+
+
+_set_tts_preferred_backend(DEFAULT_TTS_PREFERRED_BACKEND)
 
 
 def _get_wake_detector():
@@ -116,16 +156,32 @@ def _get_tts_engine():
     global _tts_backend_name
     global _tts_engine
     if _tts_engine is None:
-        try:
-            from tts.piper_tts import PiperTTS
-            piper = PiperTTS()
-            if piper.available:
-                _tts_engine = piper
-                _tts_backend_name = "piper-cpu"
-                return _tts_engine
-        except Exception as exc:
-            logger.debug("Piper TTS init failed: %s", exc)
-
+        backends = ["kokoro", "piper"]
+        if _tts_preferred_backend == "piper":
+            backends = ["piper", "kokoro"]
+        elif _tts_preferred_backend == "auto":
+            backends = ["kokoro", "piper"]
+        for backend in backends:
+            if backend == "kokoro":
+                try:
+                    from tts.kokoro_tts import KokoroTTS
+                    kokoro = KokoroTTS()
+                    if kokoro.available:
+                        _tts_engine = kokoro
+                        _tts_backend_name = "kokoro-cpu"
+                        return _tts_engine
+                except Exception as exc:
+                    logger.debug("Kokoro TTS init failed: %s", exc)
+                continue
+            try:
+                from tts.piper_tts import PiperTTS
+                piper = PiperTTS()
+                if piper.available:
+                    _tts_engine = piper
+                    _tts_backend_name = "piper-cpu"
+                    return _tts_engine
+            except Exception as exc:
+                logger.debug("Piper TTS init failed: %s", exc)
         from tts.kokoro_tts import KokoroTTS
         _tts_engine = KokoroTTS()
         _tts_backend_name = "kokoro-cpu"
@@ -193,6 +249,25 @@ class ConnectionState:
         self.sample_rate: int = 16000
         self.outbound_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=256)
         self.last_rms_sent_at: float = 0.0
+        self.tts_stream_request_id: str = ""
+        self.tts_stream_chunk_index: int = 0
+
+
+async def _warmup_tts_if_needed() -> None:
+    global _tts_warmup_done
+    if _tts_warmup_done or not TTS_WARMUP_ENABLED:
+        return
+    async with _tts_warmup_lock:
+        if _tts_warmup_done:
+            return
+        try:
+            loop = asyncio.get_event_loop()
+            tts = _get_tts_engine()
+            await loop.run_in_executor(None, tts.synthesize, "Hello.")
+            _tts_warmup_done = True
+            logger.info("TTS warmup finished (%s).", _tts_backend_name)
+        except Exception as exc:
+            logger.debug("TTS warmup skipped: %s", exc)
 
 
 async def _send(ws: WebSocketServerProtocol, payload: dict, state: ConnectionState | None = None) -> None:
@@ -227,6 +302,8 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         state.stt_enabled = bool(msg["sttEnabled"])
     if "ttsEnabled" in msg:
         state.tts_enabled = bool(msg["ttsEnabled"])
+    if "ttsBackend" in msg:
+        _set_tts_preferred_backend(msg["ttsBackend"])
     if "nlpEnabled" in msg:
         state.nlp_enabled = bool(msg["nlpEnabled"])
     if "sampleRate" in msg:
@@ -248,10 +325,17 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
             "phase": "configured",
             "runtimeState": state.runtime_state,
             "modelMode": state.model_mode,
+            "capabilities": {
+                "ttsStreamingSupported": bool(TTS_STREAMING_ENABLED),
+                "ttsBackend": _tts_backend_name,
+                "ttsPreferredBackend": _tts_preferred_backend,
+            },
             "message": "Settings applied.",
         },
         state,
     )
+    if TTS_WARMUP_ENABLED and state.tts_enabled:
+        asyncio.create_task(_warmup_tts_if_needed())
 
 
 async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
@@ -397,6 +481,97 @@ async def _handle_tts_speak(ws: WebSocketServerProtocol, state: ConnectionState,
             "message": f"TTS synthesis failed: {exc}",
             "requestId": request_id,
         }, state)
+
+
+async def _handle_tts_stream_start(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
+    request_id = str(msg.get("requestId", "")).strip()
+    state.tts_stream_request_id = request_id
+    state.tts_stream_chunk_index = 0
+    await _send(
+        ws,
+        {
+            "type": "tts_stream_ready",
+            "requestId": request_id,
+            "backend": _tts_backend_name,
+        },
+        state,
+    )
+
+
+async def _handle_tts_stream_cancel(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
+    request_id = str(msg.get("requestId", "")).strip()
+    if request_id and request_id != state.tts_stream_request_id:
+        return
+    state.tts_stream_request_id = ""
+    state.tts_stream_chunk_index = 0
+    await _send(ws, {"type": "tts_stream_cancelled", "requestId": request_id}, state)
+
+
+async def _handle_tts_stream_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
+    text = str(msg.get("text", "")).strip()
+    if not text:
+        return
+    if len(text) > TTS_STREAM_CHUNK_MAX_CHARS:
+        text = text[:TTS_STREAM_CHUNK_MAX_CHARS].strip()
+    request_id = str(msg.get("requestId", "")).strip()
+    if request_id and state.tts_stream_request_id and request_id != state.tts_stream_request_id:
+        return
+    if request_id:
+        state.tts_stream_request_id = request_id
+    if not state.tts_enabled:
+        await _send(ws, {"type": "status", "phase": "tts_skipped", "message": "TTS disabled."}, state)
+        return
+    loop = asyncio.get_event_loop()
+    try:
+        tts = _get_tts_engine()
+        wav_bytes = await asyncio.wait_for(
+            loop.run_in_executor(None, tts.synthesize, text),
+            timeout=max(TTS_STREAM_CHUNK_TIMEOUT_SECONDS, 1.0),
+        )
+        _emit_rms_from_wav(state, wav_bytes, source="tts")
+        encoded = base64.b64encode(wav_bytes).decode("ascii")
+        chunk_index = int(msg.get("chunkIndex", state.tts_stream_chunk_index) or 0)
+        await _send(
+            ws,
+            {
+                "type": "tts_audio_chunk",
+                "requestId": state.tts_stream_request_id or request_id,
+                "chunkIndex": chunk_index,
+                "data": encoded,
+                "format": "wav",
+                "backend": _tts_backend_name,
+                "isFinal": bool(msg.get("isFinal", False)),
+            },
+            state,
+        )
+        state.tts_stream_chunk_index = max(chunk_index + 1, state.tts_stream_chunk_index + 1)
+    except Exception as exc:
+        logger.warning("TTS streaming chunk error: %s", exc)
+        await _send(
+            ws,
+            {
+                "type": "error",
+                "message": f"TTS stream chunk failed: {exc}",
+                "requestId": state.tts_stream_request_id or request_id,
+            },
+            state,
+        )
+
+
+async def _handle_tts_stream_end(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
+    request_id = str(msg.get("requestId", state.tts_stream_request_id)).strip()
+    await _send(
+        ws,
+        {
+            "type": "tts_stream_done",
+            "requestId": request_id,
+            "chunks": state.tts_stream_chunk_index,
+            "backend": _tts_backend_name,
+        },
+        state,
+    )
+    state.tts_stream_request_id = ""
+    state.tts_stream_chunk_index = 0
 
 
 async def _handle_parse_intent(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
@@ -570,6 +745,10 @@ HANDLERS = {
     "configure": _handle_configure,
     "audio_chunk": _handle_audio_chunk,
     "tts_speak": _handle_tts_speak,
+    "tts_stream_start": _handle_tts_stream_start,
+    "tts_stream_chunk": _handle_tts_stream_chunk,
+    "tts_stream_end": _handle_tts_stream_end,
+    "tts_stream_cancel": _handle_tts_stream_cancel,
     "parse_intent": _handle_parse_intent,
     "memory_upsert": _handle_memory_upsert,
     "memory_search": _handle_memory_search,
@@ -588,7 +767,14 @@ async def handle_connection(ws: WebSocketServerProtocol) -> None:
         "type": "status",
         "phase": "connected",
         "message": "Jarvis AI-Agent sidecar ready.",
+        "capabilities": {
+            "ttsStreamingSupported": bool(TTS_STREAMING_ENABLED),
+            "ttsBackend": _tts_backend_name,
+            "ttsPreferredBackend": _tts_preferred_backend,
+        },
     }, state)
+    if TTS_STREAMING_ENABLED:
+        asyncio.create_task(_warmup_tts_if_needed())
 
     try:
         async for raw in ws:

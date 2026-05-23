@@ -27,6 +27,7 @@ const { createExecutionSandbox } = require('./electron/sandbox/execution-sandbox
 const { createPromptRegistry } = require('./prompts/registry');
 const { createModelCapabilityRegistry } = require('./electron/ai/models/registry');
 const { buildTemporalContext } = require('./electron/temporal/context');
+const { AiStreamSegmenter, normalizeChunk } = require('./ai-stream-segmenter');
 
 let ipcRenderer;
 let clipboard;
@@ -58,12 +59,14 @@ if (runtimeV2) {
   runtimeV2.sandbox = createExecutionSandbox();
 }
 let runtimeV2Adapter = null;
+const pendingAiRouteStreams = new Map();
 const DEFAULT_BACKEND_URL = '';
 const EXPLICIT_BACKEND_URL = (process.env.JARVIS_BACKEND_URL || '').trim();
 const BACKEND_URL = EXPLICIT_BACKEND_URL || DEFAULT_BACKEND_URL;
 const BACKEND_IS_OPTIONAL = !EXPLICIT_BACKEND_URL;
 const REALTIME_EDGE_URL = process.env.JARVIS_REALTIME_URL || '';
 const HEARTBEAT_INTERVAL_MS = Number(process.env.JARVIS_HEARTBEAT_INTERVAL_MS || 5000);
+const TTS_STREAMING_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.JARVIS_TTS_STREAMING || 'false'));
 const USER_HOME = process.env.USERPROFILE || os.homedir();
 const DEFAULT_FILE_ROOT = path.join(USER_HOME, 'Desktop');
 const SAFE_ROOTS = [
@@ -278,6 +281,39 @@ function emitStatus(status, detail) {
 function emitRawMessage(payload) {
   emitter.emit('message', JSON.stringify(payload));
 }
+
+function bindAiRouteStreamingEvents() {
+  if (!ipcRenderer || typeof ipcRenderer.on !== 'function') return;
+  ipcRenderer.on('jarvis-ai-route-event', (_event, payload) => {
+    const streamId = String(payload?.streamId || '').trim();
+    if (!streamId) return;
+    const state = pendingAiRouteStreams.get(streamId);
+    if (!state) return;
+    const token = normalizeChunk(String(payload?.token || ''));
+    if (!token) return;
+    emitRawMessage({
+      type: 'ai_stream_token',
+      streamId,
+      token,
+      provider: payload?.provider || state.provider || null,
+      model: payload?.model || state.model || null,
+    });
+    const segments = state.segmenter.pushToken(token);
+    for (const segment of segments) {
+      state.segmentIndex += 1;
+      emitRawMessage({
+        type: 'ai_stream_segment',
+        streamId,
+        segment,
+        segmentIndex: state.segmentIndex,
+        provider: payload?.provider || state.provider || null,
+        model: payload?.model || state.model || null,
+      });
+    }
+  });
+}
+
+bindAiRouteStreamingEvents();
 
 function sendMessageToBackend(payload) {
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -567,8 +603,28 @@ async function runAiPrompt(prompt, meta = {}) {
   let lastError = null;
   const session = getAccountSession();
   const accessToken = session?.accessToken;
+  const streamId = `ai-stream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const streamState = {
+    streamId,
+    segmenter: new AiStreamSegmenter(),
+    segmentIndex: 0,
+    provider: null,
+    model: null,
+    done: false,
+  };
+  if (TTS_STREAMING_ENABLED) {
+    pendingAiRouteStreams.set(streamId, streamState);
+    emitRawMessage({
+      type: 'ai_stream_started',
+      streamId,
+    });
+  }
 
   if (!accessToken) {
+    if (TTS_STREAMING_ENABLED) {
+      emitRawMessage({ type: 'ai_stream_done', streamId, reason: 'not-authenticated' });
+      pendingAiRouteStreams.delete(streamId);
+    }
     emitRawMessage({ type: 'ai_thinking', inFlight: false });
     return publishResult({
       title: 'Not logged in',
@@ -578,6 +634,7 @@ async function runAiPrompt(prompt, meta = {}) {
       source: meta.source || 'local',
       origin: meta.origin || 'desktop',
       taskId: meta.taskId || null,
+      streamId,
     });
   }
 
@@ -603,10 +660,52 @@ async function runAiPrompt(prompt, meta = {}) {
         messages: history,
         profile: routeProfile,
         contextType: routeProfile === 'coding' ? 'code' : routeProfile === 'tool' ? 'tool' : 'general',
+        streamId: TTS_STREAMING_ENABLED ? streamId : '',
       });
       if (routed?.ok && routed?.text) {
         const answer = String(routed.text || '').trim();
         if (answer) {
+          streamState.provider = routed.provider || null;
+          streamState.model = routed.model || null;
+          if (TTS_STREAMING_ENABLED && streamState.segmentIndex === 0) {
+            const fallbackSegments = streamState.segmenter.pushToken(answer);
+            const finalSegments = fallbackSegments.concat(streamState.segmenter.flush());
+            for (const segment of finalSegments) {
+              streamState.segmentIndex += 1;
+              emitRawMessage({
+                type: 'ai_stream_segment',
+                streamId,
+                segment,
+                segmentIndex: streamState.segmentIndex,
+                provider: streamState.provider,
+                model: streamState.model,
+              });
+            }
+          } else if (TTS_STREAMING_ENABLED) {
+            const tailSegments = streamState.segmenter.flush();
+            for (const segment of tailSegments) {
+              streamState.segmentIndex += 1;
+              emitRawMessage({
+                type: 'ai_stream_segment',
+                streamId,
+                segment,
+                segmentIndex: streamState.segmentIndex,
+                provider: streamState.provider,
+                model: streamState.model,
+              });
+            }
+          }
+          if (TTS_STREAMING_ENABLED && !streamState.done) {
+            streamState.done = true;
+            emitRawMessage({
+              type: 'ai_stream_done',
+              streamId,
+              provider: streamState.provider,
+              model: streamState.model,
+              segments: streamState.segmentIndex,
+            });
+            pendingAiRouteStreams.delete(streamId);
+          }
           recordConversationTurn('assistant', answer);
           runtimeV2?.cache?.set(`prompt:${routed.provider || routeHint.provider}:${routed.model || routeHint.model}:${composedPrompt}`, { text: answer }, 45_000);
           runtimeV2?.metrics?.increment('runtime.tokens.request.count', 1, {
@@ -625,6 +724,8 @@ async function runAiPrompt(prompt, meta = {}) {
             model: routed.model || null,
             routeProfile,
             routeReason: routed?.route?.reason || null,
+            streamId,
+            ttsStreaming: Boolean(TTS_STREAMING_ENABLED && streamState.segmentIndex > 0),
           });
         }
       }
@@ -640,6 +741,31 @@ async function runAiPrompt(prompt, meta = {}) {
     try {
       const cached = runtimeV2?.cache?.get(`prompt:${routeHint.provider}:${routeHint.model}:${composedPrompt}`);
       if (cached) {
+        if (TTS_STREAMING_ENABLED && !streamState.done) {
+          const cachedSegments = streamState.segmenter.pushToken(String(cached.text || ''));
+          const finalCachedSegments = cachedSegments.concat(streamState.segmenter.flush());
+          for (const segment of finalCachedSegments) {
+            streamState.segmentIndex += 1;
+            emitRawMessage({
+              type: 'ai_stream_segment',
+              streamId,
+              segment,
+              segmentIndex: streamState.segmentIndex,
+              provider: routeHint.provider,
+              model: routeHint.model,
+            });
+          }
+          streamState.done = true;
+          emitRawMessage({
+            type: 'ai_stream_done',
+            streamId,
+            provider: routeHint.provider,
+            model: routeHint.model,
+            segments: streamState.segmentIndex,
+            fromCache: true,
+          });
+          pendingAiRouteStreams.delete(streamId);
+        }
         emitRawMessage({ type: 'ai_thinking', inFlight: false });
         return publishResult({
           title: 'Jarvis AI',
@@ -648,6 +774,8 @@ async function runAiPrompt(prompt, meta = {}) {
           source: meta.source || 'local',
           origin: meta.origin || 'desktop',
           taskId: meta.taskId || null,
+          streamId,
+          ttsStreaming: Boolean(TTS_STREAMING_ENABLED && streamState.segmentIndex > 0),
         });
       }
 
@@ -694,6 +822,32 @@ async function runAiPrompt(prompt, meta = {}) {
       if (!answer) {
         throw new Error(`AI endpoint returned an empty response at ${endpoint}`);
       }
+      if (TTS_STREAMING_ENABLED && streamState.segmentIndex === 0) {
+        const fallbackSegments = streamState.segmenter.pushToken(answer);
+        const finalSegments = fallbackSegments.concat(streamState.segmenter.flush());
+        for (const segment of finalSegments) {
+          streamState.segmentIndex += 1;
+          emitRawMessage({
+            type: 'ai_stream_segment',
+            streamId,
+            segment,
+            segmentIndex: streamState.segmentIndex,
+            provider: routeHint.provider,
+            model: routeHint.model,
+          });
+        }
+      }
+      if (TTS_STREAMING_ENABLED && !streamState.done) {
+        streamState.done = true;
+        emitRawMessage({
+          type: 'ai_stream_done',
+          streamId,
+          provider: routeHint.provider,
+          model: routeHint.model,
+          segments: streamState.segmentIndex,
+        });
+        pendingAiRouteStreams.delete(streamId);
+      }
 
       // Record the assistant's reply so subsequent turns have full context.
       recordConversationTurn('assistant', answer);
@@ -711,12 +865,18 @@ async function runAiPrompt(prompt, meta = {}) {
         source: meta.source || 'local',
         origin: meta.origin || 'desktop',
         taskId: meta.taskId || null,
+        streamId,
+        ttsStreaming: Boolean(TTS_STREAMING_ENABLED && streamState.segmentIndex > 0),
       });
     } catch (error) {
       lastError = error;
     }
   }
 
+  if (TTS_STREAMING_ENABLED && !streamState.done) {
+    emitRawMessage({ type: 'ai_stream_done', streamId, error: lastError?.message || 'ai-unavailable' });
+    pendingAiRouteStreams.delete(streamId);
+  }
   emitRawMessage({ type: 'ai_thinking', inFlight: false });
 
   return publishResult({
@@ -727,6 +887,8 @@ async function runAiPrompt(prompt, meta = {}) {
     source: meta.source || 'local',
     origin: meta.origin || 'desktop',
     taskId: meta.taskId || null,
+    streamId,
+    ttsStreaming: false,
   });
 }
 

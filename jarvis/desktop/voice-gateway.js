@@ -6,6 +6,8 @@ const { createVoiceBackendAbstraction } = require('./voice/backend-abstraction')
 const DEFAULT_STT_MODEL = 'whisper-large-v3-turbo';
 const DEFAULT_VOICE_PERSONA = 'jarvis';
 const DEFAULT_LANGUAGE = 'en';
+const DEFAULT_TTS_MODEL = 'playai-tts';
+const DEFAULT_TTS_BACKEND = 'kokoro-local';
 const PROVIDER_MODE_SERVER = 'assistantx-server';
 const PROVIDER_MODE_DIRECT = 'desktop-direct';
 
@@ -25,6 +27,8 @@ class VoiceGateway extends EventEmitter {
       wakeWordPhrase: 'Hey Jarvis',
       sttModel: DEFAULT_STT_MODEL,
       persona: DEFAULT_VOICE_PERSONA,
+      ttsBackend: DEFAULT_TTS_BACKEND,
+      ttsModel: DEFAULT_TTS_MODEL,
       autoSubmit: true,
       fallbackToBrowserSpeech: true,
     };
@@ -60,7 +64,8 @@ class VoiceGateway extends EventEmitter {
         wakeWordPhrase: String(this._settings.wakeWordPhrase || '').trim() || 'Hey Jarvis',
         language: String(this._settings.language || DEFAULT_LANGUAGE).split('-')[0],
         sttEnabled: false,
-        ttsEnabled: false,
+        ttsEnabled: Boolean(isLocalTtsBackend(this._settings.ttsBackend)),
+        ttsBackend: toSidecarTtsBackend(this._settings.ttsBackend),
         nlpEnabled: false,
         vadEnabled: true,
         listeningForCommand: false,
@@ -147,11 +152,15 @@ class VoiceGateway extends EventEmitter {
 
     const persona = String(options.persona || this._settings.persona || DEFAULT_VOICE_PERSONA);
     const language = String(options.language || this._settings.language || DEFAULT_LANGUAGE);
+    const provider = String(options.provider || resolveCloudProvider(this._settings.ttsBackend));
+    const model = String(options.model || this._settings.ttsModel || DEFAULT_TTS_MODEL);
     try {
       const payload = await this._backend.synthesize({
         text: input,
         persona,
         language,
+        provider,
+        model,
       });
       return {
         ok: Boolean(payload?.ok && payload.audioBase64),
@@ -242,6 +251,25 @@ function mapVoiceTextToCommand(text) {
   if (lower.includes('mute')) return { command: 'mute' };
   if (lower.includes('screenshot')) return { command: 'screenshot' };
   return null;
+}
+
+function isLocalTtsBackend(backend) {
+  const value = String(backend || '').toLowerCase();
+  return value === 'kokoro-local' || value === 'piper-local' || value === 'auto-local';
+}
+
+function toSidecarTtsBackend(backend) {
+  const value = String(backend || '').toLowerCase();
+  if (value === 'kokoro-local') return 'kokoro';
+  if (value === 'piper-local') return 'piper';
+  return 'auto';
+}
+
+function resolveCloudProvider(backend) {
+  const value = String(backend || '').toLowerCase();
+  if (value === 'openai-cloud') return 'openai';
+  if (value === 'elevenlabs-cloud') return 'elevenlabs';
+  return 'groq';
 }
 
 module.exports = {

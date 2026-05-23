@@ -305,6 +305,18 @@ function createMainIpcHandlers(deps) {
           contextType,
           retryCount: validateInteger(body.retryCount, { min: 0, max: 5, fallback: 0 }),
           contextSize: validateString(body.contextSize, { allowEmpty: true, maxLen: 20 }) || undefined,
+          streamId: validateString(body.streamId, { allowEmpty: true, maxLen: 120 }) || '',
+        }, {
+          onChunk: (chunkEvent) => {
+            try {
+              _event.sender.send('jarvis-ai-route-event', {
+                type: 'ai_stream_token',
+                ...(chunkEvent && typeof chunkEvent === 'object' ? chunkEvent : {}),
+              });
+            } catch {
+              // ignore detached renderers
+            }
+          },
         });
       } catch (error) {
         return {
