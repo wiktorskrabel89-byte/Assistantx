@@ -616,6 +616,13 @@ export function useWorkspaceState() {
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
+  const setMultiAgentBeta = useCallback((multiAgentBeta: boolean) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: { ...workspace.settings, multiAgentBeta },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
   const clearMemoryNotes = useCallback(() => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
@@ -983,6 +990,7 @@ export function useWorkspaceState() {
     setAutoSpeakResponses,
     setPersonalityMode,
     setPostPrReviewCommentsToGitHub,
+    setMultiAgentBeta,
     clearMemoryNotes,
     createPromptTemplate,
     updatePromptTemplate,
