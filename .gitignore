@@ -48,3 +48,4 @@ next-env.d.ts
 /ai-agent/__pycache__/
 *.pyc
 /jarvis/power-guard/target/
+.aider*
