@@ -97,69 +97,71 @@ export default function PublicHome() {
   const t = COPY[language];
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-100 px-6 py-10 text-slate-900">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-5xl flex-col justify-center gap-8">
-        <div className="rounded-[2rem] border border-blue-200/70 bg-white/90 p-8 shadow-[0_24px_80px_-28px_rgba(37,99,235,0.28)] backdrop-blur">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
-            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 font-medium text-blue-700">
-              {t.badge}
-            </span>
-            <div className="flex flex-wrap items-center gap-3">
-              <PublicLanguageSelector initialLanguage={language} />
-              <nav className="flex flex-wrap items-center gap-3">
-                <Link href="/privacy" className="font-medium underline decoration-blue-200 underline-offset-4 hover:text-blue-700">
-                  {t.privacy}
-                </Link>
-                <Link href="/terms" className="font-medium underline decoration-blue-200 underline-offset-4 hover:text-blue-700">
-                  {t.terms}
-                </Link>
-                <Link href="/support" className="font-medium underline decoration-blue-200 underline-offset-4 hover:text-blue-700">
-                  {t.support}
-                </Link>
-                <Link href="/pricing" className="font-medium underline decoration-blue-200 underline-offset-4 hover:text-blue-700">
-                  {t.pricing}
-                </Link>
-                <Link href="/roadmap" className="font-medium underline decoration-blue-200 underline-offset-4 hover:text-blue-700">
-                  {t.roadmap}
-                </Link>
-              </nav>
+    <main className="min-h-screen bg-white px-5 py-5 text-slate-950">
+      <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-6xl flex-col">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4 text-sm text-slate-600">
+          <Link href="/" className="text-base font-semibold tracking-tight text-slate-950">
+            AssistantX
+          </Link>
+          <div className="flex flex-wrap items-center gap-4">
+            <PublicLanguageSelector initialLanguage={language} />
+            <nav className="flex flex-wrap items-center gap-4">
+              <Link href="/pricing" className="font-medium hover:text-slate-950">{t.pricing}</Link>
+              <Link href="/roadmap" className="font-medium hover:text-slate-950">{t.roadmap}</Link>
+              <Link href="/support" className="font-medium hover:text-slate-950">{t.support}</Link>
+              <Link href="/privacy" className="font-medium hover:text-slate-950">{t.privacy}</Link>
+              <Link href="/terms" className="font-medium hover:text-slate-950">{t.terms}</Link>
+            </nav>
+          </div>
+        </header>
+
+        <section className="grid flex-1 items-center gap-10 py-14 lg:grid-cols-[minmax(0,1fr)_430px] lg:py-20">
+          <div className="max-w-2xl">
+            <p className="mb-4 text-sm font-medium text-slate-500">{t.badge}</p>
+            <h1 className="text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
+              {t.title}
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
+              {t.intro}
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link href="/auth/login" className="inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800">
+                {t.signIn}
+              </Link>
+              <Link href="/pricing" className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-800 transition hover:border-slate-950">
+                {t.openPricing}
+              </Link>
+              <Link href="/roadmap" className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-800 transition hover:border-slate-950">
+                {t.openRoadmap}
+              </Link>
             </div>
+            <p className="mt-5 max-w-xl text-sm leading-6 text-slate-500">
+              {t.noLogin}
+            </p>
           </div>
 
-          <h1 className="mb-4 text-4xl font-bold text-blue-700">{t.title}</h1>
-          <p className="mb-4 text-lg text-slate-700">
-            <strong>AssistantX</strong> {t.intro}
-          </p>
-          <ul className="mb-6 list-disc pl-6 text-slate-700">
-            {t.bullets.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-          <p className="mb-6 text-slate-600">
-            {t.noLogin}
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <Link href="/auth/login" className="inline-flex rounded-xl bg-blue-600 px-6 py-3 font-medium text-white transition hover:bg-blue-700">
-              {t.signIn}
-            </Link>
-            <Link href="/pricing" className="inline-flex rounded-xl border border-slate-200 px-6 py-3 font-medium text-slate-700 transition hover:border-blue-200 hover:text-blue-700">
-              {t.openPricing}
-            </Link>
-            <Link href="/roadmap" className="inline-flex rounded-xl border border-slate-200 px-6 py-3 font-medium text-slate-700 transition hover:border-blue-200 hover:text-blue-700">
-              {t.openRoadmap}
-            </Link>
-            <Link href="/privacy" className="inline-flex rounded-xl border border-slate-200 px-6 py-3 font-medium text-slate-700 transition hover:border-blue-200 hover:text-blue-700">
-              {t.reviewPrivacy}
-            </Link>
+          <div className="border border-slate-200 bg-slate-50 p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-950">Workspace</div>
+                <div className="text-xs text-slate-500">{t.socialProofTitle}</div>
+              </div>
+              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+            </div>
+            <ul className="grid gap-3">
+              {t.bullets.map((item) => (
+                <li key={item} className="border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700">
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
+              {t.socialProofSubtitle}
+            </p>
           </div>
-
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4">
-            <div className="text-sm font-semibold text-slate-800">{t.socialProofTitle}</div>
-            <p className="mt-1 text-sm text-slate-600">{t.socialProofSubtitle}</p>
-          </div>
-        </div>
+        </section>
       </div>
-      <footer className="mt-8 space-y-2 text-center text-sm text-slate-500">
+      <footer className="mx-auto mt-4 max-w-6xl space-y-2 border-t border-slate-200 pt-4 text-sm text-slate-500">
         <div>&copy; {new Date().getFullYear()} AssistantX. {t.footerRights}</div>
         <div className="text-xs text-slate-600">
           Acrux.pl Sp. z o.o., ul. Sobczaka 1, Poznań. NIP: 7792506166.

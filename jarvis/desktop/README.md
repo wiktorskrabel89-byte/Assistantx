@@ -77,7 +77,7 @@ Linux runtime notes:
 ## Update model (current)
 
 Jarvis Desktop uses `electron-updater` in `main.js` with GitHub Releases provider
-configured in desktop `package.json` (`provider: github`, `private: true`).
+configured in desktop `package.json` (`provider: github`, `private: true`) for private AssistantX releases.
 
 - Dev mode: updates are disabled.
 - Packaged mode: updater does a silent startup check and uses custom in-app update modals (no native updater dialogs).

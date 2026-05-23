@@ -103,7 +103,7 @@ describe('createMCPToolRouter', () => {
       'github', 'filesystem', 'google-suite', 'postgres', 'fetch',
       'brave-search', 'slack', 'memory', 'operating-system',
     ]);
-    for (const [toolName, mapping] of Object.entries(TOOL_MAP)) {
+    for (const mapping of Object.values(TOOL_MAP)) {
       expect(VALID_IDS.has(mapping.serverId)).toBe(true);
     }
   });

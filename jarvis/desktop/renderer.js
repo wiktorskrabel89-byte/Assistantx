@@ -272,7 +272,6 @@ window.addEventListener('DOMContentLoaded', () => {
 	let currentAgentState = AGENT_STATE.IDLE;
 	let visualizerEnergy = 0;
 	let inactivityTimer = null;
-	let currentViewport = 'welcome';
 	let mapWidget = null;
 	let currentRepoContext = null;
 	let googleDevicePollTimer = null;
@@ -292,7 +291,6 @@ window.addEventListener('DOMContentLoaded', () => {
 	setMainPanelTab('command');
 
 	function switchViewport(mode) {
-		currentViewport = mode;
 		viewportWelcome?.classList.toggle('active', mode === 'welcome');
 		viewportMap?.classList.toggle('active', mode === 'map');
 		viewportRepo?.classList.toggle('active', mode === 'repo');

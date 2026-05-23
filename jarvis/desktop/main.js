@@ -36,16 +36,6 @@ const { createMemoryTools } = require('./electron/tools/memory');
 const { createOperatingSystemTools } = require('./electron/tools/os');
 const { createMCPServerManager } = require('./electron/mcp/server-manager');
 const { createMCPToolRouter } = require('./electron/mcp/tool-router');
-const {
-  buildMetadataSignatureUrl,
-  classifyInstallerBlocker,
-  classifySignatureDiagnostic,
-  classifyUpdateVersionSanity,
-  extractLatestFeedMetadata,
-  isUserWithinStagedRollout,
-  validateLatestFeedMetadata,
-  verifyDetachedMetadataSignature,
-} = require('./electron/updater/feed-metadata');
 const { AIRouter } = require('./electron/ai/router');
 const { createLocalServerStore } = require('./electron/ai/local-server-store');
 
@@ -439,6 +429,7 @@ function startSidecar() {
   });
 
   sidecarStatus = 'starting';
+  markSidecarListeningForHeartbeat();
 
   sidecarProcess.stdout?.on('data', (data) => {
     sidecarStdoutBuffer += data.toString();
@@ -1246,7 +1237,7 @@ app.on('before-quit', () => {
 });
 
 nativeAutoUpdater?.on?.('before-quit-for-update', () => {
-  prepareForQuitAndInstall(updateState.version || _validatedFeedMetadata?.version || null);
+  prepareForQuitAndInstall(updateState.version || null);
 });
 
 app.whenReady().then(async () => {

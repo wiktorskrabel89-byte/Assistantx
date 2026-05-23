@@ -65,7 +65,6 @@ function createFilesystemTools({ rootPath } = {}) {
     const results = [];
     for (const item of paths.slice(0, 100)) {
       try {
-        // eslint-disable-next-line no-await-in-loop
         const read = await read_file({ path: item });
         results.push({ path: read.path, content: read.content, ok: true });
       } catch (error) {
@@ -108,7 +107,6 @@ function createFilesystemTools({ rootPath } = {}) {
     const entries = await fs.promises.readdir(targetPath, { withFileTypes: true });
     for (const entry of entries) {
       const childPath = path.join(targetPath, entry.name);
-      // eslint-disable-next-line no-await-in-loop
       const childNode = await buildDirectoryTree(childPath, depth - 1).catch(() => null);
       if (childNode) node.children.push(childNode);
     }
@@ -142,7 +140,6 @@ function createFilesystemTools({ rootPath } = {}) {
           });
         }
         if (entry.isDirectory()) {
-          // eslint-disable-next-line no-await-in-loop
           await walk(fullPath);
         }
       }

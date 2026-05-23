@@ -71,8 +71,6 @@ function createMainIpcHandlers(deps) {
     getMainWindow,
     getOverlayWindow,
     createLauncherOverlayWindow,
-    prepareForQuitAndInstall,
-    resetQuitAndInstallPreparation,
     permissions,
     securityAudit,
     mcpManager,

@@ -39,11 +39,16 @@ export function useJarvisDeviceStatus() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    const initialRefreshId = window.setTimeout(() => {
+      void refresh();
+    }, 0);
     const intervalId = window.setInterval(() => {
       void refresh();
     }, 15000);
-    return () => window.clearInterval(intervalId);
+    return () => {
+      window.clearTimeout(initialRefreshId);
+      window.clearInterval(intervalId);
+    };
   }, [refresh]);
 
   const primaryDevice = useMemo(() => (
