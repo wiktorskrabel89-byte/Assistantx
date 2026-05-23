@@ -118,10 +118,10 @@ export async function GET(request: Request) {
     }
   }
 
-  const isDesktop = (client === "jarvis-desktop" || Boolean(desktopRedirectTarget)) && Boolean(data.session?.access_token);
+  const isDesktop = Boolean(desktopRedirectTarget) && Boolean(data.session?.access_token);
 
   if (isDesktop) {
-    const target = desktopRedirectTarget ?? new URL("assistantx://auth/callback");
+    const target = desktopRedirectTarget!;
     const queryParams = new URLSearchParams({
       access_token: data.session!.access_token,
       refresh_token: data.session!.refresh_token ?? "",
