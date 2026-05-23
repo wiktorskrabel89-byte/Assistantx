@@ -228,6 +228,10 @@ jobs:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
+      - name: Embedded Python runtime smoke
+        working-directory: jarvis/desktop
+        run: npm run smoke:runtime
+
       - name: Attach release-notes.json to desktop dist
         shell: pwsh
         run: |
@@ -239,6 +243,10 @@ jobs:
           }
           Copy-Item $src $dst -Force
           Write-Host "Copied release notes to $dst"
+
+      - name: Packaged installer smoke
+        working-directory: jarvis/desktop
+        run: npm run smoke:installer
 
       - name: List dist directory
         working-directory: jarvis/desktop
