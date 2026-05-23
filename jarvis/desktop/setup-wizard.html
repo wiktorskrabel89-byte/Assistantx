@@ -195,6 +195,22 @@
     .banner-ok      { background: rgba(0,255,213,0.07); border: 1px solid rgba(0,255,213,0.25); color: var(--neon-local); }
     .banner-upgrade { background: rgba(168,85,247,0.07); border: 1px solid rgba(168,85,247,0.3); color: var(--neon-cloud); }
 
+    /* ── refresh-status button inside cloud banner ──────────────────────────── */
+    #refresh-status-btn {
+      display: none;
+      margin-top: 8px;
+      padding: 5px 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    #refresh-status-btn:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+
     /* ── language selector ──────────────────────────────────────────────────── */
     .lang-row {
       display: flex;
@@ -313,6 +329,7 @@
         <div class="model-preview" id="cloud-model-tags" style="margin-top:14px"></div>
 
         <div id="cloud-status-banner"></div>
+        <button id="refresh-status-btn" onclick="refreshCloudStatus()">🔄 Refresh Status</button>
       </div>
 
     </div>
@@ -431,6 +448,26 @@
           banner.style.display = 'block';
         }
       } catch { /* non-critical */ }
+      // Show the Refresh button so users who upgraded their plan externally
+      // can recheck without restarting the app.
+      const refreshBtn = document.getElementById('refresh-status-btn');
+      if (refreshBtn) refreshBtn.style.display = 'inline-block';
+    }
+
+    async function refreshCloudStatus() {
+      const refreshBtn = document.getElementById('refresh-status-btn');
+      if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = '⏳ Checking…';
+      }
+      try {
+        await checkCloudSubscription();
+      } finally {
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.textContent = '🔄 Refresh Status';
+        }
+      }
     }
 
     function updateConfirmButton() {
