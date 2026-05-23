@@ -1444,6 +1444,7 @@ def _capture_screenshot() -> str:
     if not platform.system().lower().startswith("win"):
         raise RuntimeError("system_screenshot is currently supported only on Windows workers.")
     screenshot_path = Path(tempfile.gettempdir()) / f"assistantx_screenshot_{int(time.time())}.png"
+    escaped_path = str(screenshot_path).replace("'", "''")
     script = (
         "Add-Type -AssemblyName System.Windows.Forms; "
         "Add-Type -AssemblyName System.Drawing; "
@@ -1451,7 +1452,7 @@ def _capture_screenshot() -> str:
         "$bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height; "
         "$graphics = [System.Drawing.Graphics]::FromImage($bitmap); "
         "$graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); "
-        f"$bitmap.Save('{str(screenshot_path).replace(\"'\", \"''\")}', [System.Drawing.Imaging.ImageFormat]::Png); "
+        f"$bitmap.Save('{escaped_path}', [System.Drawing.Imaging.ImageFormat]::Png); "
         "$graphics.Dispose(); "
         "$bitmap.Dispose();"
     )
