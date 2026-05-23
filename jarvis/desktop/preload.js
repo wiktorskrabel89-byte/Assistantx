@@ -85,6 +85,8 @@ const ALLOWED_INVOKE = new Set([
   'config:get-engine-mode',
   'config:set-engine-mode',
   'config:get-model-config',
+  'config:get-free-model-catalog',
+  'config:pick-best-free-model',
   'setup:complete',
   'setup:get-subscription-status',
   'setup:get-recommended-config',
@@ -364,6 +366,8 @@ function buildJarvisApiV2() {
       getEngineMode: () => invokeAllowed('config:get-engine-mode'),
       setEngineMode: (mode) => invokeAllowed('config:set-engine-mode', { mode }),
       getModelConfig: () => invokeAllowed('config:get-model-config'),
+      getFreeModelCatalog: (plan) => invokeAllowed('config:get-free-model-catalog', plan ? { plan } : {}),
+      pickBestFreeModel: (profile, plan) => invokeAllowed('config:pick-best-free-model', { profile, plan }),
     },
     splash: {
       onProgress: (listener) => subscribeAllowed('splash:progress', listener),
@@ -467,6 +471,8 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     getEngineMode: () => invokeAllowed('config:get-engine-mode'),
     setEngineMode: (mode) => invokeAllowed('config:set-engine-mode', { mode }),
     getModelConfig: () => invokeAllowed('config:get-model-config'),
+    getFreeModelCatalog: (plan) => invokeAllowed('config:get-free-model-catalog', plan ? { plan } : {}),
+    pickBestFreeModel: (profile, plan) => invokeAllowed('config:pick-best-free-model', { profile, plan }),
   },
   localServer: {
     list: () => invokeAllowed('local-server:list'),

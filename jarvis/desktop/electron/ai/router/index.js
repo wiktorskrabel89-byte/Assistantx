@@ -5,6 +5,11 @@ const { decideRoute } = require('./policy');
 const { OllamaProvider } = require('../providers/ollama');
 const { CloudApiProvider } = require('../providers/cloud-api');
 const { OpenAICompatProvider } = require('../providers/openai-compat');
+const {
+  pickBestFreeModel,
+  DEFAULT_FREE_CHAT_MODEL,
+  DEFAULT_FREE_CODING_MODEL,
+} = require('../free-model-catalog');
 
 // ── Hardware profile → Ollama model matrix ────────────────────────────────────
 // Mirrors HARDWARE_PROFILE_MODELS in runtime-config.js.
@@ -26,7 +31,7 @@ const ROUTING_PROFILES = {
   },
 };
 
-// Cloud mode: DeepSeek-V3 via Groq first, then OpenRouter as fallback.
+// Cloud mode: DeepSeek-V3 via Groq kept as a named constant for external callers.
 const CLOUD_DEEPSEEK_MODEL = 'deepseek-chat';
 const CLOUD_DEEPSEEK_PROVIDER = 'groq';
 
@@ -100,18 +105,22 @@ class AIRouter {
     const localRoute = resolveConfiguredLocalRoute(localConfig, profile, availability);
 
     // ── Engine-mode overrides ─────────────────────────────────────────────────
-    // cloud mode: always use Groq + DeepSeek-V3 regardless of local availability
+    // cloud mode: pick the best free model for the user's plan and profile
     if (engineMode === 'cloud') {
-      const cloudModel = modelConfig?.llm_model || CLOUD_DEEPSEEK_MODEL;
+      const plan = String(modelConfig?.plan || 'pro').toLowerCase();
+      const candidate = pickBestFreeModel(profile === 'coding' ? 'coding' : 'chat', plan)
+        || (profile === 'coding' ? DEFAULT_FREE_CODING_MODEL : DEFAULT_FREE_CHAT_MODEL);
+      const cloudModel = modelConfig?.llm_model || candidate.model;
+      const cloudProvider = candidate.provider;
       const resolvedRequest = {
         ...request,
         messages: normalizeMessages(request),
         model: cloudModel,
-        provider: CLOUD_DEEPSEEK_PROVIDER,
+        provider: cloudProvider,
         options: { temperature: 0.7, ...(request.options || {}) },
       };
       const response = await this.cloud.stream(resolvedRequest, onChunk);
-      return { ...response, route: { provider: CLOUD_DEEPSEEK_PROVIDER, model: cloudModel, reason: 'engine-mode-cloud' }, profile, availability };
+      return { ...response, route: { provider: cloudProvider, model: cloudModel, reason: 'engine-mode-cloud-free' }, profile, availability };
     }
 
     // local mode: override chat model based on hardware profile

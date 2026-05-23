@@ -39,6 +39,16 @@ const PROVIDER_CONFIG = {
     authHeader: 'x-api-key',
     authPrefix: '',
   },
+  // Google AI Studio — OpenAI-compatible endpoint (free tier, no billing required)
+  // https://ai.google.dev/gemini-api/docs/openai
+  google: {
+    baseUrl: process.env.GOOGLE_AI_STUDIO_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai',
+    endpoint: '/chat/completions',
+    keyEnvs: ['GOOGLE_AI_STUDIO_API_KEY', 'GEMINI_API_KEY'],
+    keytarAccounts: ['google-ai-studio-api-key', 'gemini-api-key'],
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer ',
+  },
 };
 
 class CloudApiProvider extends AiProvider {

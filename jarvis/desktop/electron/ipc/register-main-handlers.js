@@ -16,6 +16,11 @@ const {
   setJarvisModelConfig,
   VALID_ENGINE_MODES,
 } = require('../../runtime-config');
+const {
+  FREE_MODEL_CATALOG,
+  getFreeModelsForPlan,
+  pickBestFreeModel,
+} = require('../ai/free-model-catalog');
 
 function denied(action, reason) {
   return {
@@ -217,6 +222,22 @@ function createMainIpcHandlers(deps) {
 
     'config:get-model-config': () => {
       return { ok: true, config: getJarvisModelConfig() };
+    },
+
+    // ── Free model catalog ────────────────────────────────────────────────────
+    'config:get-free-model-catalog': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const plan = validateString(body.plan, { allowEmpty: true, maxLen: 20 }) || '';
+      const models = plan ? getFreeModelsForPlan(plan) : FREE_MODEL_CATALOG;
+      return { ok: true, models };
+    },
+
+    'config:pick-best-free-model': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const profile = validateString(body.profile, { allowEmpty: true, maxLen: 20 }) || 'chat';
+      const plan = validateString(body.plan, { allowEmpty: false, maxLen: 20 }) || 'pro';
+      const best = pickBestFreeModel(profile, plan);
+      return { ok: true, model: best };
     },
 
     'launcher-search': async (_event, payload) => {

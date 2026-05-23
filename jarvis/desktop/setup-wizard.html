@@ -299,15 +299,19 @@
         <div class="card-header">
           <span class="card-icon">☁️</span>
           <span class="card-title">CLOUD MATRIX</span>
-          <span class="card-badge badge-premium">PREMIUM</span>
+          <span class="card-badge badge-premium">PRO / PRO+</span>
         </div>
         <ul class="feature-list">
-          <li><div class="dot"></div>OpenAI Whisper API — ultra-fast transcription</li>
-          <li><div class="dot"></div>Groq / DeepSeek-V3 — 671B parameters, &lt;200 ms</li>
-          <li><div class="dot"></div>OpenAI TTS (Onyx) — cinematic deep voice</li>
           <li><div class="dot"></div>Zero local model downloads — starts instantly</li>
+          <li><div class="dot"></div>Groq: Llama 3.3 70B, QwQ 32B, Mixtral 8x7B and more</li>
+          <li><div class="dot"></div>Google AI Studio: Gemini 2.0 Flash (1M context, free)</li>
+          <li><div class="dot"></div>OpenRouter: DeepSeek R1, Qwen3 235B and more (free tier)</li>
           <li><div class="dot"></div>Offloads compute — ideal while gaming</li>
         </ul>
+
+        <!-- Dynamic free-model tags (populated by JS) -->
+        <div class="model-preview" id="cloud-model-tags" style="margin-top:14px"></div>
+
         <div id="cloud-status-banner"></div>
       </div>
 
@@ -341,8 +345,39 @@
       pro:      { llm: 'qwen2.5:7b',    stt: 'base',  tts: 'kokoro' },
     };
 
+    // Fallback cloud model highlights shown before catalog loads
+    const CLOUD_HIGHLIGHTS = [
+      { provider: 'groq',        label: 'Llama 3.3 70B',          model: 'llama-3.3-70b-versatile' },
+      { provider: 'groq',        label: 'QwQ 32B (Reasoning)',     model: 'qwen-qwq-32b' },
+      { provider: 'google',      label: 'Gemini 2.0 Flash',        model: 'gemini-2.0-flash' },
+      { provider: 'openrouter',  label: 'DeepSeek R1 (free)',      model: 'deepseek/deepseek-r1:free' },
+      { provider: 'openrouter',  label: 'Qwen3 235B (free)',       model: 'qwen/qwen3-235b-a22b:free' },
+    ];
+
+    const PROVIDER_EMOJI = { groq: '⚡', google: '🌐', openrouter: '🔗' };
+
     let selectedMode = null;
     let selectedProfile = 'standard';
+    let _cloudCatalogLoaded = false;
+
+    async function loadCloudCatalog() {
+      if (_cloudCatalogLoaded) return;
+      let models = CLOUD_HIGHLIGHTS;
+      try {
+        if (window.jarvisIpc?.invoke) {
+          const res = await window.jarvisIpc.invoke('config:get-free-model-catalog', { plan: 'pro' });
+          if (res?.models?.length) models = res.models;
+        }
+      } catch { /* non-critical */ }
+      _cloudCatalogLoaded = true;
+      const el = document.getElementById('cloud-model-tags');
+      if (!el) return;
+      const preview = models.slice(0, 6).map((m) => {
+        const emoji = PROVIDER_EMOJI[m.provider] || '🤖';
+        return `<span class="model-tag">${emoji} <span>${m.label || m.model}</span></span>`;
+      });
+      el.innerHTML = preview.join('');
+    }
 
     function selectMode(mode) {
       selectedMode = mode;
@@ -353,6 +388,7 @@
       } else {
         document.getElementById('card-cloud').classList.add('selected-cloud');
         checkCloudSubscription();
+        loadCloudCatalog();
       }
       updateConfirmButton();
     }
@@ -387,16 +423,14 @@
         }
         if (!session?.accessToken) {
           banner.className = 'banner-upgrade';
-          banner.textContent = '⚠️ Sign in first to use Cloud Matrix. Your keys are configured in Settings after setup.';
+          banner.textContent = '⚠️ Sign in to use Cloud Matrix. API keys can be set in Settings after setup.';
           banner.style.display = 'block';
         } else {
           banner.className = 'banner-ok';
           banner.textContent = '✅ Signed in. API keys can be configured in Settings after setup.';
           banner.style.display = 'block';
         }
-      } catch {
-        // non-critical
-      }
+      } catch { /* non-critical */ }
     }
 
     function updateConfirmButton() {
