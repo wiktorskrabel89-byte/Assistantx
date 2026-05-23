@@ -235,6 +235,9 @@ export function ChatTab({
   const googleLinked = linkedProviders.includes("google") || authProvider === "google";
   const latestEntry = activeChat.messages[activeChat.messages.length - 1];
   const voiceSettings = activeWorkspace.settings;
+  const isFreePlan = state.userPlan === "free";
+  const isProPlan = state.userPlan === "pro";
+  const isProPlusPlan = state.userPlan === "pro+";
   const cloudQuotaRemaining = cloudQuota ? Math.max(cloudQuota.maxPerDay - cloudQuota.usesToday, 0) : null;
   const activePipelineAgent = ((): AgentName | null => {
     const current = latestEntry?.agentLoopStatus;
@@ -244,7 +247,12 @@ export function ChatTab({
     }
     return null;
   })();
-  const cloudQuotaExhausted = Boolean(activeWorkspace.settings.multiAgentBeta && cloudQuotaRemaining != null && cloudQuotaRemaining <= 0);
+  const cloudQuotaExhausted = Boolean(
+    activeWorkspace.settings.multiAgentBeta
+    && isProPlan
+    && cloudQuotaRemaining != null
+    && cloudQuotaRemaining <= 0,
+  );
 
   const {
     loading,
@@ -272,7 +280,7 @@ export function ChatTab({
   const { hasTrustedOnlineDesktop } = useJarvisDeviceStatus();
 
   useEffect(() => {
-    if (!authReady || !activeWorkspace.settings.multiAgentBeta) {
+    if (!authReady || !activeWorkspace.settings.multiAgentBeta || !isProPlan) {
       setCloudQuota(null);
       return;
     }
@@ -289,19 +297,19 @@ export function ChatTab({
           .maybeSingle();
         if (cancelled) return;
         if (!profile) {
-          setCloudQuota({ usesToday: 0, maxPerDay: 5 });
+          setCloudQuota({ usesToday: 0, maxPerDay: 20 });
           return;
         }
         setCloudQuota({
           usesToday: Number(profile.cloud_agent_uses_today ?? 0),
-          maxPerDay: Number(profile.max_cloud_agent_per_day ?? 5),
+          maxPerDay: Number(profile.max_cloud_agent_per_day ?? 20),
         });
       })
       .catch(() => null);
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspace.settings.multiAgentBeta, authReady, latestEntry?.agentAttempt, latestEntry?.status]);
+  }, [activeWorkspace.settings.multiAgentBeta, authReady, isProPlan, latestEntry?.agentAttempt, latestEntry?.status]);
 
   // Check if a composer message is a mode activation voice command.
   // If so, run the mode steps and swallow the message (don't send to AI).
@@ -1102,11 +1110,15 @@ export function ChatTab({
                   : undefined
             }
             cloudQuotaNotice={activeWorkspace.settings.multiAgentBeta ? (
-              cloudQuotaRemaining == null
-                ? "🔬 Multi-Agent AI (Cloud): checking your daily cloud quota…"
-                : cloudQuotaExhausted
-                  ? "⚠️ Daily cloud agent quota exhausted (0 remaining). Switch to local Ollama mode or wait until midnight UTC."
-                  : `🔬 Multi-Agent AI (Cloud): this run uses 1 of your ${cloudQuotaRemaining} remaining daily uses.`
+              isFreePlan
+                ? "🔒 Free plan runs Direct SysOps only. Upgrade to Pro/Pro+ to use the 7-agent premium pipeline."
+                : isProPlusPlan
+                  ? "🚀 Pro+ active: 7-agent premium pipeline enabled with no daily pipeline quota."
+                  : cloudQuotaRemaining == null
+                    ? "🔬 Pro pipeline: checking your daily quota…"
+                    : cloudQuotaExhausted
+                      ? "⚠️ Daily Pro pipeline quota exhausted (0 remaining). It resets at midnight UTC."
+                      : `🔬 Pro pipeline: this run uses 1 of your ${cloudQuotaRemaining} remaining daily runs.`
             ) : undefined}
             cloudQuotaExhausted={cloudQuotaExhausted}
           />

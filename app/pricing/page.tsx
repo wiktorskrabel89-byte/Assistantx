@@ -37,6 +37,7 @@ async function startCheckout(plan: "pro" | "pro+") {
 const PRO_BENEFITS = [
   "Unlimited chats",
   `${PRO_PLAN.premiumRequestsPerMonth} premium requests / month`,
+  "7-agent premium pipeline with daily quota (Architect → Security)",
   "Access to all models (GPT-5.4, Claude Opus 4.6, Grok 4, Gemini 3 Pro…)",
   "Code review & analysis",
   "AI can inspect your shared code to answer what AssistantX can do for your app",
@@ -49,6 +50,7 @@ const PRO_BENEFITS = [
 const PRO_PLUS_BENEFITS = [
   "Everything in Pro",
   `${PRO_PLUS_PLAN.premiumRequestsPerMonth} premium requests / month (5× more than Pro)`,
+  "Unlimited 7-agent premium pipeline runs",
   "Exclusive access to Claude Opus 4.7",
   "Access to all current and future models",
   "Deep codebase Q&A with web AI about app capabilities",
@@ -184,6 +186,8 @@ export default function PricingPage() {
               { feature: "All premium models", free: "—", pro: "✓", proPlus: "✓" },
               { feature: "Claude Opus 4.7", free: "—", pro: "—", proPlus: "✓" },
               { feature: "Codebase capability Q&A", free: "—", pro: "✓", proPlus: "✓" },
+              { feature: "Direct remote SysOps", free: "✓", pro: "✓", proPlus: "✓" },
+              { feature: "7-agent pipeline", free: "—", pro: "Daily quota", proPlus: "Unlimited" },
               { feature: "Image generation", free: "—", pro: "✓", proPlus: "✓" },
               { feature: "File uploads & analysis", free: "—", pro: "✓", proPlus: "✓" },
               { feature: "Web search mode", free: "—", pro: "✓", proPlus: "✓" },

@@ -294,11 +294,14 @@ export function useChatTransport({
           task?: {
             status?: string | null;
             response?: string | null;
+            output?: string | null;
             error?: string | null;
             model?: string | null;
             provider?: string | null;
             category?: string | null;
             action_type?: string | null;
+            execution_mode?: "direct" | "multi_agent" | null;
+            is_agent_generated?: boolean | null;
             agent_loop_status?: string | null;
             agent_logs?: string | null;
             agent_attempt?: number | null;
@@ -323,7 +326,7 @@ export function useChatTransport({
         if (task.status === "completed") {
           updateMessageById(params.workspaceId, params.chatId, params.messageId, (entry) => ({
             ...entry,
-            ai: task.response ?? "Local device task completed.",
+            ai: task.response ?? task.output ?? "Local device task completed.",
             model: task.model ?? entry.model,
             routeReason: task.provider
               ? `Completed by local device queue (${task.provider})`
@@ -738,6 +741,7 @@ export function useChatTransport({
           body: JSON.stringify({
             prompt: userMsg,
             category: "ai_request",
+            preferMultiAgent: Boolean(activeSettings.multiAgentBeta),
           }),
         });
 

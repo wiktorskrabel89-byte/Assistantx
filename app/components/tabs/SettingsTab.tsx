@@ -448,17 +448,14 @@ export function SettingsTab() {
             <div className="mt-3 flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold">
-                  Multi-Agent AI{" "}
-                  <span className="ml-1 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                    Beta
-                  </span>
+                  Multi-Agent pipeline (Premium)
                 </p>
                 <p className={`mt-1 text-xs ${mutedClass}`}>
-                  Activates a 7-stage pipeline (Architect, Coder, Tester, Sandbox, Reviewer, Critic, Security). Greatly improves precision on complex tasks but requires a capable local device (CPU/RAM).
+                  Direct mode (Free) keeps single-model execution for safe SysOps actions. Enabling this switch requests the 7-stage premium pipeline (Architect, Coder, Tester, Sandbox, Reviewer, Critic, Security) for complex code/deploy tasks when your plan allows it.
                 </p>
                 {(activeWorkspace.settings.multiAgentBeta ?? false) && (
                   <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                    ⚠️ Multi-Agent mode is active. Responses will be slower — each task runs through a full multi-stage validation loop.
+                    ⚠️ Premium pipeline requested. Pro uses daily quota; Pro+ runs without pipeline quota limits.
                   </p>
                 )}
               </div>
