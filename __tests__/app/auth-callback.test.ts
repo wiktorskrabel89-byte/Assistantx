@@ -166,7 +166,7 @@ describe("GET /auth/callback", () => {
     expect(location).toContain("error_code=otp_expired");
   });
 
-  it("redirects jarvis-desktop sign-ins to the desktop callback with session details", async () => {
+  it("redirects jarvis-desktop sign-ins to the desktop callback with session details when redirect_to is provided", async () => {
     mockCreateClient.mockResolvedValue(
       makeMockSupabase({
         user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
@@ -183,7 +183,11 @@ describe("GET /auth/callback", () => {
         },
       }),
     );
-    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop" }));
+    const res = await GET(makeReq({
+      code: "valid-code",
+      client: "jarvis-desktop",
+      redirect_to: "assistantx://auth/callback",
+    }));
     expect(res.status).toBe(307);
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("assistantx://auth/callback?");
@@ -213,7 +217,12 @@ describe("GET /auth/callback", () => {
         },
       }),
     );
-    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop", desktop_state: "desktop-state-abc" }));
+    const res = await GET(makeReq({
+      code: "valid-code",
+      client: "jarvis-desktop",
+      desktop_state: "desktop-state-abc",
+      redirect_to: "assistantx://auth/callback",
+    }));
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("assistantx://auth/callback?");
     const queryParams = parseRedirectQuery(location);
@@ -241,7 +250,12 @@ describe("GET /auth/callback", () => {
         },
       }),
     );
-    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop", state: "desktop-state-legacy" }));
+    const res = await GET(makeReq({
+      code: "valid-code",
+      client: "jarvis-desktop",
+      state: "desktop-state-legacy",
+      redirect_to: "assistantx://auth/callback",
+    }));
     const location = res.headers.get("location") ?? "";
     const queryParams = parseRedirectQuery(location);
     expect(queryParams.get("desktop_state")).toBe("desktop-state-legacy");
@@ -314,5 +328,29 @@ describe("GET /auth/callback", () => {
     expect(queryParams.get("email")).toBe("jarvis@example.com");
     expect(queryParams.get("user_id")).toBe("user-123");
     expect(queryParams.get("signed_in_at")).toBe("2026-05-16T08:00:00.000Z");
+  });
+
+  it("does not use desktop redirect when client is jarvis-desktop but redirect_to is missing", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeMockSupabase({
+        user: { id: "user-123", email: "jarvis@example.com", app_metadata: { provider: "github" } },
+        session: {
+          access_token: "session-token-123",
+          provider_token: null,
+          expires_in: 3600,
+          refresh_token: "refresh-token-123",
+          user: {
+            id: "user-123",
+            email: "jarvis@example.com",
+            last_sign_in_at: "2026-05-16T08:00:00.000Z",
+          },
+        },
+      }),
+    );
+    const res = await GET(makeReq({ code: "valid-code", client: "jarvis-desktop" }));
+    expect(res.status).toBe(307);
+    const location = res.headers.get("location") ?? "";
+    expect(location).not.toContain("assistantx://auth/callback?");
+    expect(location).toMatch(/\/$/);
   });
 });
