@@ -29,6 +29,11 @@ export type ChatEntry = {
   reviewText?: string;
   agentLoopStatus?: string;
   agentLogs?: string;
+  agentAttempt?: number;
+  criticScore?: number | null;
+  quotaRemaining?: number | null;
+  quotaMax?: number | null;
+  tokenEstimateK?: number | null;
   createdAt: number;
 };
 

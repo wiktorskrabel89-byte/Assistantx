@@ -74,6 +74,9 @@ export function mapTaskStatusToUiLabel(task: {
         architect: "🕵️ Architect is analysing the codebase...",
         coder:     "💻 Coder is writing the implementation...",
         tester:    "🧪 Tester is verifying syntax & logic...",
+        sandbox:   "📦 Sandbox Runner is executing runtime checks...",
+        reviewer:  "🔍 Reviewer is validating code quality...",
+        critic:    "⚖️ Product Critic is scoring final quality...",
         security:  "🛡️ Security agent is scanning the code...",
       };
       return labels[task.agent_loop_status] ?? `Multi-agent: ${task.agent_loop_status}...`;

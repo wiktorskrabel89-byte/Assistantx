@@ -41,6 +41,9 @@ function mapLocalTaskStatus(task: {
         architect: "🕵️ Architect is analysing the codebase...",
         coder:     "💻 Coder is writing the implementation...",
         tester:    "🧪 Tester is verifying syntax & logic...",
+        sandbox:   "📦 Sandbox Runner is executing runtime checks...",
+        reviewer:  "🔍 Reviewer is validating code quality...",
+        critic:    "⚖️ Product Critic is scoring final quality...",
         security:  "🛡️ Security agent is scanning the code...",
       };
       return labels[task.agent_loop_status] ?? `Multi-agent: ${task.agent_loop_status}...`;
@@ -298,6 +301,11 @@ export function useChatTransport({
             action_type?: string | null;
             agent_loop_status?: string | null;
             agent_logs?: string | null;
+            agent_attempt?: number | null;
+            critic_score?: number | null;
+            quota_remaining?: number | null;
+            quota_max?: number | null;
+            token_estimate_k?: number | null;
           };
         };
 
@@ -323,6 +331,11 @@ export function useChatTransport({
             status: undefined,
             agentLoopStatus: task.agent_loop_status ?? entry.agentLoopStatus,
             agentLogs: task.agent_logs ?? entry.agentLogs,
+            agentAttempt: task.agent_attempt ?? entry.agentAttempt,
+            criticScore: task.critic_score ?? entry.criticScore ?? null,
+            quotaRemaining: task.quota_remaining ?? entry.quotaRemaining ?? null,
+            quotaMax: task.quota_max ?? entry.quotaMax ?? null,
+            tokenEstimateK: task.token_estimate_k ?? entry.tokenEstimateK ?? null,
           }));
           break;
         }
@@ -335,6 +348,11 @@ export function useChatTransport({
             routeReason: "Local device queue",
             agentLoopStatus: task.agent_loop_status ?? entry.agentLoopStatus,
             agentLogs: task.agent_logs ?? entry.agentLogs,
+            agentAttempt: task.agent_attempt ?? entry.agentAttempt,
+            criticScore: task.critic_score ?? entry.criticScore ?? null,
+            quotaRemaining: task.quota_remaining ?? entry.quotaRemaining ?? null,
+            quotaMax: task.quota_max ?? entry.quotaMax ?? null,
+            tokenEstimateK: task.token_estimate_k ?? entry.tokenEstimateK ?? null,
           }));
           break;
         }
@@ -345,6 +363,11 @@ export function useChatTransport({
           routeReason: "Queued via Supabase local device worker",
           agentLoopStatus: task.agent_loop_status ?? entry.agentLoopStatus,
           agentLogs: task.agent_logs ?? entry.agentLogs,
+          agentAttempt: task.agent_attempt ?? entry.agentAttempt,
+          criticScore: task.critic_score ?? entry.criticScore ?? null,
+          quotaRemaining: task.quota_remaining ?? entry.quotaRemaining ?? null,
+          quotaMax: task.quota_max ?? entry.quotaMax ?? null,
+          tokenEstimateK: task.token_estimate_k ?? entry.tokenEstimateK ?? null,
         }));
 
         await new Promise((resolve) => setTimeout(resolve, 1000));

@@ -79,6 +79,8 @@ export type ChatComposerProps = {
   onRemoveQueuedMessage: (queueId: string) => void;
   premiumLimitReached?: boolean;
   planRequestLimit?: number;
+  cloudQuotaNotice?: string;
+  cloudQuotaExhausted?: boolean;
   sttEnabled?: boolean;
   voiceLanguage?: string;
   wakeWordEnabled?: boolean;
@@ -123,6 +125,8 @@ export function ChatComposer({
   onRemoveQueuedMessage,
   premiumLimitReached = false,
   planRequestLimit,
+  cloudQuotaNotice,
+  cloudQuotaExhausted = false,
   sttEnabled = true,
   voiceLanguage = "en-US",
   wakeWordEnabled = true,
@@ -252,6 +256,16 @@ export function ChatComposer({
             "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300"
           )}>
             You have used all {planRequestLimit ?? "your"} premium requests for this month. Your quota will reset next month.
+          </div>
+        ) : null}
+        {cloudQuotaNotice ? (
+          <div className={cn(
+            "rounded-lg border px-4 py-2.5 text-xs font-medium",
+            cloudQuotaExhausted
+              ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/30 dark:text-rose-300"
+              : "border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800/50 dark:bg-cyan-950/30 dark:text-cyan-300"
+          )}>
+            {cloudQuotaNotice}
           </div>
         ) : null}
 
@@ -418,7 +432,7 @@ export function ChatComposer({
             id="chat-message"
             name="chatMessage"
             value={message}
-            disabled={premiumLimitReached}
+            disabled={premiumLimitReached || cloudQuotaExhausted}
             onChange={(event) => {
               onMessageChange(event.target.value);
               resizeComposer();
@@ -472,7 +486,7 @@ export function ChatComposer({
 
           <Button
             onClick={() => onQueueMessage(2)}
-            disabled={premiumLimitReached || (!message.trim() && !file)}
+            disabled={premiumLimitReached || cloudQuotaExhausted || (!message.trim() && !file)}
             size="icon"
             className="h-11 w-11 flex-shrink-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
             title={premiumLimitReached ? "Premium request limit reached" : loading ? "Add to queue" : "Send message"}

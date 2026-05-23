@@ -10,7 +10,15 @@ type ThinkingIndicatorProps = {
   /** Approximate length (in characters) of the partial response being streamed. */
   partialResponseLength?: number;
   /** When set, renders the multi-agent pipeline status widget. */
-  multiAgentStatus?: { agent: AgentName; message: string } | null;
+  multiAgentStatus?: {
+    agent: AgentName;
+    message: string;
+    score?: number | null;
+    attempt?: number;
+    quotaRemaining?: number | null;
+    quotaMax?: number | null;
+    tokenEstimateK?: number | null;
+  } | null;
 };
 
 export function ThinkingIndicator({ dark, visible, status, routeReason, partialResponseLength, multiAgentStatus }: ThinkingIndicatorProps) {
@@ -39,6 +47,11 @@ export function ThinkingIndicator({ dark, visible, status, routeReason, partialR
           activeAgent={multiAgentStatus.agent}
           dark={dark}
           message={multiAgentStatus.message}
+          score={multiAgentStatus.score}
+          attempt={multiAgentStatus.attempt}
+          quotaRemaining={multiAgentStatus.quotaRemaining}
+          quotaMax={multiAgentStatus.quotaMax}
+          tokenEstimateK={multiAgentStatus.tokenEstimateK}
         />
       ) : null}
     </div>

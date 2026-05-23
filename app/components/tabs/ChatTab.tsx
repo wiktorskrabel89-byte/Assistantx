@@ -38,6 +38,8 @@ import { PRO_PLAN, PRO_PLUS_PLAN, isModelPremiumOnly } from "@/lib/ai-config";
 import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
 import { filterAssistantCommandsForQuery, shouldShowSlashSuggestions } from "@/src/core/commands/parser";
 import { useJarvisDeviceStatus } from "@/app/hooks/useJarvisDeviceStatus";
+import { createClient } from "@/lib/client";
+import type { AgentName } from "../AgentStatusWidget";
 
 /** Poll interval for the model health endpoint (ms). */
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
@@ -165,6 +167,7 @@ export function ChatTab({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedMessageContent, setEditedMessageContent] = useState("");
   const [wakeActivationSignal, setWakeActivationSignal] = useState(0);
+  const [cloudQuota, setCloudQuota] = useState<{ usesToday: number; maxPerDay: number } | null>(null);
   const [premiumBannerHidden, setPremiumBannerHidden] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -232,6 +235,16 @@ export function ChatTab({
   const googleLinked = linkedProviders.includes("google") || authProvider === "google";
   const latestEntry = activeChat.messages[activeChat.messages.length - 1];
   const voiceSettings = activeWorkspace.settings;
+  const cloudQuotaRemaining = cloudQuota ? Math.max(cloudQuota.maxPerDay - cloudQuota.usesToday, 0) : null;
+  const activePipelineAgent = ((): AgentName | null => {
+    const current = latestEntry?.agentLoopStatus;
+    if (!current) return null;
+    if (["architect", "coder", "tester", "sandbox", "reviewer", "critic", "security"].includes(current)) {
+      return current as AgentName;
+    }
+    return null;
+  })();
+  const cloudQuotaExhausted = Boolean(activeWorkspace.settings.multiAgentBeta && cloudQuotaRemaining != null && cloudQuotaRemaining <= 0);
 
   const {
     loading,
@@ -257,6 +270,38 @@ export function ChatTab({
     updateLastMessage,
   });
   const { hasTrustedOnlineDesktop } = useJarvisDeviceStatus();
+
+  useEffect(() => {
+    if (!authReady || !activeWorkspace.settings.multiAgentBeta) {
+      setCloudQuota(null);
+      return;
+    }
+    const supabase = createClient();
+    let cancelled = false;
+    void supabase.auth.getUser()
+      .then(async ({ data }) => {
+        const userId = data.user?.id;
+        if (!userId) return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("cloud_agent_uses_today, max_cloud_agent_per_day")
+          .eq("id", userId)
+          .maybeSingle();
+        if (cancelled) return;
+        if (!profile) {
+          setCloudQuota({ usesToday: 0, maxPerDay: 5 });
+          return;
+        }
+        setCloudQuota({
+          usesToday: Number(profile.cloud_agent_uses_today ?? 0),
+          maxPerDay: Number(profile.max_cloud_agent_per_day ?? 5),
+        });
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace.settings.multiAgentBeta, authReady, latestEntry?.agentAttempt, latestEntry?.status]);
 
   // Check if a composer message is a mode activation voice command.
   // If so, run the mode steps and swallow the message (don't send to AI).
@@ -310,6 +355,9 @@ export function ChatTab({
     if (planLimit !== null && state.premiumRequestsUsed >= planLimit) {
       return;
     }
+    if (cloudQuotaExhausted) {
+      return;
+    }
 
     // Intercept mode voice commands before sending to AI
     if (tryHandleModeCommand(message)) {
@@ -325,7 +373,7 @@ export function ChatTab({
     }
 
     transportQueueMessage(thinkingEffort);
-  }, [activeWorkspace.settings.preferredModelId, incrementPremiumRequests, message, setMessage, state.premiumRequestsUsed, state.userPlan, transportQueueMessage, tryHandleModeCommand]);
+  }, [activeWorkspace.settings.preferredModelId, cloudQuotaExhausted, incrementPremiumRequests, message, setMessage, state.premiumRequestsUsed, state.userPlan, transportQueueMessage, tryHandleModeCommand]);
 
   // Fork conversation at a specific message index
   const handleFork = useCallback((messageIndex: number) => {
@@ -997,6 +1045,15 @@ export function ChatTab({
                 status={stopRequested ? "Stopping response..." : latestEntry?.status}
                 routeReason={latestEntry?.routeReason}
                 partialResponseLength={loading ? (latestEntry?.ai?.length ?? 0) : 0}
+                multiAgentStatus={activePipelineAgent ? {
+                  agent: activePipelineAgent,
+                  message: latestEntry?.status ?? "Multi-agent pipeline running...",
+                  score: latestEntry?.criticScore ?? null,
+                  attempt: latestEntry?.agentAttempt,
+                  quotaRemaining: latestEntry?.quotaRemaining ?? cloudQuotaRemaining ?? null,
+                  quotaMax: latestEntry?.quotaMax ?? cloudQuota?.maxPerDay ?? null,
+                  tokenEstimateK: latestEntry?.tokenEstimateK ?? null,
+                } : null}
               />
             </div>
           </div>
@@ -1044,6 +1101,14 @@ export function ChatTab({
                   ? PRO_PLUS_PLAN.premiumRequestsPerMonth
                   : undefined
             }
+            cloudQuotaNotice={activeWorkspace.settings.multiAgentBeta ? (
+              cloudQuotaRemaining == null
+                ? "🔬 Multi-Agent AI (Cloud): checking your daily cloud quota…"
+                : cloudQuotaExhausted
+                  ? "⚠️ Daily cloud agent quota exhausted (0 remaining). Switch to local Ollama mode or wait until midnight UTC."
+                  : `🔬 Multi-Agent AI (Cloud): this run uses 1 of your ${cloudQuotaRemaining} remaining daily uses.`
+            ) : undefined}
+            cloudQuotaExhausted={cloudQuotaExhausted}
           />
         </section>
       </main>
