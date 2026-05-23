@@ -202,6 +202,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const localPreferEnabledToggle = document.getElementById('local-prefer-enabled');
 	const localServerSaveAssignmentButton = document.getElementById('local-server-save-assignment');
 	const sttModelSelect = document.getElementById('stt-model');
+	const ttsBackendSelect = document.getElementById('tts-backend');
 	const ttsModelSelect = document.getElementById('tts-model');
 	const ttsVoiceProfileSelect = document.getElementById('tts-voice-profile');
 	const voiceLanguageSelect = document.getElementById('voice-language');
@@ -632,7 +633,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		sttEnabled: true,
 		sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
 		ttsEnabled: true,
-		ttsModel: ttsModelSelect?.value || 'orpheus-english',
+		ttsBackend: ttsBackendSelect?.value || 'kokoro-local',
+		ttsModel: ttsModelSelect?.value || 'playai-tts',
 		ttsVoiceId: ttsVoiceProfileSelect?.value || 'jarvis',
 		wakeWordEnabled: true,
 		wakeWordPhrase: DEFAULT_JARVIS_WAKE_PHRASE,
@@ -694,6 +696,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		voiceSettings = { ...defaultVoiceSettings, ...nextSettings };
 		if (chatModelSelect && voiceSettings.chatModel) chatModelSelect.value = voiceSettings.chatModel;
 		if (sttModelSelect && voiceSettings.sttModel) sttModelSelect.value = voiceSettings.sttModel;
+		if (ttsBackendSelect && voiceSettings.ttsBackend) ttsBackendSelect.value = voiceSettings.ttsBackend;
 		if (ttsModelSelect && voiceSettings.ttsModel) ttsModelSelect.value = voiceSettings.ttsModel;
 		if (ttsVoiceProfileSelect && voiceSettings.ttsVoiceId) ttsVoiceProfileSelect.value = voiceSettings.ttsVoiceId;
 		if (sttEnabledToggle) sttEnabledToggle.checked = Boolean(voiceSettings.sttEnabled);
@@ -715,6 +718,25 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 		}
 		if (persist) writeVoiceSettings(voiceSettings);
+	}
+
+	function isLocalTtsBackend(backend) {
+		const value = String(backend || '').toLowerCase();
+		return value === 'kokoro-local' || value === 'piper-local' || value === 'auto-local';
+	}
+
+	function resolveLocalTtsBackend(backend) {
+		const value = String(backend || '').toLowerCase();
+		if (value === 'piper-local') return 'piper';
+		if (value === 'kokoro-local') return 'kokoro';
+		return 'auto';
+	}
+
+	function resolveCloudTtsProvider(backend) {
+		const value = String(backend || '').toLowerCase();
+		if (value === 'openai-cloud') return 'openai';
+		if (value === 'elevenlabs-cloud') return 'elevenlabs';
+		return 'groq';
 	}
 
 	function clearTtsAudioQueue() {
@@ -1483,7 +1505,8 @@ window.addEventListener('DOMContentLoaded', () => {
 				sttEnabled: Boolean(sttEnabledToggle?.checked),
 				sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
 				ttsEnabled: Boolean(autoTtsToggle?.checked),
-				ttsModel: ttsModelSelect?.value || 'orpheus-english',
+				ttsBackend: ttsBackendSelect?.value || 'kokoro-local',
+				ttsModel: ttsModelSelect?.value || 'playai-tts',
 				ttsVoiceId: ttsVoiceProfileSelect?.value || 'jarvis',
 				wakeWordEnabled: Boolean(wakeWordEnabledToggle?.checked),
 				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
@@ -1516,6 +1539,14 @@ window.addEventListener('DOMContentLoaded', () => {
 	if (ttsModelSelect) {
 		ttsModelSelect.addEventListener('change', () => {
 			applyVoiceSettings({ ...voiceSettings, ttsModel: ttsModelSelect.value });
+		});
+	}
+
+	if (ttsBackendSelect) {
+		ttsBackendSelect.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, ttsBackend: ttsBackendSelect.value || 'kokoro-local' });
+			resetActiveAiStream();
+			syncSidecarVoiceSettings();
 		});
 	}
 
@@ -1628,7 +1659,8 @@ window.addEventListener('DOMContentLoaded', () => {
 				language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
 				wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
 				sttEnabled: false,
-				ttsEnabled: Boolean(voiceSettings.autoTts),
+				ttsEnabled: Boolean(voiceSettings.autoTts && isLocalTtsBackend(voiceSettings.ttsBackend)),
+				ttsBackend: resolveLocalTtsBackend(voiceSettings.ttsBackend),
 				nlpEnabled: false,
 				vadEnabled: true,
 				sampleRate: 16000,
@@ -1639,6 +1671,8 @@ window.addEventListener('DOMContentLoaded', () => {
 				providerMode: voiceSettings.providerMode || 'assistantx-server',
 				sttModel: voiceSettings.sttModel,
 				persona: voiceSettings.ttsVoiceId,
+				ttsBackend: voiceSettings.ttsBackend || 'kokoro-local',
+				ttsModel: voiceSettings.ttsModel || 'playai-tts',
 				fallbackToBrowserSpeech: true,
 			});
 			// Start microphone capture immediately if wake word is enabled
@@ -1899,7 +1933,8 @@ window.addEventListener('DOMContentLoaded', () => {
 			language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
 			wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
 			sttEnabled: false,
-			ttsEnabled: Boolean(voiceSettings.autoTts),
+			ttsEnabled: Boolean(voiceSettings.autoTts && isLocalTtsBackend(voiceSettings.ttsBackend)),
+			ttsBackend: resolveLocalTtsBackend(voiceSettings.ttsBackend),
 			nlpEnabled: false,
 			vadEnabled: true,
 		});
@@ -1910,6 +1945,8 @@ window.addEventListener('DOMContentLoaded', () => {
 			wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
 			sttModel: voiceSettings.sttModel,
 			persona: voiceSettings.ttsVoiceId,
+			ttsBackend: voiceSettings.ttsBackend || 'kokoro-local',
+			ttsModel: voiceSettings.ttsModel || 'playai-tts',
 			fallbackToBrowserSpeech: true,
 		});
 		if (voiceSettings.wakeWordEnabled && !sidecar.isCapturing()) {
@@ -1952,10 +1989,14 @@ window.addEventListener('DOMContentLoaded', () => {
 				temporalAwareness: Boolean(voiceSettings.temporalAwareness),
 			})
 			: text;
-		if (sidecarConnected && voiceSettings.autoTts && voiceGateway) {
+		const ttsBackend = voiceSettings.ttsBackend || 'kokoro-local';
+		const localBackend = isLocalTtsBackend(ttsBackend);
+		if (!localBackend && sidecarConnected && voiceSettings.autoTts && voiceGateway) {
 			const tts = await voiceGateway.synthesize(enhanced, {
 				persona: voiceSettings.ttsVoiceId,
 				language: getVoiceLanguage(),
+				model: voiceSettings.ttsModel || 'playai-tts',
+				provider: resolveCloudTtsProvider(ttsBackend),
 			});
 			if (tts?.ok && tts.audioBase64) {
 				try {
@@ -1987,7 +2028,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				}
 			}
 		}
-		if (sidecarConnected && sidecar && voiceSettings.autoTts) {
+		if (localBackend && sidecarConnected && sidecar && voiceSettings.autoTts) {
 			const requestId = `tts-${Date.now()}`;
 			sidecar.requestTts(enhanced, requestId);
 			return;
@@ -2328,6 +2369,7 @@ window.addEventListener('DOMContentLoaded', () => {
 					segmentsSent: 0,
 					streamingEnabled: Boolean(
 						sidecarConnected
+						&& isLocalTtsBackend(voiceSettings.ttsBackend)
 						&& voiceSettings.autoTts
 						&& sidecar?.requestTtsStreamStart
 						&& sidecarCapabilities?.ttsStreamingSupported,

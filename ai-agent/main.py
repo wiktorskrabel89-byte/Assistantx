@@ -7,7 +7,7 @@ so the server starts quickly even when optional ML models are still being
 downloaded.
 
 Message protocol (JSON lines sent by client → handled here):
-  { "type": "configure",    ...settings }
+  { "type": "configure",    ...settings, "ttsBackend": "kokoro|piper|auto" }
   { "type": "audio_chunk",  "data": "<base64 PCM int16 LE>" }
   { "type": "tts_speak",    "text": "...", "requestId": "..." }
   { "type": "tts_stream_start", "requestId": "..." }
@@ -79,12 +79,39 @@ _tts_backend_name = "none"
 RUNTIME_STATES = {"idle", "listening", "thinking_fast", "coding_hardcore", "degraded", "killed"}
 MODEL_MODES = {"fast", "coding"}
 TTS_STREAMING_ENABLED = os.environ.get("JARVIS_TTS_STREAMING", "false").strip().lower() in {"1", "true", "yes", "on"}
-TTS_PREFERRED_BACKEND = os.environ.get("JARVIS_TTS_BACKEND", "kokoro").strip().lower()
+DEFAULT_TTS_PREFERRED_BACKEND = os.environ.get("JARVIS_TTS_BACKEND", "kokoro").strip().lower()
 TTS_STREAM_CHUNK_MAX_CHARS = int(os.environ.get("JARVIS_TTS_STREAM_CHUNK_MAX_CHARS", "320"))
 TTS_STREAM_CHUNK_TIMEOUT_SECONDS = float(os.environ.get("JARVIS_TTS_STREAM_CHUNK_TIMEOUT_SECONDS", "8"))
 TTS_WARMUP_ENABLED = os.environ.get("JARVIS_TTS_WARMUP", "true").strip().lower() in {"1", "true", "yes", "on"}
 _tts_warmup_done = False
 _tts_warmup_lock = asyncio.Lock()
+_tts_preferred_backend = "kokoro"
+
+
+def _normalize_tts_backend(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in {"kokoro-local", "kokoro"}:
+        return "kokoro"
+    if raw in {"piper-local", "piper"}:
+        return "piper"
+    return "auto"
+
+
+def _set_tts_preferred_backend(value: Any) -> None:
+    global _tts_engine
+    global _tts_backend_name
+    global _tts_preferred_backend
+    global _tts_warmup_done
+    preferred = _normalize_tts_backend(value)
+    if preferred == _tts_preferred_backend and _tts_engine is not None:
+        return
+    _tts_preferred_backend = preferred
+    _tts_engine = None
+    _tts_backend_name = "none"
+    _tts_warmup_done = False
+
+
+_set_tts_preferred_backend(DEFAULT_TTS_PREFERRED_BACKEND)
 
 
 def _get_wake_detector():
@@ -129,7 +156,11 @@ def _get_tts_engine():
     global _tts_backend_name
     global _tts_engine
     if _tts_engine is None:
-        backends = ["kokoro", "piper"] if TTS_PREFERRED_BACKEND != "piper" else ["piper", "kokoro"]
+        backends = ["kokoro", "piper"]
+        if _tts_preferred_backend == "piper":
+            backends = ["piper", "kokoro"]
+        elif _tts_preferred_backend == "auto":
+            backends = ["kokoro", "piper"]
         for backend in backends:
             if backend == "kokoro":
                 try:
@@ -271,6 +302,8 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         state.stt_enabled = bool(msg["sttEnabled"])
     if "ttsEnabled" in msg:
         state.tts_enabled = bool(msg["ttsEnabled"])
+    if "ttsBackend" in msg:
+        _set_tts_preferred_backend(msg["ttsBackend"])
     if "nlpEnabled" in msg:
         state.nlp_enabled = bool(msg["nlpEnabled"])
     if "sampleRate" in msg:
@@ -295,11 +328,14 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
             "capabilities": {
                 "ttsStreamingSupported": bool(TTS_STREAMING_ENABLED),
                 "ttsBackend": _tts_backend_name,
+                "ttsPreferredBackend": _tts_preferred_backend,
             },
             "message": "Settings applied.",
         },
         state,
     )
+    if TTS_WARMUP_ENABLED and state.tts_enabled:
+        asyncio.create_task(_warmup_tts_if_needed())
 
 
 async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
@@ -734,6 +770,7 @@ async def handle_connection(ws: WebSocketServerProtocol) -> None:
         "capabilities": {
             "ttsStreamingSupported": bool(TTS_STREAMING_ENABLED),
             "ttsBackend": _tts_backend_name,
+            "ttsPreferredBackend": _tts_preferred_backend,
         },
     }, state)
     if TTS_STREAMING_ENABLED:
