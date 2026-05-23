@@ -1,7 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
-const { getJarvisWebUrl, setJarvisWebUrl } = require('./runtime-config');
+const {
+  getEngineMode,
+  getJarvisModelConfig,
+  getJarvisWebUrl,
+  setJarvisWebUrl,
+} = require('./runtime-config');
 const { createServerBridge } = require('./electron/server/bridge');
 const { getToken: getDeviceToken } = require('./auth');
 const {
@@ -953,6 +958,208 @@ function getTrayIcon() {
   return iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
 }
 
+// ── Ollama NDJSON model-pull helper ──────────────────────────────────────────
+// Ollama's /api/pull stream sends multiple JSON objects per TCP chunk.  We
+// split the raw response body on newline boundaries before calling JSON.parse()
+// to prevent SyntaxError from half-delivered or merged NDJSON tokens.
+async function pullOllamaModel(model, onProgress) {
+  const ollamaUrl = String(process.env.JARVIS_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+  const response = await fetch(`${ollamaUrl}/api/pull`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: model, stream: true }),
+    signal: AbortSignal.timeout(600_000), // 10 min max for large models
+  });
+  if (!response.ok) {
+    throw new Error(`Ollama pull returned ${response.status}`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let lineBuffer = '';
+  let done = false;
+  while (!done) {
+    const { value, done: streamDone } = await reader.read();
+    done = streamDone;
+    if (value) lineBuffer += decoder.decode(value, { stream: !done });
+    // Split on newlines — each line is one self-contained JSON object.
+    const lines = lineBuffer.split('\n');
+    lineBuffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const event = JSON.parse(trimmed);
+        if (typeof onProgress === 'function') onProgress(event);
+      } catch {
+        // ignore malformed NDJSON lines (partial or unexpected content)
+      }
+    }
+  }
+  // Flush any remaining buffered content
+  if (lineBuffer.trim()) {
+    try {
+      const event = JSON.parse(lineBuffer.trim());
+      if (typeof onProgress === 'function') onProgress(event);
+    } catch { /* ignore */ }
+  }
+}
+
+// ── Startup screen router ─────────────────────────────────────────────────────
+// Called immediately after the BrowserWindow is created.  Routes to the
+// first-run setup wizard (when engine_mode is null/unset) or to the splash
+// loading screen (when a mode has already been chosen).
+function loadStartupScreen() {
+  if (!win || win.isDestroyed()) return;
+  const engineMode = getEngineMode();
+  if (!engineMode) {
+    // First run — show the engine-selection wizard.
+    win.loadFile('setup-wizard.html');
+  } else {
+    // Engine already configured — show splash while services warm up.
+    win.loadFile('splash.html').then(() => {
+      startSplashTransition(engineMode).catch((err) => {
+        console.error('[startup] Splash transition failed:', err?.message || err);
+      });
+    }).catch((err) => {
+      console.error('[startup] Failed to load splash.html:', err?.message || err);
+      if (win && !win.isDestroyed()) win.loadFile('index.html').catch(() => {});
+    });
+  }
+}
+
+// Drives the splash screen progress bars and transitions to index.html once
+// the runtime is ready.
+async function startSplashTransition(engineMode) {
+  if (engineMode === 'cloud') {
+    sendToRenderer('splash:progress', { status: 'Verifying cloud credentials…' });
+    // Short delay so the spinner is visible before we transition.
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    sendToRenderer('splash:progress', { status: 'Cloud matrix ready. Launching Jarvis…' });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    if (win && !win.isDestroyed()) win.loadFile('index.html').catch(() => {});
+    return;
+  }
+
+  // ── Local engine: check for required model and pull if missing ──────────────
+  const cfg = getJarvisModelConfig();
+  const llmModel = cfg.llm_model || 'gemma3:4b';
+  const ollamaUrl = String(process.env.JARVIS_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+
+  sendToRenderer('splash:progress', { llmPercent: 0, status: `Checking for AI model ${llmModel}…` });
+
+  let modelPresent = false;
+  try {
+    const tagsResp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3_000) });
+    if (tagsResp.ok) {
+      const payload = await tagsResp.json();
+      const names = Array.isArray(payload?.models)
+        ? payload.models.map((m) => String(m?.name || '').split(':')[0])
+        : [];
+      const llmBase = llmModel.split(':')[0];
+      modelPresent = names.includes(llmBase) || names.includes(llmModel);
+    }
+  } catch { /* Ollama may not be running yet */ }
+
+  if (!modelPresent) {
+    sendToRenderer('splash:progress', { llmPercent: 0, status: `Downloading ${llmModel}… (this may take a few minutes)` });
+    try {
+      await pullOllamaModel(llmModel, (event) => {
+        const total = Number(event?.total) || 0;
+        const completed = Number(event?.completed) || 0;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        sendToRenderer('splash:progress', {
+          llmPercent: pct,
+          status: String(event?.status || 'Downloading…'),
+        });
+      });
+      sendToRenderer('splash:progress', { llmPercent: 100, status: 'Model download complete.' });
+    } catch (err) {
+      sendToRenderer('splash:progress', { error: `Failed to pull model: ${String(err?.message || err)}` });
+    }
+  } else {
+    sendToRenderer('splash:progress', { llmPercent: 100, status: `Model ${llmModel} is ready.` });
+  }
+
+  // Wait for the Python sidecar to finish its health handshake (up to 20 s).
+  sendToRenderer('splash:progress', { pyPercent: 0, status: 'Starting Python AI runtime…' });
+  const sidecarTimeoutMs = 20_000;
+  const sidecarPollMs = 500;
+  const sidecarStart = Date.now();
+  while (!sidecarReady && (Date.now() - sidecarStart) < sidecarTimeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
+    const elapsed = Date.now() - sidecarStart;
+    sendToRenderer('splash:progress', {
+      pyPercent: Math.min(95, Math.round((elapsed / sidecarTimeoutMs) * 100)),
+      status: 'Waiting for AI runtime…',
+    });
+  }
+  sendToRenderer('splash:progress', {
+    pyPercent: 100,
+    status: sidecarReady ? 'AI runtime ready. Launching Jarvis…' : 'Launching Jarvis…',
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  if (win && !win.isDestroyed()) win.loadFile('index.html').catch(() => {});
+}
+
+// Called by the 'setup:complete' IPC handler after the wizard saves its config.
+// Transitions the main window from setup-wizard.html into the splash/index flow.
+async function onSetupComplete(config) {
+  log('[setup] Wizard completed, engine_mode:', config?.engine_mode);
+  startupDiagnostics.pushEvent('setup', 'info', 'Setup wizard completed.', config);
+  const engineMode = String(config?.engine_mode || '').trim();
+  if (!win || win.isDestroyed()) return;
+  await win.loadFile('splash.html');
+  startSplashTransition(engineMode).catch((err) => {
+    console.error('[setup] Splash transition error after wizard:', err?.message || err);
+    if (win && !win.isDestroyed()) win.loadFile('index.html').catch(() => {});
+  });
+}
+
+// Checks whether the signed-in account has an active paid subscription.
+// Returns { ok: true, subscribed: bool, status: string }.
+async function getSubscriptionStatus() {
+  try {
+    const session = getSafeAccountSession();
+    if (!session?.accessToken) {
+      return { ok: true, subscribed: false, status: 'unauthenticated' };
+    }
+    const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
+    const anonKey = String(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '').trim();
+    if (!supabaseUrl || !anonKey) {
+      // No Supabase config available in this context — treat as authenticated / unknown.
+      return { ok: true, subscribed: true, status: 'authenticated' };
+    }
+    const resp = await fetch(
+      `${supabaseUrl}/rest/v1/subscriptions?select=plan,status&limit=1`,
+      {
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${session.accessToken}`,
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!resp.ok) {
+      return { ok: true, subscribed: false, status: 'query-failed' };
+    }
+    const rows = await resp.json().catch(() => []);
+    const row = Array.isArray(rows) ? rows[0] : null;
+    const isActive = row?.status === 'active' || row?.plan === 'pro' || row?.plan === 'pro+';
+    return { ok: true, subscribed: isActive, status: row?.status || 'unknown', plan: row?.plan || null };
+  } catch (err) {
+    return { ok: false, subscribed: false, status: 'error', error: String(err?.message || err) };
+  }
+}
+
+// Handles a map fly-to event emitted by the voice pipeline via IPC.
+function onMapFlyTo({ lat, lon, label }) {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('map:fly-to', { lat: Number(lat) || 0, lon: Number(lon) || 0, label: String(label || '') });
+  }
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1200,
@@ -967,7 +1174,7 @@ function createWindow() {
     webPreferences: buildSecureWebPreferences({ preload: path.join(__dirname, 'preload.js') }),
   });
 
-  win.loadFile('index.html');
+  loadStartupScreen();
 
   win.webContents.on('did-finish-load', () => {
     sendToRenderer('app-meta', {
@@ -1189,6 +1396,10 @@ createMainIpcHandlers({
   securityAudit,
   mcpManager,
   mcpRouter,
+  // ── First-run wizard + map fly-to ──────────────────────────────────────────
+  onSetupComplete,
+  getSubscriptionStatus,
+  onMapFlyTo,
 });
 
 module.exports = {
