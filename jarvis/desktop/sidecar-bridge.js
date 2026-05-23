@@ -208,6 +208,10 @@ class SidecarBridge extends EventEmitter {
     this._pendingSettings = null;
     this._transport = null;
     this._ws = null;
+    this._capabilities = {
+      ttsStreamingSupported: false,
+      ttsBackend: 'unknown',
+    };
   }
 
   _buildUrl() {
@@ -310,6 +314,13 @@ class SidecarBridge extends EventEmitter {
     const { type, ...rest } = msg;
     switch (type) {
       case 'status':
+        if (rest?.capabilities && typeof rest.capabilities === 'object') {
+          this._capabilities = {
+            ...this._capabilities,
+            ...rest.capabilities,
+          };
+          this.emit('capabilities', { ...this._capabilities });
+        }
         this.emit('status', rest);
         break;
       case 'wake_word':
@@ -336,6 +347,22 @@ class SidecarBridge extends EventEmitter {
           requestId: rest.requestId || '',
           data: rest.data || '',
           format: rest.format || 'wav',
+        });
+        break;
+      case 'tts_audio_chunk':
+        this.emit('tts_audio_chunk', {
+          requestId: rest.requestId || '',
+          chunkIndex: Number(rest.chunkIndex || 0),
+          data: rest.data || '',
+          format: rest.format || 'wav',
+          isFinal: Boolean(rest.isFinal),
+        });
+        break;
+      case 'tts_stream_done':
+        this.emit('tts_stream_done', {
+          requestId: rest.requestId || '',
+          chunks: Number(rest.chunks || 0),
+          backend: rest.backend || '',
         });
         break;
       case 'intent_parsed':
@@ -406,6 +433,32 @@ class SidecarBridge extends EventEmitter {
 
   requestTts(text, requestId = '') {
     return this._send({ type: 'tts_speak', text, requestId });
+  }
+
+  requestTtsStreamStart(requestId = '') {
+    return this._send({ type: 'tts_stream_start', requestId });
+  }
+
+  requestTtsStreamChunk(text, requestId = '', chunkIndex = 0, isFinal = false) {
+    return this._send({
+      type: 'tts_stream_chunk',
+      text,
+      requestId,
+      chunkIndex,
+      isFinal,
+    });
+  }
+
+  requestTtsStreamEnd(requestId = '') {
+    return this._send({ type: 'tts_stream_end', requestId });
+  }
+
+  requestTtsStreamCancel(requestId = '') {
+    return this._send({ type: 'tts_stream_cancel', requestId });
+  }
+
+  getCapabilities() {
+    return { ...this._capabilities };
   }
 
   requestIntentParse(text, requestId = '') {

@@ -652,8 +652,21 @@ async function installLocalAiEngine() {
   });
 }
 
-async function routeAiRequest(payload = {}) {
+async function routeAiRequest(payload = {}, options = {}) {
   const request = payload && typeof payload === 'object' ? payload : {};
+  const streamId = String(request.streamId || '').trim();
+  const onChunk = typeof options.onChunk === 'function'
+    ? (event) => {
+      try {
+        options.onChunk({
+          ...(event && typeof event === 'object' ? event : {}),
+          streamId,
+        });
+      } catch {
+        // ignore chunk forwarding errors
+      }
+    }
+    : () => {};
   const response = await aiRouter.routeRequest({
     message: request.message || '',
     messages: Array.isArray(request.messages) ? request.messages : undefined,
@@ -662,7 +675,7 @@ async function routeAiRequest(payload = {}) {
     contextSize: request.contextSize,
     retryCount: request.retryCount,
     options: request.options,
-  });
+  }, onChunk);
   return {
     ok: true,
     text: String(response?.text || ''),
@@ -671,6 +684,7 @@ async function routeAiRequest(payload = {}) {
     route: response?.route || null,
     profile: response?.profile || null,
     availability: response?.availability || null,
+    streamId,
   };
 }
 

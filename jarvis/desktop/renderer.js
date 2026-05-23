@@ -667,6 +667,19 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	let speechToTextActive = false;
 	let speechPlaybackActive = false;
+	let sidecarCapabilities = {
+		ttsStreamingSupported: false,
+		ttsBackend: 'unknown',
+	};
+	let activeAiStream = {
+		id: '',
+		segmentsSent: 0,
+		streamingEnabled: false,
+	};
+	const ttsAudioChunkQueue = [];
+	const MAX_TTS_AUDIO_QUEUE = 24;
+	let ttsAudioChunkPlaying = false;
+	let ttsAudioActiveStreamId = '';
 	let voiceSettings = readVoiceSettings();
 	let desktopLocalServers = [];
 	let desktopLocalAssignment = {
@@ -699,6 +712,86 @@ window.addEventListener('DOMContentLoaded', () => {
 			voiceInputButton.disabled = !voiceSettings.sttEnabled;
 			if (!speechToTextActive) {
 				voiceInputButton.textContent = voiceSettings.sttEnabled ? '🎙 Talk' : '🎙 STT off';
+			}
+
+			function clearTtsAudioQueue() {
+				ttsAudioChunkQueue.length = 0;
+				ttsAudioChunkPlaying = false;
+			}
+
+			function playNextTtsChunk() {
+				if (ttsAudioChunkPlaying) return;
+				const next = ttsAudioChunkQueue.shift();
+				if (!next) return;
+				ttsAudioChunkPlaying = true;
+				try {
+					const AudioContext = window.AudioContext || window.webkitAudioContext;
+					if (!AudioContext) {
+						ttsAudioChunkPlaying = false;
+						return;
+					}
+					const actx = new AudioContext();
+					const binary = atob(next.data);
+					const bytes = new Uint8Array(binary.length);
+					for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+					actx.decodeAudioData(bytes.buffer, (decoded) => {
+						const source = actx.createBufferSource();
+						source.buffer = decoded;
+						source.connect(actx.destination);
+						speechPlaybackActive = true;
+						setVoiceVisualizer('speaking');
+						source.onended = () => {
+							ttsAudioChunkPlaying = false;
+							speechPlaybackActive = false;
+							setVoiceVisualizer('idle');
+							actx.close().catch(() => null);
+							playNextTtsChunk();
+						};
+						source.start(0);
+					}, () => {
+						ttsAudioChunkPlaying = false;
+						speechPlaybackActive = false;
+						actx.close().catch(() => null);
+						playNextTtsChunk();
+					});
+				} catch {
+					ttsAudioChunkPlaying = false;
+					speechPlaybackActive = false;
+					playNextTtsChunk();
+				}
+			}
+
+			function enqueueTtsAudioChunk({ streamId, chunkIndex, data, format }) {
+				if (!data) return;
+				const normalizedStreamId = String(streamId || '');
+				if (normalizedStreamId && ttsAudioActiveStreamId && normalizedStreamId !== ttsAudioActiveStreamId) {
+					clearTtsAudioQueue();
+				}
+				if (normalizedStreamId) ttsAudioActiveStreamId = normalizedStreamId;
+				if (ttsAudioChunkQueue.length >= MAX_TTS_AUDIO_QUEUE) {
+					ttsAudioChunkQueue.shift();
+				}
+				ttsAudioChunkQueue.push({
+					streamId: normalizedStreamId,
+					chunkIndex: Number(chunkIndex || 0),
+					data,
+					format: format || 'wav',
+				});
+				ttsAudioChunkQueue.sort((a, b) => a.chunkIndex - b.chunkIndex);
+				playNextTtsChunk();
+			}
+
+			function resetActiveAiStream() {
+				if (activeAiStream.id && sidecar?.requestTtsStreamCancel) {
+					sidecar.requestTtsStreamCancel(activeAiStream.id);
+				}
+				activeAiStream = {
+					id: '',
+					segmentsSent: 0,
+					streamingEnabled: false,
+				};
+				ttsAudioActiveStreamId = '';
+				clearTtsAudioQueue();
 			}
 		}
 		if (persist) writeVoiceSettings(voiceSettings);
@@ -1528,13 +1621,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
 		sidecar.on('connected', () => {
 			sidecarConnected = true;
+			sidecarCapabilities = sidecar.getCapabilities ? sidecar.getCapabilities() || sidecarCapabilities : sidecarCapabilities;
 			appendMessage(log, 'AI Sidecar', '🤖 Python voice sidecar connected (offline mode active).', 'system');
 			const configuration = {
 				wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
 				language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
 				wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
 				sttEnabled: false,
-				ttsEnabled: false,
+				ttsEnabled: Boolean(voiceSettings.autoTts),
 				nlpEnabled: false,
 				vadEnabled: true,
 				sampleRate: 16000,
@@ -1556,6 +1650,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		sidecar.on('disconnected', () => {
 			sidecarConnected = false;
 			sidecarManualListening = false;
+			resetActiveAiStream();
 			setVoiceToTextUiActive(false);
 			appendMessage(log, 'AI Sidecar', 'Python voice sidecar disconnected — using browser fallback.', 'system');
 		});
@@ -1564,6 +1659,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			// Emitted once after all reconnect attempts are exhausted without ever
 			// connecting — sidecar is not installed or Python is not available.
 			sidecarConnected = false;
+			resetActiveAiStream();
 			appendMessage(log, 'AI Sidecar', 'Python voice sidecar is not available — voice will use browser speech APIs, and text AI chat will still work.', 'system');
 		});
 
@@ -1576,9 +1672,22 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 
 		sidecar.on('status', (payload) => {
+			if (payload?.capabilities && typeof payload.capabilities === 'object') {
+				sidecarCapabilities = {
+					...sidecarCapabilities,
+					...payload.capabilities,
+				};
+			}
 			if (payload?.phase && payload.phase !== 'connected' && payload.phase !== 'configured') {
 				appendMessage(log, 'AI Sidecar', payload.message || payload.phase, 'system');
 			}
+		});
+
+		sidecar.on('capabilities', (payload) => {
+			sidecarCapabilities = {
+				...sidecarCapabilities,
+				...(payload || {}),
+			};
 		});
 
 		sidecar.on('wake_word', () => {
@@ -1628,37 +1737,32 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 		});
 
-		sidecar.on('tts_audio', ({ data, format }) => {
+		sidecar.on('tts_audio', ({ data, format, requestId }) => {
 			if (!data || !voiceSettings.autoTts) return;
-			try {
-				const AudioContext = window.AudioContext || window.webkitAudioContext;
-				if (!AudioContext) return;
-				const actx = new AudioContext();
-				const mimeMap = { wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg' };
-				const mimeType = mimeMap[format] || 'audio/wav';
-				void mimeType; // referenced for future AudioContext decoding type hint
-				const binary = atob(data);
-				const bytes = new Uint8Array(binary.length);
-				for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-				actx.decodeAudioData(bytes.buffer, (decoded) => {
-					const source = actx.createBufferSource();
-					source.buffer = decoded;
-					source.connect(actx.destination);
-					speechPlaybackActive = true;
-					setVoiceVisualizer('speaking');
-					source.onended = () => {
-						speechPlaybackActive = false;
-						setVoiceVisualizer('idle');
-						actx.close().catch(() => null);
-					};
-					source.start(0);
-				}, () => {
-					speechPlaybackActive = false;
-					actx.close().catch(() => null);
-				});
-			} catch {
-				speechPlaybackActive = false;
-				// fall through to browser TTS
+			enqueueTtsAudioChunk({
+				streamId: requestId || '',
+				chunkIndex: 0,
+				data,
+				format,
+			});
+		});
+
+		sidecar.on('tts_audio_chunk', ({ requestId, chunkIndex, data, format }) => {
+			if (!data || !voiceSettings.autoTts) return;
+			enqueueTtsAudioChunk({
+				streamId: requestId || '',
+				chunkIndex: Number(chunkIndex || 0),
+				data,
+				format,
+			});
+		});
+
+		sidecar.on('tts_stream_done', ({ requestId }) => {
+			if (requestId && activeAiStream.id === requestId) {
+				activeAiStream = {
+					...activeAiStream,
+					id: '',
+				};
 			}
 		});
 
@@ -1795,7 +1899,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
 			wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
 			sttEnabled: false,
-			ttsEnabled: false,
+			ttsEnabled: Boolean(voiceSettings.autoTts),
 			nlpEnabled: false,
 			vadEnabled: true,
 		});
@@ -2213,6 +2317,51 @@ window.addEventListener('DOMContentLoaded', () => {
 				appendMessage(log, `Task ${parsed.taskId || ''}`.trim(), body, 'system');
 				return;
 			}
+			if (parsed.type === 'ai_stream_started') {
+				const streamId = String(parsed.streamId || '').trim();
+				if (!streamId) return;
+				if (activeAiStream.id && activeAiStream.id !== streamId) {
+					resetActiveAiStream();
+				}
+				activeAiStream = {
+					id: streamId,
+					segmentsSent: 0,
+					streamingEnabled: Boolean(
+						sidecarConnected
+						&& voiceSettings.autoTts
+						&& sidecar?.requestTtsStreamStart
+						&& sidecarCapabilities?.ttsStreamingSupported,
+					),
+				};
+				if (activeAiStream.streamingEnabled) {
+					clearTtsAudioQueue();
+					ttsAudioActiveStreamId = streamId;
+					sidecar.requestTtsStreamStart(streamId);
+				}
+				return;
+			}
+			if (parsed.type === 'ai_stream_segment') {
+				const streamId = String(parsed.streamId || '').trim();
+				const segment = String(parsed.segment || '').trim();
+				if (!streamId || !segment || activeAiStream.id !== streamId) return;
+				activeAiStream.segmentsSent += 1;
+				if (activeAiStream.streamingEnabled && sidecar?.requestTtsStreamChunk) {
+					sidecar.requestTtsStreamChunk(
+						segment,
+						streamId,
+						Number(parsed.segmentIndex || activeAiStream.segmentsSent - 1),
+						false,
+					);
+				}
+				return;
+			}
+			if (parsed.type === 'ai_stream_done') {
+				const streamId = String(parsed.streamId || '').trim();
+				if (streamId && activeAiStream.id === streamId && activeAiStream.streamingEnabled && sidecar?.requestTtsStreamEnd) {
+					sidecar.requestTtsStreamEnd(streamId);
+				}
+				return;
+			}
 			const body = typeof parsed.summary === 'string'
 				? parsed.summary
 				: typeof parsed.text === 'string'
@@ -2226,7 +2375,18 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (parsed.model) badges.push(`model:${parsed.model}`);
 			appendMessage(log, title, body, parsed.level === 'error' ? 'error' : 'system', badges);
 			if (parsed.type === 'command_result' && parsed.level !== 'error') {
-				void speakWithSidecar(getComfortableSpokenText(parsed, body));
+				const streamId = String(parsed.streamId || '').trim();
+				const streamedAlready = Boolean(
+					parsed.ttsStreaming
+					&& streamId
+					&& activeAiStream.id === streamId
+					&& activeAiStream.segmentsSent > 0,
+				);
+				if (streamedAlready) {
+					activeAiStream = { id: '', segmentsSent: 0, streamingEnabled: false };
+				} else {
+					void speakWithSidecar(getComfortableSpokenText(parsed, body));
+				}
 			}
 		} catch {
 			// rawMessage is not JSON — display as plain text
