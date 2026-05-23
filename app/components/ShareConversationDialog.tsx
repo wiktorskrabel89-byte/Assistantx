@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Link2, Share2, X } from "lucide-react";
+import { Download, FileText, Link2, Share2, X } from "lucide-react";
 import { useEffect } from "react";
 
 export function ShareConversationDialog({
@@ -12,6 +12,7 @@ export function ShareConversationDialog({
   onCopyShareLink,
   onExportMarkdown,
   onExportJson,
+  onExportPdf,
   onCopyVsCodePrompt,
   onDownloadVsCodeBundle,
 }: {
@@ -23,6 +24,7 @@ export function ShareConversationDialog({
   onCopyShareLink: () => void;
   onExportMarkdown: () => void;
   onExportJson: () => void;
+  onExportPdf: () => void;
   onCopyVsCodePrompt: () => void;
   onDownloadVsCodeBundle: () => void;
 }) {
@@ -82,6 +84,10 @@ export function ShareConversationDialog({
           <button onClick={onExportJson} className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm ${dark ? "border-slate-800 bg-slate-900 hover:bg-slate-800" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}>
             <span>Export JSON</span>
             <Download className="h-4 w-4 text-slate-400" />
+          </button>
+          <button onClick={onExportPdf} className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm ${dark ? "border-slate-800 bg-slate-900 hover:bg-slate-800" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}>
+            <span>Export PDF</span>
+            <FileText className="h-4 w-4 text-slate-400" />
           </button>
         </div>
 

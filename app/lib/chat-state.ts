@@ -368,6 +368,7 @@ export function createDefaultState(): StoredState {
     workspaces: [workspace],
     activeWorkspaceId: workspace.id,
     dark: false,
+    theme: "default",
     userPlan: "free",
     premiumRequestsUsed: 0,
     appMode: "ai-chat",
@@ -623,6 +624,7 @@ export function upgradeState(value: StoredState | null): StoredState | null {
 
   const raw = value as Record<string, unknown>;
   const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
+  const VALID_THEMES: import("./chat-types").AppTheme[] = ["default", "midnight", "ocean", "slate", "cyberpunk"];
   // Migrate legacy plan values
   let userPlan: UserPlan = "free";
   const rawPlan = raw.userPlan as string | undefined;
@@ -638,10 +640,16 @@ export function upgradeState(value: StoredState | null): StoredState | null {
     userPlan = rawPlan as UserPlan;
   }
 
+  const rawTheme = raw.theme as string | undefined;
+  const theme: import("./chat-types").AppTheme = VALID_THEMES.includes(rawTheme as import("./chat-types").AppTheme)
+    ? (rawTheme as import("./chat-types").AppTheme)
+    : "default";
+
   return {
     workspaces,
     activeWorkspaceId,
     dark: Boolean(raw.dark),
+    theme,
     userPlan,
     premiumRequestsUsed: typeof raw.premiumRequestsUsed === "number"
       ? raw.premiumRequestsUsed

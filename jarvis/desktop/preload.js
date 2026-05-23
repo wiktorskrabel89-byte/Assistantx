@@ -80,6 +80,17 @@ const ALLOWED_INVOKE = new Set([
   'mcp:google-poll-auth',
   'mcp:set-api-key',
   'mcp:list-tools',
+  // Clipboard monitoring
+  'clipboard:get-status',
+  'clipboard:enable',
+  'clipboard:disable',
+  'clipboard:get-last',
+  'clipboard:get-history',
+  // Drag-and-drop file indexing
+  'index:drop-files',
+  'index:get-jobs',
+  'index:get-job',
+  'index:cancel-job',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -90,6 +101,9 @@ const ALLOWED_RECEIVE = new Set([
   'sidecar-message',
   'auth:session-changed',
   'auth:signed-out',
+  'clipboard:change',
+  'clipboard:status',
+  'index:job-update',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────
@@ -461,6 +475,27 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     enhanceSpeechText: (text, options) => enhanceSpeechText(text, options),
     formatReminderSpeech: (reminder, options) => formatReminderSpeech(reminder, options),
     buildDailySummary: (payload) => buildDailySummary(payload),
+  },
+  /** Clipboard monitoring (opt-in). Default is disabled; user must call enable(). */
+  clipboard: {
+    getStatus: () => invokeAllowed('clipboard:get-status'),
+    enable: () => invokeAllowed('clipboard:enable'),
+    disable: () => invokeAllowed('clipboard:disable'),
+    getLast: () => invokeAllowed('clipboard:get-last'),
+    getHistory: () => invokeAllowed('clipboard:get-history'),
+    /** Subscribe to new clipboard entries (fired only when watcher is enabled). */
+    onChange: (listener) => subscribeAllowed('clipboard:change', listener),
+    /** Subscribe to enabled/disabled status changes. */
+    onStatus: (listener) => subscribeAllowed('clipboard:status', listener),
+  },
+  /** Drag-and-drop local file indexing. */
+  fileIndex: {
+    dropFiles: (paths) => invokeAllowed('index:drop-files', { paths: Array.isArray(paths) ? paths : [] }),
+    getJobs: () => invokeAllowed('index:get-jobs'),
+    getJob: (jobId) => invokeAllowed('index:get-job', { jobId }),
+    cancelJob: (jobId) => invokeAllowed('index:cancel-job', { jobId }),
+    /** Subscribe to job progress updates. */
+    onJobUpdate: (listener) => subscribeAllowed('index:job-update', listener),
   },
 });
 

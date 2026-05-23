@@ -597,7 +597,117 @@ function createMainIpcHandlers(deps) {
       if (!mcpRouter) return { ok: false, error: 'mcp-unavailable' };
       return { ok: true, tools: mcpRouter.listTools() };
     },
+
+    // ── Clipboard Monitoring ─────────────────────────────────────────────────
+    'clipboard:get-status': () => {
+      const { watcher } = require('../clipboard/watcher');
+      return { ok: true, ...watcher.getStatus() };
+    },
+
+    'clipboard:enable': async (_event) => {
+      const auth = await permissions.authorize('clipboard:enable');
+      if (!auth.allowed) return denied('clipboard:enable', auth.reason);
+      const { watcher } = require('../clipboard/watcher');
+      watcher.enable();
+      return { ok: true, ...watcher.getStatus() };
+    },
+
+    'clipboard:disable': () => {
+      const { watcher } = require('../clipboard/watcher');
+      watcher.disable();
+      return { ok: true, ...watcher.getStatus() };
+    },
+
+    'clipboard:get-last': () => {
+      const { watcher } = require('../clipboard/watcher');
+      if (!watcher.getStatus().enabled) return { ok: false, error: 'clipboard-watcher-disabled' };
+      return { ok: true, entry: watcher.getLast() };
+    },
+
+    'clipboard:get-history': () => {
+      const { watcher } = require('../clipboard/watcher');
+      if (!watcher.getStatus().enabled) return { ok: false, error: 'clipboard-watcher-disabled' };
+      return { ok: true, history: watcher.getHistory() };
+    },
+
+    // ── Drag-and-drop File Indexing ──────────────────────────────────────────
+    'index:drop-files': async (_event, payload) => {
+      const auth = await permissions.authorize('index:drop-files');
+      if (!auth.allowed) return denied('index:drop-files', auth.reason);
+      const body = validatePlainObject(payload) || {};
+      const paths = Array.isArray(body.paths) ? body.paths.filter((p) => typeof p === 'string' && p.trim()) : [];
+      if (paths.length === 0) return { ok: false, error: 'no-paths-provided' };
+      const { dropHandler } = require('../indexing/drop-handler');
+      securityAudit({ action: 'index:drop-files', target: `${paths.length} path(s)` });
+      const result = await dropHandler.addDrop(paths);
+      return { ok: true, ...result };
+    },
+
+    'index:get-jobs': () => {
+      const { dropHandler } = require('../indexing/drop-handler');
+      return { ok: true, jobs: dropHandler.getJobs() };
+    },
+
+    'index:get-job': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const jobId = validateString(body.jobId, { allowEmpty: false, maxLen: 80 });
+      if (!jobId) return invalidResult('index:get-job', 'job-id-required');
+      const { dropHandler } = require('../indexing/drop-handler');
+      const job = dropHandler.getJob(jobId);
+      return job ? { ok: true, job } : { ok: false, error: 'job-not-found' };
+    },
+
+    'index:cancel-job': (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const jobId = validateString(body.jobId, { allowEmpty: false, maxLen: 80 });
+      if (!jobId) return invalidResult('index:cancel-job', 'job-id-required');
+      const { dropHandler } = require('../indexing/drop-handler');
+      const cancelled = dropHandler.cancelJob(jobId);
+      return { ok: true, cancelled };
+    },
   };
+
+  // ── Wire clipboard & indexing events → renderer ──────────────────────────
+  (function wireFeatureEvents() {
+    let clipboardWired = false;
+    let indexWired = false;
+
+    function tryWireClipboard() {
+      if (clipboardWired) return;
+      try {
+        const { watcher } = require('../clipboard/watcher');
+        watcher.on('change', (entry) => {
+          const win = getMainWindow?.();
+          if (win) win.webContents.send('clipboard:change', entry);
+        });
+        watcher.on('status', (status) => {
+          const win = getMainWindow?.();
+          if (win) win.webContents.send('clipboard:status', status);
+        });
+        watcher.init();
+        clipboardWired = true;
+      } catch {
+        // clipboard module not available in this environment
+      }
+    }
+
+    function tryWireIndexing() {
+      if (indexWired) return;
+      try {
+        const { dropHandler } = require('../indexing/drop-handler');
+        dropHandler.on('job-update', (job) => {
+          const win = getMainWindow?.();
+          if (win) win.webContents.send('index:job-update', job);
+        });
+        indexWired = true;
+      } catch {
+        // indexing module not available in this environment
+      }
+    }
+
+    tryWireClipboard();
+    tryWireIndexing();
+  })();
 
   registerIpcHandlers(ipcMain, handlers);
 }

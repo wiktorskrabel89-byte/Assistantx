@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart2, Bot, Cloud, Globe, LogOut, MessageSquareText, Mic, MoonStar, RefreshCcw, Server, Sparkles, Sun, Theater, Trash2, Volume2, Zap } from "lucide-react";
+import { BarChart2, Bot, Cloud, Globe, LogOut, MessageSquareText, Mic, MoonStar, Palette, RefreshCcw, Server, Sparkles, Sun, Theater, Trash2, Volume2, Zap } from "lucide-react";
 import UserProfileEditor, { type UserProfile } from "../UserProfileEditor";
 import { createClient } from "@/lib/client";
 import { useWorkspace } from "@/app/providers/WorkspaceProvider";
@@ -44,6 +44,7 @@ export function SettingsTab() {
     state,
     activeWorkspace,
     setDark,
+    setTheme,
     setUiLanguage,
     cloudSyncStatus,
     cloudSyncMessage,
@@ -324,7 +325,7 @@ export function SettingsTab() {
           <h2 className="mt-5 text-2xl font-semibold tracking-tight">{tr.settings_title}</h2>
           <p className={`mt-2 text-sm leading-7 ${mutedClass}`}>{tr.settings_subtitle}</p>
 
-            <div className={`mt-6 rounded-2xl border p-4 ${softSurfaceClass}`}>
+          <div className={`mt-6 rounded-2xl border p-4 ${softSurfaceClass}`}>
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold">{tr.settings_dark_mode}</p>
@@ -335,6 +336,45 @@ export function SettingsTab() {
                 <Switch checked={dark} onCheckedChange={setDark} aria-label={tr.settings_dark_mode} />
                 <MoonStar className={`h-4 w-4 ${dark ? "text-sky-300" : "text-slate-400"}`} />
               </div>
+            </div>
+          </div>
+
+          {/* Theme preset selector */}
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+              <Palette className="h-3.5 w-3.5" /> Theme
+            </div>
+            <p className="mt-2 text-sm font-semibold">Color Theme</p>
+            <p className={`mt-1 text-xs ${mutedClass}`}>Choose from curated presets. Preset themes override the dark/light toggle.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {([
+                { id: "default",   label: "Default",        swatch: dark ? "#1e293b" : "#f8fafc", accent: "#0ea5e9" },
+                { id: "midnight",  label: "Midnight",       swatch: "#0e0e1a",        accent: "#a78bfa" },
+                { id: "ocean",     label: "Deep Ocean",     swatch: "#08101a",        accent: "#22d3ee" },
+                { id: "slate",     label: "Slate Grey",     swatch: "#1a1a1a",        accent: "#94a3b8" },
+                { id: "cyberpunk", label: "Cyberpunk",      swatch: "#0b0810",        accent: "#22d9c4" },
+              ] as Array<{ id: import("@/app/lib/chat-types").AppTheme; label: string; swatch: string; accent: string }>).map((preset) => {
+                const isActive = (state.theme ?? "default") === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setTheme(preset.id)}
+                    aria-pressed={isActive}
+                    className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                      isActive
+                        ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                        : dark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    <div
+                      className="mb-1.5 h-6 w-full rounded-md border border-white/10"
+                      style={{ background: `linear-gradient(135deg, ${preset.swatch} 60%, ${preset.accent})` }}
+                    />
+                    <div className="text-xs font-semibold">{preset.label}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
