@@ -65,6 +65,7 @@ export function SettingsTab() {
     setPersonalityMode,
     setLocalOnlyMode,
     setPostPrReviewCommentsToGitHub,
+    setMultiAgentBeta,
     addLocalServer,
     removeLocalServer,
     updateLocalServer,
@@ -436,6 +437,35 @@ export function SettingsTab() {
                 checked={activeWorkspace.settings.postPrReviewCommentsToGitHub ?? false}
                 onCheckedChange={setPostPrReviewCommentsToGitHub}
                 aria-label="Post PR review comments to GitHub"
+              />
+            </div>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${softSurfaceClass}`}>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+              <Bot className="h-3.5 w-3.5" /> AI Engine
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">
+                  Multi-Agent AI{" "}
+                  <span className="ml-1 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                    Beta
+                  </span>
+                </p>
+                <p className={`mt-1 text-xs ${mutedClass}`}>
+                  Activates 4 specialised LLM roles (Architect, Coder, Tester, Security). Greatly improves precision on complex tasks but requires a capable local device (CPU/RAM).
+                </p>
+                {(activeWorkspace.settings.multiAgentBeta ?? false) && (
+                  <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                    ⚠️ Multi-Agent mode is active. Responses will be slower — each task runs through a 4-stage LLM pipeline.
+                  </p>
+                )}
+              </div>
+              <Switch
+                checked={activeWorkspace.settings.multiAgentBeta ?? false}
+                onCheckedChange={setMultiAgentBeta}
+                aria-label="Enable Multi-Agent AI mode"
               />
             </div>
           </div>

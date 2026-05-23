@@ -28,12 +28,24 @@ function mapLocalTaskStatus(task: {
   status?: string | null;
   category?: string | null;
   action_type?: string | null;
+  agent_loop_status?: string | null;
 }) {
   if (task.status === "pending") {
     return "Queued on local device...";
   }
 
   if (task.status === "processing") {
+    // Surface multi-agent pipeline step when active
+    if (task.agent_loop_status && task.agent_loop_status !== "idle" && task.agent_loop_status !== "done") {
+      const labels: Record<string, string> = {
+        architect: "🕵️ Architect is analysing the codebase...",
+        coder:     "💻 Coder is writing the implementation...",
+        tester:    "🧪 Tester is verifying syntax & logic...",
+        security:  "🛡️ Security agent is scanning the code...",
+      };
+      return labels[task.agent_loop_status] ?? `Multi-agent: ${task.agent_loop_status}...`;
+    }
+
     if (task.category === "system_action") {
       if (task.action_type === "launch_roblox") return "Launching Roblox on local device...";
       if (task.action_type === "open_app") return "Opening app on local device...";
@@ -284,6 +296,8 @@ export function useChatTransport({
             provider?: string | null;
             category?: string | null;
             action_type?: string | null;
+            agent_loop_status?: string | null;
+            agent_logs?: string | null;
           };
         };
 
@@ -307,6 +321,8 @@ export function useChatTransport({
               ? `Completed by local device queue (${task.provider})`
               : "Completed by local device queue",
             status: undefined,
+            agentLoopStatus: task.agent_loop_status ?? entry.agentLoopStatus,
+            agentLogs: task.agent_logs ?? entry.agentLogs,
           }));
           break;
         }
@@ -317,6 +333,8 @@ export function useChatTransport({
             ai: task.error ?? task.response ?? "Local device task failed.",
             status: undefined,
             routeReason: "Local device queue",
+            agentLoopStatus: task.agent_loop_status ?? entry.agentLoopStatus,
+            agentLogs: task.agent_logs ?? entry.agentLogs,
           }));
           break;
         }
@@ -325,6 +343,8 @@ export function useChatTransport({
           ...entry,
           status: uiStatus === "Done" ? undefined : uiStatus,
           routeReason: "Queued via Supabase local device worker",
+          agentLoopStatus: task.agent_loop_status ?? entry.agentLoopStatus,
+          agentLogs: task.agent_logs ?? entry.agentLogs,
         }));
 
         await new Promise((resolve) => setTimeout(resolve, 1000));

@@ -1,5 +1,7 @@
 "use client";
 
+import { AgentStatusWidget, type AgentName } from "./AgentStatusWidget";
+
 type ThinkingIndicatorProps = {
   dark: boolean;
   visible: boolean;
@@ -7,9 +9,11 @@ type ThinkingIndicatorProps = {
   routeReason?: string;
   /** Approximate length (in characters) of the partial response being streamed. */
   partialResponseLength?: number;
+  /** When set, renders the multi-agent pipeline status widget. */
+  multiAgentStatus?: { agent: AgentName; message: string } | null;
 };
 
-export function ThinkingIndicator({ dark, visible, status, routeReason, partialResponseLength }: ThinkingIndicatorProps) {
+export function ThinkingIndicator({ dark, visible, status, routeReason, partialResponseLength, multiAgentStatus }: ThinkingIndicatorProps) {
   if (!visible) return null;
 
   const tokenEstimate = partialResponseLength ? Math.ceil(partialResponseLength / 4) : 0;
@@ -30,6 +34,13 @@ export function ThinkingIndicator({ dark, visible, status, routeReason, partialR
         )}
       </div>
       {routeReason ? <div className="mt-2 text-xs text-slate-500">{routeReason}</div> : null}
+      {multiAgentStatus ? (
+        <AgentStatusWidget
+          activeAgent={multiAgentStatus.agent}
+          dark={dark}
+          message={multiAgentStatus.message}
+        />
+      ) : null}
     </div>
   );
 }

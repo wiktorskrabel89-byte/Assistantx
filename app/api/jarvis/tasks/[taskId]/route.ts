@@ -21,7 +21,7 @@ export async function GET(
 
   const { data, error } = await context.client
     .from("ai_tasks")
-    .select("task_id, user_id, status, prompt, response, error, provider, model, routing, category, action_type, payload, created_at, started_at, completed_at, device_id")
+    .select("task_id, user_id, status, prompt, response, error, provider, model, routing, category, action_type, payload, created_at, started_at, completed_at, device_id, agent_loop_status, agent_logs")
     .eq("task_id", trimmedTaskId)
     .eq("user_id", context.user.id)
     .maybeSingle();

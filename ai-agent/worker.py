@@ -551,6 +551,185 @@ class SupabaseRestClient:
             body=patch,
         )
 
+    def update_agent_loop_status(self, task_id: str, status: str, logs: str = "") -> None:
+        body: dict[str, Any] = {"agent_loop_status": status}
+        if logs:
+            body["agent_logs"] = logs[:8000]
+        try:
+            self._request(
+                "PATCH",
+                "/rest/v1/ai_tasks",
+                params={"task_id": f"eq.{task_id}"},
+                body=body,
+            )
+        except Exception as exc:
+            print(f"[Worker][warn] update_agent_loop_status failed for {task_id}: {exc}")
+
+    def get_user_multi_agent_beta(self, user_id: str) -> bool:
+        try:
+            rows = self._request(
+                "GET",
+                "/rest/v1/profiles",
+                params={
+                    "select": "multi_agent_beta",
+                    "id": f"eq.{user_id}",
+                    "limit": "1",
+                },
+            )
+            if not rows:
+                return False
+            value = rows[0].get("multi_agent_beta", False)
+            return bool(value)
+        except Exception as exc:
+            print(f"[Worker][warn] get_user_multi_agent_beta failed for {user_id}: {exc}")
+            return False
+
+
+_MULTI_AGENT_MAX_FIX_ITERATIONS = 3
+
+_AGENT_STATUS_LABELS: dict[str, str] = {
+    "architect": "architect",
+    "coder":     "coder",
+    "tester":    "tester",
+    "security":  "security",
+    "done":      "done",
+}
+
+
+class MultiAgentOrchestrator:
+    """Stateless 4-stage LLM pipeline: Architect → Coder → Tester → Security.
+
+    Uses only existing generate_with_ollama / generate_with_cloud_fallback helpers —
+    no external dependencies are required.
+    """
+
+    def __init__(self, config: "WorkerConfig", supabase: "SupabaseRestClient", task_id: str, route_to_cloud: bool = False):
+        self.config = config
+        self.supabase = supabase
+        self.task_id = task_id
+        self.route_to_cloud = route_to_cloud
+
+    def _update_status(self, agent_name: str, message: str, logs: str = "") -> None:
+        self.supabase.update_agent_loop_status(self.task_id, agent_name, logs)
+        status_json = json.dumps({
+            "type": "MULTI_AGENT_STATUS",
+            "agent": agent_name,
+            "message": message,
+            "taskId": self.task_id,
+        })
+        print(status_json, flush=True)
+
+    def _call_llm(self, system_prompt: str, user_prompt: str, model_hint: str = "light") -> str:
+        config = self.config
+        temperature = config.default_temperature
+        if self.route_to_cloud or not config.local_enabled:
+            return generate_with_cloud_fallback(
+                config,
+                raw_prompt=user_prompt,
+                temperature=temperature,
+                system_instruction=system_prompt,
+            )
+        model_name = config.ollama_heavy_model if model_hint == "heavy" else config.ollama_light_model
+        keep_alive = _get_keep_alive_for_model(config, model_name)
+        return generate_with_ollama(
+            config,
+            model_name=model_name,
+            raw_prompt=user_prompt,
+            temperature=temperature,
+            system_instruction=system_prompt,
+            keep_alive=keep_alive,
+        )
+
+    def execute(self, user_prompt: str, codebase_context: str) -> dict[str, Any]:
+        # --- STAGE 1: ARCHITECT ---
+        self._update_status("architect", "🕵️ Architect is analysing the repository and planning changes...")
+        architect_system = (
+            "You are a Senior Software Architect. Analyse the provided codebase context and create a "
+            "rigorous, step-by-step change plan. Do NOT write final code — focus on file structure, "
+            "affected modules, and logic flow. Be precise and concise."
+        )
+        architect_prompt = f"Codebase context:\n{codebase_context}\n\nTask:\n{user_prompt}"
+        plan = self._call_llm(architect_system, architect_prompt, model_hint="light")
+        self._update_status("architect", "✅ Architect completed the change plan.", logs=plan)
+
+        # --- STAGE 2: CODER ---
+        self._update_status("coder", "💻 Coder is implementing the architecture plan...")
+        coder_system = (
+            "You are an expert Software Engineer. Your only task is to implement the plan provided by the "
+            "Architect in the given codebase context. Return ONLY the modified/new code wrapped in "
+            "appropriate code blocks (```). Do not add explanations outside the code blocks."
+        )
+        coder_prompt = f"Codebase context:\n{codebase_context}\n\nArchitect plan:\n{plan}"
+        generated_code = self._call_llm(coder_system, coder_prompt, model_hint="heavy")
+        self._update_status("coder", "✅ Coder generated the implementation.", logs=generated_code)
+
+        # --- STAGE 3: TESTER (with fix loop, max _MULTI_AGENT_MAX_FIX_ITERATIONS) ---
+        self._update_status("tester", "🧪 Tester is verifying syntax and logic...")
+        tester_system = (
+            "You are a QA Engineer. Analyse the provided code for syntax errors, missing brackets, "
+            "incorrect indentation, and obvious logic bugs. "
+            "Respond ONLY with the word 'PASSED' if the code is correct, "
+            "or start your response with 'FAILED: ' followed by a precise description of every error found."
+        )
+        fix_iteration = 0
+        while fix_iteration < _MULTI_AGENT_MAX_FIX_ITERATIONS:
+            tester_prompt = f"Code to verify:\n{generated_code}"
+            tester_result = self._call_llm(tester_system, tester_prompt, model_hint="light")
+
+            if "FAILED" not in tester_result.upper():
+                self._update_status("tester", "✅ Tester: code passed quality check.")
+                break
+
+            fix_iteration += 1
+            self._update_status(
+                "tester",
+                f"❌ Tester found issues (attempt {fix_iteration}/{_MULTI_AGENT_MAX_FIX_ITERATIONS}). Sending back to Coder...",
+                logs=tester_result,
+            )
+
+            if fix_iteration >= _MULTI_AGENT_MAX_FIX_ITERATIONS:
+                self._update_status("tester", "⚠️ Fix loop limit reached — returning last generated code for human review.")
+                self.supabase.update_agent_loop_status(self.task_id, "done")
+                return {
+                    "success": False,
+                    "code": generated_code,
+                    "reason": (
+                        f"Loop interrupted after {_MULTI_AGENT_MAX_FIX_ITERATIONS} fix iterations — "
+                        "human review required.\n\n"
+                        f"Last tester feedback:\n{tester_result}"
+                    ),
+                }
+
+            self._update_status("coder", f"🔧 Coder is applying fixes (attempt {fix_iteration})...")
+            fix_prompt = (
+                f"Codebase context:\n{codebase_context}\n\nArchitect plan:\n{plan}\n\n"
+                f"Previous code contained errors:\n{tester_result}\n\nFix every listed error."
+            )
+            generated_code = self._call_llm(coder_system, fix_prompt, model_hint="heavy")
+            self._update_status("coder", f"✅ Coder applied fixes (attempt {fix_iteration}).", logs=generated_code)
+
+        # --- STAGE 4: SECURITY ---
+        self._update_status("security", "🛡️ Security agent is scanning for vulnerabilities...")
+        security_system = (
+            "You are a Chief Security Engineer. Examine the provided code for: "
+            "API key or secret leaks, SQL injection vulnerabilities, "
+            "arbitrary command execution (e.g. rm -rf, del /f, subprocess with user input), "
+            "and path traversal risks. "
+            "Respond ONLY with 'SAFE' if no issues are found, "
+            "or start with 'DANGER: ' followed by a precise description of every vulnerability."
+        )
+        security_prompt = f"Code to analyse:\n{generated_code}"
+        security_result = self._call_llm(security_system, security_prompt, model_hint="light")
+
+        self.supabase.update_agent_loop_status(self.task_id, "done")
+
+        if "SAFE" in security_result.upper() and "DANGER" not in security_result.upper():
+            self._update_status("security", "🔒 Security agent approved the code as safe.")
+            return {"success": True, "code": generated_code, "reason": None}
+
+        self._update_status("security", "🚨 CODE BLOCKED — potential security threat detected!", logs=security_result)
+        return {"success": False, "code": generated_code, "reason": security_result}
+
 
 def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout_seconds: int) -> dict[str, Any]:
     raw_payload = json.dumps(payload).encode("utf-8")
@@ -1212,8 +1391,7 @@ def process_task(
 ) -> None:
     task_id = str(task.get("task_id"))
     user_id = str(task.get("user_id") or "")
-    raw_promp
-    t = str(task.get("prompt") or "")
+    raw_prompt = str(task.get("prompt") or "")
     category = str(task.get("category") or "ai_request")
     action_type = str(task.get("action_type") or "").strip() or None
     payload = _coerce_payload(task.get("payload"))
@@ -1264,43 +1442,73 @@ def process_task(
                 except Exception as exc:
                     print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
 
-            system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
-            provider = "ollama"
-            model = config.ollama_model
-
+            # --- Multi-Agent Beta check ---
             try:
-                if route_to_cloud:
-                    output_text = generate_with_cloud_fallback(
-                        config,
-                        raw_prompt=raw_prompt,
-                        temperature=current_temp,
-                        system_instruction=system_instruction,
-                    )
-                    provider = "openrouter"
-                    model = config.cloud_model
-                    routing = "cloud"
+                multi_agent_enabled = supabase.get_user_multi_agent_beta(user_id)
+            except Exception as exc:
+                print(f"[Worker][warn] Could not read multi_agent_beta for {user_id}: {exc}")
+                multi_agent_enabled = False
+
+            if multi_agent_enabled:
+                codebase_context = get_self_code(config.source_code_max_chars)
+                if _should_attach_map_code(raw_prompt):
+                    map_code = get_map_widget_code(config.source_code_max_chars)
+                    if map_code:
+                        codebase_context += f"\n\n# --- map-widget.js ---\n{map_code}"
+
+                orchestrator = MultiAgentOrchestrator(
+                    config, supabase, task_id, route_to_cloud=route_to_cloud
+                )
+                result = orchestrator.execute(raw_prompt, codebase_context)
+                if result["success"]:
+                    output_text = str(result.get("code") or "")
+                    provider = "openrouter_multi_agent" if route_to_cloud else "ollama_multi_agent"
+                    model = config.cloud_model if route_to_cloud else config.ollama_heavy_model
+                    routing = "cloud" if route_to_cloud else "local"
                 else:
-                    output_text = generate_with_ollama(
-                        config,
-                        raw_prompt=raw_prompt,
-                        temperature=current_temp,
-                        system_instruction=system_instruction,
+                    supabase.fail_task(
+                        task_id,
+                        str(result.get("reason") or "Multi-agent pipeline failed — human review required."),
                     )
-            except Exception as local_exc:
-                if not route_to_cloud:
-                    print(f"[Worker][warn] Local generation failed for {task_id}, trying cloud fallback: {local_exc}")
-                    output_text = generate_with_cloud_fallback(
-                        config,
-                        raw_prompt=raw_prompt,
-                        temperature=current_temp,
-                        system_instruction=system_instruction,
-                    )
-                    provider = "openrouter"
-                    model = config.cloud_model
-                    routing = "cloud"
-                    fallback_reason = "local_generation_failed"
-                else:
-                    raise
+                    return
+            else:
+                system_instruction = _build_system_instruction(get_self_code(config.source_code_max_chars))
+                provider = "ollama"
+                model = config.ollama_model
+
+                try:
+                    if route_to_cloud:
+                        output_text = generate_with_cloud_fallback(
+                            config,
+                            raw_prompt=raw_prompt,
+                            temperature=current_temp,
+                            system_instruction=system_instruction,
+                        )
+                        provider = "openrouter"
+                        model = config.cloud_model
+                        routing = "cloud"
+                    else:
+                        output_text = generate_with_ollama(
+                            config,
+                            raw_prompt=raw_prompt,
+                            temperature=current_temp,
+                            system_instruction=system_instruction,
+                        )
+                except Exception as local_exc:
+                    if not route_to_cloud:
+                        print(f"[Worker][warn] Local generation failed for {task_id}, trying cloud fallback: {local_exc}")
+                        output_text = generate_with_cloud_fallback(
+                            config,
+                            raw_prompt=raw_prompt,
+                            temperature=current_temp,
+                            system_instruction=system_instruction,
+                        )
+                        provider = "openrouter"
+                        model = config.cloud_model
+                        routing = "cloud"
+                        fallback_reason = "local_generation_failed"
+                    else:
+                        raise
     except Exception:
         raise
 

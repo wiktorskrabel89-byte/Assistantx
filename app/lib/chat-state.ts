@@ -334,6 +334,7 @@ export function createSettings(): WorkspaceSettings {
     encryptedSync: false,
     pauseSync: false,
     postPrReviewCommentsToGitHub: false,
+    multiAgentBeta: false,
   };
 }
 

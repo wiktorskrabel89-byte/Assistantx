@@ -27,6 +27,8 @@ export type ChatEntry = {
   stopped?: boolean;
   feedback?: MessageFeedback;
   reviewText?: string;
+  agentLoopStatus?: string;
+  agentLogs?: string;
   createdAt: number;
 };
 
@@ -156,6 +158,7 @@ export type WorkspaceSettings = {
   encryptedSync: boolean;
   pauseSync: boolean;
   postPrReviewCommentsToGitHub: boolean;
+  multiAgentBeta: boolean;
 };
 
 export type Workspace = {
