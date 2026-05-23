@@ -222,7 +222,7 @@ jobs:
           # electron-builder recognises GH_TOKEN for authenticated GitHub release publishing.
           # Use GH_TOKEN (not GITHUB_TOKEN) because GitHub Actions blocks custom secrets
           # in the GITHUB_ namespace.
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           # electron-builder can sign the app if a certificate is available.
           # Leave blank to produce unsigned builds.
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
@@ -560,7 +560,7 @@ jobs:
             jarvis/desktop/dist/release-notes.json
             jarvis/desktop/dist/*.blockmap
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Publish Android APK to GitHub Release (jarvis-latest)
         if: steps.android_apk.outputs.found == 'true'
@@ -570,12 +570,12 @@ jobs:
           files: |
             jarvis/android/dist/Jarvis-android.apk
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Verify jarvis-latest release visibility and required assets
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
             Write-Error "GITHUB_TOKEN is required to verify release visibility."
@@ -648,7 +648,7 @@ jobs:
         working-directory: jarvis/desktop
         run: npm run dist:mac
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Upload macOS x64 DMG artifact
         uses: actions/upload-artifact@v7
@@ -672,7 +672,7 @@ jobs:
             jarvis/desktop/dist/JarvisSetup-x64.dmg
             jarvis/desktop/dist/JarvisSetup-arm64.dmg
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
   build-linux:
     name: Build Jarvis AppImage (Linux)
@@ -705,23 +705,43 @@ jobs:
         working-directory: jarvis/desktop
         run: npm run dist:linux
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Resolve Linux AppImage artifact path
+        id: linux_appimage
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          candidates=(jarvis/desktop/dist/Jarvis*.AppImage)
+          if [ "${#candidates[@]}" -eq 0 ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No Linux AppImage found in jarvis/desktop/dist"
+            exit 0
+          fi
+
+          appimage_path="${candidates[0]}"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "path=${appimage_path}" >> "$GITHUB_OUTPUT"
+          echo "Resolved Linux AppImage: ${appimage_path}"
 
       - name: Upload Linux AppImage artifact
+        if: steps.linux_appimage.outputs.found == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: Jarvis-linux-appimage-x64
-          path: jarvis/desktop/dist/Jarvis-x64.AppImage
+          path: ${{ steps.linux_appimage.outputs.path }}
           if-no-files-found: warn
 
       - name: Publish Linux AppImage to GitHub Release (jarvis-latest)
+        if: steps.linux_appimage.outputs.found == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: jarvis-latest
           files: |
-            jarvis/desktop/dist/Jarvis-x64.AppImage
+            ${{ steps.linux_appimage.outputs.path }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
   build-android:
     name: Build Jarvis Android APK
@@ -780,4 +800,4 @@ jobs:
           files: |
             jarvis/android/dist/Jarvis-android.apk
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
