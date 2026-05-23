@@ -15,12 +15,11 @@ to private GitHub release metadata/assets.
 
 ## Source of truth (updater topology)
 
-- **Permanent production updater source**: GitHub Releases (`jarvis-latest`)
-- **Desktop updater provider**: `github` with `owner=wiktorskrabel89-byte`,
-  `repo=Assistantx`, and `private=true`.
-- **Authentication**: `GH_TOKEN` Fine-Grained PAT in CI for publishing, never
-  hardcoded in the app; runtime private-feed access token stored locally via
-  Electron `safeStorage` (or `GH_TOKEN` env when set by admin).
+- **Canonical manifest host**: `https://updates.assistantx.pl/versions.json`
+- **Desktop update engine**: `electron-updater` (`latest.yml` + blockmaps)
+- **Migration mode**: dual source (`JARVIS_UPDATE_SOURCE=manifest|github`), so rollback is an env flip.
+- **Channeling**: `stable` + `beta` entries exist in `versions.json`.
+- **Compatibility fallback**: legacy `jarvis-latest` GitHub Release remains supported during migration.
 
 ## Installer identity + NSIS requirements (must stay stable)
 
@@ -66,13 +65,14 @@ For private-repo topology, end-user updater tokens are required unless
 `GH_TOKEN` is provided by environment policy. AssistantX stores the updater PAT
 encrypted with Electron `safeStorage` in userData.
 
-## Required artifacts in the GitHub release
+## Required artifacts in the release workflow
 
-For each release, publish these files to `jarvis-latest`:
+For each release, publish/update these assets so `versions.json` and desktop metadata stay aligned.
 
 - `latest.yml`
 - `latest.yml.sig`
 - `release-notes.json`
+- `versions.json`
 - `JarvisSetup-x64.exe`
 - `JarvisSetup-x64.exe.blockmap`
 - `JarvisSetup-arm64.exe`
@@ -91,12 +91,19 @@ For each release, publish these files to `jarvis-latest`:
 `latest.yml.sig` must be a detached signature generated from the final `latest.yml`
 payload after those fields are appended.
 
+`versions.json` must:
+
+- contain `schemaVersion`
+- contain both `stable` and `beta` channels
+- include `windows`, `mac`, `linux`, `android` entries in `stable`
+- point to HTTPS URLs on approved update hosts
+
 ## Build and publish
 
 1. Create the `GH_TOKEN` Fine-Grained PAT and add it as a repository secret.
 2. Bump `version` in `jarvis/desktop/package.json` (or let CI bump it).
 3. Build installers and updater metadata (`latest.yml`) in CI.
-4. Publish installer artifacts and updater metadata to GitHub release `jarvis-latest`.
+4. Publish installer artifacts + updater metadata (`latest.yml`, `release-notes.json`, `versions.json`).
 5. Verify packaged app update detection against a lower installed version.
 
 ### CI-managed publishing requirements

@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
+import {
+  fetchUpdateManifest,
+  getManifestPlatformEntry,
+  getUpdateChannel,
+  getUpdateSource,
+  isAllowedHttpsUrl,
+  resolveManifestDownloadUrl,
+} from "@/app/api/jarvis/_lib/update-manifest";
 
 const REPO = "wiktorskrabel89-byte/Assistantx";
 const RELEASE_TAG = "jarvis-latest";
@@ -92,6 +100,23 @@ type DownloadTarget = {
   instructions: string;
 };
 
+async function resolveManifestDownloadTarget(target: DownloadTarget): Promise<string | null> {
+  const manifest = await fetchUpdateManifest();
+  const channel = getUpdateChannel();
+  const manifestEntry = getManifestPlatformEntry(manifest, target.platform, channel);
+  if (!manifestEntry) return null;
+  const url = resolveManifestDownloadUrl({
+    entry: manifestEntry,
+    platform: target.platform,
+    arch: target.arch,
+  });
+  if (!url) return null;
+  if (!isAllowedHttpsUrl(url)) {
+    throw new Error("manifest-download-url-not-allowed");
+  }
+  return url;
+}
+
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const rawPlatform = searchParams.get("platform");
@@ -144,6 +169,8 @@ export async function GET(request: Request): Promise<Response> {
     };
   })();
 
+  const updateSource = getUpdateSource();
+
   // 1. Try to serve a locally published file first (built via `npm run dist:win:public`)
   for (const filename of target.filenames) {
     const localPath = path.join(process.cwd(), "public", "jarvis", filename);
@@ -163,7 +190,31 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
-  // 2. Private release downloads require server-side GitHub credentials.
+  // 2. Manifest-first mode: redirect to canonical public update asset URL.
+  if (updateSource === "manifest") {
+    try {
+      const manifestUrl = await resolveManifestDownloadTarget(target);
+      if (manifestUrl) {
+        return Response.redirect(manifestUrl, 307);
+      }
+    } catch (error) {
+      return Response.json(
+        {
+          error: "Installer is temporarily unavailable",
+          platform: target.platform,
+          arch: target.arch,
+          reason: "manifest-download-resolution-failed",
+          details: error instanceof Error ? error.message : "manifest-resolution-failed",
+          instructions:
+            `${target.instructions}\n\n` +
+            "Verify versions.json platform mapping and allowed HTTPS host configuration.",
+        },
+        { status: 503 },
+      );
+    }
+  }
+
+  // 3. Private release downloads require server-side GitHub credentials.
   const githubToken = getGithubToken();
   if (!githubToken) {
     return Response.json(
@@ -181,7 +232,7 @@ export async function GET(request: Request): Promise<Response> {
     );
   }
 
-  // 3. Try to stream the latest GitHub Release asset with authenticated GitHub API access.
+  // 4. Try to stream the latest GitHub Release asset with authenticated GitHub API access.
   const releaseLookup = await getGithubReleaseAsset(target.filenames);
   const releaseAsset = releaseLookup.asset;
   if (releaseAsset) {
@@ -220,7 +271,7 @@ export async function GET(request: Request): Promise<Response> {
     );
   }
 
-  // 4. Release exists but target asset is missing.
+  // 5. Release exists but target asset is missing.
   return Response.json(
     {
       error: target.missingError,

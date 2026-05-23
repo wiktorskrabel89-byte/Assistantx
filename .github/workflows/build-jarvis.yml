@@ -22,6 +22,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       UPDATE_ROLLOUT_PERCENTAGE: '100'
+      UPDATES_BASE_URL: 'https://updates.assistantx.pl'
 
     steps:
       - name: Checkout repository
@@ -156,6 +157,88 @@ jobs:
           }
           $releaseNotes | ConvertTo-Json -Depth 20 | Set-Content -Path "release-notes.json" -Encoding UTF8
 
+          $updatesBaseUrl = "${{ env.UPDATES_BASE_URL }}".TrimEnd('/')
+          if ([string]::IsNullOrWhiteSpace($updatesBaseUrl)) {
+            $updatesBaseUrl = "https://updates.assistantx.pl"
+          }
+
+          $versionsManifest = [ordered]@{
+            schema = "assistantx-updates-manifest"
+            schemaVersion = 1
+            generatedAt = $publishedAt
+            channels = [ordered]@{
+              stable = [ordered]@{
+                windows = [ordered]@{
+                  latestVersion = $version
+                  url = "$updatesBaseUrl/windows/JarvisSetup-x64.exe"
+                  releaseNotes = ($highlights -join " ")
+                  publishedAt = $publishedAt
+                  artifacts = [ordered]@{
+                    x64 = "$updatesBaseUrl/windows/JarvisSetup-x64.exe"
+                    arm64 = "$updatesBaseUrl/windows/JarvisSetup-arm64.exe"
+                  }
+                  desktop = [ordered]@{
+                    feedUrl = "$updatesBaseUrl/windows"
+                    releaseNotesUrl = "$updatesBaseUrl/windows/release-notes.json"
+                  }
+                }
+                mac = [ordered]@{
+                  latestVersion = $version
+                  url = "$updatesBaseUrl/mac/JarvisSetup-x64.dmg"
+                  releaseNotes = ($highlights -join " ")
+                  publishedAt = $publishedAt
+                  artifacts = [ordered]@{
+                    x64 = "$updatesBaseUrl/mac/JarvisSetup-x64.dmg"
+                    arm64 = "$updatesBaseUrl/mac/JarvisSetup-arm64.dmg"
+                  }
+                  desktop = [ordered]@{
+                    feedUrl = "$updatesBaseUrl/mac"
+                    releaseNotesUrl = "$updatesBaseUrl/mac/release-notes.json"
+                  }
+                }
+                linux = [ordered]@{
+                  latestVersion = $version
+                  url = "$updatesBaseUrl/linux/Jarvis-x64.AppImage"
+                  releaseNotes = ($highlights -join " ")
+                  publishedAt = $publishedAt
+                  artifacts = [ordered]@{
+                    x64 = "$updatesBaseUrl/linux/Jarvis-x64.AppImage"
+                  }
+                  desktop = [ordered]@{
+                    feedUrl = "$updatesBaseUrl/linux"
+                    releaseNotesUrl = "$updatesBaseUrl/linux/release-notes.json"
+                  }
+                }
+                android = [ordered]@{
+                  latestVersion = $version
+                  url = "$updatesBaseUrl/android/Jarvis-android.apk"
+                  releaseNotes = ($highlights -join " ")
+                  publishedAt = $publishedAt
+                  artifacts = [ordered]@{
+                    apk = "$updatesBaseUrl/android/Jarvis-android.apk"
+                  }
+                }
+              }
+              beta = [ordered]@{
+                windows = [ordered]@{
+                  latestVersion = "${version}-beta.1"
+                  url = "$updatesBaseUrl/beta/windows/JarvisSetup-x64.exe"
+                  releaseNotes = "Beta channel build."
+                  publishedAt = $publishedAt
+                  artifacts = [ordered]@{
+                    x64 = "$updatesBaseUrl/beta/windows/JarvisSetup-x64.exe"
+                    arm64 = "$updatesBaseUrl/beta/windows/JarvisSetup-arm64.exe"
+                  }
+                  desktop = [ordered]@{
+                    feedUrl = "$updatesBaseUrl/beta/windows"
+                    releaseNotesUrl = "$updatesBaseUrl/beta/windows/release-notes.json"
+                  }
+                }
+              }
+            }
+          }
+          $versionsManifest | ConvertTo-Json -Depth 20 | Set-Content -Path "versions.json" -Encoding UTF8
+
           $body = @(
             "## What's new in v$version",
             "",
@@ -191,6 +274,7 @@ jobs:
           $body | Set-Content -Path "changelog_body.txt" -Encoding UTF8
           Write-Host "Changelog written to changelog_body.txt"
           Write-Host "Release notes written to release-notes.json"
+          Write-Host "Update manifest written to versions.json"
 
           # Expose version as a step output so other steps can reference it
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -331,6 +415,31 @@ jobs:
           }
           Copy-Item $src $dst -Force
           Write-Host "Copied release notes to $dst"
+
+      - name: Validate versions.json manifest schema
+        shell: pwsh
+        run: |
+          $manifestPath = Join-Path (Get-Location) "versions.json"
+          if (-not (Test-Path $manifestPath)) {
+            Write-Error "Missing versions.json generated in meta step."
+            exit 1
+          }
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if (-not $manifest.schemaVersion) {
+            Write-Error "versions.json missing schemaVersion"
+            exit 1
+          }
+          if (-not $manifest.channels -or -not $manifest.channels.stable -or -not $manifest.channels.beta) {
+            Write-Error "versions.json missing stable/beta channels"
+            exit 1
+          }
+          foreach ($platform in @("windows","mac","linux","android")) {
+            if (-not $manifest.channels.stable.$platform) {
+              Write-Error "versions.json stable channel missing platform: $platform"
+              exit 1
+            }
+          }
+          Write-Host "versions.json schema validated."
 
       - name: Packaged installer smoke
         working-directory: jarvis/desktop
@@ -541,6 +650,7 @@ jobs:
           path: |
             jarvis/desktop/dist/latest.yml
             jarvis/desktop/dist/release-notes.json
+            versions.json
             jarvis/desktop/dist/*.blockmap
           if-no-files-found: warn
 
@@ -654,6 +764,7 @@ jobs:
             jarvis/desktop/dist/latest.yml
             jarvis/desktop/dist/latest.yml.sig
             jarvis/desktop/dist/release-notes.json
+            versions.json
             jarvis/desktop/dist/*.blockmap
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -703,6 +814,7 @@ jobs:
             "latest.yml",
             "latest.yml.sig",
             "release-notes.json",
+            "versions.json",
             "JarvisSetup-x64.exe",
             "JarvisSetup-x64.exe.blockmap",
             "JarvisSetup-arm64.exe",
