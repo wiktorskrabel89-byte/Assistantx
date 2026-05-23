@@ -412,6 +412,7 @@ class SupabaseRestClient:
             body={
                 "status": "completed",
                 "response": response_text,
+                "output": response_text,
                 "provider": provider,
                 "model": model,
                 "routing": routing,
@@ -445,10 +446,17 @@ class SupabaseRestClient:
             return None
         return rows[0]
 
-    def require_approval(self, task: dict[str, Any], *, prompt_summary: str) -> None:
+    def require_approval(
+        self,
+        task: dict[str, Any],
+        *,
+        prompt_summary: str,
+        proposed_output: str | None = None,
+    ) -> None:
         task_id = str(task.get("task_id") or "")
         user_id = str(task.get("user_id") or "")
         action_type = str(task.get("action_type") or "").strip().lower() or None
+        safe_output = str(proposed_output or "").strip()
         self._request(
             "PATCH",
             "/rest/v1/ai_tasks",
@@ -460,6 +468,8 @@ class SupabaseRestClient:
                 "approved_by": None,
                 "approval_at": None,
                 "started_at": None,
+                "output": safe_output or None,
+                "response": None,
             },
         )
         self.insert_notification(
@@ -566,24 +576,28 @@ class SupabaseRestClient:
         except Exception as exc:
             print(f"[Worker][warn] update_agent_loop_status failed for {task_id}: {exc}")
 
-    def get_user_multi_agent_beta(self, user_id: str) -> bool:
+    def get_user_plan(self, user_id: str) -> str:
         try:
             rows = self._request(
                 "GET",
-                "/rest/v1/profiles",
+                "/rest/v1/workspace_states",
                 params={
-                    "select": "multi_agent_beta",
-                    "id": f"eq.{user_id}",
+                    "select": "state_json",
+                    "user_id": f"eq.{user_id}",
                     "limit": "1",
                 },
             )
             if not rows:
-                return False
-            value = rows[0].get("multi_agent_beta", False)
-            return bool(value)
+                return "free"
+            state_json = rows[0].get("state_json") if isinstance(rows[0], dict) else None
+            if isinstance(state_json, dict):
+                value = str(state_json.get("userPlan") or "").strip().lower()
+                if value in {"free", "pro", "pro+"}:
+                    return value
+            return "free"
         except Exception as exc:
-            print(f"[Worker][warn] get_user_multi_agent_beta failed for {user_id}: {exc}")
-            return False
+            print(f"[Worker][warn] get_user_plan failed for {user_id}: {exc}")
+            return "free"
 
     def update_task_sandbox_telemetry(
         self,
@@ -1048,6 +1062,11 @@ def _prompt_is_dangerous(prompt: str) -> bool:
     return any(re.search(pattern, lowered) for pattern in DANGEROUS_PROMPT_PATTERNS)
 
 
+def _prompt_blocked_for_free(prompt: str) -> bool:
+    lowered = str(prompt or "").lower()
+    return any(re.search(pattern, lowered) for pattern in FREE_BLOCKLIST_PATTERNS)
+
+
 def _task_requires_approval(task: dict[str, Any]) -> bool:
     status = str(task.get("status") or "").strip().lower()
     if status in {"approved", "rejected", "pending_approval", "processing", "completed", "failed", "cancelled"}:
@@ -1064,6 +1083,14 @@ def _summarize_approval_prompt(task: dict[str, Any]) -> str:
     if len(prompt) > 180:
         prompt = f"{prompt[:177]}..."
     return f"Task `{action_type}` is waiting for approval: {prompt or 'No prompt summary available.'}"
+
+
+def _is_deploy_task(task: dict[str, Any]) -> bool:
+    task_type = str(task.get("task_type") or "").strip().lower()
+    if task_type == "deploy_request":
+        return True
+    prompt = str(task.get("prompt") or "").strip().lower()
+    return bool(re.search(r"\b(deploy|release|rollout|prod|production|wdroż|wdróż)\b", prompt))
 
 
 def _choose_local_model(config: WorkerConfig, prompt: str) -> str:
@@ -1318,6 +1345,34 @@ ALLOWED_SYSTEM_ACTIONS = {
     "system_ignore_update",
     "system_db_query",
 }
+
+FREE_SAFE_SYSTEM_ACTIONS = {
+    "launch_roblox",
+    "open_app",
+    "system_screenshot",
+    "system_sleep",
+    "system_file_list",
+    "system_file_read",
+    "system_file_search",
+    "system_status_ping",
+    "system_repo_status",
+    "system_repo_index",
+}
+
+FREE_BLOCKLIST_PATTERNS = (
+    r"\brm\s+-rf\b",
+    r"\bmkfs\b",
+    r"\bshutdown\b",
+    r"\breboot\b",
+    r"\bhalt\b",
+    r"\bchmod\s+777\b",
+    r"\bchown\b",
+    r"\buseradd\b",
+    r"\buserdel\b",
+    r"\bdd\s+if=",
+    r"\bcurl\b.*\|\s*sh\b",
+    r"\bwget\b.*\|\s*sh\b",
+)
 
 
 def _safe_json_dumps(payload: dict[str, Any]) -> str:
@@ -1667,10 +1722,29 @@ def process_task(
     task_id = str(task.get("task_id"))
     user_id = str(task.get("user_id") or "")
     raw_prompt = str(task.get("prompt") or "")
+    current_status = str(task.get("status") or "").strip().lower()
     category = str(task.get("category") or "ai_request")
     action_type = str(task.get("action_type") or "").strip() or None
     payload = _coerce_payload(task.get("payload"))
+    execution_mode = str(task.get("execution_mode") or "direct").strip().lower() or "direct"
     if not task_id or not user_id or not raw_prompt:
+        return
+
+    user_plan = supabase.get_user_plan(user_id)
+    is_premium_user = user_plan in {"pro", "pro+"}
+
+    if current_status == "approved" and _is_deploy_task(task):
+        approved_output = str(task.get("output") or "").strip()
+        if not approved_output:
+            approved_output = "Deployment approved by user. No staged output payload was stored."
+        supabase.complete_task(
+            task_id,
+            response_text=f"✅ Deployment approved by user.\n\n{approved_output}",
+            provider="manual_approval",
+            model="deploy-approval-gate",
+            routing="local",
+            fallback_reason=None,
+        )
         return
 
     output_text = ""
@@ -1682,6 +1756,17 @@ def process_task(
 
     try:
         if category == "system_action":
+            if user_plan == "free":
+                if action_type not in FREE_SAFE_SYSTEM_ACTIONS:
+                    raise RuntimeError(
+                        "Ta akcja wymaga zaawansowanej weryfikacji bezpieczeństwa. "
+                        "Uruchom ją przez potok 7 Agentów w wersji Pro."
+                    )
+                if _prompt_blocked_for_free(raw_prompt):
+                    raise RuntimeError(
+                        "Wykryto potencjalnie niebezpieczne polecenie. "
+                        "W planie Free dostępny jest tylko katalog bezpiecznych akcji."
+                    )
             output_text = handle_system_action(config, action_type=action_type, payload=payload)
         else:
             try:
@@ -1717,17 +1802,20 @@ def process_task(
                 except Exception as exc:
                     print(f"[Worker][warn] Failed to persist temperature update for {task_id}: {exc}")
 
-            # --- Multi-Agent Beta check ---
-            try:
-                multi_agent_enabled = supabase.get_user_multi_agent_beta(user_id)
-            except Exception as exc:
-                print(f"[Worker][warn] Could not read multi_agent_beta for {user_id}: {exc}")
-                multi_agent_enabled = False
+            if user_plan == "free" and _prompt_blocked_for_free(raw_prompt):
+                raise RuntimeError(
+                    "Ta akcja wymaga zaawansowanej weryfikacji bezpieczeństwa. "
+                    "Uruchom ją przez potok 7 Agentów w wersji Pro."
+                )
 
-            if multi_agent_enabled:
+            run_multi_agent = execution_mode == "multi_agent" and is_premium_user
+            if execution_mode == "multi_agent" and not is_premium_user:
+                print(f"[Worker][info] Downgrading multi-agent request to direct mode for free user {user_id}")
+
+            if run_multi_agent:
                 quota_remaining: int | None = None
                 quota_max: int | None = None
-                if route_to_cloud:
+                if user_plan == "pro":
                     quota_info = supabase.consume_cloud_agent_quota(user_id)
                     allowed = bool(quota_info.get("allowed"))
                     quota_remaining = int(quota_info.get("remaining") or 0)
@@ -1740,7 +1828,7 @@ def process_task(
                     if not allowed:
                         supabase.fail_task(
                             task_id,
-                            "Daily cloud agent quota exhausted (5/5). Switch to local Ollama mode or wait until midnight UTC.",
+                            "Daily Pro pipeline quota exhausted (20/20). Upgrade to Pro+ or wait until midnight UTC.",
                         )
                         return
 
@@ -1770,6 +1858,17 @@ def process_task(
                     provider = "openrouter_multi_agent" if route_to_cloud else "ollama_multi_agent"
                     model = config.cloud_model if route_to_cloud else config.ollama_heavy_model
                     routing = "cloud" if route_to_cloud else "local"
+
+                    if _is_deploy_task(task):
+                        approval_summary = (
+                            "✅ Premium pipeline finished. Review the staged deploy output and approve before execution."
+                        )
+                        supabase.require_approval(
+                            task,
+                            prompt_summary=approval_summary,
+                            proposed_output=output_text,
+                        )
+                        return
                 else:
                     supabase.fail_task(
                         task_id,

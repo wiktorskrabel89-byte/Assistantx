@@ -28,6 +28,17 @@ function buildSelectChain(result: unknown) {
   };
 }
 
+function buildWorkspaceStateChain(plan: "free" | "pro" | "pro+" = "free") {
+  return {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn().mockResolvedValue({
+      data: { state_json: { userPlan: plan } },
+      error: null,
+    }),
+  };
+}
+
 describe("Jarvis task routes", () => {
   beforeEach(() => {
     jest.resetModules();
@@ -52,6 +63,9 @@ describe("Jarvis task routes", () => {
         getUser: jest.fn().mockResolvedValue({ data: { user: { id: "user-1" } }, error: null }),
       },
       from: jest.fn().mockImplementation((table: string) => {
+        if (table === "workspace_states") {
+          return buildWorkspaceStateChain("free");
+        }
         if (table === "ai_tasks") {
           return { insert: jest.fn().mockReturnValue(insertChain) };
         }
@@ -76,7 +90,12 @@ describe("Jarvis task routes", () => {
       auth: {
         getUser: jest.fn().mockResolvedValue({ data: { user: { id: "user-1" } }, error: null }),
       },
-      from: jest.fn(),
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === "workspace_states") {
+          return buildWorkspaceStateChain("free");
+        }
+        return {};
+      }),
     });
 
     const { POST } = await import("@/app/api/jarvis/tasks/route");
@@ -123,6 +142,9 @@ describe("Jarvis task routes", () => {
         getUser: jest.fn().mockResolvedValue({ data: { user: { id: "user-1" } }, error: null }),
       },
       from: jest.fn().mockImplementation((table: string) => {
+        if (table === "workspace_states") {
+          return buildWorkspaceStateChain("pro");
+        }
         if (table === "ai_tasks") {
           return selectChain;
         }

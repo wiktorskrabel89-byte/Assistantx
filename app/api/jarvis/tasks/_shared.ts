@@ -1,12 +1,15 @@
 import { createClient as createBearerClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/server";
+import type { UserPlan } from "@/lib/ai-config";
 
 type TaskUserClientResult = {
   user: { id: string; is_anonymous?: boolean | null };
   client: SupabaseClient;
+  userPlan: UserPlan;
 };
 
 export type JarvisTaskCategory = "ai_request" | "system_action";
+export type JarvisTaskExecutionMode = "direct" | "multi_agent";
 
 export const JARVIS_SYSTEM_ACTION_ALLOWLIST = [
   "launch_roblox",
@@ -25,6 +28,25 @@ export const JARVIS_SYSTEM_ACTION_ALLOWLIST = [
 
 export type JarvisSystemAction = (typeof JARVIS_SYSTEM_ACTION_ALLOWLIST)[number];
 
+const VALID_USER_PLANS: UserPlan[] = ["free", "pro", "pro+"];
+
+async function getWorkspaceUserPlan(client: SupabaseClient, userId: string): Promise<UserPlan> {
+  try {
+    const { data } = await client
+      .from("workspace_states")
+      .select("state_json")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const rawPlan = (data?.state_json as Record<string, unknown> | null | undefined)?.userPlan;
+    if (typeof rawPlan === "string" && VALID_USER_PLANS.includes(rawPlan as UserPlan)) {
+      return rawPlan as UserPlan;
+    }
+  } catch {
+    // fall back to free
+  }
+  return "free";
+}
+
 export async function getTaskUserClient(request: Request): Promise<TaskUserClientResult | null> {
   const server = await createServerClient();
   const authHeader = request.headers.get("authorization");
@@ -40,7 +62,9 @@ export async function getTaskUserClient(request: Request): Promise<TaskUserClien
   }
 
   if (!token) {
-    return { user, client: server as unknown as SupabaseClient };
+    const serverClient = server as unknown as SupabaseClient;
+    const userPlan = await getWorkspaceUserPlan(serverClient, user.id);
+    return { user, client: serverClient, userPlan };
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -54,7 +78,8 @@ export async function getTaskUserClient(request: Request): Promise<TaskUserClien
     auth: { persistSession: false },
   });
 
-  return { user, client };
+  const userPlan = await getWorkspaceUserPlan(client, user.id);
+  return { user, client, userPlan };
 }
 
 export function mapTaskStatusToUiLabel(task: {
@@ -97,6 +122,14 @@ export function mapTaskStatusToUiLabel(task: {
       if (task.action_type === "system_db_query") return "Running local database query...";
     }
     return "Processing on local device...";
+  }
+
+  if (task.status === "pending_approval") {
+    return "Awaiting your deployment approval...";
+  }
+
+  if (task.status === "approved") {
+    return "Deployment approved. Waiting for local executor...";
   }
 
   if (task.status === "completed") {
