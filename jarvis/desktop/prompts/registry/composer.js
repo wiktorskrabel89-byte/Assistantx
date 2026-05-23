@@ -22,13 +22,24 @@ function createPromptComposer({ loader }) {
       }
       if (temporalContext && typeof temporalContext === 'object') {
         const ctx = temporalContext;
+        const location = ctx.location && typeof ctx.location === 'object' ? ctx.location : null;
+        const placeParts = [location?.city, location?.region, location?.country].filter(Boolean);
         const lines = [
           `Current datetime: ${ctx.iso || 'unknown'}`,
           `Timezone: ${ctx.timezone || 'unknown'}`,
+          `Locale: ${ctx.locale || 'unknown'}`,
+          `Preferred language: ${ctx.preferredLanguage || 'unknown'}`,
           `Day of week: ${ctx.weekday || 'unknown'}`,
+          `Local date: ${ctx.localDate || 'unknown'}`,
+          `Local time: ${ctx.localTime || 'unknown'}`,
           `Current hour: ${Number.isFinite(ctx.hour) ? ctx.hour : 'unknown'}`,
           `Time period: ${ctx.period || 'unknown'}`,
+          `Approximate location: ${placeParts.length > 0 ? placeParts.join(', ') : 'unknown'}`,
+          `Location source: ${location?.source || 'none'}`,
         ];
+        if (Number.isFinite(location?.latitude) && Number.isFinite(location?.longitude)) {
+          lines.push(`Approximate coordinates: ${location.latitude}, ${location.longitude}`);
+        }
         segments.push(`[TEMPORAL_CONTEXT]\n${lines.join('\n')}`);
       }
       if (taskPrompt) {

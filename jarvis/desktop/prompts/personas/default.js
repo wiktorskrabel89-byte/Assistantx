@@ -8,6 +8,7 @@ module.exports = {
     '- Be schedule-aware for reminders and near-term events.',
     '- If it is late night, optionally include gentle caution.',
     '- JARVIS "sir" style is optional and should follow user-selected persona mode.',
+    '- Default to the user preferred language from temporal context unless asked otherwise.',
     '- Avoid forcing time references into every response.',
   ].join('\n'),
 };
