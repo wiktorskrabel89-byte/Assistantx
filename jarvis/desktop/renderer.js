@@ -236,6 +236,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const runtimeApplyPermissionButton = document.getElementById('runtime-apply-permission');
 	const runtimeKillSwitchButton = document.getElementById('runtime-kill-switch');
 	const runtimeStatusNode = document.getElementById('runtime-status');
+	const openSetupWizardButton = document.getElementById('open-setup-wizard');
 	const workspaceApp = document.querySelector('.app');
 	const viewportWelcome = document.getElementById('welcome-screen');
 	const viewportMap = document.getElementById('viewport-map');
@@ -568,6 +569,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (event.target === settingsModal) settingsModal.hidden = true;
 	});
 
+	openSetupWizardButton?.addEventListener('click', () => {
+		window.location.replace('setup-wizard.html');
+	});
+
 	githubSaveTokenButton?.addEventListener('click', async () => {
 		try {
 			const token = githubTokenInput?.value?.trim();
@@ -639,7 +644,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		wakeWordEnabled: true,
 		wakeWordPhrase: DEFAULT_JARVIS_WAKE_PHRASE,
 		allowBackgroundWake: true,
-		voiceLanguage: voiceLanguageSelect?.value || 'en-US',
+		voiceLanguage: voiceLanguageSelect?.value || (typeof navigator !== 'undefined' ? navigator.language : 'en-US') || 'en-US',
 		autoTts: true,
 		providerMode: 'assistantx-server',
 		temporalAwareness: true,
@@ -1405,6 +1410,55 @@ window.addEventListener('DOMContentLoaded', () => {
 	input.addEventListener('keydown', (e) => { if (e.key === 'Enter') void submitPrompt(); });
 
 	function startSpeechToText({ autoSubmit = false } = {}) {
+		if (speechToTextActive) return;
+		if (!voiceSettings.sttEnabled) {
+			appendMessage(log, 'Speech-to-text', 'Speech-to-text is turned off in Jarvis app settings.', 'error');
+			return;
+		}
+
+		const startBrowserSpeechToText = ({ announceFallback = false } = {}) => {
+			const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+			if (!SpeechRecognitionCtor) {
+				appendMessage(log, 'Speech-to-text', 'Speech recognition is not available in this Jarvis build.', 'error');
+				return;
+			}
+			if (announceFallback) {
+				appendMessage(log, 'Speech-to-text', 'Switching to browser speech recognition fallback.', 'system');
+			}
+			recognition = new SpeechRecognitionCtor();
+			recognition.lang = getVoiceLanguage();
+			recognition.continuous = true;
+			recognition.interimResults = true;
+			recognition.onstart = () => {
+				setSpeechToTextActive(true);
+				setVoiceVisualizer('listening');
+			};
+			recognition.onend = () => {
+				setSpeechToTextActive(false);
+				setVoiceVisualizer('idle');
+			};
+			recognition.onerror = () => {
+				setSpeechToTextActive(false);
+				setVoiceVisualizer('idle');
+				appendMessage(log, 'Speech-to-text', 'Speech capture failed. Try again.', 'error');
+			};
+			recognition.onresult = (event) => {
+				const transcriptParts = [];
+				let hasFinal = false;
+				for (let i = event.resultIndex; i < event.results.length; i += 1) {
+					transcriptParts.push(event.results[i][0].transcript);
+					if (event.results[i].isFinal) hasFinal = true;
+				}
+				const transcript = transcriptParts.join(' ').replace(/\s+/g, ' ').trim();
+				input.value = transcript;
+				if (autoSubmit && hasFinal && transcript) {
+					submitPrompt();
+					recognition?.stop();
+				}
+			};
+			recognition.start();
+		};
+
 		if (sidecarConnected && sidecar) {
 			setVoiceToTextUiActive(true);
 			const bridge = voiceGateway || sidecar;
@@ -1422,51 +1476,11 @@ window.addEventListener('DOMContentLoaded', () => {
 					);
 					bridge.setListeningForCommand(false);
 					setVoiceToTextUiActive(false);
+					startBrowserSpeechToText({ announceFallback: true });
 				});
 			return;
 		}
-		const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-		if (!SpeechRecognitionCtor) {
-			appendMessage(log, 'Speech-to-text', 'Speech recognition is not available in this Jarvis build.', 'error');
-			return;
-		}
-		if (speechToTextActive) return;
-		if (!voiceSettings.sttEnabled) {
-			appendMessage(log, 'Speech-to-text', 'Speech-to-text is turned off in Jarvis app settings.', 'error');
-			return;
-		}
-		recognition = new SpeechRecognitionCtor();
-		recognition.lang = getVoiceLanguage();
-		recognition.continuous = true;
-		recognition.interimResults = true;
-		recognition.onstart = () => {
-			setSpeechToTextActive(true);
-			setVoiceVisualizer('listening');
-		};
-		recognition.onend = () => {
-			setSpeechToTextActive(false);
-			setVoiceVisualizer('idle');
-		};
-		recognition.onerror = () => {
-			setSpeechToTextActive(false);
-			setVoiceVisualizer('idle');
-			appendMessage(log, 'Speech-to-text', 'Speech capture failed. Try again.', 'error');
-		};
-		recognition.onresult = (event) => {
-			const transcriptParts = [];
-			let hasFinal = false;
-			for (let i = event.resultIndex; i < event.results.length; i += 1) {
-				transcriptParts.push(event.results[i][0].transcript);
-				if (event.results[i].isFinal) hasFinal = true;
-			}
-			const transcript = transcriptParts.join(' ').replace(/\s+/g, ' ').trim();
-			input.value = transcript;
-			if (autoSubmit && hasFinal && transcript) {
-				submitPrompt();
-				recognition?.stop();
-			}
-		};
-		recognition.start();
+		startBrowserSpeechToText();
 	}
 
 	function stopSpeechToText() {
@@ -1478,7 +1492,6 @@ window.addEventListener('DOMContentLoaded', () => {
 				sidecar.setListeningForCommand(false);
 			}
 			setVoiceToTextUiActive(false);
-			return;
 		}
 		if (!recognition) return;
 		try {
@@ -1511,7 +1524,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				wakeWordEnabled: Boolean(wakeWordEnabledToggle?.checked),
 				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
 				allowBackgroundWake: Boolean(allowBackgroundWakeToggle?.checked),
-				voiceLanguage: voiceLanguageSelect?.value || 'en-US',
+				voiceLanguage: getVoiceLanguage(),
 				autoTts: Boolean(autoTtsToggle?.checked),
 				providerMode: voiceProviderModeSelect?.value || 'assistantx-server',
 				temporalAwareness: Boolean(temporalAwarenessToggle?.checked),
