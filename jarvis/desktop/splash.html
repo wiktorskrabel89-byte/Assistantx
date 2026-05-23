@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';" />
+  <title>Jarvis OS — Loading</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --neon-local: #00ffd5;
+      --neon-cloud: #a855f7;
+      --bg: #070b14;
+      --text: #c8d8f0;
+      --text-dim: #5a7399;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    /* drag region */
+    #titlebar { -webkit-app-region: drag; height: 32px; }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: calc(100vh - 32px);
+      gap: 32px;
+      padding: 24px;
+    }
+
+    .logo {
+      font-size: 40px;
+      animation: pulse 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.7; transform: scale(0.96); }
+    }
+
+    .title-area { text-align: center; }
+    .title-area h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #e8f0ff;
+    }
+    .title-area p {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    /* ── progress bars ───────────────────────────────────────────────────────── */
+    .progress-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 380px;
+    }
+
+    .progress-item {}
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .progress-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+    }
+    .progress-pct {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .progress-track {
+      height: 6px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 20px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 20px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+    .fill-local { background: linear-gradient(90deg, #007b64, var(--neon-local)); }
+    .fill-cloud { background: linear-gradient(90deg, #5b21b6, var(--neon-cloud)); }
+
+    /* ── status lines ────────────────────────────────────────────────────────── */
+    .status-line {
+      font-size: 12px;
+      color: var(--text-dim);
+      text-align: center;
+      min-height: 16px;
+    }
+
+    /* ── error card ──────────────────────────────────────────────────────────── */
+    #error-card {
+      display: none;
+      padding: 14px 18px;
+      border: 1px solid rgba(255,80,80,0.35);
+      background: rgba(255,80,80,0.07);
+      border-radius: 10px;
+      font-size: 12.5px;
+      color: #ff8080;
+      max-width: 380px;
+      text-align: center;
+    }
+
+    /* ── cloud fast-start ────────────────────────────────────────────────────── */
+    #cloud-check {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid rgba(168,85,247,0.2);
+      border-top-color: var(--neon-cloud);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="titlebar"></div>
+  <div class="container">
+
+    <div class="logo">🤖</div>
+
+    <div class="title-area">
+      <h1 id="splash-title">Starting Jarvis OS…</h1>
+      <p id="splash-subtitle">Preparing your AI runtime</p>
+    </div>
+
+    <!-- LOCAL mode: two download bars ──────────────────────────────────────── -->
+    <div class="progress-list" id="local-progress" style="display:none">
+      <div class="progress-item">
+        <div class="progress-header">
+          <span class="progress-label">🧠 LLM MODEL (Ollama)</span>
+          <span class="progress-pct" id="llm-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill fill-local" id="llm-bar"></div>
+        </div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-header">
+          <span class="progress-label">🎙️ VOICE MODELS (Python)</span>
+          <span class="progress-pct" id="py-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill fill-local" id="py-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLOUD mode: spinner ─────────────────────────────────────────────────── -->
+    <div id="cloud-check">
+      <div class="spinner"></div>
+    </div>
+
+    <div class="status-line" id="status-line">Initializing…</div>
+    <div id="error-card"></div>
+
+  </div>
+
+  <script>
+    function setStatus(text) {
+      document.getElementById('status-line').textContent = text;
+    }
+
+    function setLlmProgress(pct) {
+      const p = Math.min(100, Math.max(0, pct));
+      document.getElementById('llm-bar').style.width = p + '%';
+      document.getElementById('llm-pct').textContent = Math.round(p) + '%';
+    }
+
+    function setPyProgress(pct) {
+      const p = Math.min(100, Math.max(0, pct));
+      document.getElementById('py-bar').style.width = p + '%';
+      document.getElementById('py-pct').textContent = Math.round(p) + '%';
+    }
+
+    function showError(msg) {
+      const card = document.getElementById('error-card');
+      card.textContent = '⚠️ ' + msg;
+      card.style.display = 'block';
+    }
+
+    // ── IPC listeners (set up before main process sends events) ──────────────
+    if (window.jarvisIpc?.on) {
+      window.jarvisIpc.on('splash:progress', (data) => {
+        if (!data) return;
+        if (data.llmPercent !== undefined) setLlmProgress(data.llmPercent);
+        if (data.pyPercent  !== undefined) setPyProgress(data.pyPercent);
+        if (data.status)   setStatus(data.status);
+        if (data.error)    showError(data.error);
+      });
+    }
+
+    // ── boot: ask main process for splash mode ────────────────────────────────
+    async function init() {
+      let mode = 'local';
+      try {
+        if (window.jarvisIpc?.invoke) {
+          const cfg = await window.jarvisIpc.invoke('config:get-engine-mode');
+          mode = cfg?.engine_mode || 'local';
+        }
+      } catch { /* ignore */ }
+
+      if (mode === 'cloud') {
+        document.getElementById('splash-title').textContent = 'Connecting to Cloud Matrix…';
+        document.getElementById('splash-subtitle').textContent = 'Verifying subscription status';
+        document.getElementById('cloud-check').style.display = 'flex';
+        setStatus('Checking network and credentials…');
+      } else {
+        document.getElementById('local-progress').style.display = 'flex';
+        setStatus('Checking for AI models…');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

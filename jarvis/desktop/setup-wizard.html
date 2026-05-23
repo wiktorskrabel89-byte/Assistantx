@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';" />
+  <title>Jarvis OS — Setup</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --neon-local:  #00ffd5;
+      --neon-cloud:  #a855f7;
+      --bg:          #070b14;
+      --card-bg:     #0d1526;
+      --card-border: #1e2d48;
+      --text:        #c8d8f0;
+      --text-dim:    #5a7399;
+      --tag-bg:      rgba(255,255,255,0.05);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    /* ── drag region ─────────────────────────────────────────────────────────── */
+    #titlebar {
+      -webkit-app-region: drag;
+      height: 32px;
+      background: transparent;
+    }
+
+    /* ── page layout ──────────────────────────────────────────────────────────── */
+    .page {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: calc(100vh - 32px);
+      padding: 0 24px 24px;
+      gap: 20px;
+      overflow-y: auto;
+    }
+
+    .headline {
+      text-align: center;
+    }
+    .headline h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #e8f0ff;
+    }
+    .headline p {
+      margin-top: 6px;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    /* ── engine cards ─────────────────────────────────────────────────────────── */
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+      max-width: 720px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 14px;
+      padding: 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      position: relative;
+    }
+    .card:hover { transform: translateY(-2px); }
+    .card.selected-local  { border-color: var(--neon-local);  box-shadow: 0 0 18px -4px var(--neon-local); }
+    .card.selected-cloud  { border-color: var(--neon-cloud);  box-shadow: 0 0 18px -4px var(--neon-cloud); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .card-icon { font-size: 22px; }
+    .card-title { font-size: 15px; font-weight: 700; letter-spacing: 0.03em; }
+    .card-local  .card-title { color: var(--neon-local); }
+    .card-cloud  .card-title { color: var(--neon-cloud); }
+    .card-badge {
+      margin-left: auto;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+    .badge-free    { background: rgba(0,255,213,0.12); color: var(--neon-local); }
+    .badge-premium { background: rgba(168,85,247,0.15); color: var(--neon-cloud); }
+
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .feature-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12.5px;
+      color: var(--text-dim);
+      line-height: 1.4;
+    }
+    .feature-list li .dot {
+      flex-shrink: 0;
+      margin-top: 4px;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .card-local .dot  { background: var(--neon-local); }
+    .card-cloud .dot  { background: var(--neon-cloud); }
+
+    /* ── hardware profile selector (LOCAL card only) ────────────────────────── */
+    .profile-section {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--card-border);
+    }
+    .profile-section label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+    .profile-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .profile-btn {
+      flex: 1;
+      padding: 7px 4px;
+      background: var(--tag-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text-dim);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      text-align: center;
+    }
+    .profile-btn:hover { background: rgba(255,255,255,0.08); }
+    .profile-btn.active {
+      background: rgba(0,255,213,0.08);
+      border-color: var(--neon-local);
+      color: var(--neon-local);
+    }
+
+    /* ── model preview tags ─────────────────────────────────────────────────── */
+    .model-preview {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .model-tag {
+      background: var(--tag-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      font-size: 11px;
+      padding: 3px 10px;
+      color: var(--text-dim);
+    }
+    .model-tag span { color: var(--text); font-weight: 600; }
+
+    /* ── cloud subscription banner ──────────────────────────────────────────── */
+    #cloud-status-banner {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      display: none;
+    }
+    .banner-ok      { background: rgba(0,255,213,0.07); border: 1px solid rgba(0,255,213,0.25); color: var(--neon-local); }
+    .banner-upgrade { background: rgba(168,85,247,0.07); border: 1px solid rgba(168,85,247,0.3); color: var(--neon-cloud); }
+
+    /* ── language selector ──────────────────────────────────────────────────── */
+    .lang-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      max-width: 720px;
+    }
+    .lang-row label { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+    .lang-row select {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      padding: 6px 10px;
+      cursor: pointer;
+      flex: 1;
+      max-width: 200px;
+    }
+
+    /* ── confirm button ─────────────────────────────────────────────────────── */
+    .confirm-area {
+      width: 100%;
+      max-width: 720px;
+    }
+    #confirm-btn {
+      width: 100%;
+      padding: 13px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: opacity 0.2s, box-shadow 0.2s;
+    }
+    #confirm-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    #confirm-btn.mode-local {
+      background: linear-gradient(135deg, #007b64, #00ffd5 120%);
+      color: #001a14;
+      box-shadow: 0 0 20px -6px var(--neon-local);
+    }
+    #confirm-btn.mode-cloud {
+      background: linear-gradient(135deg, #5b21b6, #a855f7 120%);
+      color: #fff;
+      box-shadow: 0 0 20px -6px var(--neon-cloud);
+    }
+    #confirm-btn:not(:disabled):hover { opacity: 0.9; }
+
+    #status-msg {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-dim);
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div id="titlebar"></div>
+  <div class="page">
+
+    <div class="headline">
+      <h1>🤖 Choose Your Jarvis Engine</h1>
+      <p>This selection shapes how Jarvis processes your voice and generates responses.</p>
+    </div>
+
+    <!-- ── Engine cards ───────────────────────────────────────────────────── -->
+    <div class="cards">
+
+      <!-- LOCAL ENGINE -->
+      <div class="card card-local" id="card-local" onclick="selectMode('local')">
+        <div class="card-header">
+          <span class="card-icon">🖥️</span>
+          <span class="card-title">LOCAL ENGINE</span>
+          <span class="card-badge badge-free">FREE</span>
+        </div>
+        <ul class="feature-list">
+          <li><div class="dot"></div>100% offline — your data never leaves your machine</li>
+          <li><div class="dot"></div>Powered by Ollama + faster-whisper + Kokoro TTS</li>
+          <li><div class="dot"></div>One-time model download (~3–4 GB)</li>
+          <li><div class="dot"></div>Works without an internet connection</li>
+        </ul>
+
+        <!-- Hardware profile selector -->
+        <div class="profile-section">
+          <label>HARDWARE PROFILE</label>
+          <div class="profile-buttons">
+            <button class="profile-btn" data-profile="eco"      onclick="selectProfile('eco',event)">Eco</button>
+            <button class="profile-btn active" data-profile="standard" onclick="selectProfile('standard',event)">Standard</button>
+            <button class="profile-btn" data-profile="pro"      onclick="selectProfile('pro',event)">Pro</button>
+          </div>
+          <div class="model-preview" id="model-preview">
+            <!-- filled by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- CLOUD MATRIX -->
+      <div class="card card-cloud" id="card-cloud" onclick="selectMode('cloud')">
+        <div class="card-header">
+          <span class="card-icon">☁️</span>
+          <span class="card-title">CLOUD MATRIX</span>
+          <span class="card-badge badge-premium">PRO / PRO+</span>
+        </div>
+        <ul class="feature-list">
+          <li><div class="dot"></div>Zero local model downloads — starts instantly</li>
+          <li><div class="dot"></div>Groq: Llama 3.3 70B, QwQ 32B, Mixtral 8x7B and more</li>
+          <li><div class="dot"></div>Google AI Studio: Gemini 2.0 Flash (1M context, free)</li>
+          <li><div class="dot"></div>OpenRouter: DeepSeek R1, Qwen3 235B and more (free tier)</li>
+          <li><div class="dot"></div>Offloads compute — ideal while gaming</li>
+        </ul>
+
+        <!-- Dynamic free-model tags (populated by JS) -->
+        <div class="model-preview" id="cloud-model-tags" style="margin-top:14px"></div>
+
+        <div id="cloud-status-banner"></div>
+      </div>
+
+    </div>
+
+    <!-- ── Language ──────────────────────────────────────────────────────── -->
+    <div class="lang-row">
+      <label for="lang-select">Language:</label>
+      <select id="lang-select">
+        <option value="en">English</option>
+        <option value="pl">Polish (Polski)</option>
+        <option value="de">German (Deutsch)</option>
+        <option value="fr">French (Français)</option>
+        <option value="es">Spanish (Español)</option>
+      </select>
+    </div>
+
+    <!-- ── Confirm ───────────────────────────────────────────────────────── -->
+    <div class="confirm-area">
+      <button id="confirm-btn" disabled onclick="confirm()">Select an engine above to continue</button>
+      <div id="status-msg"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // ── model matrix (mirrors runtime-config.js HARDWARE_PROFILE_MODELS) ──────
+    const MODELS = {
+      eco:      { llm: 'qwen2.5:1.5b', stt: 'tiny',  tts: 'kokoro' },
+      standard: { llm: 'gemma3:4b',     stt: 'base',  tts: 'kokoro' },
+      pro:      { llm: 'qwen2.5:7b',    stt: 'base',  tts: 'kokoro' },
+    };
+
+    // Fallback cloud model highlights shown before catalog loads
+    const CLOUD_HIGHLIGHTS = [
+      { provider: 'groq',        label: 'Llama 3.3 70B',          model: 'llama-3.3-70b-versatile' },
+      { provider: 'groq',        label: 'QwQ 32B (Reasoning)',     model: 'qwen-qwq-32b' },
+      { provider: 'google',      label: 'Gemini 2.0 Flash',        model: 'gemini-2.0-flash' },
+      { provider: 'openrouter',  label: 'DeepSeek R1 (free)',      model: 'deepseek/deepseek-r1:free' },
+      { provider: 'openrouter',  label: 'Qwen3 235B (free)',       model: 'qwen/qwen3-235b-a22b:free' },
+    ];
+
+    const PROVIDER_EMOJI = { groq: '⚡', google: '🌐', openrouter: '🔗' };
+
+    let selectedMode = null;
+    let selectedProfile = 'standard';
+    let _cloudCatalogLoaded = false;
+
+    async function loadCloudCatalog() {
+      if (_cloudCatalogLoaded) return;
+      let models = CLOUD_HIGHLIGHTS;
+      try {
+        if (window.jarvisIpc?.invoke) {
+          const res = await window.jarvisIpc.invoke('config:get-free-model-catalog', { plan: 'pro' });
+          if (res?.models?.length) models = res.models;
+        }
+      } catch { /* non-critical */ }
+      _cloudCatalogLoaded = true;
+      const el = document.getElementById('cloud-model-tags');
+      if (!el) return;
+      const preview = models.slice(0, 6).map((m) => {
+        const emoji = PROVIDER_EMOJI[m.provider] || '🤖';
+        return `<span class="model-tag">${emoji} <span>${m.label || m.model}</span></span>`;
+      });
+      el.innerHTML = preview.join('');
+    }
+
+    function selectMode(mode) {
+      selectedMode = mode;
+      document.getElementById('card-local').classList.remove('selected-local');
+      document.getElementById('card-cloud').classList.remove('selected-cloud');
+      if (mode === 'local') {
+        document.getElementById('card-local').classList.add('selected-local');
+      } else {
+        document.getElementById('card-cloud').classList.add('selected-cloud');
+        checkCloudSubscription();
+        loadCloudCatalog();
+      }
+      updateConfirmButton();
+    }
+
+    function selectProfile(profile, event) {
+      event.stopPropagation();
+      selectedProfile = profile;
+      document.querySelectorAll('.profile-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.profile === profile);
+      });
+      renderModelPreview();
+    }
+
+    function renderModelPreview() {
+      const m = MODELS[selectedProfile] || MODELS.standard;
+      document.getElementById('model-preview').innerHTML = [
+        `<span class="model-tag">🧠 LLM <span>${m.llm}</span></span>`,
+        `<span class="model-tag">🎙️ STT <span>${m.stt}</span></span>`,
+        `<span class="model-tag">🔊 TTS <span>${m.tts}</span></span>`,
+      ].join('');
+    }
+
+    async function checkCloudSubscription() {
+      const banner = document.getElementById('cloud-status-banner');
+      banner.style.display = 'none';
+      try {
+        let session = null;
+        if (window.jarvisApi?.getAccountSession) {
+          session = await window.jarvisApi.getAccountSession();
+        } else if (window.jarvisApiV2?.auth?.getSession) {
+          session = await window.jarvisApiV2.auth.getSession();
+        }
+        if (!session?.accessToken) {
+          banner.className = 'banner-upgrade';
+          banner.textContent = '⚠️ Sign in to use Cloud Matrix. API keys can be set in Settings after setup.';
+          banner.style.display = 'block';
+        } else {
+          banner.className = 'banner-ok';
+          banner.textContent = '✅ Signed in. API keys can be configured in Settings after setup.';
+          banner.style.display = 'block';
+        }
+      } catch { /* non-critical */ }
+    }
+
+    function updateConfirmButton() {
+      const btn = document.getElementById('confirm-btn');
+      if (!selectedMode) {
+        btn.disabled = true;
+        btn.textContent = 'Select an engine above to continue';
+        btn.className = '';
+        return;
+      }
+      btn.disabled = false;
+      if (selectedMode === 'local') {
+        btn.className = 'mode-local';
+        btn.textContent = '🖥️  Launch with LOCAL ENGINE';
+      } else {
+        btn.className = 'mode-cloud';
+        btn.textContent = '☁️  Launch with CLOUD MATRIX';
+      }
+    }
+
+    async function confirm() {
+      if (!selectedMode) return;
+      const btn = document.getElementById('confirm-btn');
+      const statusEl = document.getElementById('status-msg');
+      btn.disabled = true;
+      statusEl.textContent = 'Saving configuration…';
+
+      const m = MODELS[selectedProfile] || MODELS.standard;
+      const lang = document.getElementById('lang-select').value;
+      const payload = {
+        engine_mode: selectedMode,
+        hardware_profile: selectedProfile,
+        language: lang,
+        stt_model: m.stt,
+        llm_model: m.llm,
+        tts_model: m.tts,
+      };
+
+      try {
+        if (window.jarvisIpc?.invoke) {
+          await window.jarvisIpc.invoke('setup:complete', payload);
+        } else if (window.jarvisSetup?.complete) {
+          await window.jarvisSetup.complete(payload);
+        }
+        statusEl.textContent = 'Configuration saved! Starting Jarvis…';
+      } catch (err) {
+        statusEl.textContent = `Error: ${err?.message || err}`;
+        btn.disabled = false;
+      }
+    }
+
+    // ── init ───────────────────────────────────────────────────────────────────
+    renderModelPreview();
+  </script>
+</body>
+</html>

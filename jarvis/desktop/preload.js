@@ -81,6 +81,15 @@ const ALLOWED_INVOKE = new Set([
   'mcp:set-api-key',
   'mcp:list-tools',
   'map:get-config',
+  'map:fly-to',
+  'config:get-engine-mode',
+  'config:set-engine-mode',
+  'config:get-model-config',
+  'config:get-free-model-catalog',
+  'config:pick-best-free-model',
+  'setup:complete',
+  'setup:get-subscription-status',
+  'setup:get-recommended-config',
   // Clipboard monitoring
   'clipboard:get-status',
   'clipboard:enable',
@@ -105,6 +114,7 @@ const ALLOWED_RECEIVE = new Set([
   'clipboard:change',
   'clipboard:status',
   'index:job-update',
+  'splash:progress',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────
@@ -139,6 +149,10 @@ const {
   getRemoteRuntimeWsUrl,
   getRuntimeMode,
   setJarvisWebUrl,
+  getEngineMode,
+  setEngineMode,
+  getJarvisModelConfig,
+  setJarvisModelConfig,
 } = require('./runtime-config');
 
 const { VoiceGateway } = require('./voice-gateway');
@@ -298,6 +312,7 @@ function buildJarvisApiV2() {
     },
     map: {
       getConfig: () => invokeAllowed('map:get-config'),
+      flyTo: (lat, lon, label) => invokeAllowed('map:fly-to', { lat, lon, label }),
     },
     localServer: {
       list: () => invokeAllowed('local-server:list'),
@@ -341,6 +356,21 @@ function buildJarvisApiV2() {
       googlePollAuth: (deviceCode) => invokeAllowed('mcp:google-poll-auth', { deviceCode }),
       setApiKey: (serverId, value) => invokeAllowed('mcp:set-api-key', { serverId, value }),
       listTools: () => invokeAllowed('mcp:list-tools'),
+    },
+    setup: {
+      complete: (payload) => invokeAllowed('setup:complete', payload || {}),
+      getSubscriptionStatus: () => invokeAllowed('setup:get-subscription-status'),
+      getRecommendedConfig: () => invokeAllowed('setup:get-recommended-config'),
+    },
+    config: {
+      getEngineMode: () => invokeAllowed('config:get-engine-mode'),
+      setEngineMode: (mode) => invokeAllowed('config:set-engine-mode', { mode }),
+      getModelConfig: () => invokeAllowed('config:get-model-config'),
+      getFreeModelCatalog: (plan) => invokeAllowed('config:get-free-model-catalog', plan ? { plan } : {}),
+      pickBestFreeModel: (profile, plan) => invokeAllowed('config:pick-best-free-model', { profile, plan }),
+    },
+    splash: {
+      onProgress: (listener) => subscribeAllowed('splash:progress', listener),
     },
     voice: {
       sidecar: buildSidecarApi(),
@@ -430,6 +460,19 @@ contextBridge.exposeInMainWorld('jarvisApi', {
   },
   map: {
     getConfig: () => invokeAllowed('map:get-config'),
+    flyTo: (lat, lon, label) => invokeAllowed('map:fly-to', { lat, lon, label }),
+  },
+  setup: {
+    complete: (payload) => invokeAllowed('setup:complete', payload || {}),
+    getSubscriptionStatus: () => invokeAllowed('setup:get-subscription-status'),
+    getRecommendedConfig: () => invokeAllowed('setup:get-recommended-config'),
+  },
+  config: {
+    getEngineMode: () => invokeAllowed('config:get-engine-mode'),
+    setEngineMode: (mode) => invokeAllowed('config:set-engine-mode', { mode }),
+    getModelConfig: () => invokeAllowed('config:get-model-config'),
+    getFreeModelCatalog: (plan) => invokeAllowed('config:get-free-model-catalog', plan ? { plan } : {}),
+    pickBestFreeModel: (profile, plan) => invokeAllowed('config:pick-best-free-model', { profile, plan }),
   },
   localServer: {
     list: () => invokeAllowed('local-server:list'),

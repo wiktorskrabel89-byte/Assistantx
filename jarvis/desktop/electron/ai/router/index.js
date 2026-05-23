@@ -5,6 +5,19 @@ const { decideRoute } = require('./policy');
 const { OllamaProvider } = require('../providers/ollama');
 const { CloudApiProvider } = require('../providers/cloud-api');
 const { OpenAICompatProvider } = require('../providers/openai-compat');
+const {
+  pickBestFreeModel,
+  DEFAULT_FREE_CHAT_MODEL,
+  DEFAULT_FREE_CODING_MODEL,
+} = require('../free-model-catalog');
+
+// ── Hardware profile → Ollama model matrix ────────────────────────────────────
+// Mirrors HARDWARE_PROFILE_MODELS in runtime-config.js.
+const HARDWARE_PROFILE_CHAT_MODEL = {
+  eco:      'qwen2.5:1.5b',
+  standard: 'gemma3:4b',
+  pro:      'qwen2.5:7b',
+};
 
 const ROUTING_PROFILES = {
   chat: {
@@ -17,6 +30,10 @@ const ROUTING_PROFILES = {
     local: 'qwen2.5-coder:14b',
   },
 };
+
+// Cloud mode: DeepSeek-V3 via Groq kept as a named constant for external callers.
+const CLOUD_DEEPSEEK_MODEL = 'deepseek-chat';
+const CLOUD_DEEPSEEK_PROVIDER = 'groq';
 
 const REQUIRED_LOCAL_MODELS = ['gemma3:4b', 'qwen2.5-coder:14b'];
 const DEFAULT_CLOUD_PROVIDER_ORDER = ['groq', 'openrouter'];
@@ -32,6 +49,9 @@ class AIRouter {
     this.cloudProviderOrder = normalizeProviderOrder(
       options.cloudProviderOrder || process.env.JARVIS_CLOUD_PROVIDER_ORDER || DEFAULT_CLOUD_PROVIDER_ORDER,
     );
+    // Engine mode and hardware profile injected from runtime-config
+    this._engineMode = typeof options.getEngineMode === 'function' ? options.getEngineMode : () => null;
+    this._modelConfig = typeof options.getModelConfig === 'function' ? options.getModelConfig : () => null;
   }
 
   async getAvailability() {
@@ -70,6 +90,8 @@ class AIRouter {
   }
 
   async routeRequest(request = {}, onChunk = () => {}) {
+    const engineMode = this._engineMode();
+    const modelConfig = this._modelConfig();
     const profile = normalizeProfile(request?.profile || inferProfile(request));
     const analysis = analyzeRequest({
       message: request?.message || extractLastMessage(request?.messages),
@@ -81,11 +103,39 @@ class AIRouter {
     const availability = await this.getAvailability();
     const localConfig = this.getLocalServerConfig ? this.getLocalServerConfig() : null;
     const localRoute = resolveConfiguredLocalRoute(localConfig, profile, availability);
+
+    // ── Engine-mode overrides ─────────────────────────────────────────────────
+    // cloud mode: pick the best free model for the user's plan and profile
+    if (engineMode === 'cloud') {
+      const plan = String(modelConfig?.plan || 'pro').toLowerCase();
+      const candidate = pickBestFreeModel(profile === 'coding' ? 'coding' : 'chat', plan)
+        || (profile === 'coding' ? DEFAULT_FREE_CODING_MODEL : DEFAULT_FREE_CHAT_MODEL);
+      const cloudModel = modelConfig?.llm_model || candidate.model;
+      const cloudProvider = candidate.provider;
+      const resolvedRequest = {
+        ...request,
+        messages: normalizeMessages(request),
+        model: cloudModel,
+        provider: cloudProvider,
+        options: { temperature: 0.7, ...(request.options || {}) },
+      };
+      const response = await this.cloud.stream(resolvedRequest, onChunk);
+      return { ...response, route: { provider: cloudProvider, model: cloudModel, reason: 'engine-mode-cloud-free' }, profile, availability };
+    }
+
+    // local mode: override chat model based on hardware profile
+    const profileChatModel = modelConfig?.hardware_profile
+      ? (HARDWARE_PROFILE_CHAT_MODEL[modelConfig.hardware_profile] || ROUTING_PROFILES.chat.local)
+      : ROUTING_PROFILES.chat.local;
     const route = decideRoute(analysis, {
       availability,
       profile,
       cloudProviderOrder: this.cloudProviderOrder,
     });
+    // Apply hardware-profile model when routing locally for chat
+    if (route.provider === 'ollama' && profile === 'chat') {
+      route.model = profileChatModel;
+    }
     const effectiveRoute = localRoute || route;
     const resolvedRequest = {
       ...request,
@@ -218,4 +268,7 @@ module.exports = {
   ROUTING_PROFILES,
   REQUIRED_LOCAL_MODELS,
   DEFAULT_CLOUD_PROVIDER_ORDER,
+  HARDWARE_PROFILE_CHAT_MODEL,
+  CLOUD_DEEPSEEK_MODEL,
+  CLOUD_DEEPSEEK_PROVIDER,
 };

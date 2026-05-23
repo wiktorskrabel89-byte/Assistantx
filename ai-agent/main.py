@@ -48,6 +48,7 @@ import os
 import signal
 import struct
 import sys
+import threading
 import time
 import wave
 from io import BytesIO
@@ -65,6 +66,14 @@ logger = logging.getLogger("jarvis-sidecar")
 HOST = os.environ.get("JARVIS_SIDECAR_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JARVIS_SIDECAR_PORT", "8765"))
 STARTED_AT = time.monotonic()
+
+# ── Engine mode (set by Electron before spawning the sidecar) ────────────────
+# Values: "local" (default) | "cloud"
+ENGINE_MODE = os.environ.get("JARVIS_ENGINE_MODE", "local").strip().lower()
+if ENGINE_MODE not in {"local", "cloud"}:
+    ENGINE_MODE = "local"
+
+logger.info("Jarvis sidecar engine mode: %s", ENGINE_MODE)
 
 # ── Lazy-loaded pipeline singletons ──────────────────────────────────────────
 _wake_detector: Any = None
@@ -126,6 +135,19 @@ def _get_stt_engine():
     global _stt_backend_name
     global _stt_engine
     if _stt_engine is None:
+        # ── Cloud mode: prefer OpenAI Whisper API ────────────────────────────
+        if ENGINE_MODE == "cloud":
+            try:
+                from speech.openai_stt import OpenAIWhisperSTT
+                cloud_stt = OpenAIWhisperSTT()
+                if cloud_stt.available:
+                    _stt_engine = cloud_stt
+                    _stt_backend_name = "openai-whisper-api"
+                    return _stt_engine
+            except Exception as exc:
+                logger.debug("OpenAI Whisper STT init failed, falling back to local: %s", exc)
+
+        # ── Local mode (or cloud fallback) ───────────────────────────────────
         try:
             from speech.whisper_cpp_stt import WhisperCppSTT
             whisper_cpp = WhisperCppSTT()
@@ -156,6 +178,19 @@ def _get_tts_engine():
     global _tts_backend_name
     global _tts_engine
     if _tts_engine is None:
+        # ── Cloud mode: prefer OpenAI TTS API ────────────────────────────────
+        if ENGINE_MODE == "cloud":
+            try:
+                from tts.openai_tts import OpenAICloudTTS
+                cloud_tts = OpenAICloudTTS()
+                if cloud_tts.available:
+                    _tts_engine = cloud_tts
+                    _tts_backend_name = "openai-tts-api"
+                    return _tts_engine
+            except Exception as exc:
+                logger.debug("OpenAI Cloud TTS init failed, falling back to local: %s", exc)
+
+        # ── Local mode (or cloud fallback) ───────────────────────────────────
         backends = ["kokoro", "piper"]
         if _tts_preferred_backend == "piper":
             backends = ["piper", "kokoro"]
@@ -874,6 +909,58 @@ async def _process_request(path: str, _request_headers):
     return 200, headers, payload
 
 
+def _start_model_download_background(endpoint=None, state=None) -> None:
+    """
+    When engine_mode is 'local', kick off model presence checks (and downloads
+    if needed) in a daemon thread so the WebSocket/stdio heartbeat is never
+    blocked.
+
+    Progress events are emitted via the endpoint when available, or logged.
+    """
+    if ENGINE_MODE != "local":
+        return
+
+    stt_model_size = os.environ.get("JARVIS_STT_MODEL", "base").strip().lower()
+    language = os.environ.get("JARVIS_LANGUAGE", "en").strip().lower()[:2]
+
+    def _run() -> None:
+        try:
+            from speech.model_downloader import ensure_whisper_model, ensure_kokoro_model, ensure_piper_model
+        except ImportError:
+            logger.debug("model_downloader not available; skipping pre-download.")
+            return
+
+        def _emit(data: dict) -> None:
+            if endpoint is not None and state is not None:
+                import asyncio as _asyncio
+                try:
+                    loop = _asyncio.get_event_loop()
+                    if loop.is_running():
+                        _asyncio.run_coroutine_threadsafe(
+                            _send(endpoint, {"type": "status", "phase": "model_download", **data}, state),
+                            loop,
+                        )
+                except Exception:
+                    pass
+            logger.info("Model download progress: %s", data)
+
+        logger.info("Local engine: checking STT model (%s)…", stt_model_size)
+        ensure_whisper_model(stt_model_size, on_progress=_emit)
+
+        logger.info("Local engine: checking Kokoro TTS model…")
+        ensure_kokoro_model(on_progress=_emit)
+
+        if language == "pl":
+            logger.info("Local engine: checking Piper TTS model (pl)…")
+            ensure_piper_model("pl", on_progress=_emit)
+
+        _emit({"phase": "model_download_complete", "percent": 100, "status": "All local models ready."})
+        logger.info("Local engine: all model checks complete.")
+
+    t = threading.Thread(target=_run, name="jarvis-model-downloader", daemon=True)
+    t.start()
+
+
 async def main_async() -> None:
     logger.info("Starting Jarvis AI-Agent sidecar on %s:%d", HOST, PORT)
 
@@ -890,6 +977,7 @@ async def main_async() -> None:
     async with websockets.serve(handle_connection, HOST, PORT, process_request=_process_request):
         logger.info("Sidecar WebSocket server listening on ws://%s:%d", HOST, PORT)
         logger.info("Sidecar health endpoint listening on http://%s:%d/health", HOST, PORT)
+        _start_model_download_background()
         await stop_event.wait()
 
     logger.info("Sidecar shutting down.")
@@ -911,6 +999,10 @@ async def main_stdio_async() -> None:
         "phase": "connected",
         "message": "Jarvis AI-Agent sidecar ready.",
     }, state)
+
+    # Kick off background model pre-download for local engine mode.
+    # The thread emits progress events back via the endpoint.
+    _start_model_download_background(endpoint=endpoint, state=state)
 
     try:
         while True:
