@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       task: data,
       execution: {
         mode: data.execution_mode,
-        premiumRequired: executionMode === "multi_agent" && !userIsPremium,
+        premiumRequired: preferMultiAgent && !userIsPremium,
       },
     }, { status: 202 });
   } catch (error) {
