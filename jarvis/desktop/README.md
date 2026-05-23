@@ -129,7 +129,7 @@ npm run setup:local-ai
 
 This runs:
 - `scripts/setup-env.ps1` (install/start Ollama)
-- `scripts/ensure-ollama-models.ps1` (pull `gemma4:e4b`, `qwen2.5-coder:14b`)
+- `scripts/ensure-ollama-models.ps1` (pull `gemma3:4b`, `qwen2.5-coder:14b`)
 
 ### Optional local web search stack (SearXNG)
 

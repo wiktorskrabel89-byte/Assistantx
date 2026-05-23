@@ -47,8 +47,8 @@ function normalizeProfile(profile) {
 
 function resolveLocalModel(profile, escalate) {
   if (profile === 'coding') return 'qwen2.5-coder:14b';
-  if (profile === 'tool') return escalate ? 'qwen2.5-coder:14b' : 'gemma4:e4b';
-  return escalate ? 'qwen2.5-coder:14b' : 'gemma4:e4b';
+  if (profile === 'tool') return escalate ? 'qwen2.5-coder:14b' : 'gemma3:4b';
+  return escalate ? 'qwen2.5-coder:14b' : 'gemma3:4b';
 }
 
 function resolveCloudModel(provider, profile) {

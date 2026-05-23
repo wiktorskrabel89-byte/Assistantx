@@ -3,7 +3,7 @@
 const DEFAULT_MODELS = [
   {
     provider: 'ollama',
-    model: 'gemma4:e4b',
+    model: 'gemma3:4b',
     supportsTools: true,
     supportsVision: false,
     supportsStreaming: true,
