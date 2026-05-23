@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
 
 const BASE_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'JarvisDesktop');
 const TOKEN_PATH = path.join(BASE_DIR, 'device-token');
@@ -32,7 +31,7 @@ function getToken() {
   return token;
 }
 
-function createSupabaseAuthClient() {
+function getSupabaseAuthConfig() {
   const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const supabasePublishableKey = String(
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
@@ -45,31 +44,46 @@ function createSupabaseAuthClient() {
     throw new Error('Supabase client is not configured.');
   }
 
-  return createClient(supabaseUrl, supabasePublishableKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
+  return { supabaseUrl, supabasePublishableKey };
 }
 
 async function handleLogin(username, password) {
-  let supabase;
+  let authConfig;
   try {
-    supabase = createSupabaseAuthClient();
+    authConfig = getSupabaseAuthConfig();
   } catch (error) {
     console.error('Login failed:', error?.message || error);
     return false;
   }
 
-  const { data: { user } = {}, error } = await supabase.auth.signInWithPassword({
-    email: String(username || '').trim(),
-    password,
-  });
+  let response;
+  try {
+    response = await fetch(`${authConfig.supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: authConfig.supabasePublishableKey,
+        Authorization: `Bearer ${authConfig.supabasePublishableKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: String(username || '').trim(),
+        password,
+      }),
+    });
+  } catch (error) {
+    console.error('Network or auth error:', error?.message || error);
+    return false;
+  }
 
-  if (error || !user) {
-    console.error('Login failed:', error?.message || error);
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok || !data?.user || data?.error) {
+    console.error('Login failed:', data?.error_description || data?.error || response.statusText || 'Unknown error');
     return false;
   }
 
