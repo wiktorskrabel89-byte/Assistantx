@@ -454,11 +454,11 @@ export function SettingsTab() {
                   </span>
                 </p>
                 <p className={`mt-1 text-xs ${mutedClass}`}>
-                  Activates 4 specialised LLM roles (Architect, Coder, Tester, Security). Greatly improves precision on complex tasks but requires a capable local device (CPU/RAM).
+                  Activates a 7-stage pipeline (Architect, Coder, Tester, Sandbox, Reviewer, Critic, Security). Greatly improves precision on complex tasks but requires a capable local device (CPU/RAM).
                 </p>
                 {(activeWorkspace.settings.multiAgentBeta ?? false) && (
                   <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                    ⚠️ Multi-Agent mode is active. Responses will be slower — each task runs through a 4-stage LLM pipeline.
+                    ⚠️ Multi-Agent mode is active. Responses will be slower — each task runs through a full multi-stage validation loop.
                   </p>
                 )}
               </div>

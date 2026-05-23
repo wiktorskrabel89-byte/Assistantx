@@ -5,6 +5,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
@@ -102,14 +103,6 @@ def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
         return default
-
-
-def _env_str(name: str, default: str) -> str:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    value = raw.strip()
-    return value or default
     try:
         return int(raw)
     except (TypeError, ValueError):
@@ -212,6 +205,10 @@ class WorkerConfig:
     local_enabled: bool
     device_id: str
     allowed_directory: str
+    sandbox_enabled: bool
+    sandbox_timeout_seconds: int
+    sandbox_max_ram_mb: int
+    sandbox_http_probe_port: int
 
 
 def load_config() -> WorkerConfig:
@@ -254,6 +251,10 @@ def load_config() -> WorkerConfig:
         local_enabled=_env_bool("LOCAL_WORKER_ENABLED", True),
         device_id=_env_str("LOCAL_WORKER_DEVICE_ID", ""),
         allowed_directory=str(Path(_env_str("LOCAL_WORKER_ALLOWED_DIRECTORY", str(Path(__file__).resolve().parent.parent))).resolve()),
+        sandbox_enabled=_env_bool("LOCAL_WORKER_SANDBOX_ENABLED", True),
+        sandbox_timeout_seconds=max(5, _env_int("LOCAL_WORKER_SANDBOX_TIMEOUT_SECONDS", 15)),
+        sandbox_max_ram_mb=max(64, _env_int("LOCAL_WORKER_SANDBOX_MAX_RAM_MB", 256)),
+        sandbox_http_probe_port=max(1, _env_int("LOCAL_WORKER_SANDBOX_HTTP_PROBE_PORT", 8080)),
     )
 
 
@@ -584,6 +585,57 @@ class SupabaseRestClient:
             print(f"[Worker][warn] get_user_multi_agent_beta failed for {user_id}: {exc}")
             return False
 
+    def update_task_sandbox_telemetry(
+        self,
+        task_id: str,
+        *,
+        sandbox_ram_mb: int | None = None,
+        sandbox_boot_ms: int | None = None,
+        sandbox_passed: bool | None = None,
+        critic_score: int | None = None,
+        agent_attempt: int | None = None,
+        quota_remaining: int | None = None,
+        quota_max: int | None = None,
+        token_estimate_k: float | None = None,
+    ) -> None:
+        body: dict[str, Any] = {}
+        if sandbox_ram_mb is not None:
+            body["sandbox_ram_mb"] = int(sandbox_ram_mb)
+        if sandbox_boot_ms is not None:
+            body["sandbox_boot_ms"] = int(sandbox_boot_ms)
+        if sandbox_passed is not None:
+            body["sandbox_passed"] = bool(sandbox_passed)
+        if critic_score is not None:
+            body["critic_score"] = int(critic_score)
+        if agent_attempt is not None:
+            body["agent_attempt"] = max(1, int(agent_attempt))
+        if quota_remaining is not None:
+            body["quota_remaining"] = int(quota_remaining)
+        if quota_max is not None:
+            body["quota_max"] = int(quota_max)
+        if token_estimate_k is not None:
+            body["token_estimate_k"] = float(token_estimate_k)
+        if not body:
+            return
+        self._request(
+            "PATCH",
+            "/rest/v1/ai_tasks",
+            params={"task_id": f"eq.{task_id}"},
+            body=body,
+        )
+
+    def consume_cloud_agent_quota(self, user_id: str) -> dict[str, Any]:
+        rows = self._request(
+            "POST",
+            "/rest/v1/rpc/consume_cloud_agent_quota",
+            body={"p_user_id": user_id},
+        )
+        if isinstance(rows, list) and rows:
+            return dict(rows[0])
+        if isinstance(rows, dict):
+            return rows
+        return {"allowed": False, "uses_today": 0, "max_per_day": 0, "remaining": 0}
+
 
 _MULTI_AGENT_MAX_FIX_ITERATIONS = 3
 
@@ -591,9 +643,142 @@ _AGENT_STATUS_LABELS: dict[str, str] = {
     "architect": "architect",
     "coder":     "coder",
     "tester":    "tester",
+    "sandbox":   "sandbox",
+    "reviewer":  "reviewer",
+    "critic":    "critic",
     "security":  "security",
     "done":      "done",
 }
+
+_SANDBOX_WEB_HINTS = ("http.server", "flask", "fastapi", "express")
+_CODE_BLOCK_PATTERN = re.compile(r"```(?P<lang>[a-zA-Z0-9_-]*)\n(?P<code>[\s\S]*?)```", re.MULTILINE)
+
+
+def _extract_primary_code_block(generated_code: str) -> tuple[str, str]:
+    text = str(generated_code or "").strip()
+    if not text:
+        return "", "txt"
+    matches = list(_CODE_BLOCK_PATTERN.finditer(text))
+    if not matches:
+        return text, "txt"
+    chosen = max(matches, key=lambda match: len(match.group("code") or ""))
+    language = (chosen.group("lang") or "").strip().lower()
+    return (chosen.group("code") or "").strip(), language or "txt"
+
+
+def _sandbox_runtime_command(language: str, file_path: Path) -> list[str] | None:
+    if language in {"py", "python"}:
+        return [sys.executable, str(file_path)]
+    if language in {"js", "javascript", "node", "ts", "typescript"}:
+        return ["node", str(file_path)]
+    return None
+
+
+def _is_web_app_code(code: str) -> bool:
+    lowered = str(code or "").lower()
+    return any(marker in lowered for marker in _SANDBOX_WEB_HINTS)
+
+
+def _probe_http_health(port: int, timeout_seconds: int = 8) -> int | None:
+    end = time.time() + max(1, timeout_seconds)
+    url = f"http://127.0.0.1:{port}/"
+    while time.time() < end:
+        try:
+            req = urllib.request.Request(url=url, method="GET")
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                return int(getattr(resp, "status", 200))
+        except urllib.error.HTTPError as exc:
+            return int(getattr(exc, "code", 500))
+        except Exception:
+            time.sleep(0.3)
+    return None
+
+
+def execute_in_safe_sandbox(config: WorkerConfig, generated_code: str) -> tuple[bool, str, dict[str, int | None]]:
+    code, language = _extract_primary_code_block(generated_code)
+    if not code.strip():
+        return False, "No executable code found in generated output.", {"ram_mb": 0, "boot_time_ms": 0, "http_status": None}
+
+    suffix = ".py" if language in {"py", "python"} else ".js" if language in {"js", "javascript", "node", "ts", "typescript"} else ".txt"
+    command: list[str] | None = None
+    logs = ""
+    ram_mb = 0
+    boot_time_ms = 0
+    http_status: int | None = None
+    started_at = time.monotonic()
+    clean_env = {
+        "PATH": os.getenv("PATH", ""),
+        "HOME": os.getenv("HOME", ""),
+        "TMPDIR": tempfile.gettempdir(),
+    }
+
+    with tempfile.TemporaryDirectory(prefix="assistantx-sandbox-") as tmp_dir:
+        file_path = Path(tmp_dir) / f"generated{suffix}"
+        file_path.write_text(code, encoding="utf-8")
+        command = _sandbox_runtime_command(language, file_path)
+        if not command:
+            return False, f"Unsupported sandbox language: {language}", {"ram_mb": 0, "boot_time_ms": 0, "http_status": None}
+
+        proc = subprocess.Popen(
+            command,
+            cwd=tmp_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            env=clean_env,
+        )
+        try:
+            time.sleep(0.2)
+            boot_time_ms = int((time.monotonic() - started_at) * 1000)
+
+            if psutil is not None and proc.poll() is None:
+                time.sleep(2)
+                try:
+                    proc_info = psutil.Process(proc.pid)
+                    ram_mb = int(proc_info.memory_info().rss / (1024 * 1024))
+                except Exception:
+                    ram_mb = 0
+
+            if _is_web_app_code(code):
+                http_status = _probe_http_health(config.sandbox_http_probe_port, timeout_seconds=8)
+
+            if proc.poll() is not None:
+                stdout, stderr = proc.communicate(timeout=1)
+            else:
+                stdout, stderr = proc.communicate(timeout=config.sandbox_timeout_seconds)
+            logs = "\n".join(part for part in [stdout.strip(), stderr.strip()] if part).strip()
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+            logs = "\n".join(part for part in [stdout.strip(), stderr.strip(), "Sandbox timeout exceeded."] if part).strip()
+
+    passed = True
+    if command and command[0] == "node" and "Cannot find module" in logs:
+        passed = False
+    if "Traceback (most recent call last)" in logs or "Error:" in logs and "Sandbox timeout exceeded." not in logs:
+        passed = False
+    if ram_mb > config.sandbox_max_ram_mb:
+        passed = False
+        logs = f"{logs}\nSandbox memory limit exceeded: {ram_mb}MB > {config.sandbox_max_ram_mb}MB".strip()
+    if _is_web_app_code(code) and (http_status is None or http_status >= 500):
+        passed = False
+        logs = f"{logs}\nHTTP health check failed on localhost:{config.sandbox_http_probe_port} (status={http_status}).".strip()
+
+    return passed, logs, {"ram_mb": ram_mb, "boot_time_ms": boot_time_ms, "http_status": http_status}
+
+
+def parse_critic_score(critic_result: str) -> int | None:
+    match = re.search(r"(?im)^\s*SCORE\s*:\s*(10|[1-9])\s*$", str(critic_result or ""))
+    if not match:
+        return None
+    try:
+        score = int(match.group(1))
+    except ValueError:
+        return None
+    if score < 1 or score > 10:
+        return None
+    return score
 
 
 class MultiAgentOrchestrator:
@@ -603,20 +788,52 @@ class MultiAgentOrchestrator:
     no external dependencies are required.
     """
 
-    def __init__(self, config: "WorkerConfig", supabase: "SupabaseRestClient", task_id: str, route_to_cloud: bool = False):
+    def __init__(
+        self,
+        config: "WorkerConfig",
+        supabase: "SupabaseRestClient",
+        task_id: str,
+        route_to_cloud: bool = False,
+        quota_remaining: int | None = None,
+        quota_max: int | None = None,
+    ):
         self.config = config
         self.supabase = supabase
         self.task_id = task_id
         self.route_to_cloud = route_to_cloud
+        self.quota_remaining = quota_remaining
+        self.quota_max = quota_max
 
-    def _update_status(self, agent_name: str, message: str, logs: str = "") -> None:
+    def _update_status(
+        self,
+        agent_name: str,
+        message: str,
+        logs: str = "",
+        *,
+        attempt: int | None = None,
+        score: int | None = None,
+        quota_remaining: int | None = None,
+        quota_max: int | None = None,
+        token_estimate_k: float | None = None,
+    ) -> None:
         self.supabase.update_agent_loop_status(self.task_id, agent_name, logs)
-        status_json = json.dumps({
+        payload: dict[str, Any] = {
             "type": "MULTI_AGENT_STATUS",
             "agent": agent_name,
             "message": message,
             "taskId": self.task_id,
-        })
+        }
+        if attempt is not None:
+            payload["attempt"] = max(1, int(attempt))
+        if score is not None:
+            payload["score"] = int(score)
+        if quota_remaining is not None:
+            payload["quota_remaining"] = int(quota_remaining)
+        if quota_max is not None:
+            payload["quota_max"] = int(quota_max)
+        if token_estimate_k is not None:
+            payload["token_estimate_k"] = float(token_estimate_k)
+        status_json = json.dumps(payload)
         print(status_json, flush=True)
 
     def _call_llm(self, system_prompt: str, user_prompt: str, model_hint: str = "light") -> str:
@@ -652,64 +869,26 @@ class MultiAgentOrchestrator:
         plan = self._call_llm(architect_system, architect_prompt, model_hint="light")
         self._update_status("architect", "✅ Architect completed the change plan.", logs=plan)
 
-        # --- STAGE 2: CODER ---
-        self._update_status("coder", "💻 Coder is implementing the architecture plan...")
         coder_system = (
             "You are an expert Software Engineer. Your only task is to implement the plan provided by the "
             "Architect in the given codebase context. Return ONLY the modified/new code wrapped in "
             "appropriate code blocks (```). Do not add explanations outside the code blocks."
         )
-        coder_prompt = f"Codebase context:\n{codebase_context}\n\nArchitect plan:\n{plan}"
-        generated_code = self._call_llm(coder_system, coder_prompt, model_hint="heavy")
-        self._update_status("coder", "✅ Coder generated the implementation.", logs=generated_code)
-
-        # --- STAGE 3: TESTER (with fix loop, max _MULTI_AGENT_MAX_FIX_ITERATIONS) ---
-        self._update_status("tester", "🧪 Tester is verifying syntax and logic...")
         tester_system = (
             "You are a QA Engineer. Analyse the provided code for syntax errors, missing brackets, "
             "incorrect indentation, and obvious logic bugs. "
             "Respond ONLY with the word 'PASSED' if the code is correct, "
             "or start your response with 'FAILED: ' followed by a precise description of every error found."
         )
-        fix_iteration = 0
-        while fix_iteration < _MULTI_AGENT_MAX_FIX_ITERATIONS:
-            tester_prompt = f"Code to verify:\n{generated_code}"
-            tester_result = self._call_llm(tester_system, tester_prompt, model_hint="light")
-
-            if "FAILED" not in tester_result.upper():
-                self._update_status("tester", "✅ Tester: code passed quality check.")
-                break
-
-            fix_iteration += 1
-            self._update_status(
-                "tester",
-                f"❌ Tester found issues (attempt {fix_iteration}/{_MULTI_AGENT_MAX_FIX_ITERATIONS}). Sending back to Coder...",
-                logs=tester_result,
-            )
-
-            if fix_iteration >= _MULTI_AGENT_MAX_FIX_ITERATIONS:
-                self._update_status("tester", "⚠️ Fix loop limit reached — returning last generated code for human review.")
-                self.supabase.update_agent_loop_status(self.task_id, "done")
-                return {
-                    "success": False,
-                    "code": generated_code,
-                    "reason": (
-                        f"Loop interrupted after {_MULTI_AGENT_MAX_FIX_ITERATIONS} fix iterations — "
-                        "human review required.\n\n"
-                        f"Last tester feedback:\n{tester_result}"
-                    ),
-                }
-
-            self._update_status("coder", f"🔧 Coder is applying fixes (attempt {fix_iteration})...")
-            fix_prompt = (
-                f"Codebase context:\n{codebase_context}\n\nArchitect plan:\n{plan}\n\n"
-                f"Previous code contained errors:\n{tester_result}\n\nFix every listed error."
-            )
-            generated_code = self._call_llm(coder_system, fix_prompt, model_hint="heavy")
-            self._update_status("coder", f"✅ Coder applied fixes (attempt {fix_iteration}).", logs=generated_code)
-
-        # --- STAGE 4: SECURITY ---
-        self._update_status("security", "🛡️ Security agent is scanning for vulnerabilities...")
+        reviewer_system = (
+            "You are a senior code reviewer. Focus only on logic bugs, anti-patterns, maintainability, naming, "
+            "and code quality concerns (not syntax). Reply ONLY with 'PASSED' if good enough, otherwise "
+            "start with 'FAILED: ' and provide concise actionable feedback."
+        )
+        critic_system = (
+            "You are a product critic. Compare the implementation with the original user request. "
+            "Reply with line 1 exactly as 'SCORE: <1-10>' and then a short report of gaps/improvements."
+        )
         security_system = (
             "You are a Chief Security Engineer. Examine the provided code for: "
             "API key or secret leaks, SQL injection vulnerabilities, "
@@ -718,17 +897,112 @@ class MultiAgentOrchestrator:
             "Respond ONLY with 'SAFE' if no issues are found, "
             "or start with 'DANGER: ' followed by a precise description of every vulnerability."
         )
-        security_prompt = f"Code to analyse:\n{generated_code}"
-        security_result = self._call_llm(security_system, security_prompt, model_hint="light")
+
+        generated_code = ""
+        score: int | None = None
+        last_sandbox_stats: dict[str, int | None] = {"ram_mb": 0, "boot_time_ms": 0, "http_status": None}
+        for attempt in range(1, _MULTI_AGENT_MAX_FIX_ITERATIONS + 1):
+            self.supabase.update_task_sandbox_telemetry(self.task_id, agent_attempt=attempt)
+            self._update_status("coder", "💻 Coder is implementing the architecture plan...", attempt=attempt)
+            coder_prompt = f"Codebase context:\n{codebase_context}\n\nArchitect plan:\n{plan}"
+            generated_code = self._call_llm(coder_system, coder_prompt, model_hint="heavy")
+            self._update_status("coder", f"✅ Coder generated the implementation (attempt {attempt}).", logs=generated_code, attempt=attempt)
+
+            # --- STAGE 3: TESTER ---
+            self._update_status("tester", "🧪 Tester is verifying syntax and logic...", attempt=attempt)
+            tester_prompt = f"Code to verify:\n{generated_code}"
+            tester_result = self._call_llm(tester_system, tester_prompt, model_hint="light")
+            if "FAILED" in tester_result.upper():
+                plan += f"\n[Tester Feedback]: {tester_result}"
+                self._update_status("tester", f"❌ Tester found issues on attempt {attempt}.", logs=tester_result, attempt=attempt)
+                continue
+            self._update_status("tester", "✅ Tester: code passed quality check.", attempt=attempt)
+
+            # --- STAGE 3.5: SANDBOX ---
+            if self.config.sandbox_enabled:
+                self._update_status("sandbox", "📦 Sandbox Runner is executing the generated app...", attempt=attempt)
+                runtime_passed, runtime_logs, performance_stats = execute_in_safe_sandbox(self.config, generated_code)
+                last_sandbox_stats = performance_stats
+                self.supabase.update_task_sandbox_telemetry(
+                    self.task_id,
+                    sandbox_ram_mb=int(performance_stats.get("ram_mb") or 0),
+                    sandbox_boot_ms=int(performance_stats.get("boot_time_ms") or 0),
+                    sandbox_passed=runtime_passed,
+                    agent_attempt=attempt,
+                )
+                if not runtime_passed:
+                    plan += f"\n[Sandbox Runtime Crash Log]: {runtime_logs}\nFix runtime failure."
+                    self._update_status("sandbox", f"❌ Sandbox failed on attempt {attempt}.", logs=runtime_logs, attempt=attempt)
+                    continue
+                self._update_status(
+                    "sandbox",
+                    f"⚡ Sandbox passed. RAM: {performance_stats.get('ram_mb', 0)}MB, Boot: {performance_stats.get('boot_time_ms', 0)}ms.",
+                    logs=runtime_logs,
+                    attempt=attempt,
+                )
+
+            # --- STAGE 4: REVIEWER ---
+            self._update_status("reviewer", "🔍 Reviewer is checking quality and hidden logic bugs...", attempt=attempt)
+            reviewer_result = self._call_llm(reviewer_system, f"Code to review:\n{generated_code}", model_hint="light")
+            if "FAILED" in reviewer_result.upper():
+                plan += f"\n[Reviewer Feedback]: {reviewer_result}"
+                self._update_status("reviewer", f"❌ Reviewer rejected attempt {attempt}.", logs=reviewer_result, attempt=attempt)
+                continue
+            self._update_status("reviewer", "✅ Reviewer approved code quality.", attempt=attempt)
+
+            # --- STAGE 5: CRITIC ---
+            self._update_status("critic", "⚖️ Product Critic is scoring fit against user request...", attempt=attempt)
+            critic_prompt = f"Original user request:\n{user_prompt}\n\nGenerated code:\n{generated_code}"
+            critic_result = self._call_llm(critic_system, critic_prompt, model_hint="light")
+            score = parse_critic_score(critic_result)
+            if score is None:
+                score = 0
+            self.supabase.update_task_sandbox_telemetry(self.task_id, critic_score=score, agent_attempt=attempt)
+            if score < 8:
+                plan += f"\n[Critic Feedback - SCORE {score}/10]: {critic_result}\nImprove implementation."
+                self._update_status("critic", f"⚠️ Critic scored {score}/10 on attempt {attempt}; retrying.", logs=critic_result, attempt=attempt, score=score)
+                continue
+            self._update_status("critic", f"⭐ Critic scored {score}/10.", logs=critic_result, attempt=attempt, score=score)
+
+            # --- STAGE 6: SECURITY ---
+            self._update_status("security", "🛡️ Security agent is scanning for vulnerabilities...", attempt=attempt, score=score)
+            security_prompt = f"Code to analyse:\n{generated_code}"
+            security_result = self._call_llm(security_system, security_prompt, model_hint="light")
+            self.supabase.update_agent_loop_status(self.task_id, "done")
+            token_estimate_k = round(max(len(generated_code), 1) / 4 / 1000, 2)
+            if "SAFE" in security_result.upper() and "DANGER" not in security_result.upper():
+                self._update_status(
+                    "security",
+                    "🔒 Security agent approved the code as safe.",
+                    attempt=attempt,
+                    score=score,
+                    quota_remaining=self.quota_remaining,
+                    quota_max=self.quota_max,
+                    token_estimate_k=token_estimate_k,
+                )
+                return {
+                    "success": True,
+                    "code": generated_code,
+                    "reason": None,
+                    "score": score,
+                    "attempt": attempt,
+                    "sandbox_stats": last_sandbox_stats,
+                    "token_estimate_k": token_estimate_k,
+                }
+
+            self._update_status("security", "🚨 CODE BLOCKED — potential security threat detected!", logs=security_result, attempt=attempt, score=score)
+            return {"success": False, "code": generated_code, "reason": security_result, "score": score, "attempt": attempt}
 
         self.supabase.update_agent_loop_status(self.task_id, "done")
-
-        if "SAFE" in security_result.upper() and "DANGER" not in security_result.upper():
-            self._update_status("security", "🔒 Security agent approved the code as safe.")
-            return {"success": True, "code": generated_code, "reason": None}
-
-        self._update_status("security", "🚨 CODE BLOCKED — potential security threat detected!", logs=security_result)
-        return {"success": False, "code": generated_code, "reason": security_result}
+        return {
+            "success": False,
+            "code": generated_code,
+            "reason": (
+                f"Loop interrupted after {_MULTI_AGENT_MAX_FIX_ITERATIONS} attempts — human review required."
+            ),
+            "score": score,
+            "sandbox_stats": last_sandbox_stats,
+        }
 
 
 def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout_seconds: int) -> dict[str, Any]:
@@ -1170,6 +1444,7 @@ def _capture_screenshot() -> str:
     if not platform.system().lower().startswith("win"):
         raise RuntimeError("system_screenshot is currently supported only on Windows workers.")
     screenshot_path = Path(tempfile.gettempdir()) / f"assistantx_screenshot_{int(time.time())}.png"
+    escaped_path = str(screenshot_path).replace("'", "''")
     script = (
         "Add-Type -AssemblyName System.Windows.Forms; "
         "Add-Type -AssemblyName System.Drawing; "
@@ -1177,7 +1452,7 @@ def _capture_screenshot() -> str:
         "$bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height; "
         "$graphics = [System.Drawing.Graphics]::FromImage($bitmap); "
         "$graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); "
-        f"$bitmap.Save('{str(screenshot_path).replace(\"'\", \"''\")}', [System.Drawing.Imaging.ImageFormat]::Png); "
+        f"$bitmap.Save('{escaped_path}', [System.Drawing.Imaging.ImageFormat]::Png); "
         "$graphics.Dispose(); "
         "$bitmap.Dispose();"
     )
@@ -1450,6 +1725,25 @@ def process_task(
                 multi_agent_enabled = False
 
             if multi_agent_enabled:
+                quota_remaining: int | None = None
+                quota_max: int | None = None
+                if route_to_cloud:
+                    quota_info = supabase.consume_cloud_agent_quota(user_id)
+                    allowed = bool(quota_info.get("allowed"))
+                    quota_remaining = int(quota_info.get("remaining") or 0)
+                    quota_max = int(quota_info.get("max_per_day") or 0)
+                    supabase.update_task_sandbox_telemetry(
+                        task_id,
+                        quota_remaining=quota_remaining,
+                        quota_max=quota_max,
+                    )
+                    if not allowed:
+                        supabase.fail_task(
+                            task_id,
+                            "Daily cloud agent quota exhausted (5/5). Switch to local Ollama mode or wait until midnight UTC.",
+                        )
+                        return
+
                 codebase_context = get_self_code(config.source_code_max_chars)
                 if _should_attach_map_code(raw_prompt):
                     map_code = get_map_widget_code(config.source_code_max_chars)
@@ -1457,10 +1751,21 @@ def process_task(
                         codebase_context += f"\n\n# --- map-widget.js ---\n{map_code}"
 
                 orchestrator = MultiAgentOrchestrator(
-                    config, supabase, task_id, route_to_cloud=route_to_cloud
+                    config,
+                    supabase,
+                    task_id,
+                    route_to_cloud=route_to_cloud,
+                    quota_remaining=quota_remaining,
+                    quota_max=quota_max,
                 )
                 result = orchestrator.execute(raw_prompt, codebase_context)
                 if result["success"]:
+                    supabase.update_task_sandbox_telemetry(
+                        task_id,
+                        critic_score=int(result.get("score") or 0) if result.get("score") is not None else None,
+                        agent_attempt=int(result.get("attempt") or 1),
+                        token_estimate_k=float(result.get("token_estimate_k") or 0.0),
+                    )
                     output_text = str(result.get("code") or "")
                     provider = "openrouter_multi_agent" if route_to_cloud else "ollama_multi_agent"
                     model = config.cloud_model if route_to_cloud else config.ollama_heavy_model
