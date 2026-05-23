@@ -2744,3 +2744,232 @@ window.addEventListener('DOMContentLoaded', () => {
 		console.warn('[renderer] Session refresh on startup failed:', err?.message || err);
 	});
 });
+
+// ── Clipboard Monitoring UI ────────────────────────────────────────────────────
+
+(function initClipboardUI() {
+	const jarvis = window.jarvisApi;
+	if (!jarvis?.clipboard) return;
+
+	const consentBackdrop = document.getElementById('clipboard-consent-backdrop');
+	const consentAllow    = document.getElementById('clipboard-consent-allow');
+	const consentDeny     = document.getElementById('clipboard-consent-deny');
+	const toast           = document.getElementById('clipboard-toast');
+	const toastIcon       = document.getElementById('clipboard-toast-icon');
+	const toastLabel      = document.getElementById('clipboard-toast-label');
+	const toastPreview    = document.getElementById('clipboard-toast-preview');
+	const toastActions    = document.getElementById('clipboard-toast-actions');
+	const toastClose      = document.getElementById('clipboard-toast-close');
+
+	let toastTimer = null;
+
+	// Check current status; show consent dialog if not yet decided
+	jarvis.clipboard.getStatus().then((status) => {
+		if (!status.consentGiven && consentBackdrop) {
+			consentBackdrop.hidden = false;
+		}
+	}).catch(() => {});
+
+	// Consent dialog handlers
+	if (consentAllow) {
+		consentAllow.addEventListener('click', () => {
+			if (consentBackdrop) consentBackdrop.hidden = true;
+			jarvis.clipboard.enable().catch(() => {});
+		});
+	}
+	if (consentDeny) {
+		consentDeny.addEventListener('click', () => {
+			if (consentBackdrop) consentBackdrop.hidden = true;
+			jarvis.clipboard.disable().catch(() => {});
+		});
+	}
+
+	// Listen for clipboard changes and show toast
+	jarvis.clipboard.onChange((entry) => {
+		if (!toast || !entry) return;
+		const suggestion = entry.suggestions?.[0];
+		if (!suggestion) return;
+
+		if (toastTimer) clearTimeout(toastTimer);
+
+		if (toastIcon)    toastIcon.textContent = suggestion.icon ?? '📋';
+		if (toastLabel)   toastLabel.textContent = suggestion.label ?? 'Clipboard';
+		if (toastPreview) toastPreview.textContent = entry.preview ?? '';
+
+		// Render action buttons
+		if (toastActions) {
+			toastActions.innerHTML = '';
+			(suggestion.actions ?? []).slice(0, 3).forEach((action) => {
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+				btn.style.cssText = 'padding:4px 10px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#94a3b8;cursor:pointer;font-size:11px';
+				btn.addEventListener('click', () => {
+					const prompt = `${action}: ${entry.text}`;
+					// Route to chat input if available
+					const chatInput = document.getElementById('message-input') || document.querySelector('textarea[name="message"]');
+					if (chatInput) {
+						chatInput.value = prompt;
+						chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+						chatInput.focus();
+					}
+					toast.hidden = true;
+					toast.style.display = 'none';
+				});
+				toastActions.appendChild(btn);
+			});
+		}
+
+		toast.hidden = false;
+		toast.style.display = 'flex';
+		toastTimer = setTimeout(() => {
+			toast.hidden = true;
+			toast.style.display = 'none';
+		}, 8000);
+	});
+
+	if (toastClose) {
+		toastClose.addEventListener('click', () => {
+			if (toastTimer) clearTimeout(toastTimer);
+			if (toast) { toast.hidden = true; toast.style.display = 'none'; }
+		});
+	}
+})();
+
+// ── Drag-and-Drop File Indexing UI ────────────────────────────────────────────
+
+(function initDropIndexUI() {
+	const jarvis = window.jarvisApi;
+	if (!jarvis?.fileIndex) return;
+
+	const overlay    = document.getElementById('drop-overlay');
+	const indexPanel = document.getElementById('index-panel');
+	const jobsList   = document.getElementById('index-jobs-list');
+	const panelClose = document.getElementById('index-panel-close');
+
+	let dragCounter = 0;
+
+	// Show overlay on drag-enter (only for files)
+	document.addEventListener('dragenter', (e) => {
+		if (!e.dataTransfer?.types?.includes('Files')) return;
+		dragCounter++;
+		if (overlay) { overlay.hidden = false; overlay.style.display = 'flex'; }
+	});
+
+	document.addEventListener('dragleave', () => {
+		dragCounter = Math.max(0, dragCounter - 1);
+		if (dragCounter === 0 && overlay) {
+			overlay.hidden = true;
+			overlay.style.display = 'none';
+		}
+	});
+
+	document.addEventListener('dragover', (e) => {
+		if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+	});
+
+	document.addEventListener('drop', async (e) => {
+		e.preventDefault();
+		dragCounter = 0;
+		if (overlay) { overlay.hidden = true; overlay.style.display = 'none'; }
+
+		const files = e.dataTransfer?.files;
+		if (!files || files.length === 0) return;
+
+		// Collect absolute paths (Electron exposes file.path)
+		const paths = Array.from(files)
+			.map((f) => f.path)
+			.filter(Boolean);
+
+		if (paths.length === 0) return;
+
+		try {
+			const result = await jarvis.fileIndex.dropFiles(paths);
+			if (result.ok && result.fileCount > 0) {
+				showIndexPanel();
+			}
+		} catch (err) {
+			console.error('[renderer] file-drop failed:', err);
+		}
+	});
+
+	// Job update listener
+	jarvis.fileIndex.onJobUpdate((job) => {
+		updateJobInPanel(job);
+		if (job.status === 'completed' || job.status === 'error') {
+			showIndexPanel();
+		}
+	});
+
+	if (panelClose) {
+		panelClose.addEventListener('click', () => {
+			if (indexPanel) { indexPanel.hidden = true; indexPanel.style.display = 'none'; }
+		});
+	}
+
+	function showIndexPanel() {
+		if (!indexPanel) return;
+		indexPanel.hidden = false;
+		indexPanel.style.display = 'flex';
+		// Refresh all jobs
+		jarvis.fileIndex.getJobs().then(({ jobs }) => {
+			if (!jobsList) return;
+			jobsList.innerHTML = '';
+			(jobs ?? []).slice(0, 10).forEach((job) => {
+				renderJob(job);
+			});
+		}).catch(() => {});
+	}
+
+	function renderJob(job) {
+		if (!jobsList) return;
+		// Remove existing entry for this job
+		const existing = jobsList.querySelector(`[data-job-id="${job.id}"]`);
+		if (existing) existing.remove();
+
+		const el = document.createElement('div');
+		el.dataset.jobId = job.id;
+		el.style.cssText = 'background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:10px';
+
+		const statusColor = job.status === 'completed' ? '#22c55e'
+			: job.status === 'error' ? '#ef4444'
+			: job.status === 'cancelled' ? '#94a3b8'
+			: '#38bdf8';
+
+		el.innerHTML = `
+			<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+				<span style="color:${statusColor};font-weight:600;text-transform:capitalize">${job.status}</span>
+				<span style="color:#64748b">${job.processedFiles}/${job.totalFiles} files</span>
+			</div>
+			<div style="height:4px;background:#1e293b;border-radius:4px;overflow:hidden">
+				<div style="height:100%;background:${statusColor};width:${job.progressPercent}%;border-radius:4px;transition:width .3s"></div>
+			</div>
+			${job.chunks ? `<div style="color:#64748b;font-size:11px;margin-top:4px">${job.chunks} chunks indexed</div>` : ''}
+			${job.status === 'running' || job.status === 'pending'
+				? `<button data-cancel="${job.id}" type="button"
+					style="margin-top:6px;padding:3px 8px;border-radius:6px;border:1px solid #334155;
+					       background:none;color:#64748b;cursor:pointer;font-size:11px">Cancel</button>`
+				: ''}
+		`;
+
+		el.querySelector(`[data-cancel="${job.id}"]`)?.addEventListener('click', () => {
+			jarvis.fileIndex.cancelJob(job.id).catch(() => {});
+		});
+
+		// Prepend so newest is first
+		jobsList.insertBefore(el, jobsList.firstChild);
+	}
+
+	function updateJobInPanel(job) {
+		if (!jobsList) return;
+		const existing = jobsList.querySelector(`[data-job-id="${job.id}"]`);
+		if (existing) {
+			// Replace in place
+			const tmp = document.createElement('div');
+			tmp.innerHTML = existing.outerHTML;
+			renderJob(job);
+		} else {
+			renderJob(job);
+		}
+	}
+})();

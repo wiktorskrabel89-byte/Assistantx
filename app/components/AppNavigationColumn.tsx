@@ -10,6 +10,7 @@ import {
   FolderKanban,
   Globe2,
   Grid2x2,
+  History,
   LibraryBig,
   MessageSquareText,
   Plus,
@@ -32,6 +33,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { HistorySearchPanel } from "./HistorySearchPanel";
 
 export type AppNavigationTab =
   | "chat"
@@ -122,6 +124,7 @@ export function AppNavigationColumn({
   const [appsOpen, setAppsOpen] = useState(false);
   const [appsSearch, setAppsSearch] = useState("");
   const [chatSearchLocal, setChatSearchLocal] = useState("");
+  const [historySearchOpen, setHistorySearchOpen] = useState(false);
 
   const {
     activeChat,
@@ -596,6 +599,14 @@ export function AppNavigationColumn({
             ) : null}
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setHistorySearchOpen(true)}
+          className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors text-foreground/60 hover:bg-accent/60 hover:text-accent-foreground"
+        >
+          <History className="h-3.5 w-3.5" />
+          Search history
+        </button>
       </div>
     </aside>
 
@@ -680,6 +691,24 @@ export function AppNavigationColumn({
         </Tooltip>
 
         {mobileAccessory}
+
+        {/* History search — mobile */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setHistorySearchOpen(true)}
+              title="Search history"
+              aria-label="Search history"
+              className="h-10 w-10 rounded-lg text-sidebar-foreground/60 hover:bg-sidebar-accent/60"
+            >
+              <History className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Search history</TooltipContent>
+        </Tooltip>
 
         <div className="flex-1" />
 
@@ -844,6 +873,17 @@ export function AppNavigationColumn({
           </div>
         </div>
       )}
+
+      {/* ── History Search Panel ── */}
+      <HistorySearchPanel
+        open={historySearchOpen}
+        dark={false}
+        onClose={() => setHistorySearchOpen(false)}
+        onJumpToChat={(workspaceId, chatId) => {
+          setActiveChatId(workspaceId, chatId);
+          onSelectTab("chat");
+        }}
+      />
     </>
   );
 }

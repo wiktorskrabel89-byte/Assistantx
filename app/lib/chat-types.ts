@@ -170,10 +170,22 @@ export type Workspace = {
 
 export type AppMode = "ai-chat" | "ai-code";
 
+/**
+ * Curated visual themes.
+ * - "default"    → the classic two-state dark/light toggle (no extra CSS class)
+ * - "midnight"   → deep navy with violet accents
+ * - "ocean"      → dark blue with cyan accents
+ * - "slate"      → neutral grey professional
+ * - "cyberpunk"  → near-black with electric cyan/magenta
+ */
+export type AppTheme = "default" | "midnight" | "ocean" | "slate" | "cyberpunk";
+
 export type StoredState = {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   dark: boolean;
+  /** Active curated theme preset. Overrides `dark` for the preset themes. */
+  theme: AppTheme;
   userPlan: UserPlan;
   premiumRequestsUsed: number;
   appMode: AppMode;

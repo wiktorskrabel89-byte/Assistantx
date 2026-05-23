@@ -20,6 +20,7 @@ import { normalizePublicLanguage, UI_LANGUAGE_COOKIE_NAME } from "@/app/lib/ui-l
 import type {
   ActionMode,
   ActionStep,
+  AppTheme,
   ChatEntry,
   ChatThread,
   CustomAgent,
@@ -200,8 +201,19 @@ export function useWorkspaceState() {
   }, [loaded, state]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", state.dark);
-  }, [state.dark]);
+    const root = document.documentElement;
+    const THEME_CLASSES = ["theme-midnight", "theme-ocean", "theme-slate", "theme-cyberpunk"];
+    // Remove any previously applied preset theme class
+    THEME_CLASSES.forEach((cls) => root.classList.remove(cls));
+
+    if (state.theme && state.theme !== "default") {
+      // Preset themes are always dark-mode variants
+      root.classList.add("dark");
+      root.classList.add(`theme-${state.theme}`);
+    } else {
+      root.classList.toggle("dark", state.dark);
+    }
+  }, [state.dark, state.theme]);
 
   const updateWorkspace = useCallback((workspaceId: string, updater: (workspace: Workspace) => Workspace) => {
     setState((prev) => ({
@@ -379,6 +391,10 @@ export function useWorkspaceState() {
 
   const setDark = useCallback((dark: boolean) => {
     setState((prev) => ({ ...prev, dark }));
+  }, []);
+
+  const setTheme = useCallback((theme: AppTheme) => {
+    setState((prev) => ({ ...prev, theme }));
   }, []);
 
   const setUiLanguage = useCallback((uiLanguage: string) => {
@@ -943,6 +959,7 @@ export function useWorkspaceState() {
     setCostMode,
     setUserPlan,
     setDark,
+    setTheme,
     setUiLanguage,
     incrementPremiumRequests,
     setAppMode,

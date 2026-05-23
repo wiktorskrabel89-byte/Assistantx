@@ -709,6 +709,55 @@ export function ChatTab({
     URL.revokeObjectURL(url);
   }, [activeChat]);
 
+  const exportPdf = useCallback(() => {
+    const chatTitle = activeChat.title || "Chat";
+    const escapedTitle = chatTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const lines = activeChat.messages.map((entry) => {
+      const userHtml = (entry.user || "").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+      const aiHtml = (entry.ai || "").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>`).replace(/\n/g, "<br>");
+      const time = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "";
+      const modelLabel = entry.model ? ` · ${entry.model}` : "";
+      return [
+        `<div class="message user"><div class="role">User${time ? ` <span class="time">${time}</span>` : ""}</div><div class="body">${userHtml}</div></div>`,
+        `<div class="message ai"><div class="role">Assistant${modelLabel}</div><div class="body">${aiHtml}</div></div>`,
+      ].join("\n");
+    }).join("\n");
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${escapedTitle}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; line-height: 1.7; color: #1a1a2e; padding: 36px 48px; max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: #0f172a; }
+    .meta { font-size: 11px; color: #64748b; margin-bottom: 28px; }
+    .message { margin-bottom: 20px; break-inside: avoid; }
+    .role { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 4px; }
+    .time { font-weight: 400; color: #94a3b8; }
+    .body { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; }
+    .message.ai .body { background: #eff6ff; border-color: #bfdbfe; }
+    pre { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 11.5px; white-space: pre-wrap; word-break: break-all; margin: 8px 0; }
+    code { font-family: "Cascadia Code", Consolas, monospace; }
+    @media print { body { padding: 20px 24px; } }
+  </style>
+</head>
+<body>
+  <h1>${escapedTitle}</h1>
+  <div class="meta">Exported from AssistantX · ${new Date().toLocaleString()}</div>
+  ${lines}
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }, [activeChat]);
+
   const createVsCodeBundle = useCallback(() => {
     const sections = [
       `# VS Code handoff: ${activeChat.title}`,
@@ -1038,6 +1087,7 @@ export function ChatTab({
           onCopyShareLink={() => void copyShareLink()}
           onExportMarkdown={exportMarkdown}
           onExportJson={exportJson}
+          onExportPdf={exportPdf}
           onCopyVsCodePrompt={() => void copyVsCodePrompt()}
           onDownloadVsCodeBundle={downloadVsCodeBundle}
         />

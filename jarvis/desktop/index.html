@@ -1366,6 +1366,72 @@
       </div>
     </section>
   </div>
+
+  <!-- ── Clipboard Monitoring Consent Dialog ─────────────────────────────────── -->
+  <div id="clipboard-consent-backdrop" class="update-modal-backdrop" hidden>
+    <section class="update-modal" style="max-width:440px">
+      <div class="update-modal-header">
+        <span class="update-modal-icon" style="background:#7c3aed1a;color:#7c3aed">📋</span>
+        <div>
+          <div class="update-modal-title">Clipboard Monitoring</div>
+          <div class="update-modal-subtitle">Privacy-first opt-in</div>
+        </div>
+      </div>
+      <p style="font-size:13px;line-height:1.6;color:#94a3b8;margin:0 0 12px">
+        Jarvis can watch your clipboard in the background to offer quick AI actions — e.g. summarising URLs, reviewing code snippets, or composing emails.
+      </p>
+      <p style="font-size:12px;line-height:1.5;color:#64748b;margin:0 0 20px">
+        🔒 Sensitive data (passwords, credit cards, API keys) is <strong>never</strong> forwarded.
+        Audio and binary content is ignored. Nothing is sent to the cloud — all processing stays local.
+        You can disable monitoring at any time from Settings.
+      </p>
+      <div class="actions-row">
+        <button id="clipboard-consent-deny" type="button" class="secondary">No thanks</button>
+        <button id="clipboard-consent-allow" type="button" class="primary">Yes, enable</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Clipboard Suggestions Toast ────────────────────────────────────────── -->
+  <div id="clipboard-toast" hidden
+       style="position:fixed;bottom:24px;right:24px;z-index:9900;width:320px;
+              background:#1e293b;border:1px solid #334155;border-radius:16px;
+              padding:14px 16px;box-shadow:0 8px 32px #0008;
+              font-size:13px;color:#e2e8f0;display:none;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span id="clipboard-toast-icon" style="font-size:18px"></span>
+      <span id="clipboard-toast-label" style="flex:1;font-weight:600;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em"></span>
+      <button id="clipboard-toast-close" type="button"
+              style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;line-height:1;padding:0">✕</button>
+    </div>
+    <div id="clipboard-toast-preview" style="color:#cbd5e1;font-size:12px;line-height:1.5;
+          max-height:60px;overflow:hidden;text-overflow:ellipsis;word-break:break-word"></div>
+    <div id="clipboard-toast-actions" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+  </div>
+
+  <!-- ── File Drop Overlay ────────────────────────────────────────────────── -->
+  <div id="drop-overlay" hidden
+       style="position:fixed;inset:0;z-index:9800;background:#0f172acc;
+              display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px">
+    <div style="width:160px;height:160px;border:3px dashed #38bdf8;border-radius:24px;
+                display:flex;align-items:center;justify-content:center;font-size:52px">📂</div>
+    <p style="color:#38bdf8;font-size:18px;font-weight:700;margin:0">Drop files to index</p>
+    <p style="color:#64748b;font-size:13px;margin:0">Text, code, and config files only · max 10 MB each</p>
+  </div>
+
+  <!-- ── Indexing Progress Panel ─────────────────────────────────────────── -->
+  <div id="index-panel" hidden
+       style="position:fixed;bottom:24px;left:24px;z-index:9700;width:300px;max-height:320px;
+              overflow-y:auto;background:#1e293b;border:1px solid #334155;border-radius:16px;
+              padding:14px;box-shadow:0 8px 32px #0008;font-size:12px;color:#e2e8f0;display:none;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <span style="font-weight:700;font-size:13px">📥 Indexing jobs</span>
+      <button id="index-panel-close" type="button"
+              style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;line-height:1;padding:0">✕</button>
+    </div>
+    <div id="index-jobs-list" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+
   <script src="map-widget.js"></script>
   <script src="renderer.js"></script>
   <script src="log-empty-state.js"></script>
