@@ -1,9 +1,10 @@
 'use strict';
 
 class MapWidget {
-  constructor() {
+  constructor(options = {}) {
     this.container = null;
     this.iframe = null;
+    this.accessToken = String(options.accessToken || '').trim();
     this.lastLocation = { lat: 52.2297, lon: 21.0122, label: 'Europe' };
   }
 
@@ -22,10 +23,15 @@ class MapWidget {
 
   render() {
     if (!this.iframe) return;
+    const token = this.getAccessToken();
+    if (!token) {
+      this.iframe.src = 'about:blank';
+      this.iframe.title = 'Mapbox token missing';
+      return;
+    }
     const { lat, lon } = this.lastLocation;
-    const bbox = `${Number(lon) - 0.15}%2C${Number(lat) - 0.08}%2C${Number(lon) + 0.15}%2C${Number(lat) + 0.08}`;
-    const marker = `${lat}%2C${lon}`;
-    this.iframe.src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${marker}`;
+    const zoom = 10.5;
+    this.iframe.src = `https://api.mapbox.com/styles/v1/mapbox/streets-v12.html?title=false&zoomwheel=true&access_token=${encodeURIComponent(token)}#${zoom}/${lat}/${lon}`;
     this.iframe.title = this.lastLocation.label || 'Map';
   }
 
@@ -37,22 +43,25 @@ class MapWidget {
   async goTo(query) {
     const q = String(query || '').trim();
     if (!q) throw new Error('empty-location-query');
-    const endpoint = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
-    const response = await fetch(endpoint, {
-      headers: {
-        'User-Agent': 'AssistantX/1.0 (contact@assistantx.app)',
-        Accept: 'application/json',
-      },
-    });
-    const payload = await response.json().catch(() => []);
-    const best = Array.isArray(payload) ? payload[0] : null;
-    if (!best?.lat || !best?.lon) throw new Error('location-not-found');
-    this.addMarker(best.lat, best.lon, best.display_name || q);
+    const token = this.getAccessToken();
+    if (!token) throw new Error('mapbox-token-missing');
+    const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?limit=1&access_token=${encodeURIComponent(token)}`;
+    const response = await fetch(endpoint);
+    const payload = await response.json().catch(() => ({}));
+    const best = Array.isArray(payload?.features) ? payload.features[0] : null;
+    const center = Array.isArray(best?.center) ? best.center : null;
+    if (!center || center.length < 2) throw new Error('location-not-found');
+    const [lon, lat] = center;
+    this.addMarker(lat, lon, best.place_name || q);
     return {
-      lat: Number(best.lat),
-      lon: Number(best.lon),
-      label: best.display_name || q,
+      lat: Number(lat),
+      lon: Number(lon),
+      label: best.place_name || q,
     };
+  }
+
+  getAccessToken() {
+    return String(this.accessToken || window.__JARVIS_MAPBOX_ACCESS_TOKEN__ || '').trim();
   }
 
   destroy() {
