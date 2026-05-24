@@ -23,18 +23,18 @@ to private GitHub release metadata/assets.
 
 ## Installer identity + NSIS requirements (must stay stable)
 
-To keep in-place auto-updates working (no manual setup wizard flow), keep these
+To keep in-place auto-updates working and preserve installer identity, keep these
 values stable across releases:
 
 - `build.appId`
 - `build.productName`
 - `build.win.executableName`
 
-NSIS must remain configured for silent one-click updates:
+NSIS must remain configured for machine-wide installer flow:
 
-- `build.nsis.oneClick = true`
-- `build.nsis.perMachine = false`
-- `build.nsis.allowToChangeInstallationDirectory = false`
+- `build.nsis.oneClick = false`
+- `build.nsis.perMachine = true`
+- `build.nsis.allowToChangeInstallationDirectory = true`
 
 ## Required secrets and tokens
 
