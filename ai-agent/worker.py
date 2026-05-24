@@ -807,6 +807,7 @@ class MultiAgentOrchestrator:
         config: "WorkerConfig",
         supabase: "SupabaseRestClient",
         task_id: str,
+        user_id: str | None = None,
         route_to_cloud: bool = False,
         quota_remaining: int | None = None,
         quota_max: int | None = None,
@@ -814,6 +815,7 @@ class MultiAgentOrchestrator:
         self.config = config
         self.supabase = supabase
         self.task_id = task_id
+        self.user_id = user_id
         self.route_to_cloud = route_to_cloud
         self.quota_remaining = quota_remaining
         self.quota_max = quota_max
@@ -849,6 +851,24 @@ class MultiAgentOrchestrator:
             payload["token_estimate_k"] = float(token_estimate_k)
         status_json = json.dumps(payload)
         print(status_json, flush=True)
+        try:
+            self.supabase.insert_audit_log(
+                event_type="trajectory_attempt",
+                user_id=self.user_id,
+                target_type="agent_stage",
+                target_id=self.task_id,
+                payload={
+                    "agent": agent_name,
+                    "message": message,
+                    "attempt": int(attempt) if attempt is not None else None,
+                    "score": int(score) if score is not None else None,
+                    "quota_remaining": int(quota_remaining) if quota_remaining is not None else None,
+                    "quota_max": int(quota_max) if quota_max is not None else None,
+                    "token_estimate_k": float(token_estimate_k) if token_estimate_k is not None else None,
+                },
+            )
+        except Exception as exc:
+            print(f"[Worker][warn] trajectory audit insert failed for {self.task_id}: {exc}")
 
     def _call_llm(self, system_prompt: str, user_prompt: str, model_hint: str = "light") -> str:
         config = self.config
@@ -1842,6 +1862,7 @@ def process_task(
                     config,
                     supabase,
                     task_id,
+                    user_id=user_id,
                     route_to_cloud=route_to_cloud,
                     quota_remaining=quota_remaining,
                     quota_max=quota_max,

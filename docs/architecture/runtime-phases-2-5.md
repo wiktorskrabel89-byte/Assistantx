@@ -14,8 +14,10 @@
 
 ### Memory service (`src/memory/service/`)
 - `types.ts` — layered memory model: short_term, episodic, semantic, procedural.
-- `retrieval.ts` — score-based ranking and layer/org filtering.
-- `memory-service.ts` — in-process store for Phase 2; swap for Supabase pgvector adapter in later wiring.
+- `retrieval.ts` — query-aware semantic scoring + layer/org filtering.
+- `memory-service.ts` — two-tier memory contract:
+  - local high-speed tier (`ruflo_namespace`) for transient orchestration context
+  - durable tenant tier (`user_profile_memories` in Supabase) for auditability/cross-device sync
 
 ### Inngest client (`src/core/events/inngest-client.ts`)
 - Typed stub that degrades gracefully when `INNGEST_EVENT_KEY` is absent.
@@ -40,7 +42,8 @@
 ### MCP client (`src/mcp/client/`)
 - `types.ts` — `McpServerEntry`, `McpCapability`, `McpTrustLevel`, `McpToolCallRequest/Result`.
 - `registry.ts` — in-memory registry for approved MCP servers; `registerMcpServer`, `listMcpServers`.
-- `client.ts` — `callMcpTool` validates server presence, emits `MCP_TOOL_CALLED` event.
+- `client.ts` — `callMcpTool` validates server presence, applies capability-level actor attribution requirements, emits `MCP_TOOL_CALLED` event.
+- Installable profiles include `ruflo` as an external orchestrator adapter (Path B only).
 
 ### Approval queue (`src/core/approvals/`)
 - `types.ts` — `ApprovalRequest`, `ApprovalStatus`, `ApprovalResolution`.
@@ -69,6 +72,7 @@
 ### MCP server layer (`src/mcp/server/server.ts`)
 - `buildMcpServerToolList` exposes registered plugin capabilities as MCP-compatible tool definitions.
 - `handleMcpServerRequest` is the entry point for external AI systems to call AssistantX tools through the governed policy path.
+- High-risk Ruflo swarm actions (spawn/train/memory mutation) require Supabase-authenticated actor attribution and org context in API ingress.
 
 ### Public API v1 routes (`app/api/v1/`)
 - `workflows/route.ts` — `POST /api/v1/workflows` — triggers a runtime workflow execution.
@@ -95,7 +99,12 @@
 - `ExternalRuntimeRequest` / `ExternalRuntimeResponse` — contract for webhooks, SDK callers, external agents, MCP clients.
 - `acceptExternalRequest` — routes into the internal runtime facade.
 - `collectRuntimeMetrics` — health surface for OpenTelemetry / Langfuse wiring.
+- `src/ecosystem/ruflo.ts` — feature-flagged Ruflo adapter configuration, installable profile, trust-boundary-to-consensus policy mapping, health snapshot model.
+- `src/ecosystem/trajectory-ingestion.ts` — trajectory attempt ingestion helper for self-learning dataset scaffolding.
 
 ### DB migration
 - `supabase/migrations/20260511_phase5_marketplace.sql`
 - Tables: `marketplace_listings`, `marketplace_submissions`, `ecosystem_requests`.
+- Additional Ruflo rollout migrations:
+  - `supabase/migrations/20260526_mcp_ruflo_adapter.sql`
+  - `supabase/migrations/20260526_ruflo_training_trajectories.sql`

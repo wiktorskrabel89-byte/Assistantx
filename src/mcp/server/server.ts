@@ -28,6 +28,7 @@ export async function handleMcpServerRequest(
   toolName: string,
   input: Record<string, unknown>,
   actorUserId: string | null,
+  actorOrganizationId: string | null = null,
 ): Promise<McpToolCallResult & { serverSide: true }> {
   const tools = await buildMcpServerToolList();
   const found = tools.find((t) => t.name === toolName);
@@ -50,11 +51,18 @@ export async function handleMcpServerRequest(
   const toolRouter = new ToolRouter();
   const executionId = randomUUID();
   const result = await toolRouter.execute(
-    { toolId: internalToolId, input },
+    {
+      toolId: internalToolId,
+      input: {
+        ...input,
+        _requestedByUserId: actorUserId,
+        _requestedByOrganizationId: actorOrganizationId,
+      },
+    },
     {
       executionId,
       workflowId: "mcp/server",
-      actor: { userId: actorUserId, organizationId: null, sessionId: null },
+      actor: { userId: actorUserId, organizationId: actorOrganizationId, sessionId: null },
     },
   );
 

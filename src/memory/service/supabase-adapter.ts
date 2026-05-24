@@ -153,6 +153,11 @@ export class SupabaseMemoryAdapter {
 
   async search(query: MemoryQuery): Promise<MemorySearchResult> {
     const supabase = await this.getClient();
+    const queryTerms = String(query.query ?? "")
+      .toLowerCase()
+      .split(/\s+/)
+      .map((term) => term.trim())
+      .filter(Boolean);
 
     // Build prefix filter for layer-scoped retrieval.
     let keyPrefix = LAYER_PREFIX;
@@ -189,7 +194,22 @@ export class SupabaseMemoryAdapter {
       // Min score filter
       if (query.minScore !== undefined && entry.score < query.minScore) continue;
 
-      entries.push(entry);
+      const haystack = `${entry.content} ${entry.tags.join(" ")}`.toLowerCase();
+      const lexicalHits = queryTerms.reduce((sum, term) => (haystack.includes(term) ? sum + 1 : sum), 0);
+      const lexicalScore = queryTerms.length > 0 ? lexicalHits / queryTerms.length : 0;
+      const recencyDays = Math.max(
+        0,
+        (Date.now() - new Date(entry.createdAt).getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const recencyBoost = Math.max(0, 1 - Math.min(30, recencyDays) / 30) * 0.15;
+      const score = queryTerms.length > 0
+        ? Number((entry.score * 0.55 + lexicalScore * 0.45 + recencyBoost).toFixed(4))
+        : entry.score;
+
+      entries.push({
+        ...entry,
+        score,
+      });
       if (entries.length >= (query.limit ?? 20)) break;
     }
 

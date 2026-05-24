@@ -13,3 +13,4 @@ Planned additions:
 - Full backend adapter + websocket workflow integration test matrix
 - Voice interruption and wake suppression integration tests
 - Automation persistence restart/rehydration integration tests
+- Ruflo MCP Path-B orchestration + health endpoint integration tests

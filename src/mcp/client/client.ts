@@ -9,6 +9,7 @@ export async function callMcpTool(
   request: McpToolCallRequest,
   executionId: string,
   actorUserId: string | null,
+  actorOrganizationId: string | null = null,
 ): Promise<McpToolCallResult> {
   const server = await getMcpServer(request.serverId);
   if (!server) {
@@ -38,6 +39,23 @@ export async function callMcpTool(
     };
   }
 
+  if (capability.requiresActorAttribution && !actorUserId) {
+    return {
+      ok: false,
+      serverId: request.serverId,
+      capabilityName: request.capabilityName,
+      error: `Capability '${request.capabilityName}' requires actor attribution.`,
+    };
+  }
+  if (capability.requiresApproval && !actorOrganizationId) {
+    return {
+      ok: false,
+      serverId: request.serverId,
+      capabilityName: request.capabilityName,
+      error: `Capability '${request.capabilityName}' requires organization-scoped approval.`,
+    };
+  }
+
   // Schema validation and actual HTTP call to the MCP server would live here.
   // Phase-3 scaffold: emit event and return placeholder output.
   await eventBus.publish({
@@ -49,6 +67,7 @@ export async function callMcpTool(
       serverId: request.serverId,
       capabilityName: request.capabilityName,
       trustLevel: server.trustLevel,
+      actorOrganizationId,
     },
   });
 

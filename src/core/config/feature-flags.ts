@@ -11,4 +11,6 @@ export const FEATURE_FLAGS = {
   hibernateInterceptEnabled: parseBool(process.env.HIBERNATE_INTERCEPT_ENABLED, false),
   p2pTunnelEnabled: parseBool(process.env.P2P_TUNNEL_ENABLED, false),
   systemActionsBetaEnabled: parseBool(process.env.SYSTEM_ACTIONS_BETA_ENABLED, false),
+  rufloEnabled: parseBool(process.env.RUFLO_ENABLED, false),
+  rufloTrainingEnabled: parseBool(process.env.RUFLO_TRAINING_ENABLED, false),
 };

@@ -9,6 +9,17 @@ import { Store } from "lucide-react";
 // Static server registry — mirrors supabase seed data
 export const MCP_SERVER_CATALOG = [
   {
+    serverId: "ruflo",
+    pluginId: "mcp-ruflo",
+    name: "Ruflo Swarm",
+    description:
+      "External multi-agent orchestrator adapter (Queen/Worker) with governed MCP invocation and persistent shared memory namespace.",
+    authMethod: "none" as const,
+    category: "developer" as const,
+    capabilities: ["swarm_init", "agent_spawn", "memory_store", "train_pipeline", "health"],
+    icon: "👑",
+  },
+  {
     serverId: "github",
     pluginId: "mcp-github",
     name: "GitHub",

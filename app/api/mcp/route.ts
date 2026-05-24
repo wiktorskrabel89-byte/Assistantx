@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       discover: "/api/mcp",
       tools: "/api/mcp/tools",
       invoke: "/api/mcp/invoke",
+      rufloHealth: "/api/mcp/ruflo/health",
     },
   });
 }

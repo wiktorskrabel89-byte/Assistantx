@@ -8,6 +8,31 @@ import type {
 import { retrieveMemory } from "@/src/memory/service/retrieval";
 import { supabaseMemoryAdapter } from "@/src/memory/service/supabase-adapter";
 import { randomUUID } from "node:crypto";
+import { createEventBus } from "@/src/core/events/event-bus";
+import { RUNTIME_EVENT_TYPES } from "@/src/core/events/types";
+
+async function emitMemoryUpdatedEvent(params: {
+  userId: string;
+  organizationId?: string | null;
+  layer: MemoryLayer;
+  storageTier: "local_hot" | "durable_supabase";
+}) {
+  const eventBus = createEventBus();
+  await eventBus.publish({
+    type: RUNTIME_EVENT_TYPES.MEMORY_UPDATED,
+    timestamp: new Date().toISOString(),
+    actorUserId: params.userId,
+    organizationId: params.organizationId ?? null,
+    payload: {
+      layer: params.layer,
+      storageTier: params.storageTier,
+      syncPolicy: {
+        localTier: "ruflo_namespace",
+        durableTier: "supabase_user_profile_memories",
+      },
+    },
+  }).catch(() => undefined);
+}
 
 class InMemoryMemoryService {
   private store: MemoryEntry[] = [];
@@ -24,6 +49,12 @@ class InMemoryMemoryService {
       createdAt: new Date().toISOString(),
     };
     this.store.push(entry);
+    await emitMemoryUpdatedEvent({
+      userId: request.userId,
+      organizationId: request.organizationId,
+      layer: request.layer,
+      storageTier: "local_hot",
+    });
     return entry;
   }
 
@@ -52,7 +83,14 @@ class DelegatingMemoryService {
 
   async write(request: MemoryWriteRequest) {
     try {
-      return await supabaseMemoryAdapter.write(request);
+      const entry = await supabaseMemoryAdapter.write(request);
+      await emitMemoryUpdatedEvent({
+        userId: request.userId,
+        organizationId: request.organizationId,
+        layer: request.layer,
+        storageTier: "durable_supabase",
+      });
+      return entry;
     } catch {
       return this.fallback.write(request);
     }
