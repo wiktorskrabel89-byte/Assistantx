@@ -19,9 +19,6 @@ const ALLOWED_INVOKE = new Set([
   'download-update',
   'install-update',
   'defer-update',
-  'updater:get-auth-status',
-  'updater:set-token',
-  'updater:clear-token',
   'get-jarvis-web-url',
   'set-jarvis-web-url',
   'open-account-login',
@@ -416,9 +413,6 @@ contextBridge.exposeInMainWorld('updaterX', {
   download: () => invokeAllowed('download-update'),
   install: () => invokeAllowed('install-update'),
   defer: (reason = 'later', source = 'updaterX') => invokeAllowed('defer-update', { reason, source }),
-  getAuthStatus: () => invokeAllowed('updater:get-auth-status'),
-  setToken: (token) => invokeAllowed('updater:set-token', token),
-  clearToken: () => invokeAllowed('updater:clear-token'),
 });
 
 contextBridge.exposeInMainWorld('jarvisApi', {

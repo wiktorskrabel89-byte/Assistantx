@@ -214,8 +214,7 @@ class UpdateCoordinator {
   }
 
   getUpdateSource() {
-    const value = String(process.env.JARVIS_DESKTOP_UPDATE_SOURCE || process.env.JARVIS_UPDATE_SOURCE || 'github').toLowerCase();
-    return value === 'manifest' ? 'manifest' : 'github';
+    return 'manifest';
   }
 
   getManifestUrl() {

@@ -2,24 +2,18 @@
 
 ## Prerequisites
 
-The source repository is private, and production desktop updates are served
-from GitHub Releases metadata/assets:
+Production desktop updates are served from the public manifest/update host:
 
-``` 
-Private GitHub repo (CI/CD) -> GitHub Releases -> electron-updater clients
 ```
-
-electron-updater is configured with `"private": true` in `build.publish`.
-Runtime update checks on user machines therefore require authenticated access
-to private GitHub release metadata/assets.
+CI/CD -> updates.assistantx.pl (versions.json + platform assets) -> electron-updater clients
+```
 
 ## Source of truth (updater topology)
 
 - **Canonical manifest host**: `https://updates.assistantx.pl/versions.json`
 - **Desktop update engine**: `electron-updater` (`latest.yml` + blockmaps)
-- **Migration mode**: dual source (`JARVIS_UPDATE_SOURCE=manifest|github`), so rollback is an env flip.
+- **Source mode**: manifest-only (`updates.assistantx.pl`)
 - **Channeling**: `stable` + `beta` entries exist in `versions.json`.
-- **Compatibility fallback**: legacy `jarvis-latest` GitHub Release remains supported during migration.
 
 ## Installer identity + NSIS requirements (must stay stable)
 
@@ -38,17 +32,6 @@ NSIS must remain configured for machine-wide installer flow:
 
 ## Required secrets and tokens
 
-### CI repository secret
-
-| Name | Value |
-|------|-------|
-| `GH_TOKEN` | Fine-Grained PAT with **Contents: Read + Write**, **Metadata: Read** scoped to the `Assistantx` repo |
-
-> **Important**: GitHub Actions blocks secrets prefixed with `GITHUB_`. Use
-> `GH_TOKEN`, not `GITHUB_TOKEN`, for the PAT.
-
-Create at: <https://github.com/settings/personal-access-tokens>
-
 ### Updater metadata signing secrets
 
 | Name | Value |
@@ -58,12 +41,6 @@ Create at: <https://github.com/settings/personal-access-tokens>
 
 Keys may be stored as PEM text, PEM with escaped `\n`, base64-encoded PEM, or
 base64-encoded DER.
-
-### End-user machines (private updater auth)
-
-For private-repo topology, end-user updater tokens are required unless
-`GH_TOKEN` is provided by environment policy. AssistantX stores the updater PAT
-encrypted with Electron `safeStorage` in userData.
 
 ## Required artifacts in the release workflow
 
@@ -108,17 +85,13 @@ payload after those fields are appended.
 
 ### CI-managed publishing requirements
 
-The release workflow fully manages GitHub release publishing using `GH_TOKEN`.
+The release workflow fully manages artifact publishing and metadata generation.
 Required repository configuration:
 
 | Secret/Variable | Purpose |
 |-----------------|---------|
-| `GH_TOKEN` | Fine-Grained PAT for authenticated GitHub release publishing |
 | `UPDATE_FEED_METADATA_PRIVATE_KEY` | Signs `latest.yml` in CI |
 | `UPDATE_FEED_METADATA_PUBLIC_KEY` | Bundled in app for runtime verification |
-
-Post-publish CI verifies `jarvis-latest` contains all required updater assets
-(`latest.yml`, `latest.yml.sig`, installers, blockmaps, and `release-notes.json`).
 
 ## Pre-ship updater verification checklist
 

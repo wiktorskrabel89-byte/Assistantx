@@ -18,23 +18,7 @@ describe("GET /api/jarvis/version", () => {
     process.env = ORIGINAL_ENV;
   });
 
-  it("returns available:false with 200 when the release tag is missing", async () => {
-    process.env.JARVIS_UPDATE_SOURCE = "github";
-    mockFetch.mockResolvedValue({
-      ok: false,
-      status: 404,
-      json: async () => ({}),
-    } as Response);
-
-    const res = await GET();
-    expect(res.status).toBe(200);
-    const body = await res.json() as { available?: boolean; error?: string };
-    expect(body.available).toBe(false);
-    expect(body.error).toBe("Release not found");
-  });
-
   it("returns manifest data when manifest source is enabled", async () => {
-    process.env.JARVIS_UPDATE_SOURCE = "manifest";
     process.env.JARVIS_UPDATE_MANIFEST_URL = "https://updates.assistantx.pl/versions.json";
     process.env.JARVIS_UPDATES_ALLOWED_HOSTS = "updates.assistantx.pl";
 
@@ -81,34 +65,21 @@ describe("GET /api/jarvis/version", () => {
     expect(body.downloadUrlAndroid).toBe("https://updates.assistantx.pl/android/Jarvis-android.apk");
   });
 
-  it("falls back to github when manifest source fails", async () => {
-    process.env.JARVIS_UPDATE_SOURCE = "manifest";
+  it("returns available:false when manifest fetch fails", async () => {
     process.env.JARVIS_UPDATE_MANIFEST_URL = "https://updates.assistantx.pl/versions.json";
     process.env.JARVIS_UPDATES_ALLOWED_HOSTS = "updates.assistantx.pl";
 
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: async () => ({}),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          id: 123,
-          tag_name: "jarvis-latest",
-          name: "1.2.4",
-          body: "GitHub fallback",
-          published_at: "2026-05-23T10:00:00.000Z",
-          updated_at: "2026-05-23T11:00:00.000Z",
-        }),
-      } as Response);
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({}),
+    } as Response);
 
     const res = await GET();
-    const body = await res.json() as { source: string; warning: string; version: string };
+    const body = await res.json() as { available: boolean; source: string; error: string };
     expect(res.status).toBe(200);
-    expect(body.source).toBe("github-fallback");
-    expect(body.warning).toContain("manifest-fetch-failed");
-    expect(body.version).toBe("1.2.4");
+    expect(body.available).toBe(false);
+    expect(body.source).toBe("none");
+    expect(body.error).toContain("manifest-fetch-failed");
   });
 });

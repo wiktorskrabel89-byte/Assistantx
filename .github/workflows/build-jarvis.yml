@@ -132,6 +132,25 @@ jobs:
             )
           }
           $highlights = @($highlights | Select-Object -First 8)
+          $segments = @(
+            foreach ($sectionName in $sections.Keys) {
+              $items = @($sections[$sectionName])
+              if ($items.Count -gt 0) {
+                [ordered]@{
+                  title = $sectionName
+                  items = $items
+                }
+              }
+            }
+          )
+          if ($segments.Count -eq 0) {
+            $segments = @(
+              [ordered]@{
+                title = "Release highlights"
+                items = $highlights
+              }
+            )
+          }
 
           $sha7 = "${{ github.sha }}".Substring(0, 7)
           $date = (Get-Date -AsUTC -Format "yyyy-MM-dd HH:mm") + " UTC"
@@ -145,6 +164,7 @@ jobs:
             channel = "stable"
             publishedAt = $publishedAt
             highlights = $highlights
+            segments = $segments
             notesMarkdown = $notesMarkdown
             policy = [ordered]@{
               stagedRollout = [ordered]@{

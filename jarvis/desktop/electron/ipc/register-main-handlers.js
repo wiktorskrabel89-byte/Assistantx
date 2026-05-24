@@ -51,9 +51,6 @@ function createMainIpcHandlers(deps) {
     installUpdate,
     deferUpdate,
     getUpdateState,
-    getUpdaterAuthStatus,
-    setUpdaterPrivateToken,
-    clearUpdaterPrivateToken,
     getJarvisWebUrl,
     setJarvisWebUrl,
     getAuthSessionView,
@@ -456,13 +453,6 @@ function createMainIpcHandlers(deps) {
 
     'check-for-updates': () => checkForUpdates(),
     'get-update-state': () => getUpdateState(),
-    'updater:get-auth-status': () => getUpdaterAuthStatus(),
-    'updater:set-token': (_event, payload) => {
-      const token = validateString(payload, { allowEmpty: false, maxLen: 5000 });
-      if (!token) return invalidResult('updater:set-token', 'token-required');
-      return setUpdaterPrivateToken(token);
-    },
-    'updater:clear-token': () => clearUpdaterPrivateToken(),
     'get-jarvis-web-url': () => getJarvisWebUrl(),
 
     'set-jarvis-web-url': (_event, url) => {

@@ -150,10 +150,8 @@
     },
     "publish": [
       {
-        "provider": "github",
-        "owner": "wiktorskrabel89-byte",
-        "repo": "Assistantx",
-        "private": true
+        "provider": "generic",
+        "url": "https://updates.assistantx.pl"
       }
     ]
   },
