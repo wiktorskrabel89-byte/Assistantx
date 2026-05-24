@@ -44,15 +44,15 @@ function assertExeHasMZHeader(fileName) {
   if (header.length < 2 || header[0] !== 0x4d || header[1] !== 0x5a) {
     fail(`Invalid executable header (expected MZ): dist/${fileName}`);
   }
+}
 
-  function assertPatternExists(pattern) {
-    const files = fs.readdirSync(distRoot);
-    const found = files.find((file) => pattern.test(file));
-    if (!found) {
-      fail(`Missing required file matching pattern: ${pattern}`);
-    }
-    return found;
+function assertPatternExists(pattern) {
+  const files = fs.readdirSync(distRoot);
+  const found = files.find((file) => pattern.test(file));
+  if (!found) {
+    fail(`Missing required file matching pattern: ${pattern}`);
   }
+  return found;
 }
 
 function readLatestEntries(latestRaw) {

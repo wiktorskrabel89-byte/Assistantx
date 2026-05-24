@@ -594,6 +594,144 @@ class UpdateCoordinator {
     };
   }
 
+  getUpdaterFeedPublicKey() {
+    const envValue = String(
+      process.env.JARVIS_UPDATE_FEED_METADATA_PUBLIC_KEY
+      || process.env.UPDATE_FEED_METADATA_PUBLIC_KEY
+      || '',
+    ).trim();
+    if (envValue) return envValue;
+    try {
+      if (fs.existsSync(FEED_PUBLIC_KEY_FILE)) {
+        return String(fs.readFileSync(FEED_PUBLIC_KEY_FILE, 'utf8') || '').trim();
+      }
+    } catch {}
+    return '';
+  }
+
+  async verifyLatestFeedIntegrityGate({ availableVersion = '' } = {}) {
+    const metadataUrl = this.getFeedMetadataUrl();
+    if (!metadataUrl || !this.isAllowedHttpsUrl(metadataUrl)) {
+      return {
+        ok: false,
+        reason: 'feed-metadata-invalid-or-missing',
+        detail: 'Updater feed metadata URL is missing or not allowed.',
+      };
+    }
+
+    let metadataRaw = '';
+    try {
+      const response = await fetch(metadataUrl, {
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: { Accept: 'application/octet-stream,text/yaml,text/plain,*/*' },
+        signal: AbortSignal.timeout(UPDATER_FEED_VERIFY_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        return {
+          ok: false,
+          reason: 'feed-metadata-invalid-or-missing',
+          detail: `Updater metadata fetch failed (HTTP ${response.status}).`,
+        };
+      }
+      metadataRaw = await response.text();
+    } catch (error) {
+      return {
+        ok: false,
+        reason: 'feed-metadata-invalid-or-missing',
+        detail: `Updater metadata fetch failed: ${String(error?.message || error)}`,
+      };
+    }
+
+    const metadata = extractLatestFeedMetadata(metadataRaw);
+    const metadataValidation = validateLatestFeedMetadata({
+      metadata,
+      runtimeChannel: this.getChannel(),
+    });
+    if (!metadataValidation.ok) return metadataValidation;
+
+    const versionSanity = classifyUpdateVersionSanity({
+      availableVersion: metadata.version,
+      currentVersion: this.app.getVersion(),
+      runtimeChannel: this.getChannel(),
+      metadataChannel: metadata.channel,
+      minimumAllowedVersion: metadata.minimumAllowedVersion,
+    });
+    if (!versionSanity.ok) return versionSanity;
+
+    if (availableVersion && metadata.version !== String(availableVersion).trim()) {
+      return {
+        ok: false,
+        reason: 'feed-version-compare-failed',
+        detail: `Updater metadata version mismatch (event=${availableVersion}, feed=${metadata.version}).`,
+      };
+    }
+
+    const signatureUrl = buildMetadataSignatureUrl(metadataUrl);
+    if (!signatureUrl || !this.isAllowedHttpsUrl(signatureUrl)) {
+      return {
+        ok: false,
+        reason: 'signature-validation-failed',
+        detail: 'Updater metadata signature URL is missing or not allowed.',
+      };
+    }
+
+    let signature = '';
+    try {
+      const signatureResponse = await fetch(signatureUrl, {
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: { Accept: 'text/plain,application/octet-stream,*/*' },
+        signal: AbortSignal.timeout(UPDATER_FEED_VERIFY_TIMEOUT_MS),
+      });
+      if (!signatureResponse.ok) {
+        return {
+          ok: false,
+          reason: 'signature-validation-failed',
+          detail: `Updater metadata signature fetch failed (HTTP ${signatureResponse.status}).`,
+        };
+      }
+      signature = String(await signatureResponse.text()).trim();
+    } catch (error) {
+      return {
+        ok: false,
+        reason: 'signature-validation-failed',
+        detail: `Updater metadata signature fetch failed: ${String(error?.message || error)}`,
+      };
+    }
+
+    const publicKey = this.getUpdaterFeedPublicKey();
+    if (!publicKey) {
+      return {
+        ok: false,
+        reason: 'signature-validation-failed',
+        detail: 'Updater metadata verification key is not configured.',
+      };
+    }
+
+    const signatureResult = verifyDetachedMetadataSignature({
+      payload: metadataRaw,
+      signature,
+      publicKey,
+    });
+    if (!signatureResult.ok) return signatureResult;
+
+    const rollout = isUserWithinStagedRollout({
+      stagingPercentage: metadata.stagingPercentage,
+      stableId: `${this.app.getPath('userData')}|${process.arch}|${process.platform}`,
+      version: metadata.version,
+    });
+    if (!rollout.eligible) {
+      return {
+        ok: false,
+        reason: 'staged-rollout-not-eligible',
+        detail: 'This update is rolling out in stages and is not available on this device yet.',
+      };
+    }
+
+    return { ok: true, metadata, rollout };
+  }
+
   async runFeedSelfTest() {
     const publish = this.getPublishConfig();
     const context = {
@@ -605,144 +743,6 @@ class UpdateCoordinator {
       this.startupDiagnostics.pushEvent('updater', 'info', 'Updater feed self-test skipped in development mode.', context);
       this.log('feed-self-test:skipped-dev', context);
       return;
-    }
-
-    getUpdaterFeedPublicKey() {
-      const envValue = String(
-        process.env.JARVIS_UPDATE_FEED_METADATA_PUBLIC_KEY
-        || process.env.UPDATE_FEED_METADATA_PUBLIC_KEY
-        || '',
-      ).trim();
-      if (envValue) return envValue;
-      try {
-        if (fs.existsSync(FEED_PUBLIC_KEY_FILE)) {
-          return String(fs.readFileSync(FEED_PUBLIC_KEY_FILE, 'utf8') || '').trim();
-        }
-      } catch {}
-      return '';
-    }
-
-    async verifyLatestFeedIntegrityGate({ availableVersion = '' } = {}) {
-      const metadataUrl = this.getFeedMetadataUrl();
-      if (!metadataUrl || !this.isAllowedHttpsUrl(metadataUrl)) {
-        return {
-          ok: false,
-          reason: 'feed-metadata-invalid-or-missing',
-          detail: 'Updater feed metadata URL is missing or not allowed.',
-        };
-      }
-
-      let metadataRaw = '';
-      try {
-        const response = await fetch(metadataUrl, {
-          cache: 'no-store',
-          redirect: 'follow',
-          headers: { Accept: 'application/octet-stream,text/yaml,text/plain,*/*' },
-          signal: AbortSignal.timeout(UPDATER_FEED_VERIFY_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-          return {
-            ok: false,
-            reason: 'feed-metadata-invalid-or-missing',
-            detail: `Updater metadata fetch failed (HTTP ${response.status}).`,
-          };
-        }
-        metadataRaw = await response.text();
-      } catch (error) {
-        return {
-          ok: false,
-          reason: 'feed-metadata-invalid-or-missing',
-          detail: `Updater metadata fetch failed: ${String(error?.message || error)}`,
-        };
-      }
-
-      const metadata = extractLatestFeedMetadata(metadataRaw);
-      const metadataValidation = validateLatestFeedMetadata({
-        metadata,
-        runtimeChannel: this.getChannel(),
-      });
-      if (!metadataValidation.ok) return metadataValidation;
-
-      const versionSanity = classifyUpdateVersionSanity({
-        availableVersion: metadata.version,
-        currentVersion: this.app.getVersion(),
-        runtimeChannel: this.getChannel(),
-        metadataChannel: metadata.channel,
-        minimumAllowedVersion: metadata.minimumAllowedVersion,
-      });
-      if (!versionSanity.ok) return versionSanity;
-
-      if (availableVersion && metadata.version !== String(availableVersion).trim()) {
-        return {
-          ok: false,
-          reason: 'feed-version-compare-failed',
-          detail: `Updater metadata version mismatch (event=${availableVersion}, feed=${metadata.version}).`,
-        };
-      }
-
-      const signatureUrl = buildMetadataSignatureUrl(metadataUrl);
-      if (!signatureUrl || !this.isAllowedHttpsUrl(signatureUrl)) {
-        return {
-          ok: false,
-          reason: 'signature-validation-failed',
-          detail: 'Updater metadata signature URL is missing or not allowed.',
-        };
-      }
-
-      let signature = '';
-      try {
-        const signatureResponse = await fetch(signatureUrl, {
-          cache: 'no-store',
-          redirect: 'follow',
-          headers: { Accept: 'text/plain,application/octet-stream,*/*' },
-          signal: AbortSignal.timeout(UPDATER_FEED_VERIFY_TIMEOUT_MS),
-        });
-        if (!signatureResponse.ok) {
-          return {
-            ok: false,
-            reason: 'signature-validation-failed',
-            detail: `Updater metadata signature fetch failed (HTTP ${signatureResponse.status}).`,
-          };
-        }
-        signature = String(await signatureResponse.text()).trim();
-      } catch (error) {
-        return {
-          ok: false,
-          reason: 'signature-validation-failed',
-          detail: `Updater metadata signature fetch failed: ${String(error?.message || error)}`,
-        };
-      }
-
-      const publicKey = this.getUpdaterFeedPublicKey();
-      if (!publicKey) {
-        return {
-          ok: false,
-          reason: 'signature-validation-failed',
-          detail: 'Updater metadata verification key is not configured.',
-        };
-      }
-
-      const signatureResult = verifyDetachedMetadataSignature({
-        payload: metadataRaw,
-        signature,
-        publicKey,
-      });
-      if (!signatureResult.ok) return signatureResult;
-
-      const rollout = isUserWithinStagedRollout({
-        stagingPercentage: metadata.stagingPercentage,
-        stableId: `${this.app.getPath('userData')}|${process.arch}|${process.platform}`,
-        version: metadata.version,
-      });
-      if (!rollout.eligible) {
-        return {
-          ok: false,
-          reason: 'staged-rollout-not-eligible',
-          detail: 'This update is rolling out in stages and is not available on this device yet.',
-        };
-      }
-
-      return { ok: true, metadata, rollout };
     }
 
     if (this.getUpdateSource() === 'manifest') {
