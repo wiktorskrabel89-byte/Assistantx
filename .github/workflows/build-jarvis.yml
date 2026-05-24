@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag to publish (must start with v, e.g. v1.1.0)"
+        description: "Release tag to publish (e.g. v1.1.0, v2, or V2)"
         required: true
         type: string
   # Trigger automatically for versioned tags
@@ -40,11 +40,15 @@ jobs:
         shell: pwsh
         run: |
           $releaseTag = "${{ env.RELEASE_TAG }}".Trim()
-          if ($releaseTag -notmatch '^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
-            Write-Error "Invalid release tag '$releaseTag'. Expected format like v1.1.0."
+          if ($releaseTag -notmatch '^[vV](\d+)(?:\.(\d+))?(?:\.(\d+))?([+-][0-9A-Za-z.-]+)?$') {
+            Write-Error "Invalid release tag '$releaseTag'. Expected format like v1.1.0, v2, or V2."
             exit 1
           }
-          $version = $releaseTag.TrimStart('v')
+          $major = $Matches[1]
+          $minor = if ([string]::IsNullOrWhiteSpace($Matches[2])) { '0' } else { $Matches[2] }
+          $patch = if ([string]::IsNullOrWhiteSpace($Matches[3])) { '0' } else { $Matches[3] }
+          $suffix = if ([string]::IsNullOrWhiteSpace($Matches[4])) { '' } else { $Matches[4] }
+          $version = "$major.$minor.$patch$suffix"
           Write-Host "Version: $version"
 
           # Patch desktop package.json
@@ -1076,11 +1080,15 @@ jobs:
         run: |
           set -euo pipefail
           release_tag="${RELEASE_TAG}"
-          if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid release tag: $release_tag" >&2
+          if [[ ! "$release_tag" =~ ^[vV]([0-9]+)(\.([0-9]+))?(\.([0-9]+))?([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $release_tag (expected formats like v1.1.0, v2, or V2)" >&2
             exit 1
           fi
-          version="${release_tag#v}"
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[3]:-0}"
+          patch="${BASH_REMATCH[5]:-0}"
+          suffix="${BASH_REMATCH[6]:-}"
+          version="${major}.${minor}.${patch}${suffix}"
           base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
           generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
