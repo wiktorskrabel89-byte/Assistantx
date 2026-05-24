@@ -1,19 +1,12 @@
 // jarvis/android/updater.js
-//
-// Hybrid updater source strategy:
-//   1) versions.json manifest (canonical): updates.assistantx.pl
-//   2) AssistantX server proxy endpoint: /api/jarvis/version
-//   3) GitHub release metadata fallback (legacy)
+// Canonical updater source:
+//   versions.json manifest hosted on updates.assistantx.pl
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
 const APP_VERSION = String(require('./package.json').version || '');
 
-const REPO = 'wiktorskrabel89-byte/Assistantx';
-const RELEASE_TAG = 'jarvis-latest';
-const GITHUB_RELEASE_API = `https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}`;
 const UPDATE_MANIFEST_URL = 'https://updates.assistantx.pl/versions.json';
-const UPDATE_MANIFEST_FALLBACK_URL = 'https://assistantx.pl/updates/versions.json';
 const UPDATE_CHANNEL = 'stable';
 const DISMISSED_KEY = 'jarvis-updater-dismissed-build-id';
 const FETCH_TIMEOUT_MS = 8000;
@@ -42,13 +35,6 @@ function compareSemver(left, right) {
   if (!a.prerelease) return 1;
   if (!b.prerelease) return -1;
   return a.prerelease > b.prerelease ? 1 : (a.prerelease < b.prerelease ? -1 : 0);
-}
-
-function toHttpBase(url) {
-  return (url || '')
-    .replace(/^wss?:\/\//, (m) => (m === 'wss://' ? 'https://' : 'http://'))
-    .replace(/\/ws\/?$/, '')
-    .replace(/\/$/, '');
 }
 
 function normalizeManifestContainer(manifest) {
@@ -102,53 +88,12 @@ async function fetchManifestUrl(manifestUrl) {
 }
 
 async function fetchFromManifest() {
-  const direct = await fetchManifestUrl(UPDATE_MANIFEST_URL);
-  if (direct) return direct;
-  return await fetchManifestUrl(UPDATE_MANIFEST_FALLBACK_URL);
-}
-
-async function fetchFromServer(serverUrl) {
-  if (!serverUrl) return null;
-  try {
-    const base = toHttpBase(serverUrl);
-    const res = await fetch(`${base}/api/jarvis/version`, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      cache: 'no-store',
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-async function fetchFromGitHub() {
-  try {
-    const res = await fetch(GITHUB_RELEASE_API, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      cache: 'no-store',
-    });
-    if (!res.ok) return null;
-    const release = await res.json();
-    return {
-      releaseId: release.id,
-      version: release.name || release.tag_name,
-      releaseNotes: release.body || '',
-      publishedAt: release.published_at,
-      updatedAt: release.updated_at,
-      downloadUrlAndroid: `https://github.com/${REPO}/releases/download/${RELEASE_TAG}/Jarvis-android.apk`,
-    };
-  } catch {
-    return null;
-  }
+  return await fetchManifestUrl(UPDATE_MANIFEST_URL);
 }
 
 export async function checkForUpdate(serverUrl) {
-  const info = (await fetchFromManifest()) || (await fetchFromServer(serverUrl)) || (await fetchFromGitHub());
+  void serverUrl;
+  const info = await fetchFromManifest();
   if (!info) return null;
 
   const nextVersion = String(info.version || '').trim();
@@ -162,7 +107,7 @@ export async function checkForUpdate(serverUrl) {
 
   return {
     hasUpdate: true,
-    version: nextVersion || RELEASE_TAG,
+    version: nextVersion || UPDATE_CHANNEL,
     releaseNotes: String(info.releaseNotes || '').trim(),
     updatedAt: buildId,
     downloadUrl: String(info.downloadUrlAndroid || '').trim(),

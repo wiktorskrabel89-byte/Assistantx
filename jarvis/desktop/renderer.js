@@ -159,6 +159,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const updateModalTitle = document.getElementById('update-modal-title');
 	const updateModalSubtitle = document.getElementById('update-modal-subtitle');
 	const updateModalHighlights = document.getElementById('update-modal-highlights');
+	const updateModalSegments = document.getElementById('update-modal-segments');
 	const updateModalMarkdown = document.getElementById('update-modal-markdown');
 	const updateModalVersion = document.getElementById('update-modal-version');
 	const updateModalSource = document.getElementById('update-modal-source');
@@ -168,11 +169,8 @@ window.addEventListener('DOMContentLoaded', () => {
 	const updateProgressPercent = document.getElementById('update-progress-percent');
 	const updateProgressFill = document.getElementById('update-progress-fill');
 	const updateModalError = document.getElementById('update-modal-error');
-	const updateTokenForm = document.getElementById('update-token-form');
-	const updateTokenInput = document.getElementById('update-token-input');
 	const updateModalPrimaryButton = document.getElementById('update-modal-primary');
 	const updateModalSecondaryButton = document.getElementById('update-modal-secondary');
-	const updateModalClearTokenButton = document.getElementById('update-modal-clear-token');
 	const quickActionButtons = document.querySelectorAll('[data-command]');
 	const openBrowserTabButton = document.getElementById('open-browser-tab');
 	const commandTabButton = document.getElementById('command-tab-button');
@@ -1195,7 +1193,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		let detail = payload?.detail ? `${payload.status}: ${payload.detail}` : payload?.status || 'idle';
 		if (normalizedStatus === 'error' || normalizedStatus === 'unavailable') {
 			if (reason.includes('auth') || reason.includes('permission')) {
-				detail = 'Updater: authentication is missing or invalid for private release feed.';
+				detail = 'Updater: release feed configuration is invalid.';
 			} else if (reason.includes('metadata')) {
 				detail = 'Updater: release metadata is missing or invalid.';
 			} else if (reason.includes('network') || reason.includes('offline')) {
@@ -1241,7 +1239,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			});
 		} else if (payload?.status === 'error' || payload?.status === 'unavailable') {
 			showUpdateModal({
-				mode: payload?.requiresTokenSetup ? 'auth-required' : 'error',
+				mode: 'error',
 				payload,
 			});
 		}
@@ -1269,6 +1267,71 @@ window.addEventListener('DOMContentLoaded', () => {
 			const li = document.createElement('li');
 			li.textContent = item;
 			updateModalHighlights.appendChild(li);
+		});
+	}
+
+	function parseReleaseNoteSegments(payload) {
+		const fromMetadata = Array.isArray(payload?.releaseNotes?.metadata?.segments)
+			? payload.releaseNotes.metadata.segments
+			: [];
+		const normalized = fromMetadata
+			.map((segment) => {
+				const title = String(segment?.title || '').trim();
+				const items = Array.isArray(segment?.items)
+					? segment.items.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8)
+					: [];
+				if (!title || items.length === 0) return null;
+				return { title, items };
+			})
+			.filter(Boolean);
+		if (normalized.length > 0) return normalized;
+
+		const markdown = String(payload?.releaseNotes?.markdown || '').trim();
+		if (!markdown) return [];
+		return markdown
+			.split(/\n(?=###\s+)/g)
+			.map((chunk) => chunk.trim())
+			.filter(Boolean)
+			.map((chunk) => {
+				const lines = chunk.split('\n').map((line) => line.trim()).filter(Boolean);
+				const first = lines[0] || '';
+				const title = first.replace(/^###\s*/, '').trim();
+				const items = lines
+					.filter((line) => /^[-*]\s+/.test(line))
+					.map((line) => line.replace(/^[-*]\s+/, '').trim())
+					.filter(Boolean)
+					.slice(0, 8);
+				if (!title || items.length === 0) return null;
+				return { title, items };
+			})
+			.filter(Boolean);
+	}
+
+	function renderUpdateSegments(payload) {
+		if (!updateModalSegments) return;
+		updateModalSegments.innerHTML = '';
+		const segments = parseReleaseNoteSegments(payload);
+		if (segments.length === 0) {
+			updateModalSegments.hidden = true;
+			return;
+		}
+		updateModalSegments.hidden = false;
+		segments.slice(0, 5).forEach((segment) => {
+			const card = document.createElement('section');
+			card.className = 'update-segment';
+			const title = document.createElement('h4');
+			title.className = 'update-segment-title';
+			title.textContent = segment.title;
+			card.appendChild(title);
+			const list = document.createElement('ul');
+			list.className = 'update-segment-items';
+			segment.items.forEach((item) => {
+				const li = document.createElement('li');
+				li.textContent = item;
+				list.appendChild(li);
+			});
+			card.appendChild(list);
+			updateModalSegments.appendChild(card);
 		});
 	}
 
@@ -1313,9 +1376,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		updateModalBackdrop.hidden = false;
 		updateModalBackdrop.dataset.mode = mode;
 		if (updateModalBadge) {
-			updateModalBadge.textContent = mode === 'auth-required' ? 'SECURE' : 'NEW';
+			updateModalBadge.textContent = 'NEW';
 		}
 		renderUpdateHighlights(payload);
+		renderUpdateSegments(payload);
 		renderUpdateMarkdown(payload);
 		setUpdateModalVersion(payload);
 		if (updateModalProgress) updateModalProgress.hidden = true;
@@ -1323,8 +1387,6 @@ window.addEventListener('DOMContentLoaded', () => {
 			updateModalError.hidden = true;
 			updateModalError.textContent = '';
 		}
-		if (updateTokenForm) updateTokenForm.hidden = true;
-		if (updateModalClearTokenButton) updateModalClearTokenButton.hidden = true;
 		updateModalSecondaryButton.hidden = false;
 		updateModalPrimaryButton.disabled = false;
 
@@ -1359,20 +1421,6 @@ window.addEventListener('DOMContentLoaded', () => {
 				updateModalError.hidden = false;
 				updateModalError.textContent = payload?.detail || 'Unknown update error.';
 			}
-			return;
-		}
-
-		if (mode === 'auth-required') {
-			updateModalTitle.textContent = 'Integrate Private Updates';
-			updateModalSubtitle.textContent = 'Set your GitHub token to securely access private AssistantX releases.';
-			updateModalPrimaryButton.textContent = 'Save token';
-			updateModalSecondaryButton.textContent = 'Later';
-			if (updateTokenForm) updateTokenForm.hidden = false;
-			if (updateModalError) {
-				updateModalError.hidden = false;
-				updateModalError.textContent = payload?.detail || 'Private update token is required.';
-			}
-			if (updateModalClearTokenButton) updateModalClearTokenButton.hidden = false;
 			return;
 		}
 
@@ -2084,20 +2132,6 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 		}).catch(() => null);
 
-		ipcRenderer.invoke('updater:get-auth-status').then((authState) => {
-			if (authState?.required && !authState?.available) {
-				showUpdateModal({
-					mode: 'auth-required',
-					payload: {
-						status: 'error',
-						detail: 'Private update token is required before checking for updates.',
-						releaseNotes: {},
-						requiresTokenSetup: true,
-					},
-				});
-			}
-		}).catch(() => null);
-
 		ipcRenderer.on('desktop-health', (payload) => {
 			const overall = String(payload?.overall || 'unknown');
 			const componentList = Object.entries(payload?.components || {})
@@ -2117,17 +2151,6 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (result?.ok === false && result.reason === 'not-packaged') {
 				appendMessage(log, 'Updater', 'Running in dev mode — download and install the EXE to get automatic updates.', 'system');
 				return;
-			}
-			if (result?.ok === false && (result.reason === 'updater-token-missing' || result.reason === 'updater-token-error')) {
-				showUpdateModal({
-					mode: 'auth-required',
-					payload: {
-						status: 'error',
-						detail: 'Configure your private update token to continue.',
-						releaseNotes: {},
-						requiresTokenSetup: true,
-					},
-				});
 			}
 		});
 	}
@@ -2214,26 +2237,6 @@ window.addEventListener('DOMContentLoaded', () => {
 				return;
 			}
 
-			if (mode === 'auth-required') {
-				const token = String(updateTokenInput?.value || '').trim();
-				if (!token) {
-					appendMessage(log, 'Updater', 'Token is required to access private updates.', 'error');
-					return;
-				}
-				updateModalPrimaryButton.disabled = true;
-				const result = await ipcRenderer.invoke('updater:set-token', token);
-				updateModalPrimaryButton.disabled = false;
-				if (!result?.ok) {
-					appendMessage(log, 'Updater', `Token save failed: ${result?.reason || 'unknown error'}`, 'error');
-					return;
-				}
-				if (updateTokenInput) updateTokenInput.value = '';
-				appendMessage(log, 'Updater', 'Private update token saved securely.', 'system');
-				closeUpdateModal();
-				await ipcRenderer.invoke('check-for-updates');
-				return;
-			}
-
 			if (mode === 'error') {
 				await ipcRenderer.invoke('check-for-updates');
 				return;
@@ -2259,18 +2262,6 @@ window.addEventListener('DOMContentLoaded', () => {
 				});
 			}
 			closeUpdateModal();
-		});
-	}
-
-	if (updateModalClearTokenButton && ipcRenderer) {
-		updateModalClearTokenButton.addEventListener('click', async () => {
-			const result = await ipcRenderer.invoke('updater:clear-token');
-			if (!result?.ok) {
-				appendMessage(log, 'Updater', `Token clear failed: ${result?.reason || 'unknown error'}`, 'error');
-				return;
-			}
-			if (updateTokenInput) updateTokenInput.value = '';
-			appendMessage(log, 'Updater', 'Private update token removed.', 'system');
 		});
 	}
 

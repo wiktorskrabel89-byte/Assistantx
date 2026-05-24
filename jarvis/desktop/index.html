@@ -258,6 +258,34 @@
       line-height: 1.6;
     }
 
+    .update-segments {
+      display: grid;
+      gap: 10px;
+      margin-top: 2px;
+    }
+
+    .update-segment {
+      border: 1px solid #1a1a20;
+      border-radius: 6px;
+      padding: 10px;
+      background: #0a0a0c;
+    }
+
+    .update-segment-title {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #f4f4f6;
+    }
+
+    .update-segment-items {
+      margin: 0;
+      padding-left: 18px;
+      color: #d4d4d8;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
     .update-highlights::-webkit-scrollbar,
     .update-markdown::-webkit-scrollbar {
       width: 4px;
@@ -318,36 +346,6 @@
       border-radius: 8px;
       padding: 10px 12px;
       font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .update-token-form {
-      display: grid;
-      gap: 8px;
-      padding: 12px;
-      background: #0a0a0c;
-      border: 1px solid #1a1a20;
-      border-radius: 8px;
-    }
-
-    .update-token-form label {
-      font-size: 12px;
-      color: #a1a1aa;
-    }
-
-    .update-token-form input {
-      width: 100%;
-      padding: 9px 10px;
-      border-radius: 6px;
-      border: 1px solid #2a2a32;
-      background: #111114;
-      color: #f4f4f6;
-      outline: none;
-    }
-
-    .update-token-hint {
-      font-size: 11px;
-      color: #8e8e9a;
       line-height: 1.5;
     }
 
@@ -1319,6 +1317,7 @@
       </div>
       <p class="update-section-title">Release notes</p>
       <ul id="update-modal-highlights" class="update-highlights"></ul>
+      <div id="update-modal-segments" class="update-segments" hidden></div>
       <pre id="update-modal-markdown" class="update-markdown" hidden></pre>
       <details id="update-modal-details" class="update-version-details">
         <summary>Details</summary>
@@ -1335,16 +1334,8 @@
         </div>
       </div>
       <div id="update-modal-error" class="update-error" hidden></div>
-      <div id="update-token-form" class="update-token-form" hidden>
-        <label for="update-token-input">GitHub Personal Access Token</label>
-        <input id="update-token-input" type="password" autocomplete="off" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
-        <div class="update-token-hint">
-          Needed only for secure access to private AssistantX update releases.
-        </div>
-      </div>
       <div class="actions-row">
         <button id="update-modal-secondary" type="button" class="secondary">Later</button>
-        <button id="update-modal-clear-token" type="button" class="secondary" hidden>Clear token</button>
         <button id="update-modal-primary" type="button" class="danger">Update now</button>
       </div>
     </section>

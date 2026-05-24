@@ -1,4 +1,4 @@
-export type UpdateSource = "manifest" | "github";
+export type UpdateSource = "manifest";
 export type UpdateChannel = "stable" | "beta";
 export type UpdatePlatform = "windows" | "mac" | "linux" | "android";
 export type UpdateArch = "x64" | "arm64";
@@ -51,7 +51,8 @@ function normalizeChannel(raw: string): UpdateChannel {
 }
 
 export function getUpdateSource(raw = process.env.JARVIS_UPDATE_SOURCE): UpdateSource {
-  return String(raw || "").trim().toLowerCase() === "manifest" ? "manifest" : "github";
+  void raw;
+  return "manifest";
 }
 
 export function getUpdateChannel(raw = process.env.JARVIS_UPDATE_CHANNEL): UpdateChannel {

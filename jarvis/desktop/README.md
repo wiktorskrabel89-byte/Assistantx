@@ -74,16 +74,13 @@ Linux runtime notes:
 - AppImage may require FUSE support (`libfuse2`/`libfuse2t64`) on some distributions.
 - Headless Linux dev runs already use `xvfb-run` fallback in `scripts/run-electron-dev.js` when `DISPLAY` is not set.
 
-## Update model (current, hybrid)
+## Update model (current)
 
-Jarvis Desktop uses a hybrid updater architecture:
+Jarvis Desktop uses a manifest-first updater architecture:
 
 - `electron-updater` remains the desktop update engine (`latest.yml`/blockmap flow).
 - Canonical multi-platform manifest is `https://updates.assistantx.pl/versions.json`.
-- Runtime source selection is feature-flagged:
-  - `JARVIS_UPDATE_SOURCE=manifest` (recommended)
-  - `JARVIS_UPDATE_SOURCE=github` (legacy fallback)
-  - Optional desktop override: `JARVIS_DESKTOP_UPDATE_SOURCE`.
+- Update distribution uses `updates.assistantx.pl` as the single source of truth.
 
 - Dev mode: updates are disabled.
 - Packaged mode: updater does a silent startup check and uses custom in-app update modals (no native updater dialogs).
