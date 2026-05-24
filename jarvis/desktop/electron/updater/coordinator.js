@@ -319,7 +319,7 @@ class UpdateCoordinator {
     let feedUrl = String(desktop.feedUrl || '').trim();
 
     if (!feedUrl) {
-      const directUrl = String(entry.url || '').trim();
+      const directUrl = String(entry.url || entry.path || '').trim();
       if (/latest\.yml$/i.test(directUrl)) {
         feedUrl = directUrl.replace(/\/latest\.yml$/i, '');
       } else if (directUrl && !/\.(exe|dmg|appimage|apk)$/i.test(directUrl)) {
@@ -1320,7 +1320,7 @@ class UpdateCoordinator {
     }
 
     const version = String(info?.version || '').trim();
-    const manifestVersion = sanitizeText(manifestEntry?.latestVersion || '', 80);
+    const manifestVersion = sanitizeText(manifestEntry?.latestVersion || manifestEntry?.version || '', 80);
     const manifestReleaseNotes = sanitizeText(
       manifestEntry?.releaseNotes || manifestEntry?.notesMarkdown || manifestEntry?.notes || '',
       20_000,

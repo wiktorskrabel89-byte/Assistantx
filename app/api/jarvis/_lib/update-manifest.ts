@@ -102,7 +102,7 @@ export function normalizeManifestPlatformEntry(entry: unknown): NormalizedManife
   if (!obj) return null;
 
   const latestVersion = normalizeString(obj.latestVersion ?? obj.version);
-  const directUrl = normalizeString(obj.url ?? obj.downloadUrl);
+  const directUrl = normalizeString(obj.url ?? obj.path ?? obj.downloadUrl);
   const releaseNotes = normalizeString(obj.releaseNotes ?? obj.notesMarkdown ?? obj.notes);
   const publishedAt = normalizeString(obj.publishedAt ?? obj.updatedAt);
   const checksum = normalizeString(obj.checksum ?? obj.sha512);
@@ -191,7 +191,7 @@ export function resolveManifestDownloadUrl({
     return entry.artifacts.apk;
   }
 
-  return entry.url;
+  return entry.url || "";
 }
 
 export async function fetchUpdateManifest(): Promise<unknown> {
