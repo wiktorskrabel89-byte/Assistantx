@@ -1038,6 +1038,8 @@ jobs:
   deploy-manifest-to-vercel:
     name: Deploy versions manifest to Vercel
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs:
       - build
       - build-mac
