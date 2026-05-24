@@ -1,0 +1,75 @@
+{
+  "schema": "assistantx-updates-manifest",
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-23T00:00:00.000Z",
+  "channels": {
+    "stable": {
+      "windows": {
+        "latestVersion": "0.1.0",
+        "url": "https://updates.assistantx.pl/windows/JarvisSetup-x64.exe",
+        "releaseNotes": "Stable Windows release.",
+        "publishedAt": "2026-05-23T00:00:00.000Z",
+        "artifacts": {
+          "x64": "https://updates.assistantx.pl/windows/JarvisSetup-x64.exe",
+          "arm64": "https://updates.assistantx.pl/windows/JarvisSetup-arm64.exe"
+        },
+        "desktop": {
+          "feedUrl": "https://updates.assistantx.pl/windows",
+          "releaseNotesUrl": "https://updates.assistantx.pl/windows/release-notes.json"
+        }
+      },
+      "mac": {
+        "latestVersion": "0.1.0",
+        "url": "https://updates.assistantx.pl/mac/JarvisSetup-x64.dmg",
+        "releaseNotes": "Stable macOS release.",
+        "publishedAt": "2026-05-23T00:00:00.000Z",
+        "artifacts": {
+          "x64": "https://updates.assistantx.pl/mac/JarvisSetup-x64.dmg",
+          "arm64": "https://updates.assistantx.pl/mac/JarvisSetup-arm64.dmg"
+        },
+        "desktop": {
+          "feedUrl": "https://updates.assistantx.pl/mac",
+          "releaseNotesUrl": "https://updates.assistantx.pl/mac/release-notes.json"
+        }
+      },
+      "linux": {
+        "latestVersion": "0.1.0",
+        "url": "https://updates.assistantx.pl/linux/Jarvis-x64.AppImage",
+        "releaseNotes": "Stable Linux release.",
+        "publishedAt": "2026-05-23T00:00:00.000Z",
+        "artifacts": {
+          "x64": "https://updates.assistantx.pl/linux/Jarvis-x64.AppImage"
+        },
+        "desktop": {
+          "feedUrl": "https://updates.assistantx.pl/linux",
+          "releaseNotesUrl": "https://updates.assistantx.pl/linux/release-notes.json"
+        }
+      },
+      "android": {
+        "latestVersion": "0.1.0",
+        "url": "https://updates.assistantx.pl/android/Jarvis-android.apk",
+        "releaseNotes": "Stable Android release.",
+        "publishedAt": "2026-05-23T00:00:00.000Z",
+        "artifacts": {
+          "apk": "https://updates.assistantx.pl/android/Jarvis-android.apk"
+        }
+      }
+    },
+    "beta": {
+      "windows": {
+        "latestVersion": "0.1.1-beta.1",
+        "url": "https://updates.assistantx.pl/beta/windows/JarvisSetup-x64.exe",
+        "releaseNotes": "Beta Windows release.",
+        "publishedAt": "2026-05-23T00:00:00.000Z",
+        "artifacts": {
+          "x64": "https://updates.assistantx.pl/beta/windows/JarvisSetup-x64.exe",
+          "arm64": "https://updates.assistantx.pl/beta/windows/JarvisSetup-arm64.exe"
+        },
+        "desktop": {
+          "feedUrl": "https://updates.assistantx.pl/beta/windows",
+          "releaseNotesUrl": "https://updates.assistantx.pl/beta/windows/release-notes.json"
+        }
+      }
+    }
+  }
+}

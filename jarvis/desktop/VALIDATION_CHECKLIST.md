@@ -60,11 +60,12 @@ Validate sidecar bridge behavior:
 ## E) Workflow/release checks
 
 Confirm `.github/workflows/build-jarvis.yml` still matches expected desktop outputs and release tag flow (`jarvis-latest`).
-- Confirm updater topology guard still enforces `generic` provider with `https://updates.assistantx.pl/stable`.
-- Confirm CI syncs updater artifacts (`latest.yml`, `release-notes.json`, `JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `*.blockmap`) to the same public feed folder.
+- Confirm canonical manifest (`versions.json`) is generated with `stable` + `beta` channels and valid platform mappings.
+- Confirm CI syncs updater artifacts (`latest.yml`, `release-notes.json`, `versions.json`, `JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `*.blockmap`) to the same public feed folder.
 - Confirm post-publish CI checks:
   - public `latest.yml` availability/content
   - public `release-notes.json` availability/content
+  - public `versions.json` availability/content
   - public access to every artifact referenced from `latest.yml`
   - installer artifact cache policy (no forced `no-cache`/`no-store`)
   - `jarvis-latest` visibility and required release assets
@@ -79,6 +80,7 @@ For every desktop-impacting PR/release, include:
   - feed endpoint health
   - `latest.yml` validity
   - `release-notes.json` validity and highlights quality
+  - `versions.json` schema/URL validity
   - artifact parity (`latest.yml` refs vs feed files)
   - provider/privacy compatibility (public GitHub releases visibility and updater config)
   - correctness of updater error classification (`download`, metadata/auth, signature validation, installer execution)

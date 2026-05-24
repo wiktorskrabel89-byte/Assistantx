@@ -74,16 +74,22 @@ Linux runtime notes:
 - AppImage may require FUSE support (`libfuse2`/`libfuse2t64`) on some distributions.
 - Headless Linux dev runs already use `xvfb-run` fallback in `scripts/run-electron-dev.js` when `DISPLAY` is not set.
 
-## Update model (current)
+## Update model (current, hybrid)
 
-Jarvis Desktop uses `electron-updater` in `main.js` with GitHub Releases provider
-configured in desktop `package.json` (`provider: github`, `private: true`) for private AssistantX releases.
+Jarvis Desktop uses a hybrid updater architecture:
+
+- `electron-updater` remains the desktop update engine (`latest.yml`/blockmap flow).
+- Canonical multi-platform manifest is `https://updates.assistantx.pl/versions.json`.
+- Runtime source selection is feature-flagged:
+  - `JARVIS_UPDATE_SOURCE=manifest` (recommended)
+  - `JARVIS_UPDATE_SOURCE=github` (legacy fallback)
+  - Optional desktop override: `JARVIS_DESKTOP_UPDATE_SOURCE`.
 
 - Dev mode: updates are disabled.
 - Packaged mode: updater does a silent startup check and uses custom in-app update modals (no native updater dialogs).
 - Manual `Check now` remains available as a secondary troubleshooting action in desktop settings/tray.
 - Download behavior is explicit user consent (`autoDownload=false`): update download starts only after user confirmation.
-- Release notes source of truth is `release-notes.json` (fed into renderer-friendly changelog cards, with updater metadata fallback).
+- Release notes source of truth for desktop UI is manifest/release metadata (`versions.json` with `release-notes.json` fallback).
 - Supported updater state model:
   - `idle`
   - `checking`
