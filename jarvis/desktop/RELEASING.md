@@ -30,7 +30,7 @@ NSIS must remain configured for machine-wide installer flow:
 - `build.nsis.perMachine = true`
 - `build.nsis.allowToChangeInstallationDirectory = true`
 
-## Required secrets and tokens
+## Required secrets
 
 ### Updater metadata signing secrets
 
@@ -77,11 +77,10 @@ payload after those fields are appended.
 
 ## Build and publish
 
-1. Create the `GH_TOKEN` Fine-Grained PAT and add it as a repository secret.
-2. Bump `version` in `jarvis/desktop/package.json` (or let CI bump it).
-3. Build installers and updater metadata (`latest.yml`) in CI.
-4. Publish installer artifacts + updater metadata (`latest.yml`, `release-notes.json`, `versions.json`).
-5. Verify packaged app update detection against a lower installed version.
+1. Bump `version` in `jarvis/desktop/package.json` (or let CI bump it).
+2. Build installers and updater metadata (`latest.yml`) in CI.
+3. Publish installer artifacts + updater metadata (`latest.yml`, `release-notes.json`, `versions.json`).
+4. Verify packaged app update detection against a lower installed version.
 
 ### CI-managed publishing requirements
 
@@ -98,7 +97,7 @@ Required repository configuration:
 - [ ] Packaged app (not dev mode) shows real app version.
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
 - [ ] Startup check is silent (no native updater popups when already up to date).
-- [ ] Private GitHub release metadata/assets are reachable on update check with valid auth.
+- [ ] `latest.yml` and assets are reachable from `https://updates.assistantx.pl/windows/` over HTTPS.
 - [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection, rollback floor).
 - [ ] Detached `latest.yml` signature is verified before updater execution.
 - [ ] `minimumAllowedVersion` / `stagingPercentage` are present and correct for the release policy.

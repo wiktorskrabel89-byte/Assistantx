@@ -348,7 +348,7 @@ jobs:
           }
           Write-Host "Bundled updater metadata verification key at $publicKeyPath"
 
-      - name: Validate desktop updater topology (GitHub Releases)
+      - name: Validate desktop updater topology (manifest-only generic)
         shell: pwsh
         run: |
           $pkgPath = "jarvis/desktop/package.json"
@@ -365,33 +365,26 @@ jobs:
           }
 
           $publish = $publishEntries[0]
-          $expectedOwner = "${{ github.repository_owner }}"
-          $expectedRepo = "${{ github.event.repository.name }}"
           $actualProvider = [string]$publish.provider
-          $actualOwner = [string]$publish.owner
-          $actualRepo = [string]$publish.repo
+          $actualUrl = [string]$publish.url
+          $actualChannel = [string]$publish.channel
 
-          if ($actualProvider -ne "github") {
-            Write-Error "Updater provider must be 'github'. Found '$actualProvider'."
+          if ($actualProvider -ne "generic") {
+            Write-Error "Updater provider must be 'generic'. Found '$actualProvider'."
             exit 1
           }
 
-          if ([string]::IsNullOrWhiteSpace($actualOwner) -or $actualOwner -ne $expectedOwner) {
-            Write-Error "Updater owner mismatch. Expected '$expectedOwner', got '$actualOwner'."
+          if ([string]::IsNullOrWhiteSpace($actualUrl) -or $actualUrl -ne "https://updates.assistantx.pl/windows/") {
+            Write-Error "Updater URL mismatch. Expected 'https://updates.assistantx.pl/windows/', got '$actualUrl'."
             exit 1
           }
 
-          if ([string]::IsNullOrWhiteSpace($actualRepo) -or $actualRepo -ne $expectedRepo) {
-            Write-Error "Updater repo mismatch. Expected '$expectedRepo', got '$actualRepo'."
+          if ([string]::IsNullOrWhiteSpace($actualChannel) -or $actualChannel -ne "latest") {
+            Write-Error "Updater channel mismatch. Expected 'latest', got '$actualChannel'."
             exit 1
           }
 
-          if ($publish.private -ne $true) {
-            Write-Error "Updater publish config must declare 'private: true' for private GitHub release access."
-            exit 1
-          }
-
-          Write-Host "Desktop publish config validated: GitHub provider => $actualOwner/$actualRepo (private)"
+          Write-Host "Desktop publish config validated: generic provider => $actualUrl (channel: $actualChannel)"
 
       - name: Download Windows Python embeddable runtime
         shell: pwsh
@@ -411,10 +404,6 @@ jobs:
         working-directory: jarvis/desktop
         run: npm run dist:win:all
         env:
-          # electron-builder recognises GH_TOKEN for authenticated GitHub release publishing.
-          # Use GH_TOKEN (not GITHUB_TOKEN) because GitHub Actions blocks custom secrets
-          # in the GITHUB_ namespace.
-          GH_TOKEN: ${{ github.token }}
           # electron-builder can sign the app if a certificate is available.
           # Leave blank to produce unsigned builds.
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}

@@ -151,7 +151,8 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://updates.assistantx.pl"
+        "url": "https://updates.assistantx.pl/windows/",
+        "channel": "latest"
       }
     ]
   },
