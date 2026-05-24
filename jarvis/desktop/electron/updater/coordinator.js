@@ -2,6 +2,16 @@
 
 const fs = require('fs');
 const path = require('path');
+const {
+  buildMetadataSignatureUrl,
+  classifyInstallerBlocker,
+  classifySignatureDiagnostic,
+  classifyUpdateVersionSanity,
+  extractLatestFeedMetadata,
+  isUserWithinStagedRollout,
+  validateLatestFeedMetadata,
+  verifyDetachedMetadataSignature,
+} = require('./feed-metadata');
 
 const VALID_CHANNELS = new Set(['stable', 'beta', 'nightly']);
 const DEFAULT_DEFER_MINOR_PATCH_MS = 24 * 60 * 60 * 1000;
@@ -12,6 +22,8 @@ const PRIVATE_TOKEN_WAIT_TIMEOUT_MS = 4_000;
 const PRIVATE_TOKEN_STORE_FILE = 'updater-github-token.bin';
 const MANIFEST_FETCH_TIMEOUT_MS = 6_000;
 const DEFAULT_UPDATES_MANIFEST_URL = 'https://updates.assistantx.pl/versions.json';
+const UPDATER_FEED_VERIFY_TIMEOUT_MS = 8_000;
+const FEED_PUBLIC_KEY_FILE = path.join(__dirname, 'feed-public-key.pem');
 
 function safeJsonParse(raw, fallback = null) {
   try {
@@ -211,6 +223,18 @@ class UpdateCoordinator {
 
   getPolicyEnabled() {
     return String(process.env.JARVIS_UPDATER_POLICY_ENABLED || '').toLowerCase() === 'true';
+  }
+
+  getUpdatePolicyMode() {
+    const configured = String(process.env.JARVIS_UPDATER_POLICY_MODE || '').trim().toLowerCase();
+    if (configured === 'manual' || configured === 'silent') return configured;
+    return this.getChannel() === 'stable' ? 'silent' : 'manual';
+  }
+
+  getSilentInstallMode() {
+    const configured = String(process.env.JARVIS_UPDATER_SILENT_INSTALL_MODE || '').trim().toLowerCase();
+    if (configured === 'immediate') return 'immediate';
+    return 'on-quit';
   }
 
   getUpdateSource() {
@@ -428,6 +452,36 @@ class UpdateCoordinator {
   }
 
   classifyFailure(errorMeta) {
+    const lower = `${errorMeta.message || ''} ${errorMeta.code || ''}`.toLowerCase();
+    const installerBlocker = classifyInstallerBlocker(errorMeta.message);
+    if (installerBlocker) {
+      return {
+        status: 'error',
+        health: 'degraded',
+        severity: 'warn',
+        reason: installerBlocker,
+        detail: 'Installer execution was blocked. Close running app instances and retry installation.',
+      };
+    }
+    const signatureDiagnostic = classifySignatureDiagnostic(errorMeta.message);
+    if (signatureDiagnostic || /signature-validation-failed|signature-public-key-missing|feed-signature/.test(lower)) {
+      return {
+        status: 'error',
+        health: 'unavailable',
+        severity: 'error',
+        reason: 'signature-validation-failed',
+        detail: 'Update metadata signature validation failed. Update was blocked for safety.',
+      };
+    }
+    if (/feed-version-invalid|feed-minimum-version-invalid|feed-version-not-newer|feed-rollout-invalid|feed-channel-version-mismatch|feed-version-below-minimum-allowed|feed-metadata-invalid-or-missing/.test(lower)) {
+      return {
+        status: 'error',
+        health: 'unavailable',
+        severity: 'error',
+        reason: 'feed-metadata-invalid-or-missing',
+        detail: 'Update metadata validation failed. Update was blocked for safety.',
+      };
+    }
     if (errorMeta.isNoRelease) {
       return {
         status: 'up-to-date',
@@ -551,6 +605,144 @@ class UpdateCoordinator {
       this.startupDiagnostics.pushEvent('updater', 'info', 'Updater feed self-test skipped in development mode.', context);
       this.log('feed-self-test:skipped-dev', context);
       return;
+    }
+
+    getUpdaterFeedPublicKey() {
+      const envValue = String(
+        process.env.JARVIS_UPDATE_FEED_METADATA_PUBLIC_KEY
+        || process.env.UPDATE_FEED_METADATA_PUBLIC_KEY
+        || '',
+      ).trim();
+      if (envValue) return envValue;
+      try {
+        if (fs.existsSync(FEED_PUBLIC_KEY_FILE)) {
+          return String(fs.readFileSync(FEED_PUBLIC_KEY_FILE, 'utf8') || '').trim();
+        }
+      } catch {}
+      return '';
+    }
+
+    async verifyLatestFeedIntegrityGate({ availableVersion = '' } = {}) {
+      const metadataUrl = this.getFeedMetadataUrl();
+      if (!metadataUrl || !this.isAllowedHttpsUrl(metadataUrl)) {
+        return {
+          ok: false,
+          reason: 'feed-metadata-invalid-or-missing',
+          detail: 'Updater feed metadata URL is missing or not allowed.',
+        };
+      }
+
+      let metadataRaw = '';
+      try {
+        const response = await fetch(metadataUrl, {
+          cache: 'no-store',
+          redirect: 'follow',
+          headers: { Accept: 'application/octet-stream,text/yaml,text/plain,*/*' },
+          signal: AbortSignal.timeout(UPDATER_FEED_VERIFY_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+          return {
+            ok: false,
+            reason: 'feed-metadata-invalid-or-missing',
+            detail: `Updater metadata fetch failed (HTTP ${response.status}).`,
+          };
+        }
+        metadataRaw = await response.text();
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'feed-metadata-invalid-or-missing',
+          detail: `Updater metadata fetch failed: ${String(error?.message || error)}`,
+        };
+      }
+
+      const metadata = extractLatestFeedMetadata(metadataRaw);
+      const metadataValidation = validateLatestFeedMetadata({
+        metadata,
+        runtimeChannel: this.getChannel(),
+      });
+      if (!metadataValidation.ok) return metadataValidation;
+
+      const versionSanity = classifyUpdateVersionSanity({
+        availableVersion: metadata.version,
+        currentVersion: this.app.getVersion(),
+        runtimeChannel: this.getChannel(),
+        metadataChannel: metadata.channel,
+        minimumAllowedVersion: metadata.minimumAllowedVersion,
+      });
+      if (!versionSanity.ok) return versionSanity;
+
+      if (availableVersion && metadata.version !== String(availableVersion).trim()) {
+        return {
+          ok: false,
+          reason: 'feed-version-compare-failed',
+          detail: `Updater metadata version mismatch (event=${availableVersion}, feed=${metadata.version}).`,
+        };
+      }
+
+      const signatureUrl = buildMetadataSignatureUrl(metadataUrl);
+      if (!signatureUrl || !this.isAllowedHttpsUrl(signatureUrl)) {
+        return {
+          ok: false,
+          reason: 'signature-validation-failed',
+          detail: 'Updater metadata signature URL is missing or not allowed.',
+        };
+      }
+
+      let signature = '';
+      try {
+        const signatureResponse = await fetch(signatureUrl, {
+          cache: 'no-store',
+          redirect: 'follow',
+          headers: { Accept: 'text/plain,application/octet-stream,*/*' },
+          signal: AbortSignal.timeout(UPDATER_FEED_VERIFY_TIMEOUT_MS),
+        });
+        if (!signatureResponse.ok) {
+          return {
+            ok: false,
+            reason: 'signature-validation-failed',
+            detail: `Updater metadata signature fetch failed (HTTP ${signatureResponse.status}).`,
+          };
+        }
+        signature = String(await signatureResponse.text()).trim();
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'signature-validation-failed',
+          detail: `Updater metadata signature fetch failed: ${String(error?.message || error)}`,
+        };
+      }
+
+      const publicKey = this.getUpdaterFeedPublicKey();
+      if (!publicKey) {
+        return {
+          ok: false,
+          reason: 'signature-validation-failed',
+          detail: 'Updater metadata verification key is not configured.',
+        };
+      }
+
+      const signatureResult = verifyDetachedMetadataSignature({
+        payload: metadataRaw,
+        signature,
+        publicKey,
+      });
+      if (!signatureResult.ok) return signatureResult;
+
+      const rollout = isUserWithinStagedRollout({
+        stagingPercentage: metadata.stagingPercentage,
+        stableId: `${this.app.getPath('userData')}|${process.arch}|${process.platform}`,
+        version: metadata.version,
+      });
+      if (!rollout.eligible) {
+        return {
+          ok: false,
+          reason: 'staged-rollout-not-eligible',
+          detail: 'This update is rolling out in stages and is not available on this device yet.',
+        };
+      }
+
+      return { ok: true, metadata, rollout };
     }
 
     if (this.getUpdateSource() === 'manifest') {
@@ -1113,6 +1305,28 @@ class UpdateCoordinator {
       autoUpdater.on('update-available', async (info) => {
         const context = this.buildContext();
         const version = String(info?.version || '').trim() || null;
+        const feedGate = await this.verifyLatestFeedIntegrityGate({ availableVersion: version });
+        if (!feedGate.ok) {
+          if (feedGate.reason === 'staged-rollout-not-eligible') {
+            this.emitState('deferred', feedGate.detail || 'Update is rolling out in stages.', {
+              downloaded: false,
+              updateAvailable: true,
+              version,
+              deferred: {
+                reason: 'staged-rollout-not-eligible',
+                policy: true,
+              },
+              diagnostics: context,
+            });
+            return;
+          }
+          this.emitState('error', feedGate.detail || 'Updater feed validation failed.', {
+            downloaded: false,
+            reason: feedGate.reason || 'feed-metadata-invalid-or-missing',
+            diagnostics: context,
+          });
+          return;
+        }
         const releaseNotes = await this.resolveReleaseNotes(info);
         const policyResult = this.evaluatePolicy(version, releaseNotes.metadata || {});
 
@@ -1195,6 +1409,11 @@ class UpdateCoordinator {
           },
           diagnostics: context,
         });
+
+        const policyMode = this.getUpdatePolicyMode();
+        if (policyMode === 'silent') {
+          void this.download({ source: 'policy-silent' });
+        }
       });
 
       autoUpdater.on('update-not-available', () => {
@@ -1240,6 +1459,25 @@ class UpdateCoordinator {
         });
         this.telemetryBus.publish('updater.download.completed');
         this.onHealth();
+        const policyMode = this.getUpdatePolicyMode();
+        if (policyMode === 'silent') {
+          const installMode = this.getSilentInstallMode();
+          if (installMode === 'immediate') {
+            this.emitState('installing', 'Installing update… AssistantX will restart shortly.', {
+              downloaded: true,
+              updateAvailable: true,
+              version,
+            });
+            setImmediate(() => autoUpdater.quitAndInstall());
+            return;
+          }
+          this.emitState('install-ready', 'Update downloaded. It will install automatically when AssistantX exits.', {
+            downloaded: true,
+            updateAvailable: true,
+            version,
+          });
+          return;
+        }
         this.emitState('install-ready', 'Update ready. Restart AssistantX to install.', {
           downloaded: true,
           updateAvailable: true,
@@ -1570,6 +1808,14 @@ class UpdateCoordinator {
       this.startupDiagnostics.pushEvent('updater', 'warn', 'Update download failed.', { message, source });
       this.telemetryBus.publish('startup.degraded');
       this.onHealth();
+      if (source === 'policy-silent') {
+        this.emitState('available', `Silent update failed (${message}). You can continue with manual update.`, {
+          downloaded: false,
+          updateAvailable: true,
+          reason: 'download-failed',
+        });
+        return { ok: false, reason: message };
+      }
       this.emitState('error', `Download failed: ${message}`, { downloaded: false, reason: 'download-failed' });
       return { ok: false, reason: message };
     }

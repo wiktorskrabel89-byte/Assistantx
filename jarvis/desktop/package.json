@@ -32,7 +32,8 @@
     "setup:local-ai": "powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1",
     "bootstrap:windows": "powershell -ExecutionPolicy Bypass -File scripts/JarvisSystemSetup.ps1",
     "publish:download": "node scripts/publish-installer.js",
-    "dist:win:public": "npm run dist:win:all && npm run publish:download"
+    "dist:win:public": "npm run dist:win:all && npm run publish:download",
+    "publish:public-updates": "node scripts/publish-public-updates.js"
   },
   "devDependencies": {
     "electron": "^42.1.0",
@@ -81,7 +82,7 @@
           ]
         }
       ],
-      "artifactName": "JarvisSetup-${arch}.${ext}",
+      "artifactName": "JarvisSetup-${version}-${arch}.${ext}",
       "extraResources": [
         {
           "from": "scripts/post-install.ps1",
@@ -103,7 +104,7 @@
           ]
         }
       ],
-      "artifactName": "JarvisSetup-${arch}.${ext}",
+      "artifactName": "JarvisSetup-${version}-${arch}.${ext}",
       "category": "public.app-category.productivity",
       "extraResources": [
         {
@@ -126,7 +127,7 @@
           ]
         }
       ],
-      "artifactName": "Jarvis-${arch}.${ext}",
+      "artifactName": "Jarvis-${version}-${arch}.${ext}",
       "category": "Utility"
     },
     "protocols": [

@@ -8,12 +8,15 @@ const desktopRoot = path.resolve(__dirname, '..');
 const distRoot = path.join(desktopRoot, 'dist');
 
 const requiredFiles = [
-  'JarvisSetup-x64.exe',
-  'JarvisSetup-arm64.exe',
-  'JarvisSetup-x64.exe.blockmap',
-  'JarvisSetup-arm64.exe.blockmap',
   'latest.yml',
   'release-notes.json',
+];
+
+const requiredPatternGroups = [
+  /^JarvisSetup-.*-x64\.exe$/i,
+  /^JarvisSetup-.*-arm64\.exe$/i,
+  /^JarvisSetup-.*-x64\.exe\.blockmap$/i,
+  /^JarvisSetup-.*-arm64\.exe\.blockmap$/i,
 ];
 
 function fail(message) {
@@ -41,6 +44,15 @@ function assertExeHasMZHeader(fileName) {
   if (header.length < 2 || header[0] !== 0x4d || header[1] !== 0x5a) {
     fail(`Invalid executable header (expected MZ): dist/${fileName}`);
   }
+
+  function assertPatternExists(pattern) {
+    const files = fs.readdirSync(distRoot);
+    const found = files.find((file) => pattern.test(file));
+    if (!found) {
+      fail(`Missing required file matching pattern: ${pattern}`);
+    }
+    return found;
+  }
 }
 
 function readLatestEntries(latestRaw) {
@@ -63,8 +75,14 @@ for (const fileName of requiredFiles) {
   assertFileExists(fileName);
 }
 
-assertExeHasMZHeader('JarvisSetup-x64.exe');
-assertExeHasMZHeader('JarvisSetup-arm64.exe');
+for (const pattern of requiredPatternGroups) {
+  assertPatternExists(pattern);
+}
+
+const winX64Exe = assertPatternExists(/^JarvisSetup-.*-x64\.exe$/i);
+const winArm64Exe = assertPatternExists(/^JarvisSetup-.*-arm64\.exe$/i);
+assertExeHasMZHeader(winX64Exe);
+assertExeHasMZHeader(winArm64Exe);
 
 const latestPath = path.join(distRoot, 'latest.yml');
 const latestRaw = fs.readFileSync(latestPath, 'utf8');

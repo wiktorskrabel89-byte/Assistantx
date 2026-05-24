@@ -14,6 +14,8 @@ jobs:
   build:
     name: Build Jarvis EXE (Windows)
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
 
     # Minimal permissions: read code + write releases
     permissions:
@@ -181,6 +183,15 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($updatesBaseUrl)) {
             $updatesBaseUrl = "https://updates.assistantx.pl"
           }
+          $winX64 = "JarvisSetup-$version-x64.exe"
+          $winArm64 = "JarvisSetup-$version-arm64.exe"
+          $macX64 = "JarvisSetup-$version-x64.dmg"
+          $macArm64 = "JarvisSetup-$version-arm64.dmg"
+          $linuxX64 = "Jarvis-$version-x64.AppImage"
+          $androidApk = "Jarvis-android-$version.apk"
+          $betaVersion = "${version}-beta.1"
+          $betaWinX64 = "JarvisSetup-$betaVersion-x64.exe"
+          $betaWinArm64 = "JarvisSetup-$betaVersion-arm64.exe"
 
           $versionsManifest = [ordered]@{
             schema = "assistantx-updates-manifest"
@@ -190,12 +201,12 @@ jobs:
               stable = [ordered]@{
                 windows = [ordered]@{
                   latestVersion = $version
-                  url = "$updatesBaseUrl/windows/JarvisSetup-x64.exe"
+                  url = "$updatesBaseUrl/windows/$winX64"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$updatesBaseUrl/windows/JarvisSetup-x64.exe"
-                    arm64 = "$updatesBaseUrl/windows/JarvisSetup-arm64.exe"
+                    x64 = "$updatesBaseUrl/windows/$winX64"
+                    arm64 = "$updatesBaseUrl/windows/$winArm64"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/windows"
@@ -204,12 +215,12 @@ jobs:
                 }
                 mac = [ordered]@{
                   latestVersion = $version
-                  url = "$updatesBaseUrl/mac/JarvisSetup-x64.dmg"
+                  url = "$updatesBaseUrl/mac/$macX64"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$updatesBaseUrl/mac/JarvisSetup-x64.dmg"
-                    arm64 = "$updatesBaseUrl/mac/JarvisSetup-arm64.dmg"
+                    x64 = "$updatesBaseUrl/mac/$macX64"
+                    arm64 = "$updatesBaseUrl/mac/$macArm64"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/mac"
@@ -218,11 +229,11 @@ jobs:
                 }
                 linux = [ordered]@{
                   latestVersion = $version
-                  url = "$updatesBaseUrl/linux/Jarvis-x64.AppImage"
+                  url = "$updatesBaseUrl/linux/$linuxX64"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$updatesBaseUrl/linux/Jarvis-x64.AppImage"
+                    x64 = "$updatesBaseUrl/linux/$linuxX64"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/linux"
@@ -231,23 +242,23 @@ jobs:
                 }
                 android = [ordered]@{
                   latestVersion = $version
-                  url = "$updatesBaseUrl/android/Jarvis-android.apk"
+                  url = "$updatesBaseUrl/android/$androidApk"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    apk = "$updatesBaseUrl/android/Jarvis-android.apk"
+                    apk = "$updatesBaseUrl/android/$androidApk"
                   }
                 }
               }
               beta = [ordered]@{
                 windows = [ordered]@{
-                  latestVersion = "${version}-beta.1"
-                  url = "$updatesBaseUrl/beta/windows/JarvisSetup-x64.exe"
+                  latestVersion = $betaVersion
+                  url = "$updatesBaseUrl/beta/windows/$betaWinX64"
                   releaseNotes = "Beta channel build."
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$updatesBaseUrl/beta/windows/JarvisSetup-x64.exe"
-                    arm64 = "$updatesBaseUrl/beta/windows/JarvisSetup-arm64.exe"
+                    x64 = "$updatesBaseUrl/beta/windows/$betaWinX64"
+                    arm64 = "$updatesBaseUrl/beta/windows/$betaWinArm64"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/beta/windows"
@@ -270,12 +281,12 @@ jobs:
             "",
             "| File | Architecture |",
             "|------|-------------|",
-            "| ${bt}JarvisSetup-x64.exe${bt} | Intel / AMD 64-bit |",
-            "| ${bt}JarvisSetup-arm64.exe${bt} | ARM64 (Snapdragon, Surface Pro X) |",
-            "| ${bt}JarvisSetup-x64.dmg${bt} | macOS Intel |",
-            "| ${bt}JarvisSetup-arm64.dmg${bt} | macOS Apple Silicon |",
-            "| ${bt}Jarvis-x64.AppImage${bt} | Linux x64 |",
-            "| ${bt}Jarvis-android.apk${bt} | Android |",
+            "| ${bt}$winX64${bt} | Intel / AMD 64-bit |",
+            "| ${bt}$winArm64${bt} | ARM64 (Snapdragon, Surface Pro X) |",
+            "| ${bt}$macX64${bt} | macOS Intel |",
+            "| ${bt}$macArm64${bt} | macOS Apple Silicon |",
+            "| ${bt}$linuxX64${bt} | Linux x64 |",
+            "| ${bt}$androidApk${bt} | Android |",
             "",
             "**How to use:**",
             "1. Download the installer for your architecture.",
@@ -286,7 +297,7 @@ jobs:
              "- [ ] Repo baseline (`npm run lint`, `npm test -- --runInBand`, `npm run build`)",
               "- [ ] Desktop smoke (`jarvis/desktop`: `npm ci`, `npm run dev`)",
               "- [ ] Packaged smoke (startup/tray, launcher, account, updater flow)",
-              "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `JarvisSetup-x64.dmg`, `JarvisSetup-arm64.dmg`, `Jarvis-x64.AppImage`, `latest.yml`, `latest.yml.sig`, `release-notes.json`, `*.blockmap`)",
+              "- [ ] Workflow output verification (`JarvisSetup-$version-x64.exe`, `JarvisSetup-$version-arm64.exe`, `JarvisSetup-$version-x64.dmg`, `JarvisSetup-$version-arm64.dmg`, `Jarvis-$version-x64.AppImage`, `latest.yml`, `latest.yml.sig`, `release-notes.json`, `*.blockmap`)",
               "- [ ] GitHub Release asset verification (`jarvis-latest` includes updater metadata + installers)",
               "- [ ] Pre-existing/unrelated failures documented (if any)"
             ) -join "`n"
@@ -642,14 +653,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: JarvisSetup-x64
-          path: jarvis/desktop/dist/JarvisSetup-x64.exe
+          path: jarvis/desktop/dist/JarvisSetup-*-x64.exe
           if-no-files-found: warn
 
       - name: Upload arm64 installer artifact
         uses: actions/upload-artifact@v7
         with:
           name: JarvisSetup-arm64
-          path: jarvis/desktop/dist/JarvisSetup-arm64.exe
+          path: jarvis/desktop/dist/JarvisSetup-*-arm64.exe
           if-no-files-found: warn
 
       - name: Upload updater metadata artifact
@@ -658,6 +669,7 @@ jobs:
           name: JarvisUpdaterMetadata
           path: |
             jarvis/desktop/dist/latest.yml
+            jarvis/desktop/dist/latest.yml.sig
             jarvis/desktop/dist/release-notes.json
             versions.json
             jarvis/desktop/dist/*.blockmap
@@ -733,7 +745,15 @@ jobs:
           }
 
           if ($found) {
+            $version = "${{ steps.meta.outputs.version }}"
+            if ([string]::IsNullOrWhiteSpace($version)) {
+              $version = "0.1.0"
+            }
+            $versionedApk = Join-Path $distDir "Jarvis-android-$version.apk"
+            Copy-Item $apkOutput $versionedApk -Force
+            $apkOutput = $versionedApk
             "found=true" >> $env:GITHUB_OUTPUT
+            "path=$apkOutput" >> $env:GITHUB_OUTPUT
             Write-Host "Android APK prepared at $apkOutput"
           } else {
             "found=false" >> $env:GITHUB_OUTPUT
@@ -748,7 +768,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Jarvis-android
-          path: jarvis/android/dist/Jarvis-android.apk
+          path: ${{ steps.android_apk.outputs.path }}
           if-no-files-found: error
 
       - name: Upload Android Gradle log artifact
@@ -768,8 +788,8 @@ jobs:
           prerelease: false
           make_latest: true
           files: |
-            jarvis/desktop/dist/JarvisSetup-x64.exe
-            jarvis/desktop/dist/JarvisSetup-arm64.exe
+            jarvis/desktop/dist/JarvisSetup-*-x64.exe
+            jarvis/desktop/dist/JarvisSetup-*-arm64.exe
             jarvis/desktop/dist/latest.yml
             jarvis/desktop/dist/latest.yml.sig
             jarvis/desktop/dist/release-notes.json
@@ -784,7 +804,7 @@ jobs:
         with:
           tag_name: jarvis-latest
           files: |
-            jarvis/android/dist/Jarvis-android.apk
+            ${{ steps.android_apk.outputs.path }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -824,10 +844,10 @@ jobs:
             "latest.yml.sig",
             "release-notes.json",
             "versions.json",
-            "JarvisSetup-x64.exe",
-            "JarvisSetup-x64.exe.blockmap",
-            "JarvisSetup-arm64.exe",
-            "JarvisSetup-arm64.exe.blockmap"
+            "JarvisSetup-${{ steps.meta.outputs.version }}-x64.exe",
+            "JarvisSetup-${{ steps.meta.outputs.version }}-x64.exe.blockmap",
+            "JarvisSetup-${{ steps.meta.outputs.version }}-arm64.exe",
+            "JarvisSetup-${{ steps.meta.outputs.version }}-arm64.exe.blockmap"
           )
 
           $assetNames = @($tagRelease.assets | ForEach-Object { $_.name })
@@ -841,6 +861,7 @@ jobs:
 
   build-mac:
     name: Build Jarvis DMG (macOS)
+    needs: build
     runs-on: macos-latest
     permissions:
       contents: write
@@ -861,6 +882,17 @@ jobs:
         working-directory: jarvis/desktop
         run: npm ci
 
+      - name: Align desktop version with release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.build.outputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "Missing version from build job output."
+            exit 1
+          fi
+          node -e "const fs=require('fs');const p='jarvis/desktop/package.json';const d=JSON.parse(fs.readFileSync(p,'utf8'));d.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(d,null,2)+'\n');" "$VERSION"
+
       - name: Build DMG installers (x64 + arm64)
         working-directory: jarvis/desktop
         run: npm run dist:mac
@@ -871,14 +903,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: JarvisSetup-mac-x64
-          path: jarvis/desktop/dist/JarvisSetup-x64.dmg
+          path: jarvis/desktop/dist/JarvisSetup-*-x64.dmg
           if-no-files-found: warn
 
       - name: Upload macOS arm64 DMG artifact
         uses: actions/upload-artifact@v7
         with:
           name: JarvisSetup-mac-arm64
-          path: jarvis/desktop/dist/JarvisSetup-arm64.dmg
+          path: jarvis/desktop/dist/JarvisSetup-*-arm64.dmg
           if-no-files-found: warn
 
       - name: Publish macOS DMGs to GitHub Release (jarvis-latest)
@@ -886,13 +918,14 @@ jobs:
         with:
           tag_name: jarvis-latest
           files: |
-            jarvis/desktop/dist/JarvisSetup-x64.dmg
-            jarvis/desktop/dist/JarvisSetup-arm64.dmg
+            jarvis/desktop/dist/JarvisSetup-*-x64.dmg
+            jarvis/desktop/dist/JarvisSetup-*-arm64.dmg
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
   build-linux:
     name: Build Jarvis AppImage (Linux)
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -918,6 +951,17 @@ jobs:
         working-directory: jarvis/desktop
         run: npm ci
 
+      - name: Align desktop version with release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.build.outputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "Missing version from build job output."
+            exit 1
+          fi
+          node -e "const fs=require('fs');const p='jarvis/desktop/package.json';const d=JSON.parse(fs.readFileSync(p,'utf8'));d.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(d,null,2)+'\n');" "$VERSION"
+
       - name: Build Linux AppImage (x64)
         working-directory: jarvis/desktop
         run: npm run dist:linux
@@ -930,7 +974,10 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          candidates=(jarvis/desktop/dist/Jarvis*.AppImage)
+          candidates=(jarvis/desktop/dist/Jarvis-${{ needs.build.outputs.version }}-*.AppImage)
+          if [ "${#candidates[@]}" -eq 0 ]; then
+            candidates=(jarvis/desktop/dist/Jarvis*.AppImage)
+          fi
           if [ "${#candidates[@]}" -eq 0 ]; then
             echo "found=false" >> "$GITHUB_OUTPUT"
             echo "No Linux AppImage found in jarvis/desktop/dist"
@@ -962,6 +1009,7 @@ jobs:
 
   build-android:
     name: Build Jarvis Android APK
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -991,6 +1039,17 @@ jobs:
         working-directory: jarvis/android
         run: npm ci
 
+      - name: Align Android version with release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.build.outputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "Missing version from build job output."
+            exit 1
+          fi
+          node -e "const fs=require('fs');const p='jarvis/android/package.json';const d=JSON.parse(fs.readFileSync(p,'utf8'));d.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(d,null,2)+'\n');" "$VERSION"
+
       - name: Build Android release APK
         working-directory: jarvis/android/android
         env:
@@ -1001,13 +1060,13 @@ jobs:
         run: |
           ./gradlew assembleRelease
           mkdir -p ../dist
-          cp app/build/outputs/apk/release/app-release.apk ../dist/Jarvis-android.apk
+          cp app/build/outputs/apk/release/app-release.apk ../dist/Jarvis-android-${{ needs.build.outputs.version }}.apk
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v7
         with:
           name: Jarvis-android
-          path: jarvis/android/dist/Jarvis-android.apk
+          path: jarvis/android/dist/Jarvis-android-${{ needs.build.outputs.version }}.apk
           if-no-files-found: error
 
       - name: Publish Android APK to GitHub Release (jarvis-latest)
@@ -1015,6 +1074,100 @@ jobs:
         with:
           tag_name: jarvis-latest
           files: |
-            jarvis/android/dist/Jarvis-android.apk
+            jarvis/android/dist/Jarvis-android-${{ needs.build.outputs.version }}.apk
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  publish-public-update-assets:
+    name: Prepare public update assets
+    needs:
+      - build
+      - build-mac
+      - build-linux
+      - build-android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download Windows installer artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: JarvisSetup-x64
+          path: .artifacts/windows-x64
+
+      - name: Download Windows ARM64 installer artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: JarvisSetup-arm64
+          path: .artifacts/windows-arm64
+
+      - name: Download updater metadata artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: JarvisUpdaterMetadata
+          path: .artifacts/updater
+
+      - name: Download macOS x64 artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: JarvisSetup-mac-x64
+          path: .artifacts/mac-x64
+
+      - name: Download macOS arm64 artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: JarvisSetup-mac-arm64
+          path: .artifacts/mac-arm64
+
+      - name: Download Linux AppImage artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: Jarvis-linux-appimage-x64
+          path: .artifacts/linux
+
+      - name: Download Android artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: Jarvis-android
+          path: .artifacts/android
+
+      - name: Assemble dist directories from downloaded artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p jarvis/desktop/dist jarvis/android/dist
+          cp -f .artifacts/windows-x64/* jarvis/desktop/dist/ || true
+          cp -f .artifacts/windows-arm64/* jarvis/desktop/dist/ || true
+          cp -f .artifacts/updater/latest.yml jarvis/desktop/dist/latest.yml
+          cp -f .artifacts/updater/latest.yml.sig jarvis/desktop/dist/latest.yml.sig
+          cp -f .artifacts/updater/release-notes.json jarvis/desktop/dist/release-notes.json
+          cp -f .artifacts/updater/*.blockmap jarvis/desktop/dist/ || true
+          cp -f .artifacts/updater/versions.json ./versions.json
+          cp -f .artifacts/mac-x64/* jarvis/desktop/dist/ || true
+          cp -f .artifacts/mac-arm64/* jarvis/desktop/dist/ || true
+          cp -f .artifacts/linux/* jarvis/desktop/dist/ || true
+          cp -f .artifacts/android/* jarvis/android/dist/ || true
+
+      - name: Publish downloaded release artifacts to public tree
+        run: node jarvis/desktop/scripts/publish-public-updates.js
+
+      - name: Validate public update tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f public/versions.json
+          test -f public/windows/latest.yml
+          test -f public/windows/latest.yml.sig
+
+      - name: Upload prepared public update assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: JarvisPublicUpdates
+          path: |
+            public/windows
+            public/mac
+            public/linux
+            public/android
+            public/versions.json
+          if-no-files-found: error

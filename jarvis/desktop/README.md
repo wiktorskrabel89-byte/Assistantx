@@ -37,8 +37,8 @@ npm run dist:win:all
 ```
 
 Artifacts are written to `jarvis/desktop/dist/`:
-- `JarvisSetup-x64.exe`
-- `JarvisSetup-arm64.exe`
+- `JarvisSetup-<version>-x64.exe`
+- `JarvisSetup-<version>-arm64.exe`
 - `latest.yml`
 - `*.blockmap`
 
@@ -53,8 +53,8 @@ npm run dist:mac
 ```
 
 Artifacts are written to `jarvis/desktop/dist/`:
-- `JarvisSetup-x64.dmg`
-- `JarvisSetup-arm64.dmg`
+- `JarvisSetup-<version>-x64.dmg`
+- `JarvisSetup-<version>-arm64.dmg`
 
 > Note: Code signing/notarization is optional for local builds. Unsigned builds still compile.
 
@@ -67,7 +67,7 @@ npm run dist:linux
 ```
 
 Artifacts are written to `jarvis/desktop/dist/`:
-- `Jarvis-x64.AppImage`
+- `Jarvis-<version>-x64.AppImage`
 
 Linux runtime notes:
 - Some desktops require `libappindicator` for tray icon support.
@@ -85,7 +85,8 @@ Jarvis Desktop uses a manifest-first updater architecture:
 - Dev mode: updates are disabled.
 - Packaged mode: updater does a silent startup check and uses custom in-app update modals (no native updater dialogs).
 - Manual `Check now` remains available as a secondary troubleshooting action in desktop settings/tray.
-- Download behavior is explicit user consent (`autoDownload=false`): update download starts only after user confirmation.
+- Policy mode defaults to `silent` on stable channel (`manual` on beta) and can be overridden with `JARVIS_UPDATER_POLICY_MODE=manual|silent`.
+- Silent mode keeps `autoDownload=false` at updater engine level, then triggers controlled in-app auto-download/install flow with manual fallback on failures.
 - Release notes source of truth for desktop UI is manifest/release metadata (`versions.json` with `release-notes.json` fallback).
 - Supported updater state model:
   - `idle`
@@ -101,6 +102,7 @@ Jarvis Desktop uses a manifest-first updater architecture:
 
 Release assets are published via:
 - `.github/workflows/build-jarvis.yml`
+- `npm run publish:public-updates` (syncs release artifacts to `/public/windows|mac|linux|android` + `/public/versions.json`)
 
 ## Runtime endpoints and sidecar
 

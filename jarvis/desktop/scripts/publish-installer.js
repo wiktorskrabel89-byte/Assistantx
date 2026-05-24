@@ -6,18 +6,13 @@ const publicDir = path.join(__dirname, '..', '..', '..', 'public', 'jarvis');
 
 fs.mkdirSync(publicDir, { recursive: true });
 
-const arches = ['x64', 'arm64'];
+const files = fs.existsSync(distDir) ? fs.readdirSync(distDir) : [];
+const installers = files.filter((file) => /^JarvisSetup-.*-(x64|arm64)\.exe$/i.test(file));
 let published = 0;
 
-for (const arch of arches) {
-  const source = path.join(distDir, `JarvisSetup-${arch}.exe`);
-  const destination = path.join(publicDir, `JarvisSetup-${arch}.exe`);
-
-  if (!fs.existsSync(source)) {
-    console.warn(`Skipping missing installer: ${source}`);
-    continue;
-  }
-
+for (const installer of installers) {
+  const source = path.join(distDir, installer);
+  const destination = path.join(publicDir, installer);
   fs.copyFileSync(source, destination);
   console.log(`Published installer to ${destination}`);
   published++;

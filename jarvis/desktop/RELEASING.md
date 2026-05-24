@@ -14,6 +14,7 @@ CI/CD -> updates.assistantx.pl (versions.json + platform assets) -> electron-upd
 - **Desktop update engine**: `electron-updater` (`latest.yml` + blockmaps)
 - **Source mode**: manifest-only (`updates.assistantx.pl`)
 - **Channeling**: `stable` + `beta` entries exist in `versions.json`.
+- **Default updater policy mode**: `silent` for `stable`, `manual` for `beta` (override with `JARVIS_UPDATER_POLICY_MODE`)
 
 ## Installer identity + NSIS requirements (must stay stable)
 
@@ -50,14 +51,14 @@ For each release, publish/update these assets so `versions.json` and desktop met
 - `latest.yml.sig`
 - `release-notes.json`
 - `versions.json`
-- `JarvisSetup-x64.exe`
-- `JarvisSetup-x64.exe.blockmap`
-- `JarvisSetup-arm64.exe`
-- `JarvisSetup-arm64.exe.blockmap`
-- `JarvisSetup-x64.dmg`
-- `JarvisSetup-arm64.dmg`
-- `Jarvis-x64.AppImage`
-- `Jarvis-android.apk`
+- `JarvisSetup-<version>-x64.exe`
+- `JarvisSetup-<version>-x64.exe.blockmap`
+- `JarvisSetup-<version>-arm64.exe`
+- `JarvisSetup-<version>-arm64.exe.blockmap`
+- `JarvisSetup-<version>-x64.dmg`
+- `JarvisSetup-<version>-arm64.dmg`
+- `Jarvis-<version>-x64.AppImage`
+- `Jarvis-android-<version>.apk`
 
 `latest.yml` must reference exact filenames that actually exist in release assets.
 `latest.yml` must also carry:
@@ -81,6 +82,7 @@ payload after those fields are appended.
 2. Build installers and updater metadata (`latest.yml`) in CI.
 3. Publish installer artifacts + updater metadata (`latest.yml`, `release-notes.json`, `versions.json`).
 4. Verify packaged app update detection against a lower installed version.
+5. Run `npm run publish:public-updates` to materialize release artifacts under `/public/{windows,mac,linux,android}` and `/public/versions.json`.
 
 ### CI-managed publishing requirements
 
@@ -117,3 +119,9 @@ The updater runtime is channel-aware and expects channel-specific metadata when 
 - stable/beta/nightly release metadata and assets must remain isolated by channel.
 
 Current production default remains `stable`.
+
+## Binary storage policy
+
+- Keep source code and metadata in normal Git history.
+- Store large release binaries outside normal Git object history (Git LFS or external artifact storage/CDN).
+- Avoid reusing static binary filenames; keep versioned artifact names to prevent CDN/browser cache collisions.
