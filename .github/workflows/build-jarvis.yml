@@ -3,12 +3,15 @@ name: Build Jarvis Desktop
 on:
   # Trigger manually from the Actions tab
   workflow_dispatch:
-  # Trigger automatically when the desktop source changes
+    inputs:
+      release_tag:
+        description: "Release tag to publish (must start with v, e.g. v1.1.0)"
+        required: true
+        type: string
+  # Trigger automatically for versioned tags
   push:
-    branches:
-      - main
-    paths:
-      - 'jarvis/desktop/**'
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -23,6 +26,7 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       UPDATE_ROLLOUT_PERCENTAGE: '100'
       UPDATES_BASE_URL: 'https://updates.assistantx.pl'
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
     steps:
       - name: Checkout repository
@@ -35,8 +39,12 @@ jobs:
         id: meta
         shell: pwsh
         run: |
-          # Version: 0.1.{run_number} — guarantees electron-updater sees a newer build each time
-          $version = "0.1.${{ github.run_number }}"
+          $releaseTag = "${{ env.RELEASE_TAG }}".Trim()
+          if ($releaseTag -notmatch '^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+            Write-Error "Invalid release tag '$releaseTag'. Expected format like v1.1.0."
+            exit 1
+          }
+          $version = $releaseTag.TrimStart('v')
           Write-Host "Version: $version"
 
           # Patch desktop package.json
@@ -181,6 +189,7 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($updatesBaseUrl)) {
             $updatesBaseUrl = "https://updates.assistantx.pl"
           }
+          $releaseDownloadBaseUrl = "https://github.com/${{ github.repository }}/releases/download/$releaseTag"
 
           $versionsManifest = [ordered]@{
             schema = "assistantx-updates-manifest"
@@ -189,13 +198,15 @@ jobs:
             channels = [ordered]@{
               stable = [ordered]@{
                 windows = [ordered]@{
+                  version = $version
                   latestVersion = $version
-                  url = "$updatesBaseUrl/windows/JarvisSetup-x64.exe"
+                  path = "$releaseDownloadBaseUrl/JarvisSetup-x64.exe"
+                  url = "$releaseDownloadBaseUrl/JarvisSetup-x64.exe"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$updatesBaseUrl/windows/JarvisSetup-x64.exe"
-                    arm64 = "$updatesBaseUrl/windows/JarvisSetup-arm64.exe"
+                    x64 = "$releaseDownloadBaseUrl/JarvisSetup-x64.exe"
+                    arm64 = "$releaseDownloadBaseUrl/JarvisSetup-arm64.exe"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/windows"
@@ -203,13 +214,15 @@ jobs:
                   }
                 }
                 mac = [ordered]@{
+                  version = $version
                   latestVersion = $version
-                  url = "$updatesBaseUrl/mac/JarvisSetup-x64.dmg"
+                  path = "$releaseDownloadBaseUrl/JarvisSetup-x64.dmg"
+                  url = "$releaseDownloadBaseUrl/JarvisSetup-x64.dmg"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$updatesBaseUrl/mac/JarvisSetup-x64.dmg"
-                    arm64 = "$updatesBaseUrl/mac/JarvisSetup-arm64.dmg"
+                    x64 = "$releaseDownloadBaseUrl/JarvisSetup-x64.dmg"
+                    arm64 = "$releaseDownloadBaseUrl/JarvisSetup-arm64.dmg"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/mac"
@@ -217,12 +230,14 @@ jobs:
                   }
                 }
                 linux = [ordered]@{
+                  version = $version
                   latestVersion = $version
-                  url = "$updatesBaseUrl/linux/Jarvis-x64.AppImage"
+                  path = "$releaseDownloadBaseUrl/Jarvis-x64.AppImage"
+                  url = "$releaseDownloadBaseUrl/Jarvis-x64.AppImage"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$updatesBaseUrl/linux/Jarvis-x64.AppImage"
+                    x64 = "$releaseDownloadBaseUrl/Jarvis-x64.AppImage"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/linux"
@@ -230,24 +245,28 @@ jobs:
                   }
                 }
                 android = [ordered]@{
+                  version = $version
                   latestVersion = $version
-                  url = "$updatesBaseUrl/android/Jarvis-android.apk"
+                  path = "$releaseDownloadBaseUrl/Jarvis-android.apk"
+                  url = "$releaseDownloadBaseUrl/Jarvis-android.apk"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    apk = "$updatesBaseUrl/android/Jarvis-android.apk"
+                    apk = "$releaseDownloadBaseUrl/Jarvis-android.apk"
                   }
                 }
               }
               beta = [ordered]@{
                 windows = [ordered]@{
+                  version = "${version}-beta.1"
                   latestVersion = "${version}-beta.1"
-                  url = "$updatesBaseUrl/beta/windows/JarvisSetup-x64.exe"
+                  path = "$releaseDownloadBaseUrl/JarvisSetup-x64.exe"
+                  url = "$releaseDownloadBaseUrl/JarvisSetup-x64.exe"
                   releaseNotes = "Beta channel build."
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$updatesBaseUrl/beta/windows/JarvisSetup-x64.exe"
-                    arm64 = "$updatesBaseUrl/beta/windows/JarvisSetup-arm64.exe"
+                    x64 = "$releaseDownloadBaseUrl/JarvisSetup-x64.exe"
+                    arm64 = "$releaseDownloadBaseUrl/JarvisSetup-arm64.exe"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/beta/windows"
@@ -287,7 +306,7 @@ jobs:
               "- [ ] Desktop smoke (`jarvis/desktop`: `npm ci`, `npm run dev`)",
               "- [ ] Packaged smoke (startup/tray, launcher, account, updater flow)",
               "- [ ] Workflow output verification (`JarvisSetup-x64.exe`, `JarvisSetup-arm64.exe`, `JarvisSetup-x64.dmg`, `JarvisSetup-arm64.dmg`, `Jarvis-x64.AppImage`, `latest.yml`, `latest.yml.sig`, `release-notes.json`, `*.blockmap`)",
-              "- [ ] GitHub Release asset verification (`jarvis-latest` includes updater metadata + installers)",
+              "- [ ] GitHub Release asset verification (`${{ env.RELEASE_TAG }}` includes updater metadata + installers)",
               "- [ ] Pre-existing/unrelated failures documented (if any)"
             ) -join "`n"
 
@@ -759,10 +778,10 @@ jobs:
           path: jarvis/android/dist/gradle-build.log
           if-no-files-found: ignore
 
-      - name: Publish to GitHub Release (jarvis-latest)
+      - name: Publish to GitHub Release (${{ env.RELEASE_TAG }})
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jarvis-latest
+          tag_name: ${{ env.RELEASE_TAG }}
           name: "Jarvis Desktop — v${{ steps.meta.outputs.version }}"
           body_path: changelog_body.txt
           prerelease: false
@@ -778,17 +797,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Publish Android APK to GitHub Release (jarvis-latest)
+      - name: Publish Android APK to GitHub Release (${{ env.RELEASE_TAG }})
         if: steps.android_apk.outputs.found == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jarvis-latest
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             jarvis/android/dist/Jarvis-android.apk
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Verify jarvis-latest release visibility and required assets
+      - name: Verify release visibility and required assets
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -804,18 +823,12 @@ jobs:
             "X-GitHub-Api-Version" = "2022-11-28"
           }
 
-          $tagReleaseUrl = "https://api.github.com/repos/${{ github.repository }}/releases/tags/jarvis-latest"
-          $latestReleaseUrl = "https://api.github.com/repos/${{ github.repository }}/releases/latest"
+          $releaseTag = "${{ env.RELEASE_TAG }}"
+          $tagReleaseUrl = "https://api.github.com/repos/${{ github.repository }}/releases/tags/$releaseTag"
           $tagRelease = Invoke-RestMethod -Method Get -Headers $headers -Uri $tagReleaseUrl
-          $latestRelease = Invoke-RestMethod -Method Get -Headers $headers -Uri $latestReleaseUrl
 
           if ($tagRelease.draft -or $tagRelease.prerelease) {
-            Write-Error "jarvis-latest must be a published non-prerelease release."
-            exit 1
-          }
-
-          if ($latestRelease.tag_name -ne "jarvis-latest") {
-            Write-Error "Latest GitHub release tag mismatch. Expected jarvis-latest, got $($latestRelease.tag_name)."
+            Write-Error "Release '$releaseTag' must be a published non-prerelease release."
             exit 1
           }
 
@@ -833,7 +846,7 @@ jobs:
           $assetNames = @($tagRelease.assets | ForEach-Object { $_.name })
           foreach ($required in $requiredAssets) {
             if (-not ($assetNames -contains $required)) {
-              Write-Error "jarvis-latest is missing required asset: $required"
+            Write-Error "Release '$releaseTag' is missing required asset: $required"
               exit 1
             }
             Write-Host "Verified release asset: $required"
@@ -846,6 +859,7 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -881,10 +895,10 @@ jobs:
           path: jarvis/desktop/dist/JarvisSetup-arm64.dmg
           if-no-files-found: warn
 
-      - name: Publish macOS DMGs to GitHub Release (jarvis-latest)
+      - name: Publish macOS DMGs to GitHub Release (${{ env.RELEASE_TAG }})
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jarvis-latest
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             jarvis/desktop/dist/JarvisSetup-x64.dmg
             jarvis/desktop/dist/JarvisSetup-arm64.dmg
@@ -898,6 +912,7 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -950,11 +965,11 @@ jobs:
           path: ${{ steps.linux_appimage.outputs.path }}
           if-no-files-found: warn
 
-      - name: Publish Linux AppImage to GitHub Release (jarvis-latest)
+      - name: Publish Linux AppImage to GitHub Release (${{ env.RELEASE_TAG }})
         if: steps.linux_appimage.outputs.found == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jarvis-latest
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             ${{ steps.linux_appimage.outputs.path }}
         env:
@@ -967,6 +982,7 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -1010,11 +1026,139 @@ jobs:
           path: jarvis/android/dist/Jarvis-android.apk
           if-no-files-found: error
 
-      - name: Publish Android APK to GitHub Release (jarvis-latest)
+      - name: Publish Android APK to GitHub Release (${{ env.RELEASE_TAG }})
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: jarvis-latest
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             jarvis/android/dist/Jarvis-android.apk
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  deploy-manifest-to-vercel:
+    name: Deploy versions manifest to Vercel
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs:
+      - build
+      - build-mac
+      - build-linux
+      - build-android
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate Vercel secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "Missing required secret: VERCEL_TOKEN" >&2
+            exit 1
+          fi
+          if [ -z "${{ secrets.VERCEL_ORG_ID }}" ]; then
+            echo "Missing required secret: VERCEL_ORG_ID" >&2
+            exit 1
+          fi
+          if [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
+            echo "Missing required secret: VERCEL_PROJECT_ID" >&2
+            exit 1
+          fi
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Generate versions.json for release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_tag="${RELEASE_TAG}"
+          if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $release_tag" >&2
+            exit 1
+          fi
+          version="${release_tag#v}"
+          base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
+          generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          mkdir -p public/updates
+          cat > public/updates/versions.json <<EOF
+          {
+            "schema": "assistantx-updates-manifest",
+            "schemaVersion": 1,
+            "generatedAt": "${generated_at}",
+            "channels": {
+              "stable": {
+                "windows": {
+                  "version": "${version}",
+                  "latestVersion": "${version}",
+                  "path": "${base_url}/JarvisSetup-x64.exe",
+                  "url": "${base_url}/JarvisSetup-x64.exe",
+                  "artifacts": {
+                    "x64": "${base_url}/JarvisSetup-x64.exe",
+                    "arm64": "${base_url}/JarvisSetup-arm64.exe"
+                  }
+                },
+                "linux": {
+                  "version": "${version}",
+                  "latestVersion": "${version}",
+                  "path": "${base_url}/Jarvis-x64.AppImage",
+                  "url": "${base_url}/Jarvis-x64.AppImage",
+                  "artifacts": {
+                    "x64": "${base_url}/Jarvis-x64.AppImage"
+                  }
+                },
+                "mac": {
+                  "version": "${version}",
+                  "latestVersion": "${version}",
+                  "path": "${base_url}/JarvisSetup-x64.dmg",
+                  "url": "${base_url}/JarvisSetup-x64.dmg",
+                  "artifacts": {
+                    "x64": "${base_url}/JarvisSetup-x64.dmg",
+                    "arm64": "${base_url}/JarvisSetup-arm64.dmg"
+                  }
+                },
+                "android": {
+                  "version": "${version}",
+                  "latestVersion": "${version}",
+                  "path": "${base_url}/Jarvis-android.apk",
+                  "url": "${base_url}/Jarvis-android.apk",
+                  "artifacts": {
+                    "apk": "${base_url}/Jarvis-android.apk"
+                  }
+                }
+              },
+              "beta": {
+                "windows": {
+                  "version": "${version}-beta.1",
+                  "latestVersion": "${version}-beta.1",
+                  "path": "${base_url}/JarvisSetup-x64.exe",
+                  "url": "${base_url}/JarvisSetup-x64.exe",
+                  "artifacts": {
+                    "x64": "${base_url}/JarvisSetup-x64.exe",
+                    "arm64": "${base_url}/JarvisSetup-arm64.exe"
+                  }
+                },
+                "linux": {
+                  "version": "${version}-beta.1",
+                  "latestVersion": "${version}-beta.1",
+                  "path": "${base_url}/Jarvis-x64.AppImage",
+                  "url": "${base_url}/Jarvis-x64.AppImage",
+                  "artifacts": {
+                    "x64": "${base_url}/Jarvis-x64.AppImage"
+                  }
+                }
+              }
+            }
+          }
+          EOF
+          cp public/updates/versions.json public/versions.json
+
+      - name: Deploy manifest to Vercel
+        run: vercel --prod --yes --token "${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

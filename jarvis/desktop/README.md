@@ -78,9 +78,11 @@ Linux runtime notes:
 
 Jarvis Desktop uses a manifest-first updater architecture:
 
-- `electron-updater` remains the desktop update engine (`latest.yml`/blockmap flow).
+- Releases are versioned with immutable `v*` tags (for example `v1.1.0`) instead of a moving `jarvis-latest` tag.
 - Canonical multi-platform manifest is `https://updates.assistantx.pl/versions.json`.
 - Update distribution uses `updates.assistantx.pl` as the single source of truth.
+- `versions.json` exposes channel + platform entries with direct installer links (`version`/`path`, with `latestVersion`/`url` kept for compatibility).
+- Heavy installers are stored only in GitHub Releases and referenced from manifest URLs (no repository/LFS binary storage).
 
 - Dev mode: updates are disabled.
 - Packaged mode: updater does a silent startup check and uses custom in-app update modals (no native updater dialogs).

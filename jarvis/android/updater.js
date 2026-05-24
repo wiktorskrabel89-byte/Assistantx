@@ -59,7 +59,7 @@ function normalizeAndroidManifestEntry(manifest) {
 
   const latestVersion = String(entry.latestVersion || entry.version || '').trim();
   const artifacts = entry.artifacts && typeof entry.artifacts === 'object' ? entry.artifacts : {};
-  const directUrl = String(entry.url || entry.downloadUrl || '').trim();
+  const directUrl = String(entry.url || entry.path || entry.downloadUrl || '').trim();
   const url = String(artifacts.apk || directUrl || '').trim();
   if (!latestVersion || !url) return null;
 

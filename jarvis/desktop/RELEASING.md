@@ -11,9 +11,10 @@ CI/CD -> updates.assistantx.pl (versions.json + platform assets) -> electron-upd
 ## Source of truth (updater topology)
 
 - **Canonical manifest host**: `https://updates.assistantx.pl/versions.json`
-- **Desktop update engine**: `electron-updater` (`latest.yml` + blockmaps)
+- **Release strategy**: immutable Git tags (`v*`) + GitHub Releases assets per tag
 - **Source mode**: manifest-only (`updates.assistantx.pl`)
 - **Channeling**: `stable` + `beta` entries exist in `versions.json`.
+- **Binary storage**: GitHub Releases only (no Git LFS/repository binary commits)
 
 ## Installer identity + NSIS requirements (must stay stable)
 
@@ -38,6 +39,14 @@ NSIS must remain configured for machine-wide installer flow:
 |------|-------|
 | `UPDATE_FEED_METADATA_PRIVATE_KEY` | Ed25519/RSA private key for signing `latest.yml` |
 | `UPDATE_FEED_METADATA_PUBLIC_KEY` | Corresponding public key bundled in the app |
+
+### Vercel deployment secrets (manifest publish)
+
+| Name | Value |
+|------|-------|
+| `VERCEL_TOKEN` | Token used by CI to deploy manifest to Vercel |
+| `VERCEL_ORG_ID` | Vercel organization ID |
+| `VERCEL_PROJECT_ID` | Vercel project ID |
 
 Keys may be stored as PEM text, PEM with escaped `\n`, base64-encoded PEM, or
 base64-encoded DER.
@@ -72,15 +81,17 @@ payload after those fields are appended.
 
 - contain `schemaVersion`
 - contain both `stable` and `beta` channels
-- include `windows`, `mac`, `linux`, `android` entries in `stable`
+- include at least `windows` + `linux` entries in each active channel (optionally `mac`/`android`)
+- include direct installer URL aliases (`version` + `path`) and compatibility aliases (`latestVersion` + `url`)
 - point to HTTPS URLs on approved update hosts
 
 ## Build and publish
 
-1. Bump `version` in `jarvis/desktop/package.json` (or let CI bump it).
-2. Build installers and updater metadata (`latest.yml`) in CI.
-3. Publish installer artifacts + updater metadata (`latest.yml`, `release-notes.json`, `versions.json`).
-4. Verify packaged app update detection against a lower installed version.
+1. Create and push a version tag (for example `v1.1.0`).
+2. CI builds installers and updater metadata.
+3. CI publishes artifacts to GitHub Release for that tag.
+4. CI regenerates `versions.json` with direct GitHub Releases URLs and deploys it to Vercel.
+5. Verify packaged app update detection against a lower installed version.
 
 ### CI-managed publishing requirements
 
@@ -98,6 +109,7 @@ Required repository configuration:
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
 - [ ] Startup check is silent (no native updater popups when already up to date).
 - [ ] `latest.yml` and assets are reachable from `https://updates.assistantx.pl/windows/` over HTTPS.
+- [ ] `versions.json` on `updates.assistantx.pl` points to the same release tag (`v*`) for each platform in active channels.
 - [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection, rollback floor).
 - [ ] Detached `latest.yml` signature is verified before updater execution.
 - [ ] `minimumAllowedVersion` / `stagingPercentage` are present and correct for the release policy.
