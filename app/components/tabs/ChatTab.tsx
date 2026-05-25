@@ -244,7 +244,19 @@ export function ChatTab({
   const activePipelineAgent = ((): AgentName | null => {
     const current = latestEntry?.agentLoopStatus;
     if (!current) return null;
-    if (["architect", "coder", "tester", "sandbox", "reviewer", "critic", "security"].includes(current)) {
+    if ([
+      "architect",
+      "coder",
+      "tester",
+      "sandbox",
+      "reviewer",
+      "critic",
+      "security",
+      "ruflo_queen_planning",
+      "ruflo_worker_execution",
+      "ruflo_memory_sync",
+      "ruflo_synthesis",
+    ].includes(current)) {
       return current as AgentName;
     }
     return null;

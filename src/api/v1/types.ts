@@ -21,6 +21,8 @@ export type ApiV1RunSummary = {
   status: string;
   createdAt: string;
   completedAt?: string;
+  orchestrator?: "inngest" | "ruflo" | "unknown";
+  runPhase?: string;
 };
 
 export type ApiV1MemorySearchRequest = {

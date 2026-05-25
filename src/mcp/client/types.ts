@@ -3,6 +3,9 @@ export type McpCapability = {
   description: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
+  riskLevel?: "low" | "medium" | "high" | "critical";
+  requiresApproval?: boolean;
+  requiresActorAttribution?: boolean;
 };
 
 export type McpTrustLevel = "trusted" | "verified" | "sandboxed";

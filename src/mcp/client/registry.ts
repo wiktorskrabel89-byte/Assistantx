@@ -1,4 +1,5 @@
 import type { McpServerEntry } from "@/src/mcp/client/types";
+import { RUFLO_INSTALLABLE_PROFILE } from "@/src/ecosystem/ruflo";
 
 const registry = new Map<string, McpServerEntry>();
 
@@ -37,6 +38,28 @@ function fromDbRow(row: {
   };
 }
 
+function fromInstallableProfile(id: string): McpServerEntry | undefined {
+  if (id !== RUFLO_INSTALLABLE_PROFILE.serverId) return undefined;
+  return {
+    id: RUFLO_INSTALLABLE_PROFILE.serverId,
+    name: RUFLO_INSTALLABLE_PROFILE.name,
+    url: "local://ruflo-mcp",
+    trustLevel: "verified",
+    enabled: false,
+    organizationId: null,
+    credentialRef: undefined,
+    capabilities: RUFLO_INSTALLABLE_PROFILE.capabilities.map((capability) => ({
+      name: capability.name,
+      description: capability.description,
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "object", properties: {} },
+      riskLevel: capability.riskLevel,
+      requiresApproval: capability.requiresApproval,
+      requiresActorAttribution: capability.requiresActorAttribution,
+    })),
+  };
+}
+
 export async function registerMcpServer(entry: McpServerEntry): Promise<void> {
   registry.set(entry.id, entry);
   try {
@@ -54,12 +77,16 @@ export async function getMcpServer(id: string): Promise<McpServerEntry | undefin
   try {
     const { getMcpServerRegistration } = await import("@/src/core/persistence/runtime-db");
     const row = await getMcpServerRegistration(id);
-    if (!row) return undefined;
+    if (!row) {
+      const installable = fromInstallableProfile(id);
+      if (installable) return installable;
+      return undefined;
+    }
     const mapped = fromDbRow(row);
     registry.set(id, mapped);
     return mapped;
   } catch {
-    return undefined;
+    return fromInstallableProfile(id);
   }
 }
 
@@ -69,20 +96,28 @@ export async function listMcpServers(organizationId?: string | null): Promise<Mc
     const rows = await listMcpServerRegistrations(organizationId);
     const mapped = rows.map(fromDbRow);
     for (const entry of mapped) registry.set(entry.id, entry);
-    return mapped.filter((s) => {
+    const filtered = mapped.filter((s) => {
       if (!s.enabled) return false;
       if (organizationId === undefined) return true;
       return s.organizationId === organizationId || s.organizationId === null;
     });
+    if (!filtered.some((entry) => entry.id === RUFLO_INSTALLABLE_PROFILE.serverId)) {
+      filtered.push(fromInstallableProfile(RUFLO_INSTALLABLE_PROFILE.serverId) as McpServerEntry);
+    }
+    return filtered;
   } catch {
     // Fall back to in-memory registry if DB is unavailable.
   }
 
-  return [...registry.values()].filter((s) => {
+  const fallback = [...registry.values()].filter((s) => {
     if (!s.enabled) return false;
     if (organizationId === undefined) return true;
     return s.organizationId === organizationId || s.organizationId === null;
   });
+  if (!fallback.some((entry) => entry.id === RUFLO_INSTALLABLE_PROFILE.serverId)) {
+    fallback.push(fromInstallableProfile(RUFLO_INSTALLABLE_PROFILE.serverId) as McpServerEntry);
+  }
+  return fallback;
 }
 
 export async function deregisterMcpServer(id: string): Promise<boolean> {
@@ -94,4 +129,8 @@ export async function deregisterMcpServer(id: string): Promise<boolean> {
   } catch {
     return removed;
   }
+}
+
+export function listInstallableMcpProfiles() {
+  return [RUFLO_INSTALLABLE_PROFILE] as const;
 }

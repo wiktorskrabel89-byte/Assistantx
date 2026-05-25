@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { runAgentTask } from "@/src/agents/runtime/coordinator";
 import { runVerifier } from "@/src/agents/runtime/verifier";
+import { decomposeGoal, type SubtaskSpec } from "@/src/agents/runtime/planner";
 import { createEventBus } from "@/src/core/events/event-bus";
 import { RUNTIME_EVENT_TYPES } from "@/src/core/events/types";
 import { memoryService } from "@/src/memory/service/memory-service";
@@ -11,6 +12,8 @@ import type {
 import { ToolRouter } from "@/src/tools/router/router";
 import { APP_FORCED_MODEL_ID, ROUTING_GEMINI_MODEL } from "@/lib/ai-config";
 import { executeSandboxCode, type SandboxExecutionLanguage } from "@/src/backend/runtime/sandbox-executor";
+import { getRufloHealthSnapshot, getRufloRuntimeConfig } from "@/src/ecosystem/ruflo";
+import { ingestTrajectoryAttempt } from "@/src/ecosystem/trajectory-ingestion";
 
 function createExecutionId() {
   return randomUUID();
@@ -33,8 +36,15 @@ function estimateTokenUsage(value: unknown) {
 function isCodingWorkflow(request: RuntimeExecutionRequest) {
   return request.workflow === "sandbox_execute"
     || request.workflow === "pr_review"
+    || request.workflow === "ruflo_swarm"
+    || request.workflow === "multi_agent"
     || request.workflow.toLowerCase().includes("code")
     || request.workflow.toLowerCase().includes("refactor");
+}
+
+function isRufloWorkflow(request: RuntimeExecutionRequest) {
+  if (request.workflow === "ruflo_swarm" || request.workflow === "multi_agent") return true;
+  return request.input.rufloMode === true || request.input.orchestrator === "ruflo";
 }
 
 function getGitHubRuntimeToken() {
@@ -226,6 +236,127 @@ async function maybePublishGitHubPrComment({
   return response.ok;
 }
 
+async function executeRufloWorkflow(request: RuntimeExecutionRequest, executionId: string) {
+  const config = getRufloRuntimeConfig();
+  if (!config.enabled) {
+    throw new Error("Ruflo adapter is disabled. Enable RUFLO_ENABLED to run swarm workflows.");
+  }
+  if (!request.actor.userId) {
+    throw new Error("Ruflo workflows require authenticated actor attribution.");
+  }
+
+  const health = getRufloHealthSnapshot();
+  if (health.trustBoundary !== "local" && !request.actor.organizationId) {
+    throw new Error("Federated/zero-trust Ruflo workflows require organization-scoped actor context.");
+  }
+  const parentTaskId = `${executionId}:queen`;
+  const startedAt = new Date().toISOString();
+
+  const { insertAgentTask, updateAgentTask } = await import("@/src/core/persistence/runtime-db");
+
+  await insertAgentTask({
+    task_id: parentTaskId,
+    execution_id: executionId,
+    role: "coordinator",
+    goal: request.workflow,
+    input: {
+      orchestrator: "ruflo",
+      topology: "queen_worker",
+      productionPath: health.productionPath,
+      trustBoundary: health.trustBoundary,
+      consensusMode: health.consensusMode,
+    },
+    user_id: request.actor.userId,
+    organization_id: request.actor.organizationId,
+    status: "running",
+  }).catch(() => undefined);
+
+  const specs: SubtaskSpec[] = [
+    { role: "researcher", goal: `${request.workflow}:research` },
+    { role: "coder", goal: `${request.workflow}:implementation` },
+    { role: "verifier", goal: `${request.workflow}:verification` },
+  ];
+  const plan = decomposeGoal(request.workflow, specs);
+
+  const subtaskResults = await Promise.all(
+    plan.subtasks.map(async (subtask, index) => {
+      await insertAgentTask({
+        task_id: subtask.id,
+        execution_id: executionId,
+        role: subtask.role,
+        goal: subtask.goal,
+        input: subtask.input,
+        user_id: request.actor.userId,
+        organization_id: request.actor.organizationId,
+        status: "running",
+      }).catch(() => undefined);
+
+      const output = await runAgentTask({
+        id: subtask.id,
+        role: subtask.role,
+        goal: subtask.goal,
+        input: {
+          ...request.input,
+          ...subtask.input,
+          orchestrator: "ruflo",
+          workerIndex: index,
+          trustBoundary: health.trustBoundary,
+        },
+      });
+
+      await updateAgentTask(subtask.id, {
+        status: "completed",
+        output: output.output,
+        completed_at: new Date().toISOString(),
+      }).catch(() => undefined);
+
+      await ingestTrajectoryAttempt({
+        executionId,
+        workflowId: request.workflow,
+        stage: subtask.role,
+        attempt: 1,
+        success: true,
+        actorUserId: request.actor.userId,
+        organizationId: request.actor.organizationId,
+        metadata: {
+          orchestrator: "ruflo",
+          planId: plan.planId,
+          taskId: subtask.id,
+        },
+      }).catch(() => undefined);
+
+      return output;
+    }),
+  );
+
+  await updateAgentTask(parentTaskId, {
+    status: "completed",
+    output: {
+      planId: plan.planId,
+      subtasks: plan.subtasks.map((s) => ({ id: s.id, role: s.role, goal: s.goal })),
+    },
+    completed_at: new Date().toISOString(),
+  }).catch(() => undefined);
+
+  return {
+    workflow: request.workflow,
+    runPhase: "queen_synthesis_completed",
+    orchestrator: "ruflo",
+    mode: "external_adapter",
+    productionPath: "mcp_registration_only",
+    trustBoundary: health.trustBoundary,
+    consensusMode: health.consensusMode,
+    rufloHealth: health,
+    startedAt,
+    workers: subtaskResults.map((result) => ({
+      taskId: result.taskId,
+      role: result.role,
+      summary: result.summary,
+      output: result.output,
+    })),
+  } satisfies Record<string, unknown>;
+}
+
 export async function executeRuntimeRequest(
   request: RuntimeExecutionRequest,
 ): Promise<RuntimeExecutionResult<Record<string, unknown>>> {
@@ -306,7 +437,9 @@ export async function executeRuntimeRequest(
   let finalError: string | null = null;
 
   try {
-    if (request.workflow === "sandbox_execute") {
+    if (isRufloWorkflow(request)) {
+      finalOutput = await executeRufloWorkflow(request, executionId);
+    } else if (request.workflow === "sandbox_execute") {
       const language = request.input.language;
       const code = request.input.code;
       const supportedLanguages: SandboxExecutionLanguage[] = ["python", "bash", "sql", "typescript"];
@@ -387,6 +520,16 @@ export async function executeRuntimeRequest(
         };
         lastVerification = await runVerifier(verifierTask, agent.output);
         consumedTokens += estimateTokenUsage(lastVerification.output);
+        await ingestTrajectoryAttempt({
+          executionId,
+          workflowId: request.workflow,
+          stage: "verifier",
+          attempt: attempt + 1,
+          success: lastVerification.safe,
+          actorUserId: request.actor.userId,
+          organizationId: request.actor.organizationId,
+          metadata: { reasons: lastVerification.reasons },
+        }).catch(() => undefined);
 
         if (lastVerification.safe) break;
         if (attempt + 1 >= reflectionMaxIterations) break;
@@ -422,6 +565,16 @@ export async function executeRuntimeRequest(
           },
         });
         consumedTokens += estimateTokenUsage(agent.output);
+        await ingestTrajectoryAttempt({
+          executionId,
+          workflowId: request.workflow,
+          stage: primaryRole,
+          attempt: attempt + 1,
+          success: true,
+          actorUserId: request.actor.userId,
+          organizationId: request.actor.organizationId,
+          metadata: { reflectionAttempt: attempt },
+        }).catch(() => undefined);
       }
 
       const toolResult = await toolRouter.execute(

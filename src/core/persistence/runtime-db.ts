@@ -1745,3 +1745,40 @@ export async function queryRuntimeMetrics(): Promise<RuntimeMetricsSnapshot> {
 
   return { activeWorkflows, failedWorkflows24h, costUsd24h };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Training trajectories (Ruflo self-learning scaffold)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type TrainingTrajectoryRow = {
+  id?: string;
+  execution_id: string;
+  workflow_id: string;
+  stage: string;
+  attempt: number;
+  success: boolean;
+  score?: number | null;
+  user_id?: string | null;
+  organization_id?: string | null;
+  source: "runtime" | "worker" | "mcp";
+  metadata?: Record<string, unknown>;
+};
+
+export async function insertTrainingTrajectory(row: TrainingTrajectoryRow): Promise<void> {
+  const supabase = await getClient();
+  const { error } = await supabase.from("training_trajectories").insert({
+    id: row.id ?? randomUUID(),
+    execution_id: row.execution_id,
+    workflow_id: row.workflow_id,
+    stage: row.stage,
+    attempt: Math.max(1, Math.floor(row.attempt)),
+    success: row.success,
+    score: row.score ?? null,
+    user_id: row.user_id ?? null,
+    organization_id: row.organization_id ?? null,
+    source: row.source,
+    metadata: row.metadata ?? {},
+    created_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(`insertTrainingTrajectory: ${error.message}`);
+}

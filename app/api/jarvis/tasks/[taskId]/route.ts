@@ -37,6 +37,7 @@ export async function GET(
   return NextResponse.json({
     taskId: data.task_id,
     task: data,
+    runPhase: data.agent_loop_status ?? null,
     uiStatus: mapTaskStatusToUiLabel(data),
   });
 }

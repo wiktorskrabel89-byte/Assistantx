@@ -68,6 +68,18 @@ export async function GET(request: Request) {
       status: row.status,
       createdAt: row.created_at ?? new Date(0).toISOString(),
       completedAt: row.completed_at ?? undefined,
+      orchestrator: (
+        row.output
+        && typeof row.output === "object"
+        && "orchestrator" in row.output
+        && row.output.orchestrator === "ruflo"
+      ) ? "ruflo" : "inngest",
+      runPhase: (
+        row.output
+        && typeof row.output === "object"
+        && "runPhase" in row.output
+        && typeof row.output.runPhase === "string"
+      ) ? row.output.runPhase : undefined,
     }));
   } catch {
     // DB unavailable — return empty list rather than a 5xx.
