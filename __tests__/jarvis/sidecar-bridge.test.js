@@ -103,6 +103,35 @@ describe('SidecarBridge', () => {
     });
   });
 
+  it('wraps tool calls in the unified jarvis_executor payload', async () => {
+    const bridge = new SidecarBridge({ ipcMode: 'stdio' });
+    bridge.connect();
+    await flushPromises();
+
+    const ok = bridge.requestToolCall('web_search', { query: 'assistantx', limit: 3 }, 'req-tool', {
+      source: 'desktop',
+      origin: 'test',
+    });
+
+    expect(ok).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('sidecar:send', {
+      type: 'tool_call',
+      tool: 'jarvis_executor',
+      action: {
+        schema_version: '2026-05-27',
+        action_type: 'web_search',
+        params: { query: 'assistantx', limit: 3 },
+        request_id: 'req-tool',
+        source: 'desktop',
+        origin: 'test',
+        dry_run: false,
+      },
+      requestId: 'req-tool',
+      source: 'desktop',
+      origin: 'test',
+    });
+  });
+
   it('routes stdio sidecar messages to events', async () => {
     const bridge = new SidecarBridge({ ipcMode: 'stdio' });
     const handler = jest.fn();

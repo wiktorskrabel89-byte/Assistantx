@@ -7,6 +7,9 @@
  * MCP server handles it and delegates via createMCPServerManager.callTool().
  */
 
+const JARVIS_EXECUTOR_TOOL = 'jarvis_executor';
+const ACTION_SCHEMA_VERSION = '2026-05-27';
+
 const TOOL_MAP = {
   // ── GitHub ────────────────────────────────────────────────────────────────
   github_search_repositories:  { serverId: 'github', method: 'search_repositories' },
@@ -97,16 +100,40 @@ const TOOL_MAP = {
 const ALWAYS_ON_NATIVE_SERVERS = new Set(['filesystem', 'fetch', 'memory']);
 
 function createMCPToolRouter({ serverManager, nativeTools = {} }) {
-  /**
-   * Route a tool call by name.
-   * @param {string} toolName  - One of the keys in TOOL_MAP
-   * @param {object} params
-   * @returns {Promise<{ ok: boolean, result?: any, error?: string }>}
-   */
-  async function route(toolName, params = {}) {
+  function normalizeActionPayload(params = {}) {
+    if (!params || typeof params !== 'object') {
+      return { ok: false, error: { code: 'invalid_params', message: 'params must be an object' } };
+    }
+    const schemaVersion = String(params.schema_version || ACTION_SCHEMA_VERSION).trim();
+    if (schemaVersion !== ACTION_SCHEMA_VERSION) {
+      return {
+        ok: false,
+        error: { code: 'invalid_params', message: `unsupported schema_version:${schemaVersion}` },
+      };
+    }
+    const actionType = String(params.action_type || '').trim();
+    const actionParams = params.params && typeof params.params === 'object' ? params.params : {};
+    if (!actionType) {
+      return { ok: false, error: { code: 'invalid_params', message: 'action_type is required' } };
+    }
+    return {
+      ok: true,
+      payload: {
+        actionType,
+        params: actionParams,
+        requestId: String(params.request_id || '').trim(),
+        source: String(params.source || '').trim(),
+        origin: String(params.origin || '').trim(),
+        dryRun: Boolean(params.dry_run),
+        schemaVersion,
+      },
+    };
+  }
+
+  async function executeMapping(toolName, params = {}) {
     const mapping = TOOL_MAP[toolName];
     if (!mapping) {
-      return { ok: false, error: `unknown-mcp-tool:${toolName}` };
+      return { ok: false, error: 'unknown-mcp-tool:' + toolName };
     }
     try {
       if (mapping.dispatch === 'native') {
@@ -131,7 +158,61 @@ function createMCPToolRouter({ serverManager, nativeTools = {} }) {
     }
   }
 
+  async function routeExecutor(params = {}) {
+    const normalized = normalizeActionPayload(params);
+    if (!normalized.ok) {
+      return { ok: false, error: normalized.error };
+    }
+    const outcome = await executeMapping(normalized.payload.actionType, normalized.payload.params);
+    if (!outcome.ok) {
+      const isUnknown = String(outcome.error || '').startsWith('unknown-mcp-tool:');
+      return {
+        ok: false,
+        error: {
+          code: isUnknown ? 'unknown_action' : 'execution_failed',
+          message: outcome.error,
+        },
+        action_type: normalized.payload.actionType,
+        request_id: normalized.payload.requestId,
+      };
+    }
+    return {
+      ok: true,
+      action_type: normalized.payload.actionType,
+      request_id: normalized.payload.requestId,
+      result: outcome.result,
+      meta: {
+        entrypoint: JARVIS_EXECUTOR_TOOL,
+        schema_version: normalized.payload.schemaVersion,
+        source: normalized.payload.source,
+        origin: normalized.payload.origin,
+        dry_run: normalized.payload.dryRun,
+      },
+    };
+  }
+
+  /**
+   * Route a tool call by name.
+   * @param {string} toolName  - One of the keys in TOOL_MAP
+   * @param {object} params
+   * @returns {Promise<{ ok: boolean, result?: any, error?: string }>}
+   */
+  async function route(toolName, params = {}) {
+    if (toolName === JARVIS_EXECUTOR_TOOL) {
+      return routeExecutor(params);
+    }
+    return executeMapping(toolName, params);
+  }
+
   function listTools() {
+    return [{
+      name: JARVIS_EXECUTOR_TOOL,
+      schemaVersion: ACTION_SCHEMA_VERSION,
+      description: 'Unified MCP executor for AssistantX sidecar-first actions.',
+    }];
+  }
+
+  function listLegacyTools() {
     return Object.keys(TOOL_MAP).map((name) => ({
       name,
       serverId: TOOL_MAP[name].serverId,
@@ -139,7 +220,7 @@ function createMCPToolRouter({ serverManager, nativeTools = {} }) {
     }));
   }
 
-  return { route, listTools, TOOL_MAP };
+  return { route, routeExecutor, listTools, listLegacyTools, TOOL_MAP, JARVIS_EXECUTOR_TOOL, ACTION_SCHEMA_VERSION };
 }
 
-module.exports = { createMCPToolRouter, TOOL_MAP };
+module.exports = { createMCPToolRouter, TOOL_MAP, JARVIS_EXECUTOR_TOOL, ACTION_SCHEMA_VERSION };

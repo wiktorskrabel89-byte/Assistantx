@@ -1,6 +1,11 @@
 'use strict';
 
-const { createMCPToolRouter, TOOL_MAP } = require('../../jarvis/desktop/electron/mcp/tool-router');
+const {
+  createMCPToolRouter,
+  TOOL_MAP,
+  JARVIS_EXECUTOR_TOOL,
+  ACTION_SCHEMA_VERSION,
+} = require('../../jarvis/desktop/electron/mcp/tool-router');
 
 // Minimal mock server manager
 function mockManager(callResult = { content: [{ type: 'text', text: 'ok' }] }) {
@@ -23,10 +28,20 @@ describe('createMCPToolRouter', () => {
     expect(Object.keys(TOOL_MAP).length).toBeGreaterThan(0);
   });
 
-  it('listTools returns all tool names present in TOOL_MAP', () => {
+  it('listTools exposes only the unified executor tool', () => {
     const manager = mockManager();
     const router = createMCPToolRouter({ serverManager: manager });
     const tools = router.listTools();
+    expect(tools).toEqual([expect.objectContaining({
+      name: JARVIS_EXECUTOR_TOOL,
+      schemaVersion: ACTION_SCHEMA_VERSION,
+    })]);
+  });
+
+  it('listLegacyTools returns all tool names present in TOOL_MAP', () => {
+    const manager = mockManager();
+    const router = createMCPToolRouter({ serverManager: manager });
+    const tools = router.listLegacyTools();
     expect(tools.length).toBe(Object.keys(TOOL_MAP).length);
     expect(tools.every((t) => t.name && t.serverId && t.method)).toBe(true);
   });
@@ -77,6 +92,56 @@ describe('createMCPToolRouter', () => {
     expect(result.ok).toBe(true);
     expect(nativeTools.memory.search_nodes).toHaveBeenCalledWith({ query: 'preferences' });
     expect(manager.calls.length).toBe(0);
+  });
+
+  it('routes jarvis_executor action payloads through the internal tool map', async () => {
+    const manager = mockManager();
+    const router = createMCPToolRouter({ serverManager: manager });
+    const result = await router.route(JARVIS_EXECUTOR_TOOL, {
+      schema_version: ACTION_SCHEMA_VERSION,
+      action_type: 'gmail_search',
+      params: { query: 'test' },
+      request_id: 'req-1',
+      source: 'desktop',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.action_type).toBe('gmail_search');
+    expect(result.request_id).toBe('req-1');
+    expect(result.meta).toEqual(expect.objectContaining({
+      entrypoint: JARVIS_EXECUTOR_TOOL,
+      schema_version: ACTION_SCHEMA_VERSION,
+      source: 'desktop',
+    }));
+    expect(manager.calls[0].serverId).toBe('google-suite');
+    expect(manager.calls[0].method).toBe('search_messages');
+  });
+
+  it('formats unknown unified actions with a stable error contract', async () => {
+    const manager = mockManager();
+    const router = createMCPToolRouter({ serverManager: manager });
+    const result = await router.route(JARVIS_EXECUTOR_TOOL, {
+      schema_version: ACTION_SCHEMA_VERSION,
+      action_type: 'totally_unknown_tool',
+      params: {},
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual(expect.objectContaining({
+      code: 'unknown_action',
+    }));
+  });
+
+  it('rejects invalid unified payloads', async () => {
+    const manager = mockManager();
+    const router = createMCPToolRouter({ serverManager: manager });
+    const result = await router.route(JARVIS_EXECUTOR_TOOL, {
+      schema_version: 'legacy',
+      action_type: 'gmail_search',
+      params: { query: 'test' },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual(expect.objectContaining({
+      code: 'invalid_params',
+    }));
   });
 
   it('returns ok:false for an unknown tool name', async () => {

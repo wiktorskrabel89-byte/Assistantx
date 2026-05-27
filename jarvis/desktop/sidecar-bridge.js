@@ -391,8 +391,11 @@ class SidecarBridge extends EventEmitter {
         this.emit('tool_result', {
           requestId: rest.requestId || '',
           tool: rest.tool || '',
+          entrypoint: rest.entrypoint || '',
           results: Array.isArray(rest.results) ? rest.results : [],
           ok: rest.ok !== false,
+          error: rest.error || null,
+          meta: rest.meta && typeof rest.meta === 'object' ? rest.meta : {},
         });
         break;
       case 'llm_route_result':
@@ -473,8 +476,29 @@ class SidecarBridge extends EventEmitter {
     return this._send({ type: 'memory_upsert', text, metadata, requestId });
   }
 
-  requestToolCall(tool, query, requestId = '') {
-    return this._send({ type: 'tool_call', tool, query, requestId });
+  requestToolCall(tool, queryOrParams, requestId = '', meta = {}) {
+    const rawTool = String(tool || '').trim();
+    if (!rawTool) return false;
+    const params = queryOrParams && typeof queryOrParams === 'object' && !Array.isArray(queryOrParams)
+      ? { ...queryOrParams }
+      : { query: queryOrParams };
+    const action = {
+      schema_version: '2026-05-27',
+      action_type: rawTool,
+      params,
+      request_id: requestId,
+      source: meta?.source || '',
+      origin: meta?.origin || '',
+      dry_run: Boolean(meta?.dryRun),
+    };
+    return this._send({
+      type: 'tool_call',
+      tool: 'jarvis_executor',
+      action,
+      requestId,
+      source: action.source,
+      origin: action.origin,
+    });
   }
 
   setListeningForCommand(listening) {

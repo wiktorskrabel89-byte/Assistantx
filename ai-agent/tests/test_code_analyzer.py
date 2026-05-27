@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 
-REPO_ROOT = Path("/home/runner/work/Assistantx/Assistantx")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = REPO_ROOT / "ai-agent" / "code_analyzer.py"
 
 
