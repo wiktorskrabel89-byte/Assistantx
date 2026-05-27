@@ -9,7 +9,8 @@
  * 1. Inngest  = locked-in orchestration backbone (not provisional)
  * 2. Org-first multitenancy = must precede all public APIs and SDK surfaces
  * 3. High-risk tools = deny-until-approved on ALL paid tiers
- * 4. FastAPI = long-term Jarvis orchestration core, Node realtime is optional edge
+ * 4. FastAPI = compatibility bridge only; new orchestration belongs in Node runtime
+ * 5. Ruflo = external orchestrator adapter (never replaces Inngest backbone)
  */
 
 export type WorkflowOrchestrator = "inngest";
@@ -19,6 +20,7 @@ export type BackendHost = "railway" | "render" | "fly-io";
 export type HighRiskToolPolicy = "deny_until_approved";
 export type FastApiMode = "compatibility_only" | "orchestration_core";
 export type OrgMultitenancyPolicy = "org_first_before_public_apis";
+export type RufloIntegrationMode = "external_adapter_only";
 
 export type PlatformDecisions = {
   /**
@@ -37,12 +39,18 @@ export type PlatformDecisions = {
   identityProvider: IdentityProvider;
 
   /**
-   * FastAPI is the long-term Jarvis orchestration core (AI planning,
-   * secure command routing, automation and local-agent coordination).
-   * Node.js realtime gateway is optional and edge-scoped for low-latency
-   * fanout, presence, streaming UI updates, and signaling.
+   * FastAPI remains compatibility-only for legacy Jarvis bridge paths.
+   * New orchestration, workflows, and multi-agent runtime features
+   * must be implemented in Node/TypeScript runtime boundaries.
    */
   fastApiMode: FastApiMode;
+
+  /**
+   * Ruflo is integrated only as an external orchestrator adapter invoked
+   * through governed runtime and MCP boundaries. It must never replace
+   * Inngest as the core orchestration backbone.
+   */
+  rufloIntegrationMode: RufloIntegrationMode;
 
   vectorProviderV1: VectorProvider;
   backendHost: BackendHost;
@@ -79,7 +87,8 @@ export const PLATFORM_DECISIONS: PlatformDecisions = {
   workflowOrchestrator: "inngest",
   cacheProvider: "upstash-redis",
   identityProvider: "supabase-auth",
-  fastApiMode: "orchestration_core",
+  fastApiMode: "compatibility_only",
+  rufloIntegrationMode: "external_adapter_only",
   vectorProviderV1: "supabase-pgvector",
   backendHost: "railway",
   multitenancyPolicy: "org_first_before_public_apis",

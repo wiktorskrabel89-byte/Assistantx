@@ -1,6 +1,17 @@
 "use client";
 
-export type AgentName = "architect" | "coder" | "tester" | "sandbox" | "reviewer" | "critic" | "security";
+export type AgentName =
+  | "architect"
+  | "coder"
+  | "tester"
+  | "sandbox"
+  | "reviewer"
+  | "critic"
+  | "security"
+  | "ruflo_queen_planning"
+  | "ruflo_worker_execution"
+  | "ruflo_memory_sync"
+  | "ruflo_synthesis";
 
 type AgentStatusWidgetProps = {
   activeAgent: AgentName | null;
@@ -21,6 +32,10 @@ const AGENTS: Array<{ id: AgentName; label: string; icon: string }> = [
   { id: "reviewer",  label: "Reviewer",  icon: "🔍" },
   { id: "critic",    label: "Critic",    icon: "⚖️" },
   { id: "security",  label: "Security",  icon: "🛡️" },
+  { id: "ruflo_queen_planning", label: "Ruflo Queen", icon: "👑" },
+  { id: "ruflo_worker_execution", label: "Ruflo Workers", icon: "🤖" },
+  { id: "ruflo_memory_sync", label: "Ruflo Memory", icon: "🧠" },
+  { id: "ruflo_synthesis", label: "Ruflo Synthesis", icon: "🧩" },
 ];
 
 export function AgentStatusWidget({

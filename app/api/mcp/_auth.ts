@@ -1,14 +1,24 @@
 import { extractBearerToken, resolveActor } from "@/src/core/auth/actor-resolver";
 
 export async function authorizeMcpRequest(request: Request): Promise<
-  | { ok: true; actorUserId: string | null; authMode: "api_key" | "supabase" }
+  | {
+      ok: true;
+      actorUserId: string | null;
+      actorOrganizationId: string | null;
+      authMode: "api_key" | "supabase";
+    }
   | { ok: false; status: number; error: string }
 > {
   const token = extractBearerToken(request.headers.get("Authorization"));
   const apiKey = process.env.MCP_API_KEY;
 
   if (token && apiKey && token === apiKey) {
-    return { ok: true, actorUserId: null, authMode: "api_key" };
+    return {
+      ok: true,
+      actorUserId: null,
+      actorOrganizationId: null,
+      authMode: "api_key",
+    };
   }
 
   if (!token) {
@@ -23,6 +33,7 @@ export async function authorizeMcpRequest(request: Request): Promise<
   return {
     ok: true,
     actorUserId: actorResult.actor.userId,
+    actorOrganizationId: actorResult.actor.organizationId,
     authMode: "supabase",
   };
 }

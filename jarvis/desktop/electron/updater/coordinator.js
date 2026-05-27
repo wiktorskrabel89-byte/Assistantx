@@ -10,6 +10,8 @@ const STARTUP_CHECK_DELAY_MS = 15_000;
 const FEED_SELF_TEST_TIMEOUT_MS = 8_000;
 const PRIVATE_TOKEN_WAIT_TIMEOUT_MS = 4_000;
 const PRIVATE_TOKEN_STORE_FILE = 'updater-github-token.bin';
+const MANIFEST_FETCH_TIMEOUT_MS = 6_000;
+const DEFAULT_UPDATES_MANIFEST_URL = 'https://updates.assistantx.pl/versions.json';
 
 function safeJsonParse(raw, fallback = null) {
   try {
@@ -113,6 +115,9 @@ class UpdateCoordinator {
     this.launchId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     this.deferStorePath = path.join(this.app.getPath('userData'), 'updater-defer-state.json');
     this.deferState = this.readDeferState();
+    this.manifestCache = null;
+    this.manifestCacheTs = 0;
+    this.manifestDesktopFeedUrl = null;
 
     this.state = {
       status: 'idle',
@@ -208,6 +213,126 @@ class UpdateCoordinator {
     return String(process.env.JARVIS_UPDATER_POLICY_ENABLED || '').toLowerCase() === 'true';
   }
 
+  getUpdateSource() {
+    return 'manifest';
+  }
+
+  getManifestUrl() {
+    return String(process.env.JARVIS_UPDATE_MANIFEST_URL || DEFAULT_UPDATES_MANIFEST_URL).trim();
+  }
+
+  getManifestAllowedHosts() {
+    const configured = String(process.env.JARVIS_UPDATES_ALLOWED_HOSTS || '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean);
+    if (configured.length > 0) return new Set(configured);
+    return new Set([
+      'updates.assistantx.pl',
+      'assistantx.pl',
+      'github.com',
+      'objects.githubusercontent.com',
+      'release-assets.githubusercontent.com',
+    ]);
+  }
+
+  isAllowedHttpsUrl(rawUrl) {
+    try {
+      const url = new URL(String(rawUrl || '').trim());
+      if (url.protocol !== 'https:') return false;
+      return this.getManifestAllowedHosts().has(url.hostname.toLowerCase());
+    } catch {
+      return false;
+    }
+  }
+
+  resolveManifestPlatformKey() {
+    if (process.platform === 'win32') return 'windows';
+    if (process.platform === 'darwin') return 'mac';
+    if (process.platform === 'linux') return 'linux';
+    return null;
+  }
+
+  resolveManifestChannelKey() {
+    const channel = this.getChannel();
+    return channel === 'beta' ? 'beta' : 'stable';
+  }
+
+  async fetchUpdatesManifest() {
+    if (this.getUpdateSource() !== 'manifest') return null;
+    const now = Date.now();
+    if (this.manifestCache && (now - this.manifestCacheTs) < 60_000) {
+      return this.manifestCache;
+    }
+
+    const manifestUrl = this.getManifestUrl();
+    if (!this.isAllowedHttpsUrl(manifestUrl)) {
+      throw new Error('manifest-url-not-allowed');
+    }
+
+    const response = await fetch(manifestUrl, {
+      cache: 'no-store',
+      redirect: 'follow',
+      headers: { Accept: 'application/json,text/plain,*/*' },
+      signal: AbortSignal.timeout(MANIFEST_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      throw new Error(`manifest-fetch-failed:${response.status}`);
+    }
+    const parsed = await response.json();
+    this.manifestCache = parsed && typeof parsed === 'object' ? parsed : null;
+    this.manifestCacheTs = now;
+    return this.manifestCache;
+  }
+
+  resolveManifestChannelContainer(manifest) {
+    if (!manifest || typeof manifest !== 'object') return null;
+    const channel = this.resolveManifestChannelKey();
+    if (manifest.channels && typeof manifest.channels === 'object' && manifest.channels[channel]) {
+      return manifest.channels[channel];
+    }
+    if (manifest[channel] && typeof manifest[channel] === 'object') {
+      return manifest[channel];
+    }
+    return manifest;
+  }
+
+  async getManifestPlatformEntry() {
+    const platformKey = this.resolveManifestPlatformKey();
+    if (!platformKey) return null;
+    const manifest = await this.fetchUpdatesManifest();
+    if (!manifest) return null;
+    const channelContainer = this.resolveManifestChannelContainer(manifest);
+    if (!channelContainer || typeof channelContainer !== 'object') return null;
+    const platforms = (channelContainer.platforms && typeof channelContainer.platforms === 'object')
+      ? channelContainer.platforms
+      : null;
+    const entry = platforms?.[platformKey] || channelContainer[platformKey];
+    return entry && typeof entry === 'object' ? entry : null;
+  }
+
+  async applyManifestGenericFeed(autoUpdater) {
+    if (this.getUpdateSource() !== 'manifest' || !autoUpdater) return null;
+    const entry = await this.getManifestPlatformEntry();
+    if (!entry) return null;
+    const desktop = entry.desktop && typeof entry.desktop === 'object' ? entry.desktop : {};
+    let feedUrl = String(desktop.feedUrl || '').trim();
+
+    if (!feedUrl) {
+      const directUrl = String(entry.url || entry.path || '').trim();
+      if (/latest\.yml$/i.test(directUrl)) {
+        feedUrl = directUrl.replace(/\/latest\.yml$/i, '');
+      } else if (directUrl && !/\.(exe|dmg|appimage|apk)$/i.test(directUrl)) {
+        feedUrl = directUrl.replace(/\/+$/, '');
+      }
+    }
+
+    if (!feedUrl || !this.isAllowedHttpsUrl(feedUrl)) return null;
+    this.manifestDesktopFeedUrl = feedUrl;
+    autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl });
+    return feedUrl;
+  }
+
   getPublishConfig() {
     if (this.publishConfig) return this.publishConfig;
     try {
@@ -242,6 +367,9 @@ class UpdateCoordinator {
   }
 
   getFeedMetadataUrl() {
+    if (this.manifestDesktopFeedUrl) {
+      return `${this.manifestDesktopFeedUrl.replace(/\/+$/, '')}/latest.yml`;
+    }
     const publish = this.getPublishConfig();
     if (publish.provider === 'generic' && publish.url) {
       return `${publish.url.replace(/\/+$/, '')}/latest.yml`;
@@ -250,6 +378,9 @@ class UpdateCoordinator {
   }
 
   getReleaseNotesUrl() {
+    if (this.manifestDesktopFeedUrl) {
+      return `${this.manifestDesktopFeedUrl.replace(/\/+$/, '')}/release-notes.json`;
+    }
     const publish = this.getPublishConfig();
     if (publish.provider === 'generic' && publish.url) {
       return `${publish.url.replace(/\/+$/, '')}/release-notes.json`;
@@ -265,6 +396,8 @@ class UpdateCoordinator {
       arch: process.arch,
       platform: process.platform,
       provider: publish.provider,
+      updateSource: this.getUpdateSource(),
+      manifestUrl: this.getManifestUrl(),
       feedUrl: publish.url || null,
       sourceFeedUrl: publish.sourceUrl || null,
       channel: publish.channel,
@@ -420,7 +553,18 @@ class UpdateCoordinator {
       return;
     }
 
-    if (publish.provider !== 'generic') {
+    if (this.getUpdateSource() === 'manifest') {
+      try {
+        const updater = this.getAutoUpdater();
+        await this.applyManifestGenericFeed(updater);
+      } catch (error) {
+        this.log('manifest-feed:override-failed', {
+          message: String(error?.message || error || 'manifest override failed'),
+        });
+      }
+    }
+
+    if (publish.provider !== 'generic' && !this.manifestDesktopFeedUrl) {
       // GitHub provider self-test: electron-updater handles feed fetching with
       // authenticated GitHub API calls. We skip the HTTP self-test here and
       // mark the updater healthy so the startup check can proceed normally.
@@ -561,6 +705,7 @@ class UpdateCoordinator {
   }
 
   isPrivateGithubProvider() {
+    if (this.getUpdateSource() === 'manifest') return false;
     const publish = this.getPublishConfig();
     return publish.provider === 'github' && publish.private === true;
   }
@@ -940,7 +1085,7 @@ class UpdateCoordinator {
         autoUpdater.setFeedURL({ provider: 'generic', url: publish.url });
       }
 
-      if (publish.provider === 'github' && publish.private) {
+      if (this.isPrivateGithubProvider()) {
         this.privateTokenReady = this._injectGitHubToken(autoUpdater);
       }
 
@@ -1143,6 +1288,15 @@ class UpdateCoordinator {
   async resolveReleaseNotes(info = {}) {
     const fromUpdater = sanitizeText(info?.releaseNotes || info?.releaseName || '', 4000);
     let metadata = null;
+    let manifestEntry = null;
+
+    if (this.getUpdateSource() === 'manifest') {
+      try {
+        manifestEntry = await this.getManifestPlatformEntry();
+      } catch (error) {
+        this.log('manifest-release-notes:read-failed', { message: String(error?.message || error) });
+      }
+    }
 
     const notesUrl = this.getReleaseNotesUrl();
     if (notesUrl) {
@@ -1166,6 +1320,18 @@ class UpdateCoordinator {
     }
 
     const version = String(info?.version || '').trim();
+    const manifestVersion = sanitizeText(manifestEntry?.latestVersion || manifestEntry?.version || '', 80);
+    const manifestReleaseNotes = sanitizeText(
+      manifestEntry?.releaseNotes || manifestEntry?.notesMarkdown || manifestEntry?.notes || '',
+      20_000,
+    );
+    if (manifestVersion && (!version || version === manifestVersion) && manifestReleaseNotes) {
+      metadata = {
+        version: manifestVersion,
+        notesMarkdown: manifestReleaseNotes,
+        highlights: normalizeHighlights(manifestReleaseNotes, 6),
+      };
+    }
     const selected = this.selectReleaseMetadata(metadata, version);
     const rawDetails = sanitizeText(selected?.notesMarkdown || selected?.details || fromUpdater || '', 4000);
     const markdownSource = sanitizeText(selected?.notesMarkdown || fromUpdater || '', 20_000);
@@ -1313,6 +1479,22 @@ class UpdateCoordinator {
 
     const updater = this.getAutoUpdater();
     if (!updater) return { ok: false, reason: 'updater-unavailable' };
+
+    if (this.getUpdateSource() === 'manifest') {
+      try {
+        await this.applyManifestGenericFeed(updater);
+      } catch (error) {
+        this.emitState('error', 'Failed to load manifest update feed configuration.', {
+          downloaded: false,
+          reason: 'manifest-feed-configuration-failed',
+          diagnostics: {
+            ...this.buildContext(),
+            error: String(error?.message || error || 'manifest override failed'),
+          },
+        });
+        return { ok: false, reason: 'manifest-feed-configuration-failed' };
+      }
+    }
 
     if (this.isPrivateGithubProvider()) {
       const tokenState = await this.waitForPrivateTokenReady();

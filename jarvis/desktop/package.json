@@ -138,10 +138,10 @@
       }
     ],
     "nsis": {
-      "oneClick": true,
-      "perMachine": false,
+      "oneClick": false,
+      "perMachine": true,
       "allowElevation": true,
-      "allowToChangeInstallationDirectory": false,
+      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Jarvis",
@@ -150,10 +150,9 @@
     },
     "publish": [
       {
-        "provider": "github",
-        "owner": "wiktorskrabel89-byte",
-        "repo": "Assistantx",
-        "private": true
+        "provider": "generic",
+        "url": "https://updates.assistantx.pl/windows/",
+        "channel": "latest"
       }
     ]
   },

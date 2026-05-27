@@ -307,15 +307,32 @@ export const BUILTIN_TOOLS: RegisteredTool[] = [
       timeoutMs: 30_000,
     },
     async execute(input, context) {
+      const capabilityName = String(input.capabilityName ?? "");
+      const normalizedCapability = capabilityName.toLowerCase();
+      const isHighRiskRufloCall = (
+        (normalizedCapability.startsWith("ruflo/") || normalizedCapability.startsWith("ruflo."))
+        && ["spawn", "train", "memory"].some((token) => normalizedCapability.includes(token))
+      );
+      if (isHighRiskRufloCall && !context.actor.organizationId) {
+        return {
+          ok: false,
+          serverId: String(input.serverId ?? ""),
+          capabilityName,
+          output: null,
+          error: "High-risk Ruflo calls require organization-scoped actor attribution.",
+        };
+      }
+
       const { callMcpTool } = await import("@/src/mcp/client/client");
       const result = await callMcpTool(
         {
           serverId: String(input.serverId ?? ""),
-          capabilityName: String(input.capabilityName ?? ""),
+          capabilityName,
           input: (input.input as Record<string, unknown>) ?? {},
         },
         context.executionId,
         context.actor.userId,
+        context.actor.organizationId,
       );
       return {
         ok: result.ok,
@@ -327,4 +344,3 @@ export const BUILTIN_TOOLS: RegisteredTool[] = [
     },
   },
 ];
-

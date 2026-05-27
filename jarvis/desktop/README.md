@@ -76,14 +76,19 @@ Linux runtime notes:
 
 ## Update model (current)
 
-Jarvis Desktop uses `electron-updater` in `main.js` with GitHub Releases provider
-configured in desktop `package.json` (`provider: github`, `private: true`) for private AssistantX releases.
+Jarvis Desktop uses a manifest-first updater architecture:
+
+- Releases are versioned with immutable `v*` tags (for example `v1.1.0`) instead of a moving `jarvis-latest` tag.
+- Canonical multi-platform manifest is `https://updates.assistantx.pl/versions.json`.
+- Update distribution uses `updates.assistantx.pl` as the single source of truth.
+- `versions.json` exposes channel + platform entries with direct installer links (`version`/`path`, with `latestVersion`/`url` kept for compatibility).
+- Heavy installers are stored only in GitHub Releases and referenced from manifest URLs (no repository/LFS binary storage).
 
 - Dev mode: updates are disabled.
 - Packaged mode: updater does a silent startup check and uses custom in-app update modals (no native updater dialogs).
 - Manual `Check now` remains available as a secondary troubleshooting action in desktop settings/tray.
 - Download behavior is explicit user consent (`autoDownload=false`): update download starts only after user confirmation.
-- Release notes source of truth is `release-notes.json` (fed into renderer-friendly changelog cards, with updater metadata fallback).
+- Release notes source of truth for desktop UI is manifest/release metadata (`versions.json` with `release-notes.json` fallback).
 - Supported updater state model:
   - `idle`
   - `checking`

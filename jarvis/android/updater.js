@@ -1,157 +1,125 @@
 // jarvis/android/updater.js
-//
-// Checks whether a newer Jarvis release is available on GitHub and returns
-// the update info so the caller can decide how to present it to the user.
-//
-// Strategy:
-//   1. Try the configured AssistantX server at /api/jarvis/version first.
-//      This works for private repos because the server has a GitHub token.
-//   2. Fall back to the public GitHub Releases API directly.
-//      This works for public repos without any credentials.
-//
-// Change detection uses the release's `updated_at` timestamp (stored in
-// AsyncStorage).  Each workflow run updates the release body/assets, which
-// bumps `updated_at`, so any new build is correctly detected even when the
-// tag name (`jarvis-latest`) stays constant.
+// Canonical updater source:
+//   versions.json manifest hosted on updates.assistantx.pl
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
+const APP_VERSION = String(require('./package.json').version || '');
 
-const REPO = 'wiktorskrabel89-byte/Assistantx';
-const RELEASE_TAG = 'jarvis-latest';
-const GITHUB_RELEASE_API = `https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}`;
-const LAST_SEEN_KEY = 'jarvis-updater-last-seen-updated-at';
-const DISMISSED_KEY = 'jarvis-updater-dismissed-updated-at';
+const UPDATE_MANIFEST_URL = 'https://updates.assistantx.pl/versions.json';
+const UPDATE_CHANNEL = 'stable';
+const DISMISSED_KEY = 'jarvis-updater-dismissed-build-id';
 const FETCH_TIMEOUT_MS = 8000;
 
-/**
- * Normalise a server URL (which may be http/https or ws/wss) to an http base.
- * @param {string} url
- * @returns {string}
- */
-function toHttpBase(url) {
-  return (url || '')
-    .replace(/^wss?:\/\//, (m) => (m === 'wss://' ? 'https://' : 'http://'))
-    .replace(/\/ws\/?$/, '')
-    .replace(/\/$/, '');
-}
-
-/**
- * Fetch release metadata from the AssistantX server endpoint.
- * @param {string} serverUrl
- * @returns {Promise<object|null>}
- */
-async function fetchFromServer(serverUrl) {
-  if (!serverUrl) return null;
-  try {
-    const base = toHttpBase(serverUrl);
-    const res = await fetch(`${base}/api/jarvis/version`, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Fetch release metadata directly from the GitHub Releases API.
- * Works without authentication for public repositories.
- * @returns {Promise<object|null>}
- */
-async function fetchFromGitHub() {
-  try {
-    const res = await fetch(GITHUB_RELEASE_API, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (!res.ok) return null;
-    const release = await res.json();
-    return {
-      releaseId: release.id,
-      version: release.name || release.tag_name,
-      releaseNotes: release.body || '',
-      publishedAt: release.published_at,
-      updatedAt: release.updated_at,
-      downloadUrlAndroid: `https://github.com/${REPO}/releases/download/${RELEASE_TAG}/Jarvis-android.apk`,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check whether a new Jarvis release is available.
- *
- * @param {string} serverUrl - The AssistantX server URL saved in the WoL
- *   settings (e.g. "http://192.168.1.100:3000").  Pass an empty string if
- *   the user hasn't configured one yet.
- *
- * @returns {Promise<{
- *   hasUpdate: boolean,
- *   version: string,
- *   releaseNotes: string,
- *   updatedAt: string,
- *   downloadUrl: string
- * } | null>} Update info when an update is available, null when up-to-date or
- *   when the check could not be completed.
- */
-export async function checkForUpdate(serverUrl) {
-  const info = (await fetchFromServer(serverUrl)) || (await fetchFromGitHub());
-  if (!info || !info.updatedAt) return null;
-
-  // Load the timestamp that the user already acknowledged (either by tapping
-  // "Download" or "Later" in a previous session).
-  const dismissed = await AsyncStorage.getItem(DISMISSED_KEY);
-  if (dismissed && dismissed >= info.updatedAt) {
-    // User has already seen / dismissed this exact release build.
-    return null;
-  }
-
-  // Load the timestamp we last stored.  If it's the same as what GitHub
-  // reports, the release hasn't changed since last check.
-  const lastSeen = await AsyncStorage.getItem(LAST_SEEN_KEY);
-  await AsyncStorage.setItem(LAST_SEEN_KEY, info.updatedAt);
-
-  if (lastSeen && lastSeen >= info.updatedAt) {
-    // Release hasn't been updated since we last checked.
-    return null;
-  }
-
+function parseSemver(value) {
+  const match = String(value || '').trim().match(
+    /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-.]+))?(?:\+[0-9A-Za-z-.]+)?$/,
+  );
+  if (!match) return null;
   return {
-    hasUpdate: true,
-    version: info.version || RELEASE_TAG,
-    releaseNotes: info.releaseNotes || '',
-    updatedAt: info.updatedAt,
-    downloadUrl: info.downloadUrlAndroid || '',
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4] || '',
   };
 }
 
-/**
- * Mark the given release build as dismissed so the user won't be prompted
- * again for this exact build.
- *
- * Call this when the user taps "Download" OR "Later".
- *
- * @param {string} updatedAt - The `updatedAt` value returned by checkForUpdate.
- */
+function compareSemver(left, right) {
+  const a = parseSemver(left);
+  const b = parseSemver(right);
+  if (!a || !b) return null;
+  if (a.major !== b.major) return a.major > b.major ? 1 : -1;
+  if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
+  if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
+  if (!a.prerelease && !b.prerelease) return 0;
+  if (!a.prerelease) return 1;
+  if (!b.prerelease) return -1;
+  return a.prerelease > b.prerelease ? 1 : (a.prerelease < b.prerelease ? -1 : 0);
+}
+
+function normalizeManifestContainer(manifest) {
+  if (!manifest || typeof manifest !== 'object') return null;
+  if (manifest.channels && typeof manifest.channels === 'object' && manifest.channels[UPDATE_CHANNEL]) {
+    return manifest.channels[UPDATE_CHANNEL];
+  }
+  if (manifest[UPDATE_CHANNEL] && typeof manifest[UPDATE_CHANNEL] === 'object') {
+    return manifest[UPDATE_CHANNEL];
+  }
+  return manifest;
+}
+
+function normalizeAndroidManifestEntry(manifest) {
+  const container = normalizeManifestContainer(manifest);
+  if (!container || typeof container !== 'object') return null;
+  const platforms = container.platforms && typeof container.platforms === 'object'
+    ? container.platforms
+    : null;
+  const entry = platforms?.android || container.android;
+  if (!entry || typeof entry !== 'object') return null;
+
+  const latestVersion = String(entry.latestVersion || entry.version || '').trim();
+  const artifacts = entry.artifacts && typeof entry.artifacts === 'object' ? entry.artifacts : {};
+  const directUrl = String(entry.url || entry.path || entry.downloadUrl || '').trim();
+  const url = String(artifacts.apk || directUrl || '').trim();
+  if (!latestVersion || !url) return null;
+
+  const publishedAt = String(entry.publishedAt || entry.updatedAt || '').trim();
+  const buildId = `${latestVersion}@${publishedAt || 'unknown'}`;
+  return {
+    version: latestVersion,
+    releaseNotes: String(entry.releaseNotes || entry.notesMarkdown || entry.notes || '').trim(),
+    updatedAt: buildId,
+    downloadUrlAndroid: url,
+  };
+}
+
+async function fetchManifestUrl(manifestUrl) {
+  try {
+    const response = await fetch(manifestUrl, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return normalizeAndroidManifestEntry(payload);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchFromManifest() {
+  return await fetchManifestUrl(UPDATE_MANIFEST_URL);
+}
+
+export async function checkForUpdate(serverUrl) {
+  void serverUrl;
+  const info = await fetchFromManifest();
+  if (!info) return null;
+
+  const nextVersion = String(info.version || '').trim();
+  const semverCmp = compareSemver(nextVersion, APP_VERSION);
+  if (semverCmp !== null && semverCmp <= 0) return null;
+
+  const buildId = String(info.updatedAt || nextVersion || '').trim();
+  if (!buildId) return null;
+  const dismissedBuildId = await AsyncStorage.getItem(DISMISSED_KEY);
+  if (dismissedBuildId && dismissedBuildId === buildId) return null;
+
+  return {
+    hasUpdate: true,
+    version: nextVersion || UPDATE_CHANNEL,
+    releaseNotes: String(info.releaseNotes || '').trim(),
+    updatedAt: buildId,
+    downloadUrl: String(info.downloadUrlAndroid || '').trim(),
+  };
+}
+
 export async function dismissUpdate(updatedAt) {
   if (updatedAt) {
     await AsyncStorage.setItem(DISMISSED_KEY, updatedAt);
   }
 }
 
-/**
- * Open the download URL in the device's default browser.
- * Android will prompt the user to save the APK and then to install it
- * (requires "Install from unknown sources" to be enabled for the browser).
- *
- * @param {string} downloadUrl
- */
 export async function openDownloadUrl(downloadUrl) {
   if (!downloadUrl) return;
   try {
@@ -160,6 +128,6 @@ export async function openDownloadUrl(downloadUrl) {
       await Linking.openURL(downloadUrl);
     }
   } catch {
-    // Linking failure is non-fatal — the user can navigate manually.
+    // non-fatal
   }
 }

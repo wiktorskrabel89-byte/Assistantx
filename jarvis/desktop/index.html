@@ -258,6 +258,34 @@
       line-height: 1.6;
     }
 
+    .update-segments {
+      display: grid;
+      gap: 10px;
+      margin-top: 2px;
+    }
+
+    .update-segment {
+      border: 1px solid #1a1a20;
+      border-radius: 6px;
+      padding: 10px;
+      background: #0a0a0c;
+    }
+
+    .update-segment-title {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #f4f4f6;
+    }
+
+    .update-segment-items {
+      margin: 0;
+      padding-left: 18px;
+      color: #d4d4d8;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
     .update-highlights::-webkit-scrollbar,
     .update-markdown::-webkit-scrollbar {
       width: 4px;
@@ -318,36 +346,6 @@
       border-radius: 8px;
       padding: 10px 12px;
       font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .update-token-form {
-      display: grid;
-      gap: 8px;
-      padding: 12px;
-      background: #0a0a0c;
-      border: 1px solid #1a1a20;
-      border-radius: 8px;
-    }
-
-    .update-token-form label {
-      font-size: 12px;
-      color: #a1a1aa;
-    }
-
-    .update-token-form input {
-      width: 100%;
-      padding: 9px 10px;
-      border-radius: 6px;
-      border: 1px solid #2a2a32;
-      background: #111114;
-      color: #f4f4f6;
-      outline: none;
-    }
-
-    .update-token-hint {
-      font-size: 11px;
-      color: #8e8e9a;
       line-height: 1.5;
     }
 
@@ -1019,6 +1017,11 @@
                   <button id="voice-input" type="button" class="secondary" title="Talk to Jarvis">🎙 Talk</button>
                   <button id="send" type="button">Send</button>
                 </div>
+                <div id="voice-visualizer" class="voice-visualizer" aria-hidden="true">
+                  <div class="orb-halo"></div>
+                  <div class="orb-ring"></div>
+                  <div class="orb-core"></div>
+                </div>
   
                 <div id="log">
                   <div class="log-empty" id="log-empty">
@@ -1059,11 +1062,12 @@
           </div>
   
           <div id="settings-tab-panel" class="tab-panel" role="tabpanel" aria-labelledby="settings-tab-button">
-            <div style="display:flex;justify-content:flex-end;">
+            <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+              <button id="open-setup-wizard" type="button" class="secondary sm">🧙 Setup wizard</button>
               <button id="open-settings-modal" type="button" class="secondary sm">🔐 Accounts settings</button>
             </div>
             <div class="stack">
-              <div class="section-label">AssistantX Server</div>
+              <div class="section-label">Servers</div>
               <div class="settings-grid">
                 <label class="field field-full">
                   <span>Server URL</span>
@@ -1071,7 +1075,6 @@
                 </label>
                 <button id="save-server-url" type="button" class="secondary field-full">Save server URL</button>
               </div>
-            <div class="stack">
               <div class="section-label">System Core / Linux Runtime</div>
               <div class="settings-grid">
                 <label class="field">
@@ -1110,81 +1113,6 @@
                   Runtime not connected.
                 </div>
               </div>
-            </div>
-
-            <div class="stack">
-              <div class="section-label">AI Models</div>
-              <div class="model-grid">
-                <label class="field">
-                  <span>Chat model</span>
-                  <select id="chat-model">
-                    <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
-                    <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
-                    <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
-                    <option value="meta-llama/llama-4-scout">meta-llama/llama-4-scout</option>
-                    <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Speech-to-text model</span>
-                  <select id="stt-model">
-                    <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>TTS backend</span>
-                  <select id="tts-backend">
-                    <optgroup label="Free plan (local)">
-                      <option value="kokoro-local">Kokoro-82M (local, fast, free)</option>
-                      <option value="piper-local">Piper (local fallback)</option>
-                      <option value="auto-local">Auto local (Kokoro → Piper)</option>
-                    </optgroup>
-                    <optgroup label="Pro / Pro+ (cloud)">
-                      <option value="groq-cloud">Groq TTS (cloud)</option>
-                      <option value="openai-cloud">OpenAI TTS (BYOK)</option>
-                      <option value="elevenlabs-cloud">ElevenLabs (BYOK)</option>
-                    </optgroup>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Text-to-speech model</span>
-                  <select id="tts-model">
-                    <option value="playai-tts">playai-tts (Groq default)</option>
-                    <option value="gpt-4o-mini-tts">gpt-4o-mini-tts (OpenAI)</option>
-                    <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Jarvis voice profile</span>
-                  <select id="tts-voice-profile">
-                    <option value="jarvis">JARVIS</option>
-                    <option value="default">Default</option>
-                    <option value="nova">Nova</option>
-                    <option value="echo">Echo</option>
-                    <option value="aria">Aria</option>
-                    <option value="silent">Silent (say nothing)</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Voice language</span>
-                  <select id="voice-language">
-                    <option value="pl-PL">Polish (pl-PL)</option>
-                    <option value="en-US">English (en-US)</option>
-                    <option value="de-DE">German (de-DE)</option>
-                    <option value="es-ES">Spanish (es-ES)</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Voice provider mode</span>
-                  <select id="voice-provider-mode">
-                    <option value="assistantx-server">AssistantX API gateway (default)</option>
-                    <option value="desktop-direct">Desktop-direct (BYOK / advanced)</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div class="stack">
               <div class="section-label">Local Servers</div>
               <div class="settings-grid">
                 <label class="field">
@@ -1233,20 +1161,78 @@
                 </label>
                 <button id="local-server-save-assignment" type="button" class="secondary">Save local routing</button>
               </div>
-              <div class="voice-actions">
-                <label class="toggle" for="stt-enabled">
+            </div>
+
+            <div class="stack">
+              <div class="section-label">AI Models</div>
+              <div class="model-grid">
+                <label class="field">
+                  <span>Chat model</span>
+                  <select id="chat-model">
+                    <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
+                    <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
+                    <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
+                    <option value="meta-llama/llama-4-scout">meta-llama/llama-4-scout</option>
+                    <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Speech-to-text model</span>
+                  <select id="stt-model">
+                    <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
+                    <option value="tiny">whisper-tiny</option>
+                    <option value="base">whisper-base</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>TTS backend</span>
+                  <select id="tts-backend">
+                    <optgroup label="Free plan (local)">
+                      <option value="kokoro-local">Kokoro-82M (local, fast, free)</option>
+                      <option value="piper-local">Piper (local fallback)</option>
+                      <option value="auto-local">Auto local (Kokoro → Piper)</option>
+                    </optgroup>
+                    <optgroup label="Pro / Pro+ (cloud)">
+                      <option value="groq-cloud">Groq TTS (cloud)</option>
+                      <option value="openai-cloud">OpenAI TTS (BYOK)</option>
+                      <option value="elevenlabs-cloud">ElevenLabs (BYOK)</option>
+                    </optgroup>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Text-to-speech model</span>
+                  <select id="tts-model">
+                    <option value="playai-tts">playai-tts (Groq default)</option>
+                    <option value="gpt-4o-mini-tts">gpt-4o-mini-tts (OpenAI)</option>
+                    <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Jarvis voice profile</span>
+                  <select id="tts-voice-profile">
+                    <option value="jarvis">JARVIS</option>
+                    <option value="default">Default</option>
+                    <option value="nova">Nova</option>
+                    <option value="echo">Echo</option>
+                    <option value="aria">Aria</option>
+                    <option value="silent">Silent (say nothing)</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Voice provider mode</span>
+                  <select id="voice-provider-mode">
+                    <option value="assistantx-server">AssistantX API gateway (default)</option>
+                    <option value="desktop-direct">Desktop-direct (BYOK / advanced)</option>
+                  </select>
+                </label>
+                <label class="toggle field-full" for="stt-enabled">
                   <input id="stt-enabled" type="checkbox" checked />
                   Speech-to-text enabled
                 </label>
-                <label class="toggle" for="auto-tts">
+                <label class="toggle field-full" for="auto-tts">
                   <input id="auto-tts" type="checkbox" checked />
                   Auto text-to-speech playback
                 </label>
-              </div>
-              <div id="voice-visualizer" class="voice-visualizer" aria-hidden="true">
-                <div class="orb-halo"></div>
-                <div class="orb-ring"></div>
-                <div class="orb-core"></div>
               </div>
             </div>
 
@@ -1331,6 +1317,7 @@
       </div>
       <p class="update-section-title">Release notes</p>
       <ul id="update-modal-highlights" class="update-highlights"></ul>
+      <div id="update-modal-segments" class="update-segments" hidden></div>
       <pre id="update-modal-markdown" class="update-markdown" hidden></pre>
       <details id="update-modal-details" class="update-version-details">
         <summary>Details</summary>
@@ -1347,16 +1334,8 @@
         </div>
       </div>
       <div id="update-modal-error" class="update-error" hidden></div>
-      <div id="update-token-form" class="update-token-form" hidden>
-        <label for="update-token-input">GitHub Personal Access Token</label>
-        <input id="update-token-input" type="password" autocomplete="off" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
-        <div class="update-token-hint">
-          Needed only for secure access to private AssistantX update releases.
-        </div>
-      </div>
       <div class="actions-row">
         <button id="update-modal-secondary" type="button" class="secondary">Later</button>
-        <button id="update-modal-clear-token" type="button" class="secondary" hidden>Clear token</button>
         <button id="update-modal-primary" type="button" class="danger">Update now</button>
       </div>
     </section>

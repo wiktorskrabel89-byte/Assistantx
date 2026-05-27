@@ -50,6 +50,10 @@ function mapLocalTaskStatus(task: {
         release_manager: "🚀 Release Manager is preparing PR summary...",
         critic:    "⚖️ Product Critic is scoring final quality...",
         security:  "🛡️ Security agent is scanning the code...",
+        ruflo_queen_planning: "👑 Ruflo Queen is planning the swarm topology...",
+        ruflo_worker_execution: "🤖 Ruflo workers are executing delegated tasks...",
+        ruflo_memory_sync: "🧠 Ruflo shared memory sync is in progress...",
+        ruflo_synthesis: "🧩 Ruflo Queen is synthesizing worker outputs...",
       };
       return labels[task.agent_loop_status] ?? `Multi-agent: ${task.agent_loop_status}...`;
     }

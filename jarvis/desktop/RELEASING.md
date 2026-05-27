@@ -2,53 +2,36 @@
 
 ## Prerequisites
 
-The source repository is private, and production desktop updates are served
-from GitHub Releases metadata/assets:
+Production desktop updates are served from the public manifest/update host:
 
-``` 
-Private GitHub repo (CI/CD) -> GitHub Releases -> electron-updater clients
 ```
-
-electron-updater is configured with `"private": true` in `build.publish`.
-Runtime update checks on user machines therefore require authenticated access
-to private GitHub release metadata/assets.
+CI/CD -> updates.assistantx.pl (versions.json + platform assets) -> electron-updater clients
+```
 
 ## Source of truth (updater topology)
 
-- **Permanent production updater source**: GitHub Releases (`jarvis-latest`)
-- **Desktop updater provider**: `github` with `owner=wiktorskrabel89-byte`,
-  `repo=Assistantx`, and `private=true`.
-- **Authentication**: `GH_TOKEN` Fine-Grained PAT in CI for publishing, never
-  hardcoded in the app; runtime private-feed access token stored locally via
-  Electron `safeStorage` (or `GH_TOKEN` env when set by admin).
+- **Canonical manifest host**: `https://updates.assistantx.pl/versions.json`
+- **Release strategy**: immutable Git tags (`v*`) + GitHub Releases assets per tag
+- **Source mode**: manifest-only (`updates.assistantx.pl`)
+- **Channeling**: `stable` + `beta` entries exist in `versions.json`.
+- **Binary storage**: GitHub Releases only (no Git LFS/repository binary commits)
 
 ## Installer identity + NSIS requirements (must stay stable)
 
-To keep in-place auto-updates working (no manual setup wizard flow), keep these
+To keep in-place auto-updates working and preserve installer identity, keep these
 values stable across releases:
 
 - `build.appId`
 - `build.productName`
 - `build.win.executableName`
 
-NSIS must remain configured for silent one-click updates:
+NSIS must remain configured for machine-wide installer flow:
 
-- `build.nsis.oneClick = true`
-- `build.nsis.perMachine = false`
-- `build.nsis.allowToChangeInstallationDirectory = false`
+- `build.nsis.oneClick = false`
+- `build.nsis.perMachine = true`
+- `build.nsis.allowToChangeInstallationDirectory = true`
 
-## Required secrets and tokens
-
-### CI repository secret
-
-| Name | Value |
-|------|-------|
-| `GH_TOKEN` | Fine-Grained PAT with **Contents: Read + Write**, **Metadata: Read** scoped to the `Assistantx` repo |
-
-> **Important**: GitHub Actions blocks secrets prefixed with `GITHUB_`. Use
-> `GH_TOKEN`, not `GITHUB_TOKEN`, for the PAT.
-
-Create at: <https://github.com/settings/personal-access-tokens>
+## Required secrets
 
 ### Updater metadata signing secrets
 
@@ -57,22 +40,25 @@ Create at: <https://github.com/settings/personal-access-tokens>
 | `UPDATE_FEED_METADATA_PRIVATE_KEY` | Ed25519/RSA private key for signing `latest.yml` |
 | `UPDATE_FEED_METADATA_PUBLIC_KEY` | Corresponding public key bundled in the app |
 
+### Vercel deployment secrets (manifest publish)
+
+| Name | Value |
+|------|-------|
+| `VERCEL_TOKEN` | Token used by CI to deploy manifest to Vercel |
+| `VERCEL_ORG_ID` | Vercel organization ID |
+| `VERCEL_PROJECT_ID` | Vercel project ID |
+
 Keys may be stored as PEM text, PEM with escaped `\n`, base64-encoded PEM, or
 base64-encoded DER.
 
-### End-user machines (private updater auth)
+## Required artifacts in the release workflow
 
-For private-repo topology, end-user updater tokens are required unless
-`GH_TOKEN` is provided by environment policy. AssistantX stores the updater PAT
-encrypted with Electron `safeStorage` in userData.
-
-## Required artifacts in the GitHub release
-
-For each release, publish these files to `jarvis-latest`:
+For each release, publish/update these assets so `versions.json` and desktop metadata stay aligned.
 
 - `latest.yml`
 - `latest.yml.sig`
 - `release-notes.json`
+- `versions.json`
 - `JarvisSetup-x64.exe`
 - `JarvisSetup-x64.exe.blockmap`
 - `JarvisSetup-arm64.exe`
@@ -91,34 +77,39 @@ For each release, publish these files to `jarvis-latest`:
 `latest.yml.sig` must be a detached signature generated from the final `latest.yml`
 payload after those fields are appended.
 
+`versions.json` must:
+
+- contain `schemaVersion`
+- contain both `stable` and `beta` channels
+- include at least `windows` + `linux` entries in each active channel (optionally `mac`/`android`)
+- include direct installer URL aliases (`version` + `path`) and compatibility aliases (`latestVersion` + `url`)
+- point to HTTPS URLs on approved update hosts
+
 ## Build and publish
 
-1. Create the `GH_TOKEN` Fine-Grained PAT and add it as a repository secret.
-2. Bump `version` in `jarvis/desktop/package.json` (or let CI bump it).
-3. Build installers and updater metadata (`latest.yml`) in CI.
-4. Publish installer artifacts and updater metadata to GitHub release `jarvis-latest`.
+1. Create and push a version tag (for example `v1.1.0`).
+2. CI builds installers and updater metadata.
+3. CI publishes artifacts to GitHub Release for that tag.
+4. CI regenerates `versions.json` with direct GitHub Releases URLs and deploys it to Vercel.
 5. Verify packaged app update detection against a lower installed version.
 
 ### CI-managed publishing requirements
 
-The release workflow fully manages GitHub release publishing using `GH_TOKEN`.
+The release workflow fully manages artifact publishing and metadata generation.
 Required repository configuration:
 
 | Secret/Variable | Purpose |
 |-----------------|---------|
-| `GH_TOKEN` | Fine-Grained PAT for authenticated GitHub release publishing |
 | `UPDATE_FEED_METADATA_PRIVATE_KEY` | Signs `latest.yml` in CI |
 | `UPDATE_FEED_METADATA_PUBLIC_KEY` | Bundled in app for runtime verification |
-
-Post-publish CI verifies `jarvis-latest` contains all required updater assets
-(`latest.yml`, `latest.yml.sig`, installers, blockmaps, and `release-notes.json`).
 
 ## Pre-ship updater verification checklist
 
 - [ ] Packaged app (not dev mode) shows real app version.
 - [ ] `Check now` emits `checking`, then either `update-available` or `up-to-date`.
 - [ ] Startup check is silent (no native updater popups when already up to date).
-- [ ] Private GitHub release metadata/assets are reachable on update check with valid auth.
+- [ ] `latest.yml` and assets are reachable from `https://updates.assistantx.pl/windows/` over HTTPS.
+- [ ] `versions.json` on `updates.assistantx.pl` points to the same release tag (`v*`) for each platform in active channels.
 - [ ] Runtime update-available flow validates metadata sanity (`semver`, `available > current`, stable channel vs prerelease mismatch rejection, rollback floor).
 - [ ] Detached `latest.yml` signature is verified before updater execution.
 - [ ] `minimumAllowedVersion` / `stagingPercentage` are present and correct for the release policy.
