@@ -37,6 +37,13 @@ const CLOUD_DEEPSEEK_PROVIDER = 'groq';
 
 const REQUIRED_LOCAL_MODELS = ['gemma3:4b', 'qwen2.5-coder:14b'];
 const DEFAULT_CLOUD_PROVIDER_ORDER = ['groq', 'openrouter'];
+const TASK_DIFFICULTY_MODELS = {
+  1: { primary: { provider: 'google', model: 'gemini-2.5-flash' }, fallback: { provider: 'groq', model: 'llama-3.1-8b-instant' } },
+  2: { primary: { provider: 'groq', model: 'llama-3.3-70b-versatile' }, fallback: { provider: 'google', model: 'gemini-2.0-flash' } },
+  3: { primary: { provider: 'google', model: 'gemini-2.5-pro' }, fallback: { provider: 'groq', model: 'llama-3.3-70b-versatile' } },
+  4: { primary: { provider: 'openrouter', model: 'deepseek/deepseek-r1:free' }, fallback: { provider: 'google', model: 'gemini-2.5-pro' } },
+  5: { primary: { provider: 'openrouter', model: 'anthropic/claude-sonnet-4' }, fallback: { provider: 'openrouter', model: 'deepseek/deepseek-r1:free' } },
+ };
 
 class AIRouter {
   constructor(options = {}) {
@@ -107,11 +114,13 @@ class AIRouter {
     // ── Engine-mode overrides ─────────────────────────────────────────────────
     // cloud mode: pick the best free model for the user's plan and profile
     if (engineMode === 'cloud') {
+      const difficulty = detectTaskDifficulty(request);
+      const registryChoice = TASK_DIFFICULTY_MODELS[difficulty] || TASK_DIFFICULTY_MODELS[2];
       const plan = String(modelConfig?.plan || 'pro').toLowerCase();
       const candidate = pickBestFreeModel(profile === 'coding' ? 'coding' : 'chat', plan)
         || (profile === 'coding' ? DEFAULT_FREE_CODING_MODEL : DEFAULT_FREE_CHAT_MODEL);
-      const cloudModel = modelConfig?.llm_model || candidate.model;
-      const cloudProvider = candidate.provider;
+      const cloudProvider = modelConfig?.provider || registryChoice.primary.provider || candidate.provider;
+      const cloudModel = modelConfig?.llm_model || registryChoice.primary.model || candidate.model;
       const resolvedRequest = {
         ...request,
         messages: normalizeMessages(request),
@@ -120,7 +129,7 @@ class AIRouter {
         options: { temperature: 0.7, ...(request.options || {}) },
       };
       const response = await this.cloud.stream(resolvedRequest, onChunk);
-      return { ...response, route: { provider: cloudProvider, model: cloudModel, reason: 'engine-mode-cloud-free' }, profile, availability };
+      return { ...response, route: { provider: cloudProvider, model: cloudModel, reason: `engine-mode-cloud-difficulty-${difficulty}` }, profile, availability };
     }
 
     // local mode: override chat model based on hardware profile
@@ -209,6 +218,15 @@ function inferProfile(request = {}) {
   if (/(code|refactor|debug|architecture|typescript|python|javascript|sql)/i.test(content)) return 'coding';
   if (/(search|tool|web|browser|retrieve|memory)/i.test(content)) return 'tool';
   return 'chat';
+}
+
+function detectTaskDifficulty(request = {}) {
+  const text = `${request?.message || ''} ${extractLastMessage(request?.messages)}`.toLowerCase();
+  if (/(microservice|autonomous|multi-agent|7-agent|full stack|from scratch)/i.test(text)) return 5;
+  if (/(memory leak|reasoning|algorithm|deep debug|incident|critical bug)/i.test(text)) return 4;
+  if (/(refactor|migration|database optimization|state machine|rewrite)/i.test(text)) return 3;
+  if (/(endpoint|component|feature|function|api)/i.test(text)) return 2;
+  return 1;
 }
 
 function normalizeProfile(profile) {

@@ -376,6 +376,7 @@
     let selectedMode = null;
     let selectedProfile = 'standard';
     let _cloudCatalogLoaded = false;
+    let _cloudSubscription = { subscribed: false, plan: null, status: 'unknown' };
 
     async function loadCloudCatalog() {
       if (_cloudCatalogLoaded) return;
@@ -432,19 +433,24 @@
       const banner = document.getElementById('cloud-status-banner');
       banner.style.display = 'none';
       try {
-        let session = null;
-        if (window.jarvisApi?.getAccountSession) {
-          session = await window.jarvisApi.getAccountSession();
-        } else if (window.jarvisApiV2?.auth?.getSession) {
-          session = await window.jarvisApiV2.auth.getSession();
+        let status = null;
+        if (window.jarvisIpc?.invoke) {
+          status = await window.jarvisIpc.invoke('setup:get-subscription-status');
+        } else if (window.jarvisSetup?.getSubscriptionStatus) {
+          status = await window.jarvisSetup.getSubscriptionStatus();
         }
-        if (!session?.accessToken) {
+        _cloudSubscription = {
+          subscribed: Boolean(status?.subscribed),
+          plan: status?.plan || null,
+          status: status?.status || 'unknown',
+        };
+        if (!_cloudSubscription.subscribed) {
           banner.className = 'banner-upgrade';
-          banner.textContent = '⚠️ Sign in to use Cloud Matrix. API keys can be set in Settings after setup.';
+          banner.textContent = '🔐 ACCESS DENIED: PRO LEVEL REQUIRED. Sign in with PRO / PRO+ to use Cloud Matrix and 7-Agent Tasking.';
           banner.style.display = 'block';
         } else {
           banner.className = 'banner-ok';
-          banner.textContent = '✅ Signed in. API keys can be configured in Settings after setup.';
+          banner.textContent = `✅ ${String(_cloudSubscription.plan || 'pro').toUpperCase()} active. Cloud Matrix unlocked.`;
           banner.style.display = 'block';
         }
       } catch { /* non-critical */ }
@@ -452,6 +458,7 @@
       // can recheck without restarting the app.
       const refreshBtn = document.getElementById('refresh-status-btn');
       if (refreshBtn) refreshBtn.style.display = 'inline-block';
+      updateConfirmButton();
     }
 
     async function refreshCloudStatus() {
@@ -483,6 +490,12 @@
         btn.className = 'mode-local';
         btn.textContent = '🖥️  Launch with LOCAL ENGINE';
       } else {
+        if (!_cloudSubscription.subscribed) {
+          btn.disabled = true;
+          btn.className = 'mode-cloud';
+          btn.textContent = '🔐 PRO / PRO+ required for CLOUD MATRIX';
+          return;
+        }
         btn.className = 'mode-cloud';
         btn.textContent = '☁️  Launch with CLOUD MATRIX';
       }
@@ -494,6 +507,11 @@
       const statusEl = document.getElementById('status-msg');
       btn.disabled = true;
       statusEl.textContent = 'Saving configuration…';
+      if (selectedMode === 'cloud' && !_cloudSubscription.subscribed) {
+        statusEl.textContent = 'Cloud Matrix requires active PRO / PRO+ subscription.';
+        btn.disabled = false;
+        return;
+      }
 
       const m = MODELS[selectedProfile] || MODELS.standard;
       const lang = document.getElementById('lang-select').value;

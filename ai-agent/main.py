@@ -690,9 +690,13 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
     tool = str(msg.get("tool", "")).strip().lower()
     request_id = str(msg.get("requestId", ""))
     query = str(msg.get("query", "")).strip()
+    action = str(msg.get("action", "")).strip()
+    payload = msg.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
     if not tool:
         return
-    if tool != "web_search":
+    if tool not in {"web_search", "git_core"}:
         await _send(ws, {
             "type": "tool_result",
             "requestId": request_id,
@@ -704,22 +708,34 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
     loop = asyncio.get_event_loop()
     try:
         _state.runtime_state = "thinking_fast"
-        from tools.web_search import search_web
-        results = await loop.run_in_executor(None, search_web, query, 5)
-        await _send(ws, {
-            "type": "tool_result",
-            "requestId": request_id,
-            "tool": "web_search",
-            "ok": True,
-            "results": results,
-        }, _state)
+        if tool == "web_search":
+            from tools.web_search import search_web
+            results = await loop.run_in_executor(None, search_web, query, 5)
+            await _send(ws, {
+                "type": "tool_result",
+                "requestId": request_id,
+                "tool": "web_search",
+                "ok": True,
+                "results": results,
+            }, _state)
+        else:
+            from tools.git_core import execute_git_core_action
+            result = await loop.run_in_executor(None, execute_git_core_action, action, payload)
+            await _send(ws, {
+                "type": "tool_result",
+                "requestId": request_id,
+                "tool": "git_core",
+                "ok": bool(result.get("ok")),
+                "result": result.get("result"),
+                "error": result.get("error"),
+            }, _state)
         _state.runtime_state = "idle"
     except Exception as exc:
         logger.warning("Tool call error: %s", exc)
         await _send(ws, {
             "type": "tool_result",
             "requestId": request_id,
-            "tool": "web_search",
+            "tool": tool,
             "ok": False,
             "results": [],
             "error": str(exc),

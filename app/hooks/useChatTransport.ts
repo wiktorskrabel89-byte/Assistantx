@@ -39,10 +39,15 @@ function mapLocalTaskStatus(task: {
     if (task.agent_loop_status && task.agent_loop_status !== "idle" && task.agent_loop_status !== "done") {
       const labels: Record<string, string> = {
         architect: "🕵️ Architect is analysing the codebase...",
+        planner: "🕵️ Architect is analysing the codebase...",
         coder:     "💻 Coder is writing the implementation...",
+        developer: "💻 Developer is writing the implementation...",
         tester:    "🧪 Tester is verifying syntax & logic...",
         sandbox:   "📦 Sandbox Runner is executing runtime checks...",
         reviewer:  "🔍 Reviewer is validating code quality...",
+        debugger:  "🛠️ Debugger is fixing failing checks...",
+        devops:    "⚙️ DevOps is preparing branch/CI changes...",
+        release_manager: "🚀 Release Manager is preparing PR summary...",
         critic:    "⚖️ Product Critic is scoring final quality...",
         security:  "🛡️ Security agent is scanning the code...",
         ruflo_queen_planning: "👑 Ruflo Queen is planning the swarm topology...",
@@ -72,6 +77,14 @@ function mapLocalTaskStatus(task: {
 
   if (task.status === "completed") {
     return "Done";
+  }
+
+  if (task.status === "pending_approval") {
+    return "Awaiting your deployment approval...";
+  }
+
+  if (task.status === "approved") {
+    return "Deployment approved. Waiting for local executor...";
   }
 
   if (task.status === "failed") {
@@ -745,7 +758,7 @@ export function useChatTransport({
           body: JSON.stringify({
             prompt: userMsg,
             category: "ai_request",
-            preferMultiAgent: Boolean(activeSettings.multiAgentBeta),
+            preferMultiAgent: Boolean(activeSettings.jarvisCode?.use7AgentTasking ?? activeSettings.multiAgentBeta),
           }),
         });
 
