@@ -65,6 +65,7 @@ export function SettingsTab() {
     setPersonalityMode,
     setLocalOnlyMode,
     setPostPrReviewCommentsToGitHub,
+    setJarvisCodeSettings,
     setMultiAgentBeta,
     addLocalServer,
     removeLocalServer,
@@ -203,6 +204,9 @@ export function SettingsTab() {
     ? "border-slate-800 bg-slate-900/60"
     : "border-slate-200 bg-slate-50/80";
   const localServers = activeWorkspace.settings.localServers;
+  const jarvisCodeSettings = activeWorkspace.settings.jarvisCode;
+  const canUseSwarm = state.userPlan === "pro" || state.userPlan === "pro+";
+  const swarmEnabled = jarvisCodeSettings?.use7AgentTasking ?? activeWorkspace.settings.multiAgentBeta ?? false;
   const localAssignment = activeWorkspace.settings.localModelAssignment ?? {
     chatModelId: null,
     codeModelId: null,
@@ -448,20 +452,34 @@ export function SettingsTab() {
             <div className="mt-3 flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold">
-                  Multi-Agent pipeline (Premium)
+                  Jarvis Code 7-Agent Tasking (PRO / PRO+)
                 </p>
                 <p className={`mt-1 text-xs ${mutedClass}`}>
-                  Direct mode (Free) keeps single-model execution for safe SysOps actions. Enabling this switch requests the 7-stage premium pipeline (Architect, Coder, Tester, Sandbox, Reviewer, Critic, Security) for complex code/deploy tasks when your plan allows it.
+                  FREE runs in Solo-Developer mode (single coding agent). PRO / PRO+ unlocks autonomous 7-agent swarm with Architect, Developer, Reviewer, Tester, Debugger, DevOps and Release Manager.
                 </p>
-                {(activeWorkspace.settings.multiAgentBeta ?? false) && (
+                {swarmEnabled && (
                   <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                    ⚠️ Premium pipeline requested. Pro uses daily quota; Pro+ runs without pipeline quota limits.
+                    ⚠️ Human-in-the-loop release is enabled by default: merge/push actions require explicit approval.
+                  </p>
+                )}
+                {!canUseSwarm && (
+                  <p className="mt-2 text-xs text-fuchsia-600 dark:text-fuchsia-400">
+                    🔐 ACCESS DENIED: PRO LEVEL REQUIRED
                   </p>
                 )}
               </div>
               <Switch
-                checked={activeWorkspace.settings.multiAgentBeta ?? false}
-                onCheckedChange={setMultiAgentBeta}
+                checked={swarmEnabled}
+                onCheckedChange={(checked) => {
+                  const next = canUseSwarm ? checked : false;
+                  setJarvisCodeSettings({
+                    enabled: next || (jarvisCodeSettings?.enabled ?? false),
+                    use7AgentTasking: next,
+                    freeSoloAgent: true,
+                    releaseRequiresApproval: true,
+                  });
+                  setMultiAgentBeta(next);
+                }}
                 aria-label="Enable Multi-Agent AI mode"
               />
             </div>

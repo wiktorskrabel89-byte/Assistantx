@@ -120,6 +120,14 @@ export type LocalModelAssignment = {
   serverId: string | null;
 };
 
+export type JarvisCodeSettings = {
+  enabled: boolean;
+  difficultyAutoDetect: boolean;
+  use7AgentTasking: boolean;
+  freeSoloAgent: boolean;
+  releaseRequiresApproval: boolean;
+};
+
 export type WorkspaceSettings = {
   activeAgentId: string;
   customAgents: CustomAgent[];
@@ -163,6 +171,7 @@ export type WorkspaceSettings = {
   encryptedSync: boolean;
   pauseSync: boolean;
   postPrReviewCommentsToGitHub: boolean;
+  jarvisCode: JarvisCodeSettings;
   multiAgentBeta: boolean;
 };
 

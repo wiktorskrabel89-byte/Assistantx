@@ -24,6 +24,7 @@ import type {
   ChatEntry,
   ChatThread,
   CustomAgent,
+  JarvisCodeSettings,
   JarvisMode,
   LocalModelAssignment,
   LocalServerEntry,
@@ -619,7 +620,29 @@ export function useWorkspaceState() {
   const setMultiAgentBeta = useCallback((multiAgentBeta: boolean) => {
     updateWorkspace(activeWorkspace.id, (workspace) => ({
       ...workspace,
-      settings: { ...workspace.settings, multiAgentBeta },
+      settings: {
+        ...workspace.settings,
+        multiAgentBeta,
+        jarvisCode: {
+          ...workspace.settings.jarvisCode,
+          enabled: multiAgentBeta || workspace.settings.jarvisCode.enabled,
+          use7AgentTasking: multiAgentBeta,
+        },
+      },
+    }));
+  }, [activeWorkspace.id, updateWorkspace]);
+
+  const setJarvisCodeSettings = useCallback((nextSettings: Partial<JarvisCodeSettings>) => {
+    updateWorkspace(activeWorkspace.id, (workspace) => ({
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        jarvisCode: {
+          ...workspace.settings.jarvisCode,
+          ...nextSettings,
+        },
+        multiAgentBeta: Boolean(nextSettings.use7AgentTasking ?? workspace.settings.jarvisCode.use7AgentTasking),
+      },
     }));
   }, [activeWorkspace.id, updateWorkspace]);
 
@@ -990,6 +1013,7 @@ export function useWorkspaceState() {
     setAutoSpeakResponses,
     setPersonalityMode,
     setPostPrReviewCommentsToGitHub,
+    setJarvisCodeSettings,
     setMultiAgentBeta,
     clearMemoryNotes,
     createPromptTemplate,

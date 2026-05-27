@@ -654,9 +654,14 @@ class SupabaseRestClient:
 _MULTI_AGENT_MAX_FIX_ITERATIONS = 3
 
 _AGENT_STATUS_LABELS: dict[str, str] = {
+    "planner":   "planner",
     "architect": "architect",
+    "developer": "developer",
     "coder":     "coder",
     "tester":    "tester",
+    "debugger":  "debugger",
+    "devops":    "devops",
+    "release_manager": "release_manager",
     "sandbox":   "sandbox",
     "reviewer":  "reviewer",
     "critic":    "critic",
@@ -873,7 +878,7 @@ class MultiAgentOrchestrator:
 
     def execute(self, user_prompt: str, codebase_context: str) -> dict[str, Any]:
         # --- STAGE 1: ARCHITECT ---
-        self._update_status("architect", "🕵️ Architect is analysing the repository and planning changes...")
+        self._update_status("planner", "🕵️ Architect is analysing the repository and planning changes...")
         architect_system = (
             "You are a Senior Software Architect. Analyse the provided codebase context and create a "
             "rigorous, step-by-step change plan. Do NOT write final code — focus on file structure, "
@@ -881,7 +886,7 @@ class MultiAgentOrchestrator:
         )
         architect_prompt = f"Codebase context:\n{codebase_context}\n\nTask:\n{user_prompt}"
         plan = self._call_llm(architect_system, architect_prompt, model_hint="light")
-        self._update_status("architect", "✅ Architect completed the change plan.", logs=plan)
+        self._update_status("planner", "✅ Architect completed the change plan.", logs=plan)
 
         coder_system = (
             "You are an expert Software Engineer. Your only task is to implement the plan provided by the "
@@ -917,10 +922,10 @@ class MultiAgentOrchestrator:
         last_sandbox_stats: dict[str, int | None] = {"ram_mb": 0, "boot_time_ms": 0, "http_status": None}
         for attempt in range(1, _MULTI_AGENT_MAX_FIX_ITERATIONS + 1):
             self.supabase.update_task_sandbox_telemetry(self.task_id, agent_attempt=attempt)
-            self._update_status("coder", "💻 Coder is implementing the architecture plan...", attempt=attempt)
+            self._update_status("developer", "💻 Developer is implementing the architecture plan...", attempt=attempt)
             coder_prompt = f"Codebase context:\n{codebase_context}\n\nArchitect plan:\n{plan}"
             generated_code = self._call_llm(coder_system, coder_prompt, model_hint="heavy")
-            self._update_status("coder", f"✅ Coder generated the implementation (attempt {attempt}).", logs=generated_code, attempt=attempt)
+            self._update_status("developer", f"✅ Developer generated the implementation (attempt {attempt}).", logs=generated_code, attempt=attempt)
 
             # --- STAGE 3: TESTER ---
             self._update_status("tester", "🧪 Tester is verifying syntax and logic...", attempt=attempt)
@@ -929,6 +934,7 @@ class MultiAgentOrchestrator:
             if "FAILED" in tester_result.upper():
                 plan += f"\n[Tester Feedback]: {tester_result}"
                 self._update_status("tester", f"❌ Tester found issues on attempt {attempt}.", logs=tester_result, attempt=attempt)
+                self._update_status("debugger", f"🛠️ Debugger is applying tester fixes for attempt {attempt}.", logs=tester_result, attempt=attempt)
                 continue
             self._update_status("tester", "✅ Tester: code passed quality check.", attempt=attempt)
 
@@ -947,6 +953,7 @@ class MultiAgentOrchestrator:
                 if not runtime_passed:
                     plan += f"\n[Sandbox Runtime Crash Log]: {runtime_logs}\nFix runtime failure."
                     self._update_status("sandbox", f"❌ Sandbox failed on attempt {attempt}.", logs=runtime_logs, attempt=attempt)
+                    self._update_status("debugger", f"🛠️ Debugger is fixing sandbox/runtime issues (attempt {attempt}).", logs=runtime_logs, attempt=attempt)
                     continue
                 self._update_status(
                     "sandbox",
@@ -961,11 +968,12 @@ class MultiAgentOrchestrator:
             if "FAILED" in reviewer_result.upper():
                 plan += f"\n[Reviewer Feedback]: {reviewer_result}"
                 self._update_status("reviewer", f"❌ Reviewer rejected attempt {attempt}.", logs=reviewer_result, attempt=attempt)
+                self._update_status("debugger", f"🛠️ Debugger is fixing reviewer findings (attempt {attempt}).", logs=reviewer_result, attempt=attempt)
                 continue
             self._update_status("reviewer", "✅ Reviewer approved code quality.", attempt=attempt)
 
-            # --- STAGE 5: CRITIC ---
-            self._update_status("critic", "⚖️ Product Critic is scoring fit against user request...", attempt=attempt)
+            # --- STAGE 5: DEVOPS READINESS ---
+            self._update_status("devops", "⚙️ DevOps is validating release readiness and CI-fit...", attempt=attempt)
             critic_prompt = f"Original user request:\n{user_prompt}\n\nGenerated code:\n{generated_code}"
             critic_result = self._call_llm(critic_system, critic_prompt, model_hint="light")
             score = parse_critic_score(critic_result)
@@ -974,17 +982,24 @@ class MultiAgentOrchestrator:
             self.supabase.update_task_sandbox_telemetry(self.task_id, critic_score=score, agent_attempt=attempt)
             if score < 8:
                 plan += f"\n[Critic Feedback - SCORE {score}/10]: {critic_result}\nImprove implementation."
-                self._update_status("critic", f"⚠️ Critic scored {score}/10 on attempt {attempt}; retrying.", logs=critic_result, attempt=attempt, score=score)
+                self._update_status("devops", f"⚠️ DevOps quality gate scored {score}/10 on attempt {attempt}; retrying.", logs=critic_result, attempt=attempt, score=score)
+                self._update_status("debugger", f"🛠️ Debugger is addressing DevOps quality gate findings (attempt {attempt}).", logs=critic_result, attempt=attempt, score=score)
                 continue
-            self._update_status("critic", f"⭐ Critic scored {score}/10.", logs=critic_result, attempt=attempt, score=score)
+            self._update_status("devops", f"⭐ DevOps quality gate scored {score}/10.", logs=critic_result, attempt=attempt, score=score)
 
             # --- STAGE 6: SECURITY ---
             self._update_status("security", "🛡️ Security agent is scanning for vulnerabilities...", attempt=attempt, score=score)
             security_prompt = f"Code to analyse:\n{generated_code}"
             security_result = self._call_llm(security_system, security_prompt, model_hint="light")
-            self.supabase.update_agent_loop_status(self.task_id, "done")
             token_estimate_k = round(max(len(generated_code), 1) / 4 / 1000, 2)
             if "SAFE" in security_result.upper() and "DANGER" not in security_result.upper():
+                self._update_status(
+                    "release_manager",
+                    "🚀 Release Manager prepared PR summary and is awaiting explicit user approval.",
+                    logs=generated_code,
+                    attempt=attempt,
+                    score=score,
+                )
                 self._update_status(
                     "security",
                     "🔒 Security agent approved the code as safe.",
@@ -994,6 +1009,7 @@ class MultiAgentOrchestrator:
                     quota_max=self.quota_max,
                     token_estimate_k=token_estimate_k,
                 )
+                self.supabase.update_agent_loop_status(self.task_id, "done")
                 return {
                     "success": True,
                     "code": generated_code,
@@ -1005,6 +1021,7 @@ class MultiAgentOrchestrator:
                 }
 
             self._update_status("security", "🚨 CODE BLOCKED — potential security threat detected!", logs=security_result, attempt=attempt, score=score)
+            self.supabase.update_agent_loop_status(self.task_id, "done")
             return {"success": False, "code": generated_code, "reason": security_result, "score": score, "attempt": attempt}
 
         self.supabase.update_agent_loop_status(self.task_id, "done")

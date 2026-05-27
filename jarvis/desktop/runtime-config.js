@@ -277,6 +277,34 @@ function setJarvisModelConfig({ engine_mode, hardware_profile, language, stt_mod
   return config;
 }
 
+function normalizeJarvisCodeConfig(value) {
+  const raw = value && typeof value === 'object' ? value : {};
+  return {
+    enabled: Boolean(raw.enabled),
+    difficulty_auto_detect: raw.difficulty_auto_detect !== false,
+    use_7_agent_tasking: Boolean(raw.use_7_agent_tasking),
+    release_requires_approval: raw.release_requires_approval !== false,
+    free_solo_agent: raw.free_solo_agent !== false,
+    trusted_workspace_directories: Array.isArray(raw.trusted_workspace_directories)
+      ? raw.trusted_workspace_directories.map((entry) => String(entry || '').trim()).filter(Boolean)
+      : [],
+  };
+}
+
+function getJarvisCodeConfig() {
+  const cfg = readConfig();
+  return normalizeJarvisCodeConfig(cfg.jarvis_code);
+}
+
+function setJarvisCodeConfig(input = {}) {
+  const next = normalizeJarvisCodeConfig(input);
+  writeConfig((current) => {
+    current.jarvis_code = next;
+    return current;
+  });
+  return next;
+}
+
 module.exports = {
   getJarvisApiUrl,
   getJarvisWebUrl,
@@ -294,6 +322,8 @@ module.exports = {
   setEngineMode,
   getJarvisModelConfig,
   setJarvisModelConfig,
+  getJarvisCodeConfig,
+  setJarvisCodeConfig,
   HARDWARE_PROFILE_MODELS,
   VALID_ENGINE_MODES,
   VALID_HARDWARE_PROFILES,
