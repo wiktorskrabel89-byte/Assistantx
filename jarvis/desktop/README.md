@@ -111,6 +111,15 @@ Release assets are published via:
 - Optional legacy backend websocket is used **only** when `JARVIS_BACKEND_URL` is set.
 - Python sidecar websocket default: `ws://127.0.0.1:8765`
 
+### Agent + Router / One Big Toolkit
+
+- Current milestone is **sidecar-first**: the Python sidecar is the canonical action hub for unified agent tool calls.
+- External tool-calling surfaces should expose exactly one tool entrypoint: `jarvis_executor`.
+- Canonical action payload lives under `params` with schema version `2026-05-27` and fields such as `action_type`, `params`, `request_id`, `source`, `origin`, and `dry_run`.
+- Legacy payloads are still adapted at the bridge/router edge during migration, but new integrations should emit the canonical schema immediately.
+- High-risk desktop runtime commands keep the existing phone-approval flow unchanged; the unified router does not bypass backend risk gates.
+- To add a new sidecar action safely, register the action in `ai-agent/action_hub.py`, add parameter validation there, and then wire the implementation handler from `ai-agent/main.py` or the relevant internal runtime.
+
 ### Voice provider mode
 
 - Default (recommended): `assistantx-server` (Desktop → AssistantX API → Groq/OpenRouter)

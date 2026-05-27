@@ -17,7 +17,7 @@ Message protocol (JSON lines sent by client → handled here):
   { "type": "parse_intent", "text": "...", "requestId": "..." }
   { "type": "memory_upsert", "text": "...", "metadata": {...}, "requestId": "..." }
   { "type": "memory_search", "query": "...", "topK": 5, "requestId": "..." }
-  { "type": "tool_call", "tool": "web_search", "query": "...", "requestId": "..." }
+  { "type": "tool_call", "tool": "jarvis_executor", "action": { "schema_version": "2026-05-27", "action_type": "web_search", "params": { "query": "..." } }, "requestId": "..." }
   { "type": "llm_route", "intent": "voice_chat|quick_command|analyze_codebase|rag_search|system_modification|write_code|execute_workflow", "prompt": "...", "context": {...}, "requestId": "..." }
 
 Events emitted to client:
@@ -32,7 +32,7 @@ Events emitted to client:
   { "type": "intent_parsed",    "requestId": "...", "intent": "...", "entities": {...}, "confidence": float }
   { "type": "memory_upsert_result", "requestId": "...", "ok": bool, "id": "..." }
   { "type": "memory_search_result", "requestId": "...", "results": [...] }
-  { "type": "tool_result", "requestId": "...", "tool": "web_search", "ok": bool, "results": [...] }
+  { "type": "tool_result", "requestId": "...", "tool": "web_search", "entrypoint": "jarvis_executor", "ok": bool, "results": [...] }
   { "type": "llm_route_result", "requestId": "...", "ok": bool, "intent": "...", "provider": "...", "model": "...", "text": "..." }
   { "type": "error",            "message": "..." }
 """
@@ -56,6 +56,8 @@ from typing import Any
 
 import websockets
 from websockets.server import WebSocketServerProtocol
+
+from action_hub import ENTRYPOINT_NAME, dispatch_action, format_action_error
 
 logging.basicConfig(
     level=logging.INFO,
@@ -687,42 +689,44 @@ async def _handle_memory_search(ws: WebSocketServerProtocol, _state: ConnectionS
 
 
 async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
-    tool = str(msg.get("tool", "")).strip().lower()
     request_id = str(msg.get("requestId", ""))
-    query = str(msg.get("query", "")).strip()
-    if not tool:
-        return
-    if tool != "web_search":
-        await _send(ws, {
-            "type": "tool_result",
-            "requestId": request_id,
-            "tool": tool,
-            "ok": False,
-            "results": [],
-        }, _state)
-        return
     loop = asyncio.get_event_loop()
+
+    async def _handle_web_search(params: dict[str, Any]) -> list[dict]:
+        def _search() -> list[dict]:
+            from tools.web_search import search_web
+            return search_web(str(params.get("query", "")), int(params.get("limit", 5) or 5))
+
+        return await loop.run_in_executor(None, _search)
+
     try:
         _state.runtime_state = "thinking_fast"
-        from tools.web_search import search_web
-        results = await loop.run_in_executor(None, search_web, query, 5)
+        dispatched = await dispatch_action(msg, {
+            "web_search": _handle_web_search,
+        })
+        result_payload = dispatched.get("result")
+        results = result_payload if isinstance(result_payload, list) else []
         await _send(ws, {
             "type": "tool_result",
-            "requestId": request_id,
-            "tool": "web_search",
+            "requestId": dispatched.get("request_id", request_id),
+            "tool": dispatched.get("action_type", ""),
+            "entrypoint": ENTRYPOINT_NAME,
             "ok": True,
             "results": results,
+            "meta": dispatched.get("meta", {}),
         }, _state)
         _state.runtime_state = "idle"
     except Exception as exc:
         logger.warning("Tool call error: %s", exc)
+        formatted = format_action_error(exc, request_id=request_id)
         await _send(ws, {
             "type": "tool_result",
             "requestId": request_id,
-            "tool": "web_search",
+            "tool": formatted.get("action_type", "") or str(msg.get("tool", "")).strip().lower(),
+            "entrypoint": ENTRYPOINT_NAME,
             "ok": False,
             "results": [],
-            "error": str(exc),
+            "error": formatted.get("error"),
         }, _state)
 
 

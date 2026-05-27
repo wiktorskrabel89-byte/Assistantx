@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-REPO_ROOT = Path("/home/runner/work/Assistantx/Assistantx")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKER_PATH = REPO_ROOT / "ai-agent" / "worker.py"
 
 
