@@ -1069,7 +1069,21 @@ def _build_system_instruction(source_code: str, web_context: str = "") -> str:
         "Jesteś Jarvisem, zaawansowanym asystentem systemowym. Masz pełny wgląd w swój aktualny kod źródłowy "
         "backendu Pythona (Local Worker), na którym teraz pracujesz. Poniżej znajduje się Twój kod. "
         "Użyj go, jeśli użytkownik zapyta o Twoją strukturę, działanie lub poprosi o modyfikację:\n\n"
-        f"```python\n{source_code}\n```"
+        f"```python\n{source_code}\n```\n\n"
+        "Jesteś głównym inżynierem AssistantX. Masz dostęp do całego kodu źródłowego projektu "
+        "przez następujące narzędzia systemowe:\n"
+        "- system_scan_structure: skanuje i zwraca drzewo plików wskazanego katalogu "
+        "(payload: {\"path\": \"<ścieżka>\"}; domyślnie katalog główny projektu)\n"
+        "- system_file_read: czyta pełną zawartość konkretnego pliku "
+        "(payload: {\"path\": \"<ścieżka do pliku>\"})\n"
+        "- system_file_list: listuje pliki i podkatalogi w podanym katalogu\n"
+        "- system_file_search: przeszukuje pliki projektu po nazwie lub zawartości "
+        "(payload: {\"query\": \"<szukana fraza>\"})\n\n"
+        "Zasada diagnostyki: Gdy użytkownik zgłosi błąd (np. 'logowanie w GUI nie działa'), "
+        "NIE ZGADUJ – zamiast tego:\n"
+        "1. Użyj system_scan_structure, aby zlokalizować podejrzany moduł.\n"
+        "2. Użyj system_file_read, aby przeczytać kod i zidentyfikować przyczynę.\n"
+        "3. Zaproponuj konkretną poprawkę z wyjaśnieniem, w której linii i dlaczego wystąpił błąd."
     )
     if web_context:
         return f"{base}\n\nKontekst z lokalnego SearXNG:\n{web_context}"
@@ -1364,6 +1378,7 @@ ALLOWED_SYSTEM_ACTIONS = {
     "system_repo_index",
     "system_ignore_update",
     "system_db_query",
+    "system_scan_structure",
 }
 
 FREE_SAFE_SYSTEM_ACTIONS = {
@@ -1377,6 +1392,7 @@ FREE_SAFE_SYSTEM_ACTIONS = {
     "system_status_ping",
     "system_repo_status",
     "system_repo_index",
+    "system_scan_structure",
 }
 
 FREE_BLOCKLIST_PATTERNS = (
@@ -1669,6 +1685,75 @@ def _repo_index(config: WorkerConfig, payload: dict[str, Any]) -> str:
     })
 
 
+_SCAN_SKIP_DIRS = frozenset({
+    "node_modules", ".git", "__pycache__", ".next", "dist", "build",
+    ".venv", "venv", ".tox", "coverage", ".mypy_cache", ".pytest_cache",
+})
+_SCAN_MAX_ENTRIES = 500
+
+
+def scan_project_structure(config: WorkerConfig, path: str = ".") -> str:
+    """Return a text directory tree rooted at *path* (must be inside allowed_directory).
+
+    Directories listed in _SCAN_SKIP_DIRS are silently omitted.  Output is
+    capped at _SCAN_MAX_ENTRIES lines to avoid overwhelming the LLM context.
+    """
+    root = _resolve_allowed_path(config, path)
+    if not root.exists() or not root.is_dir():
+        raise RuntimeError(f"Path does not exist or is not a directory: {root}")
+
+    lines: list[str] = [f"{root.name}/"]
+    entry_count = 0
+
+    def _walk(directory: Path, level: int) -> None:
+        nonlocal entry_count
+        if entry_count >= _SCAN_MAX_ENTRIES:
+            return
+        indent = "    " * level
+        try:
+            items = sorted(directory.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+        except PermissionError:
+            return
+        for item in items:
+            if entry_count >= _SCAN_MAX_ENTRIES:
+                lines.append(f"{indent}... [truncated at {_SCAN_MAX_ENTRIES} entries]")
+                return
+            if item.name in _SCAN_SKIP_DIRS:
+                continue
+            entry_count += 1
+            if item.is_dir():
+                lines.append(f"{indent}{item.name}/")
+                _walk(item, level + 1)
+            else:
+                lines.append(f"{indent}{item.name}")
+
+    _walk(root, 1)
+    return "\n".join(lines)
+
+
+def read_file_content(config: WorkerConfig, file_path: str) -> str:
+    """Return the UTF-8 text content of *file_path* (must be inside allowed_directory).
+
+    On error returns a descriptive error string so the caller (LLM) can decide
+    how to proceed rather than raising an uncaught exception.
+    """
+    try:
+        resolved = _resolve_allowed_path(config, file_path)
+        if not resolved.exists():
+            return f"Error reading file: path does not exist – {resolved}"
+        if not resolved.is_file():
+            return f"Error reading file: path is not a regular file – {resolved}"
+        return resolved.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        return f"Error reading file: {exc}"
+
+
+def _scan_project_structure(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    """System-action wrapper around scan_project_structure for handle_system_action."""
+    path = str(payload.get("path") or ".")
+    return scan_project_structure(config, path)
+
+
 def _update_ignore_rules(config: WorkerConfig, payload: dict[str, Any]) -> str:
     pattern = str(payload.get("pattern") or "").strip()
     if not pattern:
@@ -1727,6 +1812,8 @@ def handle_system_action(config: WorkerConfig, *, action_type: str | None, paylo
         return _update_ignore_rules(config, payload)
     if action_type == "system_db_query":
         return _db_query(payload)
+    if action_type == "system_scan_structure":
+        return _scan_project_structure(config, payload)
 
     raise RuntimeError(f"Unsupported system_action '{action_type or ''}'.")
 
