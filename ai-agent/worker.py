@@ -654,9 +654,14 @@ class SupabaseRestClient:
 _MULTI_AGENT_MAX_FIX_ITERATIONS = 3
 
 _AGENT_STATUS_LABELS: dict[str, str] = {
+    "planner":   "planner",
     "architect": "architect",
+    "developer": "developer",
     "coder":     "coder",
     "tester":    "tester",
+    "debugger":  "debugger",
+    "devops":    "devops",
+    "release_manager": "release_manager",
     "sandbox":   "sandbox",
     "reviewer":  "reviewer",
     "critic":    "critic",
@@ -893,7 +898,7 @@ class MultiAgentOrchestrator:
 
     def execute(self, user_prompt: str, codebase_context: str) -> dict[str, Any]:
         # --- STAGE 1: ARCHITECT ---
-        self._update_status("architect", "🕵️ Architect is analysing the repository and planning changes...")
+        self._update_status("planner", "🕵️ Architect is analysing the repository and planning changes...")
         architect_system = (
             "You are a Senior Software Architect. Analyse the provided codebase context and create a "
             "rigorous, step-by-step change plan. Do NOT write final code — focus on file structure, "
@@ -901,7 +906,7 @@ class MultiAgentOrchestrator:
         )
         architect_prompt = f"Codebase context:\n{codebase_context}\n\nTask:\n{user_prompt}"
         plan = self._call_llm(architect_system, architect_prompt, model_hint="light")
-        self._update_status("architect", "✅ Architect completed the change plan.", logs=plan)
+        self._update_status("planner", "✅ Architect completed the change plan.", logs=plan)
 
         coder_system = (
             "You are an expert Software Engineer. Your only task is to implement the plan provided by the "
@@ -937,10 +942,10 @@ class MultiAgentOrchestrator:
         last_sandbox_stats: dict[str, int | None] = {"ram_mb": 0, "boot_time_ms": 0, "http_status": None}
         for attempt in range(1, _MULTI_AGENT_MAX_FIX_ITERATIONS + 1):
             self.supabase.update_task_sandbox_telemetry(self.task_id, agent_attempt=attempt)
-            self._update_status("coder", "💻 Coder is implementing the architecture plan...", attempt=attempt)
+            self._update_status("developer", "💻 Developer is implementing the architecture plan...", attempt=attempt)
             coder_prompt = f"Codebase context:\n{codebase_context}\n\nArchitect plan:\n{plan}"
             generated_code = self._call_llm(coder_system, coder_prompt, model_hint="heavy")
-            self._update_status("coder", f"✅ Coder generated the implementation (attempt {attempt}).", logs=generated_code, attempt=attempt)
+            self._update_status("developer", f"✅ Developer generated the implementation (attempt {attempt}).", logs=generated_code, attempt=attempt)
 
             # --- STAGE 3: TESTER ---
             self._update_status("tester", "🧪 Tester is verifying syntax and logic...", attempt=attempt)
@@ -949,6 +954,7 @@ class MultiAgentOrchestrator:
             if "FAILED" in tester_result.upper():
                 plan += f"\n[Tester Feedback]: {tester_result}"
                 self._update_status("tester", f"❌ Tester found issues on attempt {attempt}.", logs=tester_result, attempt=attempt)
+                self._update_status("debugger", f"🛠️ Debugger is applying tester fixes for attempt {attempt}.", logs=tester_result, attempt=attempt)
                 continue
             self._update_status("tester", "✅ Tester: code passed quality check.", attempt=attempt)
 
@@ -967,6 +973,7 @@ class MultiAgentOrchestrator:
                 if not runtime_passed:
                     plan += f"\n[Sandbox Runtime Crash Log]: {runtime_logs}\nFix runtime failure."
                     self._update_status("sandbox", f"❌ Sandbox failed on attempt {attempt}.", logs=runtime_logs, attempt=attempt)
+                    self._update_status("debugger", f"🛠️ Debugger is fixing sandbox/runtime issues (attempt {attempt}).", logs=runtime_logs, attempt=attempt)
                     continue
                 self._update_status(
                     "sandbox",
@@ -981,11 +988,12 @@ class MultiAgentOrchestrator:
             if "FAILED" in reviewer_result.upper():
                 plan += f"\n[Reviewer Feedback]: {reviewer_result}"
                 self._update_status("reviewer", f"❌ Reviewer rejected attempt {attempt}.", logs=reviewer_result, attempt=attempt)
+                self._update_status("debugger", f"🛠️ Debugger is fixing reviewer findings (attempt {attempt}).", logs=reviewer_result, attempt=attempt)
                 continue
             self._update_status("reviewer", "✅ Reviewer approved code quality.", attempt=attempt)
 
-            # --- STAGE 5: CRITIC ---
-            self._update_status("critic", "⚖️ Product Critic is scoring fit against user request...", attempt=attempt)
+            # --- STAGE 5: DEVOPS READINESS ---
+            self._update_status("devops", "⚙️ DevOps is validating release readiness and CI-fit...", attempt=attempt)
             critic_prompt = f"Original user request:\n{user_prompt}\n\nGenerated code:\n{generated_code}"
             critic_result = self._call_llm(critic_system, critic_prompt, model_hint="light")
             score = parse_critic_score(critic_result)
@@ -994,17 +1002,24 @@ class MultiAgentOrchestrator:
             self.supabase.update_task_sandbox_telemetry(self.task_id, critic_score=score, agent_attempt=attempt)
             if score < 8:
                 plan += f"\n[Critic Feedback - SCORE {score}/10]: {critic_result}\nImprove implementation."
-                self._update_status("critic", f"⚠️ Critic scored {score}/10 on attempt {attempt}; retrying.", logs=critic_result, attempt=attempt, score=score)
+                self._update_status("devops", f"⚠️ DevOps quality gate scored {score}/10 on attempt {attempt}; retrying.", logs=critic_result, attempt=attempt, score=score)
+                self._update_status("debugger", f"🛠️ Debugger is addressing DevOps quality gate findings (attempt {attempt}).", logs=critic_result, attempt=attempt, score=score)
                 continue
-            self._update_status("critic", f"⭐ Critic scored {score}/10.", logs=critic_result, attempt=attempt, score=score)
+            self._update_status("devops", f"⭐ DevOps quality gate scored {score}/10.", logs=critic_result, attempt=attempt, score=score)
 
             # --- STAGE 6: SECURITY ---
             self._update_status("security", "🛡️ Security agent is scanning for vulnerabilities...", attempt=attempt, score=score)
             security_prompt = f"Code to analyse:\n{generated_code}"
             security_result = self._call_llm(security_system, security_prompt, model_hint="light")
-            self.supabase.update_agent_loop_status(self.task_id, "done")
             token_estimate_k = round(max(len(generated_code), 1) / 4 / 1000, 2)
             if "SAFE" in security_result.upper() and "DANGER" not in security_result.upper():
+                self._update_status(
+                    "release_manager",
+                    "🚀 Release Manager prepared PR summary and is awaiting explicit user approval.",
+                    logs=generated_code,
+                    attempt=attempt,
+                    score=score,
+                )
                 self._update_status(
                     "security",
                     "🔒 Security agent approved the code as safe.",
@@ -1014,6 +1029,7 @@ class MultiAgentOrchestrator:
                     quota_max=self.quota_max,
                     token_estimate_k=token_estimate_k,
                 )
+                self.supabase.update_agent_loop_status(self.task_id, "done")
                 return {
                     "success": True,
                     "code": generated_code,
@@ -1025,6 +1041,7 @@ class MultiAgentOrchestrator:
                 }
 
             self._update_status("security", "🚨 CODE BLOCKED — potential security threat detected!", logs=security_result, attempt=attempt, score=score)
+            self.supabase.update_agent_loop_status(self.task_id, "done")
             return {"success": False, "code": generated_code, "reason": security_result, "score": score, "attempt": attempt}
 
         self.supabase.update_agent_loop_status(self.task_id, "done")
@@ -1069,7 +1086,21 @@ def _build_system_instruction(source_code: str, web_context: str = "") -> str:
         "Jesteś Jarvisem, zaawansowanym asystentem systemowym. Masz pełny wgląd w swój aktualny kod źródłowy "
         "backendu Pythona (Local Worker), na którym teraz pracujesz. Poniżej znajduje się Twój kod. "
         "Użyj go, jeśli użytkownik zapyta o Twoją strukturę, działanie lub poprosi o modyfikację:\n\n"
-        f"```python\n{source_code}\n```"
+        f"```python\n{source_code}\n```\n\n"
+        "Jesteś głównym inżynierem AssistantX. Masz dostęp do całego kodu źródłowego projektu "
+        "przez następujące narzędzia systemowe:\n"
+        "- system_scan_structure: skanuje i zwraca drzewo plików wskazanego katalogu "
+        "(payload: {\"path\": \"<ścieżka>\"}; domyślnie katalog główny projektu)\n"
+        "- system_file_read: czyta pełną zawartość konkretnego pliku "
+        "(payload: {\"path\": \"<ścieżka do pliku>\"})\n"
+        "- system_file_list: listuje pliki i podkatalogi w podanym katalogu\n"
+        "- system_file_search: przeszukuje pliki projektu po nazwie lub zawartości "
+        "(payload: {\"query\": \"<szukana fraza>\"})\n\n"
+        "Zasada diagnostyki: Gdy użytkownik zgłosi błąd (np. 'logowanie w GUI nie działa'), "
+        "NIE ZGADUJ – zamiast tego:\n"
+        "1. Użyj system_scan_structure, aby zlokalizować podejrzany moduł.\n"
+        "2. Użyj system_file_read, aby przeczytać kod i zidentyfikować przyczynę.\n"
+        "3. Zaproponuj konkretną poprawkę z wyjaśnieniem, w której linii i dlaczego wystąpił błąd."
     )
     if web_context:
         return f"{base}\n\nKontekst z lokalnego SearXNG:\n{web_context}"
@@ -1364,6 +1395,7 @@ ALLOWED_SYSTEM_ACTIONS = {
     "system_repo_index",
     "system_ignore_update",
     "system_db_query",
+    "system_scan_structure",
 }
 
 FREE_SAFE_SYSTEM_ACTIONS = {
@@ -1377,6 +1409,7 @@ FREE_SAFE_SYSTEM_ACTIONS = {
     "system_status_ping",
     "system_repo_status",
     "system_repo_index",
+    "system_scan_structure",
 }
 
 FREE_BLOCKLIST_PATTERNS = (
@@ -1669,6 +1702,75 @@ def _repo_index(config: WorkerConfig, payload: dict[str, Any]) -> str:
     })
 
 
+_SCAN_SKIP_DIRS = frozenset({
+    "node_modules", ".git", "__pycache__", ".next", "dist", "build",
+    ".venv", "venv", ".tox", "coverage", ".mypy_cache", ".pytest_cache",
+})
+_SCAN_MAX_ENTRIES = 500
+
+
+def scan_project_structure(config: WorkerConfig, path: str = ".") -> str:
+    """Return a text directory tree rooted at *path* (must be inside allowed_directory).
+
+    Directories listed in _SCAN_SKIP_DIRS are silently omitted.  Output is
+    capped at _SCAN_MAX_ENTRIES lines to avoid overwhelming the LLM context.
+    """
+    root = _resolve_allowed_path(config, path)
+    if not root.exists() or not root.is_dir():
+        raise RuntimeError(f"Path does not exist or is not a directory: {root}")
+
+    lines: list[str] = [f"{root.name}/"]
+    entry_count = 0
+
+    def _walk(directory: Path, level: int) -> None:
+        nonlocal entry_count
+        if entry_count >= _SCAN_MAX_ENTRIES:
+            return
+        indent = "    " * level
+        try:
+            items = sorted(directory.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+        except PermissionError:
+            return
+        for item in items:
+            if entry_count >= _SCAN_MAX_ENTRIES:
+                lines.append(f"{indent}... [truncated at {_SCAN_MAX_ENTRIES} entries]")
+                return
+            if item.name in _SCAN_SKIP_DIRS:
+                continue
+            entry_count += 1
+            if item.is_dir():
+                lines.append(f"{indent}{item.name}/")
+                _walk(item, level + 1)
+            else:
+                lines.append(f"{indent}{item.name}")
+
+    _walk(root, 1)
+    return "\n".join(lines)
+
+
+def read_file_content(config: WorkerConfig, file_path: str) -> str:
+    """Return the UTF-8 text content of *file_path* (must be inside allowed_directory).
+
+    On error returns a descriptive error string so the caller (LLM) can decide
+    how to proceed rather than raising an uncaught exception.
+    """
+    try:
+        resolved = _resolve_allowed_path(config, file_path)
+        if not resolved.exists():
+            return f"Error reading file: path does not exist – {resolved}"
+        if not resolved.is_file():
+            return f"Error reading file: path is not a regular file – {resolved}"
+        return resolved.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        return f"Error reading file: {exc}"
+
+
+def _scan_project_structure(config: WorkerConfig, payload: dict[str, Any]) -> str:
+    """System-action wrapper around scan_project_structure for handle_system_action."""
+    path = str(payload.get("path") or ".")
+    return scan_project_structure(config, path)
+
+
 def _update_ignore_rules(config: WorkerConfig, payload: dict[str, Any]) -> str:
     pattern = str(payload.get("pattern") or "").strip()
     if not pattern:
@@ -1727,6 +1829,8 @@ def handle_system_action(config: WorkerConfig, *, action_type: str | None, paylo
         return _update_ignore_rules(config, payload)
     if action_type == "system_db_query":
         return _db_query(payload)
+    if action_type == "system_scan_structure":
+        return _scan_project_structure(config, payload)
 
     raise RuntimeError(f"Unsupported system_action '{action_type or ''}'.")
 

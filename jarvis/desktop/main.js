@@ -1127,24 +1127,38 @@ async function getSubscriptionStatus() {
     const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
     const anonKey = String(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '').trim();
     if (!supabaseUrl || !anonKey) {
-      // No Supabase config available in this context — treat as authenticated / unknown.
       return { ok: true, subscribed: true, status: 'authenticated' };
     }
-    const resp = await fetch(
-      `${supabaseUrl}/rest/v1/subscriptions?select=plan,status&limit=1`,
-      {
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${session.accessToken}`,
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(8_000),
-      },
+    const headers = {
+      apikey: anonKey,
+      Authorization: 'Bearer ' + session.accessToken,
+      Accept: 'application/json',
+    };
+
+    const workspaceResp = await fetch(
+      `${supabaseUrl}/rest/v1/workspace_states?select=state_json&limit=1`,
+      { headers, signal: AbortSignal.timeout(8_000) },
     );
-    if (!resp.ok) {
+    if (workspaceResp.ok) {
+      const rows = await workspaceResp.json().catch(() => []);
+      const row = Array.isArray(rows) ? rows[0] : null;
+      const statePlan = String(row?.state_json?.userPlan || '').toLowerCase();
+      if (statePlan === 'pro' || statePlan === 'pro+') {
+        return { ok: true, subscribed: true, status: 'active', plan: statePlan };
+      }
+      if (statePlan === 'free') {
+        return { ok: true, subscribed: false, status: 'active', plan: statePlan };
+      }
+    }
+
+    const subscriptionResp = await fetch(
+      `${supabaseUrl}/rest/v1/subscriptions?select=plan,status&limit=1`,
+      { headers, signal: AbortSignal.timeout(8_000) },
+    );
+    if (!subscriptionResp.ok) {
       return { ok: true, subscribed: false, status: 'query-failed' };
     }
-    const rows = await resp.json().catch(() => []);
+    const rows = await subscriptionResp.json().catch(() => []);
     const row = Array.isArray(rows) ? rows[0] : null;
     const isActive = row?.status === 'active' || row?.plan === 'pro' || row?.plan === 'pro+';
     return { ok: true, subscribed: isActive, status: row?.status || 'unknown', plan: row?.plan || null };

@@ -690,6 +690,22 @@ async def _handle_memory_search(ws: WebSocketServerProtocol, _state: ConnectionS
 
 async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:
     request_id = str(msg.get("requestId", ""))
+    query = str(msg.get("query", "")).strip()
+    action = str(msg.get("action", "")).strip()
+    payload = msg.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
+    if not tool:
+        return
+    if tool not in {"web_search", "git_core"}:
+        await _send(ws, {
+            "type": "tool_result",
+            "requestId": request_id,
+            "tool": tool,
+            "ok": False,
+            "results": [],
+        }, _state)
+        return
     loop = asyncio.get_event_loop()
 
     async def _handle_web_search(params: dict[str, Any]) -> list[dict]:
@@ -701,20 +717,27 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
 
     try:
         _state.runtime_state = "thinking_fast"
-        dispatched = await dispatch_action(msg, {
-            "web_search": _handle_web_search,
-        })
-        result_payload = dispatched.get("result")
-        results = result_payload if isinstance(result_payload, list) else []
-        await _send(ws, {
-            "type": "tool_result",
-            "requestId": dispatched.get("request_id", request_id),
-            "tool": dispatched.get("action_type", ""),
-            "entrypoint": ENTRYPOINT_NAME,
-            "ok": True,
-            "results": results,
-            "meta": dispatched.get("meta", {}),
-        }, _state)
+        if tool == "web_search":
+            from tools.web_search import search_web
+            results = await loop.run_in_executor(None, search_web, query, 5)
+            await _send(ws, {
+                "type": "tool_result",
+                "requestId": request_id,
+                "tool": "web_search",
+                "ok": True,
+                "results": results,
+            }, _state)
+        else:
+            from tools.git_core import execute_git_core_action
+            result = await loop.run_in_executor(None, execute_git_core_action, action, payload)
+            await _send(ws, {
+                "type": "tool_result",
+                "requestId": request_id,
+                "tool": "git_core",
+                "ok": bool(result.get("ok")),
+                "result": result.get("result"),
+                "error": result.get("error"),
+            }, _state)
         _state.runtime_state = "idle"
     except Exception as exc:
         logger.warning("Tool call error: %s", exc)
@@ -723,8 +746,7 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
         await _send(ws, {
             "type": "tool_result",
             "requestId": request_id,
-            "tool": formatted.get("action_type", "") or action_type,
-            "entrypoint": ENTRYPOINT_NAME,
+            "tool": tool,
             "ok": False,
             "results": [],
             "error": formatted.get("error"),

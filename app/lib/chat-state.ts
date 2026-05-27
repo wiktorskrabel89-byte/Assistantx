@@ -334,6 +334,13 @@ export function createSettings(): WorkspaceSettings {
     encryptedSync: false,
     pauseSync: false,
     postPrReviewCommentsToGitHub: false,
+    jarvisCode: {
+      enabled: false,
+      difficultyAutoDetect: true,
+      use7AgentTasking: false,
+      freeSoloAgent: true,
+      releaseRequiresApproval: true,
+    },
     multiAgentBeta: false,
   };
 }
@@ -608,6 +615,19 @@ export function upgradeState(value: StoredState | null): StoredState | null {
       localModelAssignment,
       preferLocalWhenAvailable: Boolean(rawSettings.preferLocalWhenAvailable),
     };
+    settings.jarvisCode = {
+      ...createSettings().jarvisCode,
+      ...(rawSettings.jarvisCode && typeof rawSettings.jarvisCode === "object"
+        ? rawSettings.jarvisCode as WorkspaceSettings["jarvisCode"]
+        : {}),
+      use7AgentTasking:
+        rawSettings.jarvisCode
+        && typeof rawSettings.jarvisCode === "object"
+        && "use7AgentTasking" in (rawSettings.jarvisCode as Record<string, unknown>)
+          ? Boolean((rawSettings.jarvisCode as Record<string, unknown>).use7AgentTasking)
+          : Boolean(rawSettings.multiAgentBeta),
+    };
+    settings.multiAgentBeta = Boolean(settings.jarvisCode.use7AgentTasking);
 
     return {
       ...workspace,
