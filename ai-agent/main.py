@@ -718,16 +718,18 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
         _state.runtime_state = "idle"
     except Exception as exc:
         logger.warning("Tool call error: %s", exc)
-        formatted = format_action_error(exc, request_id=request_id)
+        action_type = str(((msg.get("action") or {}).get("action_type")) or msg.get("tool") or "").strip().lower()
+        formatted = format_action_error(exc, action_type=action_type, request_id=request_id)
         await _send(ws, {
             "type": "tool_result",
             "requestId": request_id,
-            "tool": formatted.get("action_type", "") or str(msg.get("tool", "")).strip().lower(),
+            "tool": formatted.get("action_type", "") or action_type,
             "entrypoint": ENTRYPOINT_NAME,
             "ok": False,
             "results": [],
             "error": formatted.get("error"),
         }, _state)
+        _state.runtime_state = "degraded"
 
 
 async def _handle_llm_route(ws: WebSocketServerProtocol, _state: ConnectionState, msg: dict) -> None:

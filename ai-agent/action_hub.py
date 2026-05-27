@@ -70,6 +70,13 @@ def normalize_action_payload(message: dict[str, Any]) -> dict[str, Any]:
 
     action = message.get("action")
     if isinstance(action, dict):
+        tool_name = _coerce_string(message.get("tool"))
+        if tool_name and tool_name != ENTRYPOINT_NAME:
+            raise ActionError(
+                ERROR_INVALID_PARAMS,
+                f"tool must be {ENTRYPOINT_NAME}",
+                {"field": "tool"},
+            )
         action_type = _coerce_string(action.get("action_type"))
         params = action.get("params")
         normalized: dict[str, Any] = {
