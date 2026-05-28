@@ -25,7 +25,7 @@ function createLocalServerStore() {
         externalApiModelId: null,
         serverId: null,
       },
-      preferLocalWhenAvailable: false,
+      preferLocalWhenAvailable: true,
     };
   }
 
