@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MemorySummaryCard } from "../MemorySummaryCard";
+import { RoadmapPanel } from "../RoadmapPanel";
 import { getTranslations, UI_LANGUAGES } from "@/app/lib/i18n";
 import { useJarvisDeviceStatus } from "@/app/hooks/useJarvisDeviceStatus";
 
@@ -964,6 +965,8 @@ export function SettingsTab() {
             </div>
           )}
         </div>
+
+        <RoadmapPanel dark={dark} />
       </div>
     </section>
   );
