@@ -1,5 +1,11 @@
 'use strict';
 
+const LOCAL_LANE_MODELS = {
+  fast: { model: 'qwen2.5-coder:14b', gpuAffinity: 'gpu0' },
+  coding: { model: 'qwen2.5-coder:14b', gpuAffinity: 'gpu0' },
+  utility: { model: 'gemma3:4b', gpuAffinity: 'gpu1' },
+};
+
 function decideRoute(analysis, options = {}) {
   const availability = options.availability || {};
   const profile = normalizeProfile(options.profile);
@@ -12,11 +18,14 @@ function decideRoute(analysis, options = {}) {
     || analysis.complexity === 'hard';
 
   if (ollamaAvailable) {
+    const lane = resolveLocalLane(profile, escalate);
     return {
       provider: 'ollama',
-      model: resolveLocalModel(profile, escalate),
-      keepAlive: escalate ? '5m' : -1,
-      reason: escalate ? 'escalation' : 'fast-lane',
+      model: lane.model,
+      lane: lane.name,
+      gpuAffinity: lane.gpuAffinity,
+      keepAlive: lane.name === 'coding' ? '15m' : -1,
+      reason: lane.reason,
       profile,
     };
   }
@@ -34,7 +43,7 @@ function decideRoute(analysis, options = {}) {
     provider: target.provider,
     model: target.model || resolveCloudModel(target.provider, profile),
     keepAlive: null,
-    reason: escalate ? 'escalation' : 'fast-lane',
+    reason: 'local-unavailable-fallback',
     profile,
   };
 }
@@ -45,10 +54,14 @@ function normalizeProfile(profile) {
   return 'chat';
 }
 
-function resolveLocalModel(profile, escalate) {
-  if (profile === 'coding') return 'qwen2.5-coder:14b';
-  if (profile === 'tool') return escalate ? 'qwen2.5-coder:14b' : 'gemma3:4b';
-  return escalate ? 'qwen2.5-coder:14b' : 'gemma3:4b';
+function resolveLocalLane(profile, escalate) {
+  if (profile === 'coding') {
+    return { name: 'coding', reason: 'coding-lane', ...LOCAL_LANE_MODELS.coding };
+  }
+  if (profile === 'tool' && !escalate) {
+    return { name: 'utility', reason: 'utility-lane', ...LOCAL_LANE_MODELS.utility };
+  }
+  return { name: 'fast', reason: escalate ? 'fast-lane-escalated' : 'fast-lane', ...LOCAL_LANE_MODELS.fast };
 }
 
 function resolveCloudModel(provider, profile) {

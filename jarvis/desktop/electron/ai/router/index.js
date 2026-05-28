@@ -15,19 +15,19 @@ const {
 // Mirrors HARDWARE_PROFILE_MODELS in runtime-config.js.
 const HARDWARE_PROFILE_CHAT_MODEL = {
   eco:      'qwen2.5:1.5b',
-  standard: 'gemma3:4b',
-  pro:      'qwen2.5:7b',
+  standard: 'qwen2.5-coder:14b',
+  pro:      'qwen2.5-coder:14b',
 };
 
 const ROUTING_PROFILES = {
   chat: {
-    local: 'gemma3:4b',
+    local: 'qwen2.5-coder:14b',
   },
   coding: {
     local: 'qwen2.5-coder:14b',
   },
   tool: {
-    local: 'qwen2.5-coder:14b',
+    local: 'gemma3:4b',
   },
 };
 
@@ -97,6 +97,14 @@ class AIRouter {
   }
 
   async routeRequest(request = {}, onChunk = () => {}) {
+    const requestStartedAt = Date.now();
+    let firstTokenAt = null;
+    const onChunkWithMetrics = (event) => {
+      if (!firstTokenAt && event?.type === 'token') {
+        firstTokenAt = Date.now();
+      }
+      onChunk(event);
+    };
     const engineMode = this._engineMode();
     const modelConfig = this._modelConfig();
     const profile = normalizeProfile(request?.profile || inferProfile(request));
@@ -128,8 +136,14 @@ class AIRouter {
         provider: cloudProvider,
         options: { temperature: 0.7, ...(request.options || {}) },
       };
-      const response = await this.cloud.stream(resolvedRequest, onChunk);
-      return { ...response, route: { provider: cloudProvider, model: cloudModel, reason: `engine-mode-cloud-difficulty-${difficulty}` }, profile, availability };
+      const response = await this.cloud.stream(resolvedRequest, onChunkWithMetrics);
+      return {
+        ...response,
+        route: { provider: cloudProvider, model: cloudModel, reason: `engine-mode-cloud-difficulty-${difficulty}` },
+        profile,
+        availability,
+        metrics: buildRouteMetrics({ requestStartedAt, firstTokenAt, request }),
+      };
     }
 
     // local mode: override chat model based on hardware profile
@@ -160,23 +174,25 @@ class AIRouter {
 
     if (effectiveRoute.provider === 'ollama' && availability.ollama_available) {
       const provider = localRoute?.server ? createLocalProvider(localRoute.server) : this.ollama;
-      const response = await provider.stream(resolvedRequest, onChunk);
+      const response = await provider.stream(resolvedRequest, onChunkWithMetrics);
       return {
         ...response,
         route: effectiveRoute,
         profile,
         availability,
+        metrics: buildRouteMetrics({ requestStartedAt, firstTokenAt, request }),
       };
     }
 
     if (effectiveRoute.provider === 'openai-compat' && localRoute?.server) {
       const provider = createLocalProvider(localRoute.server);
-      const response = await provider.stream(resolvedRequest, onChunk);
+      const response = await provider.stream(resolvedRequest, onChunkWithMetrics);
       return {
         ...response,
         route: effectiveRoute,
         profile,
         availability,
+        metrics: buildRouteMetrics({ requestStartedAt, firstTokenAt, request }),
       };
     }
 
@@ -184,12 +200,13 @@ class AIRouter {
       ...resolvedRequest,
       provider: effectiveRoute.provider,
       model: effectiveRoute.model,
-    }, onChunk);
+    }, onChunkWithMetrics);
     return {
       ...response,
       route: effectiveRoute,
       profile,
       availability,
+      metrics: buildRouteMetrics({ requestStartedAt, firstTokenAt, request }),
     };
   }
 }
@@ -279,6 +296,21 @@ function resolveConfiguredLocalRoute(localConfig, profile, availability) {
     profile,
     server,
   };
+}
+
+function buildRouteMetrics({ requestStartedAt, firstTokenAt, request }) {
+  const timings = request?.timings && typeof request.timings === 'object' ? request.timings : {};
+  return {
+    totalLatencyMs: Math.max(0, Date.now() - Number(requestStartedAt || Date.now())),
+    ttftMs: Number.isFinite(firstTokenAt) ? Math.max(0, firstTokenAt - requestStartedAt) : null,
+    promptAssemblyMs: coerceMetric(timings.promptAssemblyMs),
+    retrievalMs: coerceMetric(timings.retrievalMs),
+    historyCompactionMs: coerceMetric(timings.historyCompactionMs),
+  };
+}
+
+function coerceMetric(value) {
+  return Number.isFinite(value) ? Number(value) : null;
 }
 
 module.exports = {
