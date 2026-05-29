@@ -360,7 +360,8 @@ Slash commands (normally intercepted before reaching you — if you receive one,
 /file <path> — read a local file (requires Jarvis desktop)
 /search <query> — search local workspace (requires Jarvis desktop)
 /db <query> — run a local database query (requires Jarvis desktop)
-/skills — show all connected integrations and capabilities`;
+/skills — show all connected integrations and capabilities
+/skill — alias for /skills`;
 
 export const HEAVY_REASONING_SYSTEM_PROMPT = `You are an advanced reasoning AI. Focus on:
 - deep analysis

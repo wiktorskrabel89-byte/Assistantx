@@ -278,6 +278,27 @@ function emitStatus(status, detail) {
   emitter.emit('status', { status, detail, url: BACKEND_URL });
 }
 
+function isSkillsSlashPrompt(prompt) {
+  const normalized = String(prompt || '').trim().toLowerCase();
+  return normalized === '/skill' || normalized === '/skills';
+}
+
+function buildSkillsSlashResponse() {
+  return [
+    '# Jarvis Skills',
+    '',
+    'Use `/skills` or `/skill` to open this capability overview.',
+    '',
+    '## Local desktop commands',
+    '- /os, /screenshot, /open <app>, /game <name>, /sleep',
+    '- /repo [path], /file <path>, /search <query>, /db <query>, /index, /ignore <pattern>',
+    '',
+    '## Cloud commands (AssistantX account)',
+    '- /today, /calendar <event>, /gmail [filter], /draft <text>, /drive <url|id>',
+    '- /web <url>, /google <query>, /slack [#channel]',
+  ].join('\n');
+}
+
 function emitRawMessage(payload) {
   emitter.emit('message', JSON.stringify(payload));
 }
@@ -1568,6 +1589,15 @@ async function processTaskQueue() {
 function queuePromptExecution(text, meta = {}) {
   const prompt = String(text || '').trim();
   if (!prompt) return null;
+
+  if (isSkillsSlashPrompt(prompt)) {
+    respond(buildSkillsSlashResponse(), {
+      title: 'Jarvis Skills',
+      source: meta.source || 'local',
+      origin: meta.origin || 'desktop',
+    });
+    return null;
+  }
 
   if (runtimeV2Enabled) {
     const adapter = getRuntimeV2Adapter();

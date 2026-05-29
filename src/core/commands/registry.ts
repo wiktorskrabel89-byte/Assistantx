@@ -253,8 +253,8 @@ export const ASSISTANT_COMMANDS: AssistantCommandDefinition[] = [
     executionMode: "hybrid_dual",
     riskLevel: "low",
     requiresDesktop: false,
-    aliases: ["skills", "capabilities", "tools"],
-    examples: ["/skills", "show skills"],
+    aliases: ["skills", "skill", "capabilities", "tools"],
+    examples: ["/skills", "/skill", "show skills"],
   },
 ];
 

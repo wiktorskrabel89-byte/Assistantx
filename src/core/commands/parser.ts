@@ -10,7 +10,10 @@ function parseSlash(input: string): ParsedAssistantCommand | null {
   if (!normalized.startsWith("/")) return null;
   const match = normalized.match(/^\/([a-z]+)(?:\s+(.*))?$/i);
   if (!match) return null;
-  const id = match[1].toLowerCase() as AssistantCommandId;
+  const slashAliasMap: Record<string, AssistantCommandId> = {
+    skill: "skills",
+  };
+  const id = (slashAliasMap[match[1].toLowerCase()] ?? match[1].toLowerCase()) as AssistantCommandId;
   const command = getAssistantCommand(id);
   if (!command) return null;
   return {
