@@ -20,6 +20,15 @@ let activeIndex = 0;
 let pendingConfirmationId = null;
 let searchTimer = null;
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function setProviderStatus(providerStatus = [], catalogHealth = null) {
   const everything = providerStatus.find((entry) => entry.provider === 'everything');
   const freshness = catalogHealth?.freshness ? ` · ${catalogHealth.freshness}` : '';
@@ -48,12 +57,15 @@ function renderResults() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `item${index === activeIndex ? ' active' : ''}`;
+    const name = escapeHtml(item.name || '');
+    const meta = escapeHtml(item.subtitle || item.sourceProvider || 'launcher result');
+    const risk = item.riskLevel !== 'safe' ? escapeHtml(item.riskLevel) : '';
     button.innerHTML = `
       <span>
-        <span class="item-name">${item.name}</span>
-        <span class="item-meta">${item.subtitle || item.sourceProvider || 'launcher result'}</span>
+        <span class="item-name">${name}</span>
+        <span class="item-meta">${meta}</span>
       </span>
-      <span class="item-risk">${item.riskLevel !== 'safe' ? item.riskLevel : ''}</span>
+      <span class="item-risk">${risk}</span>
     `;
     button.addEventListener('click', () => {
       activeIndex = index;

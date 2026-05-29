@@ -62,7 +62,6 @@ async function handleLogin(username, password) {
       method: 'POST',
       headers: {
         apikey: authConfig.supabasePublishableKey,
-        Authorization: `Bearer ${authConfig.supabasePublishableKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

@@ -626,10 +626,24 @@ async def ws_handler(websocket):
         for pair in query.split("&")
         if pair
     )
-    token = params.get("token")
+    token = (params.get("token") or "").strip()
     session = None
-    async with _lock:
-        session = _sessions.get(token or "")
+    if token:
+        async with _lock:
+            session = _sessions.get(token)
+    if not session:
+        try:
+            raw = await asyncio.wait_for(websocket.recv(), timeout=5)
+            message = json.loads(raw)
+        except Exception:
+            await websocket.close(code=4401, reason="Unauthorized")
+            return
+        if str(message.get("type", "")).strip() != "auth":
+            await websocket.close(code=4401, reason="Unauthorized")
+            return
+        token = str(message.get("token", "")).strip()
+        async with _lock:
+            session = _sessions.get(token)
     if not session or session.expired:
         await websocket.close(code=4401, reason="Unauthorized")
         return
