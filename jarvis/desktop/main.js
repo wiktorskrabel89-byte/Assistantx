@@ -533,6 +533,7 @@ let overlayWin;
 let tray;
 const pendingLauncherConfirmations = new Map();
 let appIsInstallingUpdate = false;
+const STARTUP_UPDATE_CHECK_TIMEOUT_MS = 3_000;
 let updateState = {
   status: 'idle',
   detail: 'Waiting to check for updates.',
@@ -548,6 +549,11 @@ let updateState = {
 };
 let pendingAuthFlow = null;
 let silentRefreshTimer = null;
+let splashTransitionDone = false;
+let startupUpdateGatePromise = null;
+let startupUpdateGateResolver = null;
+let startupUpdateGateTimeout = null;
+let startupUpdateGateSettled = false;
 
 function sendToRenderer(channel, payload) {
   if (win && !win.isDestroyed()) {
@@ -715,6 +721,7 @@ function emitUpdateStatus(status, detail, extra = {}) {
     ...extra,
   };
   sendToRenderer('auto-update-status', updateState);
+  maybeResolveStartupUpdateGate(updateState);
   if (tray && !tray.isDestroyed()) {
     if (status === 'available') {
       tray.setToolTip('AssistantX — Update available ⬆️');
@@ -723,6 +730,78 @@ function emitUpdateStatus(status, detail, extra = {}) {
     } else {
       tray.setToolTip('Jarvis Desktop');
     }
+  }
+}
+
+function resetStartupUpdateGate() {
+  startupUpdateGateSettled = false;
+  if (startupUpdateGateTimeout) {
+    clearTimeout(startupUpdateGateTimeout);
+    startupUpdateGateTimeout = null;
+  }
+}
+
+function settleStartupUpdateGate(reason = 'resolved') {
+  if (startupUpdateGateSettled) return;
+  startupUpdateGateSettled = true;
+  if (startupUpdateGateTimeout) {
+    clearTimeout(startupUpdateGateTimeout);
+    startupUpdateGateTimeout = null;
+  }
+  if (typeof startupUpdateGateResolver === 'function') {
+    startupUpdateGateResolver({ reason });
+  }
+  startupUpdateGateResolver = null;
+}
+
+function maybeResolveStartupUpdateGate(state) {
+  if (!state || startupUpdateGateSettled) return;
+  const status = String(state.status || '').toLowerCase();
+  if ([
+    'up-to-date',
+    'available',
+    'downloading',
+    'install-ready',
+    'error',
+    'unavailable',
+    'disabled',
+    'deferred',
+  ].includes(status)) {
+    settleStartupUpdateGate(status);
+  }
+}
+
+function startStartupUpdateCheckGate() {
+  if (startupUpdateGatePromise) return startupUpdateGatePromise;
+  resetStartupUpdateGate();
+  startupUpdateGatePromise = new Promise((resolve) => {
+    startupUpdateGateResolver = resolve;
+  });
+  startupUpdateGateTimeout = setTimeout(() => {
+    settleStartupUpdateGate('timeout');
+  }, STARTUP_UPDATE_CHECK_TIMEOUT_MS);
+  void Promise.resolve(checkForUpdates('startup'))
+    .then((result) => {
+      if (result?.ok === false) settleStartupUpdateGate(result.reason || 'check-failed');
+    })
+    .catch((error) => {
+      settleStartupUpdateGate(String(error?.message || error || 'check-failed'));
+    });
+  return startupUpdateGatePromise;
+}
+
+function resetSplashTransitionState() {
+  splashTransitionDone = false;
+  startupUpdateGatePromise = null;
+  startupUpdateGateResolver = null;
+  resetStartupUpdateGate();
+}
+
+function transitionToIndexOnce() {
+  if (splashTransitionDone) return;
+  splashTransitionDone = true;
+  if (win && !win.isDestroyed()) {
+    win.loadFile('index.html').catch(() => {});
   }
 }
 
@@ -1030,13 +1109,16 @@ function loadStartupScreen() {
 // Drives the splash screen progress bars and transitions to index.html once
 // the runtime is ready.
 async function startSplashTransition(engineMode) {
+  resetSplashTransitionState();
+  const startupUpdateGate = startStartupUpdateCheckGate();
   if (engineMode === 'cloud') {
     sendToRenderer('splash:progress', { status: 'Verifying cloud credentials…' });
     // Short delay so the spinner is visible before we transition.
     await new Promise((resolve) => setTimeout(resolve, 1_200));
     sendToRenderer('splash:progress', { status: 'Cloud matrix ready. Launching Jarvis…' });
     await new Promise((resolve) => setTimeout(resolve, 600));
-    if (win && !win.isDestroyed()) win.loadFile('index.html').catch(() => {});
+    await startupUpdateGate.catch(() => null);
+    transitionToIndexOnce();
     return;
   }
 
@@ -1099,7 +1181,8 @@ async function startSplashTransition(engineMode) {
   });
 
   await new Promise((resolve) => setTimeout(resolve, 400));
-  if (win && !win.isDestroyed()) win.loadFile('index.html').catch(() => {});
+  await startupUpdateGate.catch(() => null);
+  transitionToIndexOnce();
 }
 
 // Called by the 'setup:complete' IPC handler after the wizard saves its config.

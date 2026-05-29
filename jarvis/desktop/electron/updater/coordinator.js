@@ -6,7 +6,6 @@ const path = require('path');
 const VALID_CHANNELS = new Set(['stable', 'beta', 'nightly']);
 const DEFAULT_DEFER_MINOR_PATCH_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DEFER_MAJOR_SECURITY_MS = 6 * 60 * 60 * 1000;
-const STARTUP_CHECK_DELAY_MS = 15_000;
 const FEED_SELF_TEST_TIMEOUT_MS = 8_000;
 const PRIVATE_TOKEN_WAIT_TIMEOUT_MS = 4_000;
 const PRIVATE_TOKEN_STORE_FILE = 'updater-github-token.bin';
@@ -1078,7 +1077,7 @@ class UpdateCoordinator {
       const { autoUpdater } = require('electron-updater');
       const publish = this.getPublishConfig();
 
-      autoUpdater.autoDownload = false;
+      autoUpdater.autoDownload = true;
       autoUpdater.autoInstallOnAppQuit = true;
 
       if (publish.provider === 'generic' && publish.url) {
@@ -1142,32 +1141,6 @@ class UpdateCoordinator {
           return;
         }
 
-        const suppression = this.shouldSuppressPrompt(version);
-        if (suppression.suppressed) {
-          this.log('update-available:suppressed', {
-            ...context,
-            availableVersion: version,
-            reason: suppression.reason,
-          });
-          this.emitState('deferred', 'Update is available. We will remind you later.', {
-            downloaded: false,
-            updateAvailable: true,
-            version,
-            releaseNotes,
-            deferred: {
-              reason: suppression.reason,
-              policy: false,
-            },
-            policy: {
-              enabled: this.getPolicyEnabled(),
-              applied: false,
-              reason: null,
-            },
-            diagnostics: context,
-          });
-          return;
-        }
-
         this.log('update-available', {
           ...context,
           availableVersion: version,
@@ -1179,10 +1152,10 @@ class UpdateCoordinator {
           availableVersion: version,
           releaseNotesSource: releaseNotes.source,
         });
-        this.telemetryBus.publish('updater.prompt.shown');
+        this.telemetryBus.publish('updater.update.available');
         this.onHealth();
 
-        this.emitState('available', 'AssistantX update available.', {
+        this.emitState('available', 'AssistantX update found. Downloading in background…', {
           downloaded: false,
           updateAvailable: true,
           version,
@@ -1603,11 +1576,6 @@ class UpdateCoordinator {
 
     void this.runFeedSelfTest();
     this.getAutoUpdater();
-    setTimeout(() => {
-      void this.waitForPrivateTokenReady()
-        .catch(() => null)
-        .finally(() => this.check({ source: 'startup' }));
-    }, STARTUP_CHECK_DELAY_MS);
   }
 }
 
