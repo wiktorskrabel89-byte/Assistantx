@@ -213,13 +213,6 @@ class SidecarBridge extends EventEmitter {
       ttsBackend: 'unknown',
     };
   }
-
-  _buildUrl() {
-    if (!this._token) return this._baseUrl;
-    const separator = this._baseUrl.includes('?') ? '&' : '?';
-    return `${this._baseUrl}${separator}token=${encodeURIComponent(this._token)}`;
-  }
-
   _createTransport() {
     if (this._ipcMode === 'stdio' && electronIpcRenderer) {
       return new StdioTransport({
@@ -231,8 +224,14 @@ class SidecarBridge extends EventEmitter {
       });
     }
     const transport = new WebSocketTransport({
-      url: this._buildUrl(),
-      onOpen: () => this._handleConnected(),
+      url: this._baseUrl,
+      onOpen: () => {
+        if (this._token) {
+          transport.send({ type: 'auth', token: this._token });
+          return;
+        }
+        this._handleConnected();
+      },
       onClose: () => this._handleDisconnected(),
       onMessage: (payload) => this._handleMessage(payload),
       onUnavailable: () => this.emit('unavailable'),
@@ -314,6 +313,9 @@ class SidecarBridge extends EventEmitter {
     const { type, ...rest } = msg;
     switch (type) {
       case 'status':
+        if (rest?.status === 'connected') {
+          this._handleConnected();
+        }
         if (rest?.capabilities && typeof rest.capabilities === 'object') {
           this._capabilities = {
             ...this._capabilities,

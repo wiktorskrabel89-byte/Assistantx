@@ -78,6 +78,20 @@ const VOICE_PROFILES = {
 	},
 };
 
+function escapeHtml(value) {
+	return String(value ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
+function toFiniteNumber(value, fallback = 0) {
+	const num = Number(value);
+	return Number.isFinite(num) ? num : fallback;
+}
+
 function getVoiceProfile(voiceId) {
 	return VOICE_PROFILES[voiceId] || VOICE_PROFILES.default;
 }
@@ -838,7 +852,9 @@ window.addEventListener('DOMContentLoaded', () => {
 			for (const model of models) {
 				const value = `${server.id}::${model}`;
 				const selected = value === selectedValue ? ' selected' : '';
-				entries.push(`<option value="${value.replace(/"/g, '&quot;')}"${selected}>${server.label} · ${model}</option>`);
+				entries.push(
+					`<option value="${escapeHtml(value)}"${selected}>${escapeHtml(server.label)} · ${escapeHtml(model)}</option>`,
+				);
 			}
 		}
 		selectNode.innerHTML = entries.join('');
@@ -851,20 +867,21 @@ window.addEventListener('DOMContentLoaded', () => {
 			} else {
 				localServerListNode.innerHTML = desktopLocalServers.map((server) => {
 					const models = Array.isArray(server.discoveredModels) && server.discoveredModels.length
-						? server.discoveredModels.join(', ')
+						? server.discoveredModels.map((model) => escapeHtml(model)).join(', ')
 						: 'no scanned models';
+					const serverId = escapeHtml(server.id);
 					return `
 						<div style="border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;margin-bottom:8px;">
 							<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
 								<div>
-									<div style="font-weight:600;">${server.label}</div>
-									<div style="font-size:11px;opacity:.8;">${server.baseUrl} · ${server.apiType}</div>
+									<div style="font-weight:600;">${escapeHtml(server.label)}</div>
+									<div style="font-size:11px;opacity:.8;">${escapeHtml(server.baseUrl)} · ${escapeHtml(server.apiType)}</div>
 									<div style="font-size:11px;opacity:.7;">${models}</div>
 								</div>
 								<div style="display:flex;gap:6px;flex-wrap:wrap;">
-									<button type="button" class="secondary sm" data-local-scan="${server.id}">Scan</button>
-									<button type="button" class="secondary sm" data-local-toggle="${server.id}">${server.enabled ? 'Disable' : 'Enable'}</button>
-									<button type="button" class="danger sm" data-local-remove="${server.id}">Remove</button>
+									<button type="button" class="secondary sm" data-local-scan="${serverId}">Scan</button>
+									<button type="button" class="secondary sm" data-local-toggle="${serverId}">${server.enabled ? 'Disable' : 'Enable'}</button>
+									<button type="button" class="danger sm" data-local-remove="${serverId}">Remove</button>
 								</div>
 							</div>
 						</div>
@@ -2480,7 +2497,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			return;
 		}
 		linkedAccountsList.innerHTML = accounts.map((a) =>
-			`<span>✅ ${a.provider}</span>`,
+			`<span>✅ ${escapeHtml(a.provider)}</span>`,
 		).join('<br>');
 	}
 
@@ -2770,8 +2787,8 @@ window.addEventListener('DOMContentLoaded', () => {
 			return;
 		}
 		schedulesList.innerHTML = schedules.map((s) => {
-			const next = s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : 'n/a';
-			return `<span>${s.enabled ? '🟢' : '⏸'} <strong>${s.label || s.command}</strong> · ${s.cronExpr} · next: ${next}</span>`;
+			const next = escapeHtml(s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : 'n/a');
+			return `<span>${s.enabled ? '🟢' : '⏸'} <strong>${escapeHtml(s.label || s.command)}</strong> · ${escapeHtml(s.cronExpr)} · next: ${next}</span>`;
 		}).join('<br>');
 	}
 	refreshSchedulesUI();
@@ -2786,10 +2803,10 @@ window.addEventListener('DOMContentLoaded', () => {
 			return;
 		}
 		remindersList.innerHTML = reminders.map((item) => {
-			const when = item.triggerAt ? new Date(item.triggerAt).toLocaleString() : 'n/a';
+			const when = escapeHtml(item.triggerAt ? new Date(item.triggerAt).toLocaleString() : 'n/a');
 			const done = item.completed ? '✅' : '🕒';
-			const priority = Number(item.priority || 1);
-			return `<span>${done} <strong>${item.label || item.text || 'Reminder'}</strong> · ${when} · p${priority}</span>`;
+			const priority = toFiniteNumber(item.priority || 1, 1);
+			return `<span>${done} <strong>${escapeHtml(item.label || item.text || 'Reminder')}</strong> · ${when} · p${priority}</span>`;
 		}).join('<br>');
 	}
 	refreshRemindersUI();
@@ -3149,7 +3166,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	function renderJob(job) {
 		if (!jobsList) return;
 		// Remove existing entry for this job
-		const existing = jobsList.querySelector(`[data-job-id="${job.id}"]`);
+		const existing = Array.from(jobsList.children).find((node) => node.dataset?.jobId === String(job.id));
 		if (existing) existing.remove();
 
 		const el = document.createElement('div');
@@ -3160,24 +3177,30 @@ window.addEventListener('DOMContentLoaded', () => {
 			: job.status === 'error' ? '#ef4444'
 			: job.status === 'cancelled' ? '#94a3b8'
 			: '#38bdf8';
+		const processedFiles = toFiniteNumber(job.processedFiles);
+		const totalFiles = toFiniteNumber(job.totalFiles);
+		const progressPercent = Math.max(0, Math.min(100, toFiniteNumber(job.progressPercent)));
+		const chunks = toFiniteNumber(job.chunks, 0);
+		const jobId = escapeHtml(job.id);
+		const jobStatus = escapeHtml(job.status);
 
 		el.innerHTML = `
 			<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-				<span style="color:${statusColor};font-weight:600;text-transform:capitalize">${job.status}</span>
-				<span style="color:#64748b">${job.processedFiles}/${job.totalFiles} files</span>
+				<span style="color:${statusColor};font-weight:600;text-transform:capitalize">${jobStatus}</span>
+				<span style="color:#64748b">${processedFiles}/${totalFiles} files</span>
 			</div>
 			<div style="height:4px;background:#1e293b;border-radius:4px;overflow:hidden">
-				<div style="height:100%;background:${statusColor};width:${job.progressPercent}%;border-radius:4px;transition:width .3s"></div>
+				<div style="height:100%;background:${statusColor};width:${progressPercent}%;border-radius:4px;transition:width .3s"></div>
 			</div>
-			${job.chunks ? `<div style="color:#64748b;font-size:11px;margin-top:4px">${job.chunks} chunks indexed</div>` : ''}
+			${chunks ? `<div style="color:#64748b;font-size:11px;margin-top:4px">${chunks} chunks indexed</div>` : ''}
 			${job.status === 'running' || job.status === 'pending'
-				? `<button data-cancel="${job.id}" type="button"
+				? `<button data-cancel="${jobId}" type="button"
 					style="margin-top:6px;padding:3px 8px;border-radius:6px;border:1px solid #334155;
 					       background:none;color:#64748b;cursor:pointer;font-size:11px">Cancel</button>`
 				: ''}
 		`;
 
-		el.querySelector(`[data-cancel="${job.id}"]`)?.addEventListener('click', () => {
+		el.querySelector('[data-cancel]')?.addEventListener('click', () => {
 			jarvis.fileIndex.cancelJob(job.id).catch(() => {});
 		});
 
@@ -3187,11 +3210,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	function updateJobInPanel(job) {
 		if (!jobsList) return;
-		const existing = jobsList.querySelector(`[data-job-id="${job.id}"]`);
+		const existing = Array.from(jobsList.children).find((node) => node.dataset?.jobId === String(job.id));
 		if (existing) {
-			// Replace in place
-			const tmp = document.createElement('div');
-			tmp.innerHTML = existing.outerHTML;
 			renderJob(job);
 		} else {
 			renderJob(job);

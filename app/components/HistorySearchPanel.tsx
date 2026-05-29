@@ -1,7 +1,7 @@
 "use client";
 
 import { Calendar, ChevronRight, Clock, Command, MessageSquareText, Search, Terminal, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useDebounce } from "@/app/hooks/useDebounce";
 import { cn } from "@/lib/utils";
 
@@ -30,13 +30,13 @@ const TYPE_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 function renderPreview(text: string) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return text.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+
+    return <Fragment key={index}>{part}</Fragment>;
+  });
 }
 
 export function HistorySearchPanel({
@@ -217,13 +217,15 @@ export function HistorySearchPanel({
               <div className="min-w-0 flex-1">
                 <div
                   className="text-sm font-medium leading-snug"
-                  dangerouslySetInnerHTML={{ __html: renderPreview(hit.title) }}
-                />
+                >
+                  {renderPreview(hit.title)}
+                </div>
                 {hit.preview && (
                   <div
                     className={cn("mt-0.5 text-xs leading-relaxed line-clamp-2", dark ? "text-slate-400" : "text-slate-500")}
-                    dangerouslySetInnerHTML={{ __html: renderPreview(hit.preview) }}
-                  />
+                  >
+                    {renderPreview(hit.preview)}
+                  </div>
                 )}
                 <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
                   <Calendar className="h-3 w-3" />
