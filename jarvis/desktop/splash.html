@@ -180,6 +180,18 @@
     </div>
 
     <div class="status-line" id="status-line">Initializing…</div>
+    <div class="status-line" id="updater-status-line">Updater: waiting to check…</div>
+    <div class="progress-list" style="max-width:380px">
+      <div class="progress-item" id="updater-progress-wrap" style="display:none">
+        <div class="progress-header">
+          <span class="progress-label">⬆️ APP UPDATE</span>
+          <span class="progress-pct" id="updater-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill fill-cloud" id="updater-bar"></div>
+        </div>
+      </div>
+    </div>
     <div id="error-card"></div>
 
   </div>
@@ -207,6 +219,56 @@
       card.style.display = 'block';
     }
 
+    function setUpdaterStatus(text) {
+      document.getElementById('updater-status-line').textContent = text;
+    }
+
+    function setUpdaterProgress(pct) {
+      const p = Math.min(100, Math.max(0, Number(pct || 0)));
+      const wrap = document.getElementById('updater-progress-wrap');
+      if (wrap) wrap.style.display = 'block';
+      document.getElementById('updater-bar').style.width = p + '%';
+      document.getElementById('updater-pct').textContent = Math.round(p) + '%';
+    }
+
+    function hideUpdaterProgress() {
+      const wrap = document.getElementById('updater-progress-wrap');
+      if (wrap) wrap.style.display = 'none';
+    }
+
+    function applyUpdaterState(payload) {
+      const status = String(payload?.status || 'idle').toLowerCase();
+      if (status === 'checking') {
+        hideUpdaterProgress();
+        setUpdaterStatus('Updater: checking for updates…');
+        return;
+      }
+      if (status === 'available') {
+        hideUpdaterProgress();
+        setUpdaterStatus('Updater: update found, downloading in background…');
+        return;
+      }
+      if (status === 'downloading') {
+        setUpdaterProgress(payload?.downloadProgress || 0);
+        setUpdaterStatus('Updater: downloading update in background…');
+        return;
+      }
+      if (status === 'install-ready') {
+        setUpdaterProgress(100);
+        setUpdaterStatus('Updater: update ready, will install on app close.');
+        return;
+      }
+      if (status === 'error' || status === 'unavailable') {
+        hideUpdaterProgress();
+        setUpdaterStatus('Updater: check unavailable, continuing startup.');
+        return;
+      }
+      if (status === 'up-to-date') {
+        hideUpdaterProgress();
+        setUpdaterStatus('Updater: app is up to date.');
+      }
+    }
+
     // ── IPC listeners (set up before main process sends events) ──────────────
     if (window.jarvisIpc?.on) {
       window.jarvisIpc.on('splash:progress', (data) => {
@@ -215,6 +277,10 @@
         if (data.pyPercent  !== undefined) setPyProgress(data.pyPercent);
         if (data.status)   setStatus(data.status);
         if (data.error)    showError(data.error);
+      });
+      window.jarvisIpc.on('auto-update-status', (payload) => {
+        if (!payload) return;
+        applyUpdaterState(payload);
       });
     }
 

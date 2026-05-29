@@ -185,6 +185,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const updateModalError = document.getElementById('update-modal-error');
 	const updateModalPrimaryButton = document.getElementById('update-modal-primary');
 	const updateModalSecondaryButton = document.getElementById('update-modal-secondary');
+	let updateModalManualFlow = false;
 	const quickActionButtons = document.querySelectorAll('[data-command]');
 	const openBrowserTabButton = document.getElementById('open-browser-tab');
 	const commandTabButton = document.getElementById('command-tab-button');
@@ -1239,22 +1240,22 @@ window.addEventListener('DOMContentLoaded', () => {
 			checkUpdatesButton.disabled = payload?.status === 'checking' || payload?.status === 'downloading';
 		}
 
-		if (payload?.status === 'available') {
+		if (payload?.status === 'available' && updateModalManualFlow) {
 			showUpdateModal({
 				mode: 'available',
 				payload,
 			});
-		} else if (payload?.status === 'downloading') {
+		} else if (payload?.status === 'downloading' && updateModalManualFlow) {
 			showUpdateModal({
 				mode: 'downloading',
 				payload,
 			});
-		} else if (payload?.status === 'install-ready') {
+		} else if (payload?.status === 'install-ready' && updateModalManualFlow) {
 			showUpdateModal({
 				mode: 'install-ready',
 				payload,
 			});
-		} else if (payload?.status === 'error' || payload?.status === 'unavailable') {
+		} else if ((payload?.status === 'error' || payload?.status === 'unavailable') && updateModalManualFlow) {
 			showUpdateModal({
 				mode: 'error',
 				payload,
@@ -2164,6 +2165,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	if (checkUpdatesButton && ipcRenderer) {
 		checkUpdatesButton.addEventListener('click', async () => {
+			updateModalManualFlow = true;
 			const result = await ipcRenderer.invoke('check-for-updates');
 			if (result?.ok === false && result.reason === 'not-packaged') {
 				appendMessage(log, 'Updater', 'Running in dev mode — download and install the EXE to get automatic updates.', 'system');
@@ -2233,6 +2235,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const downloadUpdateButton = document.getElementById('download-update');
 	if (downloadUpdateButton && ipcRenderer) {
 		downloadUpdateButton.addEventListener('click', async () => {
+			updateModalManualFlow = true;
 			appendMessage(log, 'Updater', 'Starting download…', 'system');
 			downloadUpdateButton.disabled = true;
 			const result = await ipcRenderer.invoke('download-update');
@@ -2255,10 +2258,12 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 
 			if (mode === 'error') {
+				updateModalManualFlow = true;
 				await ipcRenderer.invoke('check-for-updates');
 				return;
 			}
 
+			updateModalManualFlow = true;
 			updateModalPrimaryButton.disabled = true;
 			const result = await ipcRenderer.invoke('download-update');
 			updateModalPrimaryButton.disabled = false;
