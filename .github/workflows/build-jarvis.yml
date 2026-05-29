@@ -5,11 +5,15 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag to publish (e.g. v1.1.0, v2, or V2)"
-        required: true
+        description: "Release tag (e.g. v1.1.0). Leave blank to publish to jarvis-latest."
+        required: false
         type: string
-  # Trigger automatically for versioned tags
+  # Auto-trigger when jarvis changes land on main, or when a versioned tag is pushed
   push:
+    branches:
+      - main
+    paths:
+      - 'jarvis/**'
     tags:
       - 'v*'
 
@@ -26,7 +30,7 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       UPDATE_ROLLOUT_PERCENTAGE: '100'
       UPDATES_BASE_URL: 'https://updates.assistantx.pl'
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || startsWith(github.ref, 'refs/tags/') && github.ref_name || 'jarvis-latest' }}
 
     steps:
       - name: Checkout repository
@@ -35,21 +39,65 @@ jobs:
           # Full history so we can generate a meaningful changelog
           fetch-depth: 0
 
+      - name: Advance jarvis-latest tag and remove legacy releases
+        shell: pwsh
+        if: env.RELEASE_TAG == 'jarvis-latest'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $headers = @{
+            Authorization = "token $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $repoUrl = "https://api.github.com/repos/${{ github.repository }}"
+
+          # Force-move the jarvis-latest tag to the current commit
+          try {
+            Invoke-RestMethod -Method Patch -Headers $headers `
+              -Uri "$repoUrl/git/refs/tags/jarvis-latest" `
+              -Body (@{ sha = "${{ github.sha }}"; force = $true } | ConvertTo-Json) | Out-Null
+            Write-Host "Moved jarvis-latest tag to ${{ github.sha }}"
+          } catch {
+            Write-Host "jarvis-latest tag not found yet; it will be created by the release step."
+          }
+
+          # One-time cleanup: delete legacy V2 and Jarvis-Latest releases and their tags
+          foreach ($oldTag in @("V2", "Jarvis-Latest")) {
+            try {
+              $rel = Invoke-RestMethod -Method Get -Headers $headers -Uri "$repoUrl/releases/tags/$oldTag" -ErrorAction Stop
+              Invoke-RestMethod -Method Delete -Headers $headers -Uri "$repoUrl/releases/$($rel.id)" -ErrorAction Stop
+              Write-Host "Deleted release: $oldTag (id=$($rel.id))"
+            } catch { Write-Host "Release '$oldTag' not found or already removed." }
+            try {
+              Invoke-RestMethod -Method Delete -Headers $headers -Uri "$repoUrl/git/refs/tags/$oldTag" -ErrorAction Stop
+              Write-Host "Deleted tag: $oldTag"
+            } catch { Write-Host "Tag '$oldTag' not found or already removed." }
+          }
+
       - name: Bump version and generate changelog
         id: meta
         shell: pwsh
         run: |
           $releaseTag = "${{ env.RELEASE_TAG }}".Trim()
-          if ($releaseTag -notmatch '^[vV](\d+)(?:\.(\d+))?(?:\.(\d+))?([+-][0-9A-Za-z.-]+)?$') {
+          if ($releaseTag -eq 'jarvis-latest') {
+            # Rolling latest: auto-increment patch from current package.json version
+            $desktopPkg = Get-Content "jarvis/desktop/package.json" -Raw | ConvertFrom-Json
+            $parts = $desktopPkg.version -split '\.'
+            $parts[2] = [string]([int]$parts[2] + 1)
+            $version = $parts -join '.'
+            Write-Host "Rolling build — version auto-incremented to: $version"
+          } elseif ($releaseTag -notmatch '^[vV](\d+)(?:\.(\d+))?(?:\.(\d+))?([+-][0-9A-Za-z.-]+)?$') {
             Write-Error "Invalid release tag '$releaseTag'. Expected format like v1.1.0, v2, or V2."
             exit 1
+          } else {
+            $major = $Matches[1]
+            $minor = if ([string]::IsNullOrWhiteSpace($Matches[2])) { '0' } else { $Matches[2] }
+            $patch = if ([string]::IsNullOrWhiteSpace($Matches[3])) { '0' } else { $Matches[3] }
+            $suffix = if ([string]::IsNullOrWhiteSpace($Matches[4])) { '' } else { $Matches[4] }
+            $version = "$major.$minor.$patch$suffix"
+            Write-Host "Version: $version"
           }
-          $major = $Matches[1]
-          $minor = if ([string]::IsNullOrWhiteSpace($Matches[2])) { '0' } else { $Matches[2] }
-          $patch = if ([string]::IsNullOrWhiteSpace($Matches[3])) { '0' } else { $Matches[3] }
-          $suffix = if ([string]::IsNullOrWhiteSpace($Matches[4])) { '' } else { $Matches[4] }
-          $version = "$major.$minor.$patch$suffix"
-          Write-Host "Version: $version"
 
           # Patch desktop package.json
           $desktopPkg = Get-Content "jarvis/desktop/package.json" -Raw | ConvertFrom-Json
@@ -863,7 +911,7 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || startsWith(github.ref, 'refs/tags/') && github.ref_name || 'jarvis-latest' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -916,7 +964,7 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || startsWith(github.ref, 'refs/tags/') && github.ref_name || 'jarvis-latest' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -986,7 +1034,7 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || startsWith(github.ref, 'refs/tags/') && github.ref_name || 'jarvis-latest' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -1055,7 +1103,7 @@ jobs:
       - build-linux
       - build-android
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || startsWith(github.ref, 'refs/tags/') && github.ref_name || 'jarvis-latest' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -1085,15 +1133,19 @@ jobs:
         run: |
           set -euo pipefail
           release_tag="${RELEASE_TAG}"
-          if [[ ! "$release_tag" =~ ^[vV]([0-9]+)(\.([0-9]+))?(\.([0-9]+))?([+-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid release tag: $release_tag (expected formats like v1.1.0, v2, or V2)" >&2
+          if [[ "$release_tag" == "jarvis-latest" ]]; then
+            # Read version from package.json for rolling build
+            version="$(node -p "require('./jarvis/desktop/package.json').version")"
+          elif [[ "$release_tag" =~ ^[vV]([0-9]+)(\.([0-9]+))?(\.([0-9]+))?([+-][0-9A-Za-z.-]+)?$ ]]; then
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[3]:-0}"
+            patch="${BASH_REMATCH[5]:-0}"
+            suffix="${BASH_REMATCH[6]:-}"
+            version="${major}.${minor}.${patch}${suffix}"
+          else
+            echo "Invalid release tag: $release_tag (expected formats like v1.1.0, v2, V2, or jarvis-latest)" >&2
             exit 1
           fi
-          major="${BASH_REMATCH[1]}"
-          minor="${BASH_REMATCH[3]:-0}"
-          patch="${BASH_REMATCH[5]:-0}"
-          suffix="${BASH_REMATCH[6]:-}"
-          version="${major}.${minor}.${patch}${suffix}"
           base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
           generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
