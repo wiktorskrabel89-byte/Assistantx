@@ -44,7 +44,7 @@ describe("GET /api/jarvis/download", () => {
     expect(res.headers.get("location")).toBe("https://updates.assistantx.pl/windows/JarvisSetup-x64.exe");
   });
 
-  it("returns manifest error when resolved url host is not allowed", async () => {
+  it("redirects to canonical installer url when manifest host is not allowed", async () => {
     const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
     fetchMock.mockResolvedValueOnce(
       Response.json({
@@ -62,10 +62,8 @@ describe("GET /api/jarvis/download", () => {
     );
 
     const res = await GET(new Request("http://localhost/api/jarvis/download?platform=windows&arch=x64"));
-    const payload = await res.json() as { reason?: string; instructions?: string };
-    expect(res.status).toBe(503);
-    expect(payload.reason).toBe("manifest-download-resolution-failed");
-    expect(payload.instructions).toContain("Verify versions.json platform mapping");
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://updates.assistantx.pl/windows/JarvisSetup-x64.exe");
   });
 
   it("returns missing-installer 503 when manifest has no platform entry", async () => {
@@ -77,5 +75,33 @@ describe("GET /api/jarvis/download", () => {
     expect(res.status).toBe(503);
     expect(payload.error).toBe("Installer not yet available");
     expect(payload.reason).toBe("manifest-platform-entry-missing");
+  });
+
+  it("redirects android requests to canonical fallback url when manifest JSON is invalid", async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(
+      new Response("<html>oops</html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+
+    const res = await GET(new Request("http://localhost/api/jarvis/download?platform=android"));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://updates.assistantx.pl/android/Jarvis-android.apk");
+  });
+
+  it("redirects windows requests to canonical fallback url when manifest JSON is invalid", async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(
+      new Response("<html>oops</html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+
+    const res = await GET(new Request("http://localhost/api/jarvis/download?platform=windows&arch=arm64"));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://updates.assistantx.pl/windows/JarvisSetup-arm64.exe");
   });
 });
