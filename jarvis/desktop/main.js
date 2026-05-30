@@ -1371,6 +1371,8 @@ function createWindow() {
     webPreferences: buildSecureWebPreferences({ preload: path.join(__dirname, 'preload.js') }),
   });
 
+  win.webContents.openDevTools();
+
   loadStartupScreen();
 
   win.webContents.on('did-finish-load', () => {
