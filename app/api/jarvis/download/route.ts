@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { NextResponse } from "next/server";
 import {
   DEFAULT_UPDATES_HOST,
   fetchUpdateManifest,
@@ -16,6 +17,66 @@ const BUILD_MAC_COMMAND = "cd jarvis/desktop && npm install && npm run dist:mac"
 const BUILD_LINUX_COMMAND = "cd jarvis/desktop && npm install && npm run dist:linux";
 const ANDROID_BUILD_COMMAND =
   "cd jarvis/android/android && ./gradlew assembleRelease";
+
+type GitHubReleaseAsset = {
+  name?: string;
+  url?: string;
+};
+
+type GitHubReleaseResponse = {
+  assets?: GitHubReleaseAsset[];
+};
+
+async function proxyGitHubReleaseAsset(tag: string, filename: string): Promise<Response> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    return new NextResponse("Brak konfiguracji tokenu", { status: 500 });
+  }
+  const authHeader = ["Bearer", token].join(" ");
+
+  try {
+    const releaseRes = await fetch(
+      `https://api.github.com/repos/wiktorskrabel89-byte/Assistantx/releases/tags/${encodeURIComponent(tag)}`,
+      {
+        headers: { Authorization: authHeader },
+        cache: "no-store",
+      },
+    );
+
+    if (!releaseRes.ok) {
+      return new NextResponse("Nie znaleziono wydania", { status: 404 });
+    }
+
+    const release = (await releaseRes.json()) as GitHubReleaseResponse;
+    const asset = release.assets?.find((candidate) => candidate.name === filename);
+    if (!asset?.url) {
+      return new NextResponse("Nie znaleziono pliku w tym wydaniu", { status: 404 });
+    }
+
+    const fileRes = await fetch(asset.url, {
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/octet-stream",
+      },
+      redirect: "follow",
+      cache: "no-store",
+    });
+
+    if (!fileRes.ok || !fileRes.body) {
+      return new NextResponse("Nie udało się pobrać pliku", { status: 502 });
+    }
+
+    const safeFilename = filename.replace(/["\\\r\n]/g, "_");
+    return new NextResponse(fileRes.body, {
+      headers: {
+        "Content-Disposition": `attachment; filename="${safeFilename}"`,
+        "Content-Type": "application/octet-stream",
+      },
+    });
+  } catch {
+    return new NextResponse("Błąd wewnętrzny", { status: 500 });
+  }
+}
 
 function resolvePlatformFallbackDownloadUrl(target: DownloadTarget): string {
   const base = `https://${DEFAULT_UPDATES_HOST}`;
@@ -53,6 +114,12 @@ async function resolveManifestDownloadTarget(target: DownloadTarget): Promise<st
 
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
+  const tag = searchParams.get("tag") || "jarvis-latest";
+  const filename = searchParams.get("file");
+  if (filename) {
+    return proxyGitHubReleaseAsset(tag, filename);
+  }
+
   const rawPlatform = searchParams.get("platform");
   const platform =
     rawPlatform === "android" || rawPlatform === "mac" || rawPlatform === "linux"

@@ -1146,7 +1146,7 @@ jobs:
             echo "Invalid release tag: $release_tag (expected formats like v1.1.0, v2, V2, or jarvis-latest)" >&2
             exit 1
           fi
-          base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
+          base_url="https://assistantx.pl/api/jarvis/download?tag=${release_tag}"
           generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
           mkdir -p public/updates
@@ -1160,39 +1160,39 @@ jobs:
                 "windows": {
                   "version": "${version}",
                   "latestVersion": "${version}",
-                  "path": "${base_url}/JarvisSetup-x64.exe",
-                  "url": "${base_url}/JarvisSetup-x64.exe",
+                  "path": "${base_url}&file=JarvisSetup-x64.exe",
+                  "url": "${base_url}&file=JarvisSetup-x64.exe",
                   "artifacts": {
-                    "x64": "${base_url}/JarvisSetup-x64.exe",
-                    "arm64": "${base_url}/JarvisSetup-arm64.exe"
+                    "x64": "${base_url}&file=JarvisSetup-x64.exe",
+                    "arm64": "${base_url}&file=JarvisSetup-arm64.exe"
                   }
                 },
                 "linux": {
                   "version": "${version}",
                   "latestVersion": "${version}",
-                  "path": "${base_url}/Jarvis-x64.AppImage",
-                  "url": "${base_url}/Jarvis-x64.AppImage",
+                  "path": "${base_url}&file=Jarvis-x64.AppImage",
+                  "url": "${base_url}&file=Jarvis-x64.AppImage",
                   "artifacts": {
-                    "x64": "${base_url}/Jarvis-x64.AppImage"
+                    "x64": "${base_url}&file=Jarvis-x64.AppImage"
                   }
                 },
                 "mac": {
                   "version": "${version}",
                   "latestVersion": "${version}",
-                  "path": "${base_url}/JarvisSetup-x64.dmg",
-                  "url": "${base_url}/JarvisSetup-x64.dmg",
+                  "path": "${base_url}&file=JarvisSetup-x64.dmg",
+                  "url": "${base_url}&file=JarvisSetup-x64.dmg",
                   "artifacts": {
-                    "x64": "${base_url}/JarvisSetup-x64.dmg",
-                    "arm64": "${base_url}/JarvisSetup-arm64.dmg"
+                    "x64": "${base_url}&file=JarvisSetup-x64.dmg",
+                    "arm64": "${base_url}&file=JarvisSetup-arm64.dmg"
                   }
                 },
                 "android": {
                   "version": "${version}",
                   "latestVersion": "${version}",
-                  "path": "${base_url}/Jarvis-android.apk",
-                  "url": "${base_url}/Jarvis-android.apk",
+                  "path": "${base_url}&file=Jarvis-android.apk",
+                  "url": "${base_url}&file=Jarvis-android.apk",
                   "artifacts": {
-                    "apk": "${base_url}/Jarvis-android.apk"
+                    "apk": "${base_url}&file=Jarvis-android.apk"
                   }
                 }
               },
@@ -1200,20 +1200,20 @@ jobs:
                 "windows": {
                   "version": "${version}-beta.1",
                   "latestVersion": "${version}-beta.1",
-                  "path": "${base_url}/JarvisSetup-x64.exe",
-                  "url": "${base_url}/JarvisSetup-x64.exe",
+                  "path": "${base_url}&file=JarvisSetup-x64.exe",
+                  "url": "${base_url}&file=JarvisSetup-x64.exe",
                   "artifacts": {
-                    "x64": "${base_url}/JarvisSetup-x64.exe",
-                    "arm64": "${base_url}/JarvisSetup-arm64.exe"
+                    "x64": "${base_url}&file=JarvisSetup-x64.exe",
+                    "arm64": "${base_url}&file=JarvisSetup-arm64.exe"
                   }
                 },
                 "linux": {
                   "version": "${version}-beta.1",
                   "latestVersion": "${version}-beta.1",
-                  "path": "${base_url}/Jarvis-x64.AppImage",
-                  "url": "${base_url}/Jarvis-x64.AppImage",
+                  "path": "${base_url}&file=Jarvis-x64.AppImage",
+                  "url": "${base_url}&file=Jarvis-x64.AppImage",
                   "artifacts": {
-                    "x64": "${base_url}/Jarvis-x64.AppImage"
+                    "x64": "${base_url}&file=Jarvis-x64.AppImage"
                   }
                 }
               }
