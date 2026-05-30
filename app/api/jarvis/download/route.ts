@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import {
+  DEFAULT_UPDATES_HOST,
   fetchUpdateManifest,
   getManifestPlatformEntry,
   getUpdateChannel,
@@ -15,6 +16,7 @@ const BUILD_MAC_COMMAND = "cd jarvis/desktop && npm install && npm run dist:mac"
 const BUILD_LINUX_COMMAND = "cd jarvis/desktop && npm install && npm run dist:linux";
 const ANDROID_BUILD_COMMAND =
   "cd jarvis/android/android && ./gradlew assembleRelease";
+const ANDROID_FALLBACK_DOWNLOAD_URL = `https://${DEFAULT_UPDATES_HOST}/android/Jarvis-android.apk`;
 
 type DownloadTarget = {
   platform: "windows" | "mac" | "linux" | "android";
@@ -115,6 +117,10 @@ export async function GET(request: Request): Promise<Response> {
       return Response.redirect(manifestUrl, 307);
     }
   } catch (error) {
+    if (target.platform === "android" && isAllowedHttpsUrl(ANDROID_FALLBACK_DOWNLOAD_URL)) {
+      return Response.redirect(ANDROID_FALLBACK_DOWNLOAD_URL, 307);
+    }
+
     return Response.json(
       {
         error: "Installer is temporarily unavailable",
