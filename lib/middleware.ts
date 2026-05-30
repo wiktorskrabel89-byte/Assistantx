@@ -7,8 +7,29 @@ import {
 } from '@/app/lib/ui-language'
 
 const PUBLIC_METADATA_PATHS = new Set(['/manifest.json', '/manifest.webmanifest'])
+const PUBLIC_UPDATER_ROOT_PATHS = new Set([
+  '/latest.yml',
+  '/latest.yml.sig',
+  '/latest-mac.yml',
+  '/latest-mac.yml.sig',
+  '/release-notes.json',
+  '/versions.json',
+  '/updates/versions.json',
+])
+const PUBLIC_UPDATER_PATH_PREFIXES = [
+  '/windows/',
+  '/linux/',
+  '/mac/',
+  '/android/',
+  '/beta/windows/',
+  '/beta/linux/',
+  '/beta/mac/',
+  '/beta/android/',
+]
 const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support']
 const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/support']
+const PUBLIC_UPDATER_FILE_PATTERN =
+  /(?:^|\/)(?:latest(?:-[^/]+)?\.yml(?:\.sig)?|release-notes\.json|[^/]+\.(?:exe|nupkg|dmg|appimage|apk|blockmap))$/i
 
 function hasSupabaseConfig() {
   return Boolean(
@@ -19,6 +40,15 @@ function hasSupabaseConfig() {
 
 function isAuthOptionalPath(pathname: string): boolean {
   return pathname === '/' || AUTH_OPTIONAL_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
+function isPublicUpdaterPath(pathname: string): boolean {
+  if (PUBLIC_UPDATER_ROOT_PATHS.has(pathname)) return true
+
+  return (
+    PUBLIC_UPDATER_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+    && PUBLIC_UPDATER_FILE_PATTERN.test(pathname)
+  )
 }
 
 function isAuthDebugEnabled(): boolean {
@@ -90,6 +120,7 @@ export async function updateSession(request: NextRequest) {
 
   if (
     PUBLIC_METADATA_PATHS.has(pathname)
+    || isPublicUpdaterPath(pathname)
     || !hasSupabaseConfig()
     || isAuthOptionalPath(pathname)
   ) {
