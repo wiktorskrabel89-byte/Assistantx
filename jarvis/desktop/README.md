@@ -144,6 +144,7 @@ npm run setup:local-ai
 This runs:
 - `scripts/setup-env.ps1` (install/start Ollama)
 - `scripts/ensure-ollama-models.ps1` (pull `gemma3:4b`, `qwen2.5-coder:14b`)
+- local voice asset bootstrap (cache Whisper STT + Kokoro TTS, and Piper for Polish installs)
 
 ### Optional local web search stack (SearXNG)
 

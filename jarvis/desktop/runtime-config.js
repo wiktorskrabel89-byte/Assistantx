@@ -16,6 +16,16 @@ const VALID_LLM_TARGETS = ['local-ollama', 'local-vllm', 'cloud-provider', 'remo
 const VALID_LOCAL_RUNTIMES = ['ollama', 'vllm'];
 const VALID_CLOUD_PROVIDERS = ['openai', 'anthropic', 'openrouter'];
 const VALID_PAIRING_STATES = ['unpaired', 'paired', 'expired'];
+const VALID_STT_MODELS = ['tiny', 'base', 'small', 'medium', 'large'];
+const STT_MODEL_ALIASES = {
+  'whisper-tiny': 'tiny',
+  'whisper-base': 'base',
+  'whisper-small': 'small',
+  'whisper-medium': 'medium',
+  'whisper-large-v3': 'large',
+  'whisper-large-v3-turbo': 'large',
+};
+const VALID_LOCAL_TTS_MODELS = ['kokoro', 'piper', 'auto'];
 
 // Model matrix: hardware profile → Ollama model tag
 const HARDWARE_PROFILE_MODELS = {
@@ -88,6 +98,22 @@ function normalizePairingState(value) {
   return VALID_PAIRING_STATES.includes(normalized) ? normalized : 'unpaired';
 }
 
+function normalizeSttModel(value, fallback = 'base') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (VALID_STT_MODELS.includes(normalized)) return normalized;
+  if (STT_MODEL_ALIASES[normalized]) return STT_MODEL_ALIASES[normalized];
+  return String(fallback || 'base').trim().toLowerCase() || 'base';
+}
+
+function normalizeTtsModel(value, fallback = 'kokoro') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (VALID_LOCAL_TTS_MODELS.includes(normalized)) return normalized;
+  if (normalized === 'kokoro-local') return 'kokoro';
+  if (normalized === 'piper-local') return 'piper';
+  if (normalized === 'auto-local') return 'auto';
+  return String(fallback || 'kokoro').trim().toLowerCase() || 'kokoro';
+}
+
 function normalizeRuntimeConfig(input = {}) {
   const raw = input && typeof input === 'object' ? input : {};
   const engine_mode = normalizeEngineMode(raw.engine_mode);
@@ -140,9 +166,9 @@ function normalizeRuntimeConfig(input = {}) {
 
   normalized.hardware_profile = profile;
   normalized.language = String(raw.language || 'en').trim() || 'en';
-  normalized.stt_model = String(raw.stt_model || defaults.stt).trim() || defaults.stt;
+  normalized.stt_model = normalizeSttModel(raw.stt_model, defaults.stt);
   normalized.llm_model = String(raw.llm_model || defaults.llm).trim() || defaults.llm;
-  normalized.tts_model = String(raw.tts_model || defaults.tts).trim() || defaults.tts;
+  normalized.tts_model = normalizeTtsModel(raw.tts_model, defaults.tts);
   normalized.remoteRuntimeApiUrl = normalized.server.remoteRuntimeApiUrl;
   normalized.remoteRuntimeWsUrl = normalized.server.remoteRuntimeWsUrl;
   return normalized;

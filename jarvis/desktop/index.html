@@ -582,6 +582,16 @@
       grid-column: span 2;
     }
 
+    .field-note {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--panel-border);
+      background: rgba(125, 211, 252, 0.06);
+    }
+
     .toggle {
       display: inline-flex;
       align-items: center;
@@ -1166,7 +1176,10 @@
             <div class="stack">
               <div class="section-label">AI Models</div>
               <div class="model-grid">
-                <label class="field">
+                <div id="engine-profile-summary" class="field-note" style="grid-column:1 / -1;">
+                  Loading current engine profile…
+                </div>
+                <label class="field" id="chat-model-field">
                   <span>Chat model</span>
                   <select id="chat-model">
                     <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
@@ -1176,15 +1189,16 @@
                     <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
                   </select>
                 </label>
-                <label class="field">
+                <label class="field" id="stt-model-field">
                   <span>Speech-to-text model</span>
                   <select id="stt-model">
-                    <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
-                    <option value="tiny">whisper-tiny</option>
+                    <option value="large">whisper-large-v3</option>
+                    <option value="medium">whisper-medium</option>
                     <option value="base">whisper-base</option>
+                    <option value="tiny">whisper-tiny</option>
                   </select>
                 </label>
-                <label class="field">
+                <label class="field" id="tts-backend-field">
                   <span>TTS backend</span>
                   <select id="tts-backend">
                     <optgroup label="Free plan (local)">
@@ -1199,9 +1213,11 @@
                     </optgroup>
                   </select>
                 </label>
-                <label class="field">
+                <label class="field" id="tts-model-field">
                   <span>Text-to-speech model</span>
                   <select id="tts-model">
+                    <option value="kokoro">kokoro-82m (local voice runtime)</option>
+                    <option value="piper">piper local voice pack</option>
                     <option value="playai-tts">playai-tts (Groq default)</option>
                     <option value="gpt-4o-mini-tts">gpt-4o-mini-tts (OpenAI)</option>
                     <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
@@ -1218,13 +1234,16 @@
                     <option value="silent">Silent (say nothing)</option>
                   </select>
                 </label>
-                <label class="field">
+                <label class="field" id="voice-provider-mode-field">
                   <span>Voice provider mode</span>
                   <select id="voice-provider-mode">
                     <option value="assistantx-server">AssistantX API gateway (default)</option>
                     <option value="desktop-direct">Desktop-direct (BYOK / advanced)</option>
                   </select>
                 </label>
+                <div id="model-settings-note" class="field-note" style="grid-column:1 / -1;">
+                  Local engine settings are loading…
+                </div>
                 <label class="toggle field-full" for="stt-enabled">
                   <input id="stt-enabled" type="checkbox" checked />
                   Speech-to-text enabled
