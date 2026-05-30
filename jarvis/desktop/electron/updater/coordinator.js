@@ -312,7 +312,13 @@ class UpdateCoordinator {
 
   async applyManifestGenericFeed(autoUpdater) {
     if (this.getUpdateSource() !== 'manifest' || !autoUpdater) return null;
-    const entry = await this.getManifestPlatformEntry();
+    let entry;
+    try {
+      entry = await this.getManifestPlatformEntry();
+    } catch (err) {
+      this.log('manifest-feed-fetch-skipped', { error: String(err?.message || err) });
+      return null;
+    }
     if (!entry) return null;
     const desktop = entry.desktop && typeof entry.desktop === 'object' ? entry.desktop : {};
     let feedUrl = String(desktop.feedUrl || '').trim();
