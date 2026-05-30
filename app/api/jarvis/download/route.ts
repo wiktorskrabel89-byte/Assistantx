@@ -16,7 +16,14 @@ const BUILD_MAC_COMMAND = "cd jarvis/desktop && npm install && npm run dist:mac"
 const BUILD_LINUX_COMMAND = "cd jarvis/desktop && npm install && npm run dist:linux";
 const ANDROID_BUILD_COMMAND =
   "cd jarvis/android/android && ./gradlew assembleRelease";
-const ANDROID_FALLBACK_DOWNLOAD_URL = `https://${DEFAULT_UPDATES_HOST}/android/Jarvis-android.apk`;
+
+function resolvePlatformFallbackDownloadUrl(target: DownloadTarget): string {
+  const base = `https://${DEFAULT_UPDATES_HOST}`;
+  if (target.platform === "android") return `${base}/android/Jarvis-android.apk`;
+  if (target.platform === "mac") return `${base}/mac/JarvisSetup-${target.arch ?? "x64"}.dmg`;
+  if (target.platform === "linux") return `${base}/linux/Jarvis-x64.AppImage`;
+  return `${base}/windows/JarvisSetup-${target.arch ?? "x64"}.exe`;
+}
 
 type DownloadTarget = {
   platform: "windows" | "mac" | "linux" | "android";
@@ -117,8 +124,9 @@ export async function GET(request: Request): Promise<Response> {
       return Response.redirect(manifestUrl, 307);
     }
   } catch (error) {
-    if (target.platform === "android" && isAllowedHttpsUrl(ANDROID_FALLBACK_DOWNLOAD_URL)) {
-      return Response.redirect(ANDROID_FALLBACK_DOWNLOAD_URL, 307);
+    const fallbackUrl = resolvePlatformFallbackDownloadUrl(target);
+    if (isAllowedHttpsUrl(fallbackUrl)) {
+      return Response.redirect(fallbackUrl, 307);
     }
 
     return Response.json(
