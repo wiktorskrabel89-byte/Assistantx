@@ -87,6 +87,9 @@ const ALLOWED_INVOKE = new Set([
   'setup:complete',
   'setup:get-subscription-status',
   'setup:get-recommended-config',
+  'secure:set-api-key',
+  'secure:get-api-key',
+  'secure:clear-api-key',
   // Clipboard monitoring
   'clipboard:get-status',
   'clipboard:enable',
@@ -358,6 +361,9 @@ function buildJarvisApiV2() {
       complete: (payload) => invokeAllowed('setup:complete', payload || {}),
       getSubscriptionStatus: () => invokeAllowed('setup:get-subscription-status'),
       getRecommendedConfig: () => invokeAllowed('setup:get-recommended-config'),
+      setApiKey: (provider, value) => invokeAllowed('secure:set-api-key', { provider, value }),
+      getApiKey: (provider) => invokeAllowed('secure:get-api-key', { provider }),
+      clearApiKey: (provider) => invokeAllowed('secure:clear-api-key', { provider }),
     },
     config: {
       getEngineMode: () => invokeAllowed('config:get-engine-mode'),
@@ -460,6 +466,9 @@ contextBridge.exposeInMainWorld('jarvisApi', {
     complete: (payload) => invokeAllowed('setup:complete', payload || {}),
     getSubscriptionStatus: () => invokeAllowed('setup:get-subscription-status'),
     getRecommendedConfig: () => invokeAllowed('setup:get-recommended-config'),
+    setApiKey: (provider, value) => invokeAllowed('secure:set-api-key', { provider, value }),
+    getApiKey: (provider) => invokeAllowed('secure:get-api-key', { provider }),
+    clearApiKey: (provider) => invokeAllowed('secure:clear-api-key', { provider }),
   },
   config: {
     getEngineMode: () => invokeAllowed('config:get-engine-mode'),

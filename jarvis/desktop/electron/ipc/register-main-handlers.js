@@ -10,10 +10,10 @@ const {
 const { withSchema } = require('./schema');
 const { registerIpcHandlers } = require('./channel-registry');
 const {
-  getEngineMode,
   setEngineMode,
   getJarvisModelConfig,
   setJarvisModelConfig,
+  getRuntimeConfig,
   VALID_ENGINE_MODES,
 } = require('../../runtime-config');
 const {
@@ -21,6 +21,9 @@ const {
   getFreeModelsForPlan,
   pickBestFreeModel,
 } = require('../ai/free-model-catalog');
+const { createByokKeyStore, normalizeProvider } = require('../ai/byok-key-store');
+
+const byokKeyStore = createByokKeyStore();
 
 function denied(action, reason) {
   return {
@@ -165,7 +168,8 @@ function createMainIpcHandlers(deps) {
     'setup:complete': async (_event, payload) => {
       const body = validatePlainObject(payload);
       if (!body) return invalidResult('setup:complete', 'payload-must-be-object');
-      const engine_mode = validateString(body.engine_mode, { allowEmpty: false, maxLen: 20 });
+      const requestedEngineMode = validateString(body.engine_mode, { allowEmpty: false, maxLen: 20 });
+      const engine_mode = requestedEngineMode === 'cloud' ? 'byok-cloud' : requestedEngineMode;
       if (!engine_mode || !VALID_ENGINE_MODES.includes(engine_mode)) {
         return invalidResult('setup:complete', 'invalid-engine-mode');
       }
@@ -174,8 +178,23 @@ function createMainIpcHandlers(deps) {
       const stt_model = validateString(body.stt_model, { allowEmpty: true, maxLen: 40 }) || 'base';
       const llm_model = validateString(body.llm_model, { allowEmpty: true, maxLen: 80 }) || 'gemma3:4b';
       const tts_model = validateString(body.tts_model, { allowEmpty: true, maxLen: 40 }) || 'kokoro';
+      const llm_target = validateString(body.llm_target, { allowEmpty: true, maxLen: 30 }) || undefined;
+      const local = validatePlainObject(body.local) || undefined;
+      const cloud = validatePlainObject(body.cloud) || undefined;
+      const server = validatePlainObject(body.server) || undefined;
       try {
-        const config = setJarvisModelConfig({ engine_mode, hardware_profile, language, stt_model, llm_model, tts_model });
+        const config = setJarvisModelConfig({
+          engine_mode,
+          llm_target,
+          hardware_profile,
+          language,
+          stt_model,
+          llm_model,
+          tts_model,
+          local,
+          cloud,
+          server,
+        });
         if (typeof onSetupComplete === 'function') {
           await onSetupComplete(config);
         }
@@ -193,8 +212,33 @@ function createMainIpcHandlers(deps) {
     },
 
     'setup:get-recommended-config': () => {
-      const config = getJarvisModelConfig();
+      const config = getRuntimeConfig();
       return { ok: true, config };
+    },
+
+    'secure:set-api-key': async (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const provider = normalizeProvider(validateString(body.provider, { allowEmpty: false, maxLen: 40 }) || '');
+      const value = validateString(body.value, { allowEmpty: false, maxLen: 8192 }) || '';
+      if (!provider || !value) return invalidResult('secure:set-api-key', 'provider-and-value-required');
+      securityAudit({ action: 'secure:set-api-key', target: provider });
+      return byokKeyStore.set(provider, value);
+    },
+
+    'secure:get-api-key': async (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const provider = normalizeProvider(validateString(body.provider, { allowEmpty: false, maxLen: 40 }) || '');
+      if (!provider) return invalidResult('secure:get-api-key', 'provider-required');
+      const value = await byokKeyStore.get(provider);
+      return { ok: true, value: value || null };
+    },
+
+    'secure:clear-api-key': async (_event, payload) => {
+      const body = validatePlainObject(payload) || {};
+      const provider = normalizeProvider(validateString(body.provider, { allowEmpty: false, maxLen: 40 }) || '');
+      if (!provider) return invalidResult('secure:clear-api-key', 'provider-required');
+      securityAudit({ action: 'secure:clear-api-key', target: provider });
+      return byokKeyStore.clear(provider);
     },
 
     // ── Config IPC (engine mode + model config) ──────────────────────────────
@@ -205,7 +249,8 @@ function createMainIpcHandlers(deps) {
 
     'config:set-engine-mode': async (_event, payload) => {
       const body = validatePlainObject(payload) || {};
-      const mode = validateString(body.mode, { allowEmpty: false, maxLen: 20 });
+      const requestedMode = validateString(body.mode, { allowEmpty: false, maxLen: 20 });
+      const mode = requestedMode === 'cloud' ? 'byok-cloud' : requestedMode;
       if (!mode || !VALID_ENGINE_MODES.includes(mode)) {
         return invalidResult('config:set-engine-mode', 'invalid-engine-mode');
       }

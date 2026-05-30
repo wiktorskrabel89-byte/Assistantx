@@ -121,7 +121,7 @@ class AIRouter {
 
     // ── Engine-mode overrides ─────────────────────────────────────────────────
     // cloud mode: pick the best free model for the user's plan and profile
-    if (engineMode === 'cloud') {
+    if (engineMode === 'cloud' || engineMode === 'byok-cloud') {
       const difficulty = detectTaskDifficulty(request);
       const registryChoice = TASK_DIFFICULTY_MODELS[difficulty] || TASK_DIFFICULTY_MODELS[2];
       const plan = String(modelConfig?.plan || 'pro').toLowerCase();

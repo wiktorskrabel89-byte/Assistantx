@@ -1030,7 +1030,7 @@ function loadStartupScreen() {
 // Drives the splash screen progress bars and transitions to index.html once
 // the runtime is ready.
 async function startSplashTransition(engineMode) {
-  if (engineMode === 'cloud') {
+  if (engineMode === 'cloud' || engineMode === 'byok-cloud') {
     sendToRenderer('splash:progress', { status: 'Verifying cloud credentials…' });
     // Short delay so the spinner is visible before we transition.
     await new Promise((resolve) => setTimeout(resolve, 1_200));
