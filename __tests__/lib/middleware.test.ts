@@ -126,6 +126,27 @@ describe("updateSession", () => {
     expect(res.status).not.toBe(307);
   });
 
+  it.each([
+    "/versions.json",
+    "/updates/versions.json",
+    "/latest.yml",
+    "/windows/latest.yml",
+    "/windows/JarvisSetup-x64.exe",
+    "/windows/JarvisSetup-x64.exe.blockmap",
+    "/windows/release-notes.json",
+    "/beta/windows/latest.yml",
+    "/mac/latest-mac.yml",
+    "/linux/Jarvis-x64.AppImage",
+    "/android/Jarvis-android.apk",
+  ])("does not redirect public updater path %s when there is no authenticated user", async (pathname) => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+
+    const req = makeRequest(pathname);
+    const res = await updateSession(req);
+
+    expect(res.status).not.toBe(307);
+  });
+
   it("skips Supabase session refresh when Supabase env vars are missing", async () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
