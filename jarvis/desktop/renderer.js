@@ -67,6 +67,11 @@ function normalizeSttModel(value) {
 	return STT_MODEL_ALIASES[raw] || raw || 'base';
 }
 
+function isLocalTtsBackend(backend) {
+	const value = String(backend || '').toLowerCase();
+	return value === 'kokoro-local' || value === 'piper-local' || value === 'auto-local';
+}
+
 function normalizeTtsModel(value, backend = '') {
 	const raw = String(value || '').trim().toLowerCase();
 	if (raw === 'kokoro-local') return 'kokoro';
@@ -809,11 +814,6 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 		updateModelSettingsUi();
 		if (persist) writeVoiceSettings(voiceSettings);
-	}
-
-	function isLocalTtsBackend(backend) {
-		const value = String(backend || '').toLowerCase();
-		return value === 'kokoro-local' || value === 'piper-local' || value === 'auto-local';
 	}
 
 	function resolveLocalTtsBackend(backend) {
