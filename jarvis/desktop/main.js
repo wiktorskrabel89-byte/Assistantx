@@ -1187,7 +1187,7 @@ function loadStartupScreen() {
 async function startSplashTransition(engineMode) {
   resetSplashTransitionState();
   const startupUpdateGate = startStartupUpdateCheckGate();
-  if (engineMode === 'cloud') {
+  if (engineMode === 'byok-cloud') {
     sendToRenderer('splash:progress', { status: 'Verifying cloud credentials…' });
     // Short delay so the spinner is visible before we transition.
     await new Promise((resolve) => setTimeout(resolve, 1_200));
@@ -1370,8 +1370,6 @@ function createWindow() {
     title: 'Jarvis Desktop',
     webPreferences: buildSecureWebPreferences({ preload: path.join(__dirname, 'preload.js') }),
   });
-
-  win.webContents.openDevTools();
 
   loadStartupScreen();
 

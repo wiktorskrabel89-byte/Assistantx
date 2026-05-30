@@ -525,10 +525,14 @@
       };
 
       try {
+        let result;
         if (window.jarvisIpc?.invoke) {
-          await window.jarvisIpc.invoke('setup:complete', payload);
+          result = await window.jarvisIpc.invoke('setup:complete', payload);
         } else if (window.jarvisSetup?.complete) {
-          await window.jarvisSetup.complete(payload);
+          result = await window.jarvisSetup.complete(payload);
+        }
+        if (result && result.ok === false) {
+          throw new Error(result.error || 'Setup failed — please try again.');
         }
         statusEl.textContent = 'Configuration saved! Starting Jarvis…';
       } catch (err) {
