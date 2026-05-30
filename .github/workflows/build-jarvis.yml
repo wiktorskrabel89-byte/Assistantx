@@ -80,13 +80,21 @@ jobs:
         shell: pwsh
         run: |
           $releaseTag = "${{ env.RELEASE_TAG }}".Trim()
+          $desktopPkg = Get-Content "jarvis/desktop/package.json" -Raw | ConvertFrom-Json
           if ($releaseTag -eq 'jarvis-latest') {
-            # Rolling latest: auto-increment patch from current package.json version
-            $desktopPkg = Get-Content "jarvis/desktop/package.json" -Raw | ConvertFrom-Json
-            $parts = $desktopPkg.version -split '\.'
-            $parts[2] = [string]([int]$parts[2] + 1)
-            $version = $parts -join '.'
-            Write-Host "Rolling build — version auto-incremented to: $version"
+            # Rolling latest: always generate a unique newer patch version.
+            $baseVersion = [string]$desktopPkg.version
+            if ($baseVersion -notmatch '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:[-+][0-9A-Za-z.-]+)?$') {
+              Write-Error "Invalid desktop package version '$baseVersion'. Expected semver."
+              exit 1
+            }
+            $major = [int]$Matches['major']
+            $minor = [int]$Matches['minor']
+            $basePatch = [int]$Matches['patch']
+            $runIncrement = [Math]::Max([int]"${{ github.run_number }}", 1)
+            $patch = $basePatch + $runIncrement
+            $version = "$major.$minor.$patch"
+            Write-Host "Rolling build — version generated from run number: $version"
           } elseif ($releaseTag -notmatch '^[vV](\d+)(?:\.(\d+))?(?:\.(\d+))?([+-][0-9A-Za-z.-]+)?$') {
             Write-Error "Invalid release tag '$releaseTag'. Expected format like v1.1.0, v2, or V2."
             exit 1
@@ -98,9 +106,8 @@ jobs:
             $version = "$major.$minor.$patch$suffix"
             Write-Host "Version: $version"
           }
-
           # Patch desktop package.json
-          $desktopPkg = Get-Content "jarvis/desktop/package.json" -Raw | ConvertFrom-Json
+          # Patch desktop package.json
           $desktopPkg.version = $version
           $desktopPkg | ConvertTo-Json -Depth 20 | Set-Content "jarvis/desktop/package.json" -Encoding UTF8
 
