@@ -34,11 +34,40 @@ const HARDWARE_PROFILE_MODELS = {
   pro: { llm: 'qwen2.5:7b', stt: 'base', tts: 'kokoro' },
 };
 
-const CONFIG_PATH = path.join(
+// Legacy config path used before userData migration (kept for one-time migration).
+const _LEGACY_CONFIG_PATH = path.join(
   process.env.APPDATA || path.join(os.homedir(), '.config'),
   'JarvisDesktop',
   'config.json',
 );
+
+// Resolved lazily so that app.getPath() is called after Electron is ready.
+let _resolvedConfigPath = null;
+
+function getConfigPath() {
+  if (_resolvedConfigPath) return _resolvedConfigPath;
+  try {
+    // In the Electron main process app is always available; use its userData
+    // directory so the config path is consistent regardless of how the app
+    // was launched (normal user, elevated installer, etc.).
+    const { app } = require('electron');
+    _resolvedConfigPath = path.join(app.getPath('userData'), 'config.json');
+    // One-time migration: if a config exists at the legacy path but not at the
+    // new location, move it across so existing users keep their settings.
+    if (!fs.existsSync(_resolvedConfigPath) && fs.existsSync(_LEGACY_CONFIG_PATH)) {
+      try {
+        fs.mkdirSync(path.dirname(_resolvedConfigPath), { recursive: true });
+        fs.copyFileSync(_LEGACY_CONFIG_PATH, _resolvedConfigPath);
+      } catch {
+        // Migration failed – the app will show the wizard once to reconfigure.
+      }
+    }
+  } catch {
+    // Non-Electron context (unit tests, CLI tools): fall back to the legacy path.
+    _resolvedConfigPath = _LEGACY_CONFIG_PATH;
+  }
+  return _resolvedConfigPath;
+}
 
 // In-memory override set for the current session (updated via setJarvisWebUrl).
 let _webUrlOverride = null;
@@ -48,8 +77,9 @@ let _remoteRuntimeWsUrlOverride = null;
 let _engineModeOverride = null;
 
 function writeConfigFile(config) {
-  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  const configPath = getConfigPath();
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
 function trimTrailingSlash(value) {
@@ -66,7 +96,7 @@ function isPackagedDesktopRuntime() {
 
 function readPersistedWebUrl() {
   try {
-    const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    const raw = JSON.parse(fs.readFileSync(getConfigPath(), 'utf-8'));
     return raw?.webUrl ? trimTrailingSlash(String(raw.webUrl)) : null;
   } catch {
     return null;
@@ -187,7 +217,7 @@ function migrateLegacyConfig(input = {}) {
 
 function readConfig() {
   try {
-    const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) || {};
+    const raw = JSON.parse(fs.readFileSync(getConfigPath(), 'utf-8')) || {};
     const { config, changed } = migrateLegacyConfig(raw);
     if (changed) writeConfigFile(config);
     return config;
