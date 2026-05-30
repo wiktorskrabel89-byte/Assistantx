@@ -101,6 +101,18 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function createOfflineError(message = 'network-offline') {
+  const error = new Error(message);
+  error.code = 'ERR_NETWORK_OFFLINE';
+  return error;
+}
+
+function createTimeoutError(message = 'network-timeout') {
+  const error = new Error(message);
+  error.code = 'ETIMEDOUT';
+  return error;
+}
+
 class UpdateCoordinator {
   constructor({ app, startupDiagnostics, telemetryBus, onState, onHealth }) {
     this.app = app;
@@ -235,6 +247,68 @@ class UpdateCoordinator {
     ]);
   }
 
+  getElectronNet() {
+    try {
+      const { net } = require('electron');
+      return net || null;
+    } catch {
+      return null;
+    }
+  }
+
+  isOffline() {
+    const electronNet = this.getElectronNet();
+    return typeof electronNet?.isOnline === 'function' ? !electronNet.isOnline() : false;
+  }
+
+  async fetchWithNetworkStack(url, init = {}, timeoutMs = 0) {
+    const electronNet = this.getElectronNet();
+    const fetchImpl = typeof electronNet?.fetch === 'function'
+      ? electronNet.fetch.bind(electronNet)
+      : globalThis.fetch?.bind(globalThis);
+
+    if (typeof fetchImpl !== 'function') {
+      throw new Error('fetch-unavailable');
+    }
+
+    const controller = new AbortController();
+    const originalSignal = init?.signal;
+    let timeoutHandle = null;
+    let removeAbortListener = null;
+
+    if (originalSignal) {
+      if (originalSignal.aborted) {
+        controller.abort(originalSignal.reason);
+      } else {
+        const onAbort = () => controller.abort(originalSignal.reason);
+        originalSignal.addEventListener('abort', onAbort, { once: true });
+        removeAbortListener = () => originalSignal.removeEventListener('abort', onAbort);
+      }
+    }
+
+    if (timeoutMs > 0) {
+      timeoutHandle = setTimeout(() => {
+        controller.abort(createTimeoutError());
+      }, timeoutMs);
+    }
+
+    try {
+      return await fetchImpl(url, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted && (error?.name === 'AbortError' || /abort/i.test(String(error?.message || '')))) {
+        const reason = controller.signal.reason;
+        if (reason instanceof Error) throw reason;
+      }
+      throw error;
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (removeAbortListener) removeAbortListener();
+    }
+  }
+
   isAllowedHttpsUrl(rawUrl) {
     try {
       const url = new URL(String(rawUrl || '').trim());
@@ -268,13 +342,15 @@ class UpdateCoordinator {
     if (!this.isAllowedHttpsUrl(manifestUrl)) {
       throw new Error('manifest-url-not-allowed');
     }
+    if (this.isOffline()) {
+      throw createOfflineError();
+    }
 
-    const response = await fetch(manifestUrl, {
+    const response = await this.fetchWithNetworkStack(manifestUrl, {
       cache: 'no-store',
       redirect: 'follow',
       headers: { Accept: 'application/json,text/plain,*/*' },
-      signal: AbortSignal.timeout(MANIFEST_FETCH_TIMEOUT_MS),
-    });
+    }, MANIFEST_FETCH_TIMEOUT_MS);
     if (!response.ok) {
       throw new Error(`manifest-fetch-failed:${response.status}`);
     }
@@ -408,6 +484,7 @@ class UpdateCoordinator {
       channel: publish.channel,
       owner: publish.owner || null,
       repo: publish.repo || null,
+      networkTransport: typeof this.getElectronNet()?.fetch === 'function' ? 'electron.net.fetch' : 'global.fetch',
       metadataUrl: this.getFeedMetadataUrl(),
       releaseNotesUrl: this.getReleaseNotesUrl(),
     };
@@ -601,18 +678,35 @@ class UpdateCoordinator {
       return;
     }
 
+    if (this.isOffline()) {
+      const classification = this.classifyFeedSelfTestFailure({ message: 'offline' });
+      this.startupDiagnostics.setComponent('updater', classification.health, classification.detail);
+      this.startupDiagnostics.pushEvent('updater', classification.severity, 'Updater feed self-test skipped while offline.', {
+        ...context,
+        metadataUrl,
+        classification: classification.reason,
+      });
+      this.telemetryBus.publish('startup.degraded');
+      this.onHealth();
+      this.log('feed-self-test:skipped-offline', {
+        ...context,
+        metadataUrl,
+        classification: classification.reason,
+      });
+      return;
+    }
+
     this.startupDiagnostics.pushEvent('updater', 'info', 'Updater feed self-test started.', {
       ...context,
       metadataUrl,
     });
 
     try {
-      const response = await fetch(metadataUrl, {
+      const response = await this.fetchWithNetworkStack(metadataUrl, {
         cache: 'no-store',
         redirect: 'follow',
         headers: { Accept: 'application/octet-stream,text/yaml,text/plain,*/*' },
-        signal: AbortSignal.timeout(FEED_SELF_TEST_TIMEOUT_MS),
-      });
+      }, FEED_SELF_TEST_TIMEOUT_MS);
       const contentType = String(response.headers.get('content-type') || '').toLowerCase();
       const raw = await response.text();
       const hasVersion = /^\s*version\s*:/m.test(raw);
@@ -1246,7 +1340,10 @@ class UpdateCoordinator {
         this.emitState(classification.status, classification.detail, {
           downloaded: false,
           reason: classification.reason,
-          diagnostics: context,
+          diagnostics: {
+            ...context,
+            error: errorMeta,
+          },
         });
       });
 
@@ -1280,12 +1377,11 @@ class UpdateCoordinator {
     const notesUrl = this.getReleaseNotesUrl();
     if (notesUrl) {
       try {
-        const response = await fetch(notesUrl, {
+        const response = await this.fetchWithNetworkStack(notesUrl, {
           cache: 'no-store',
           redirect: 'follow',
           headers: { Accept: 'application/json,text/plain,*/*' },
-          signal: AbortSignal.timeout(5000),
-        });
+        }, 5000);
         if (response.ok) {
           const raw = await response.text();
           const parsed = safeJsonParse(raw, null);
@@ -1456,6 +1552,25 @@ class UpdateCoordinator {
       return { ok: false, reason: 'not-packaged' };
     }
 
+    if (this.isOffline()) {
+      const context = this.buildContext();
+      this.log('check-for-updates:skipped-offline', { ...context, source });
+      this.startupDiagnostics.setComponent('updater', 'degraded', 'Update check skipped while the device is offline.');
+      this.startupDiagnostics.pushEvent('updater', 'info', 'Update check skipped because the device is offline.', {
+        ...context,
+        source,
+        classification: 'network-offline',
+      });
+      this.telemetryBus.publish('startup.degraded');
+      this.onHealth();
+      this.emitState('unavailable', 'Update check skipped while the device is offline.', {
+        downloaded: false,
+        reason: 'network-offline',
+        diagnostics: context,
+      });
+      return { ok: false, reason: 'network-offline' };
+    }
+
     const updater = this.getAutoUpdater();
     if (!updater) return { ok: false, reason: 'updater-unavailable' };
 
@@ -1463,15 +1578,17 @@ class UpdateCoordinator {
       try {
         await this.applyManifestGenericFeed(updater);
       } catch (error) {
-        this.emitState('error', 'Failed to load manifest update feed configuration.', {
+        const errorMeta = this.toErrorMetadata(error);
+        const classification = this.classifyFailure(errorMeta);
+        this.emitState(classification.status, classification.detail, {
           downloaded: false,
-          reason: 'manifest-feed-configuration-failed',
+          reason: classification.reason,
           diagnostics: {
             ...this.buildContext(),
-            error: String(error?.message || error || 'manifest override failed'),
+            error: errorMeta,
           },
         });
-        return { ok: false, reason: 'manifest-feed-configuration-failed' };
+        return { ok: false, reason: classification.reason };
       }
     }
 
@@ -1525,7 +1642,10 @@ class UpdateCoordinator {
       this.emitState(classification.status, classification.detail, {
         downloaded: false,
         reason: classification.reason,
-        diagnostics: context,
+        diagnostics: {
+          ...context,
+          error: errorMeta,
+        },
       });
       return { ok: false, reason: errorMeta.message };
     }
