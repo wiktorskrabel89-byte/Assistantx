@@ -1,6 +1,7 @@
 'use strict';
 
 const { AiProvider } = require('../provider-interface');
+const { createByokKeyStore } = require('../byok-key-store');
 
 const DEFAULT_BASE_URL = process.env.JARVIS_CLOUD_AI_BASE_URL || 'https://openrouter.ai/api/v1';
 const DEFAULT_ENDPOINT = '/chat/completions';
@@ -11,6 +12,14 @@ const PROVIDER_CONFIG = {
     endpoint: '/chat/completions',
     keyEnvs: ['OPENROUTER_API_KEY', 'JARVIS_CLOUD_API_KEY'],
     keytarAccounts: ['openrouter-api-key'],
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer ',
+  },
+  openai: {
+    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    endpoint: '/chat/completions',
+    keyEnvs: ['OPENAI_API_KEY'],
+    keytarAccounts: ['openai-api-key'],
     authHeader: 'Authorization',
     authPrefix: 'Bearer ',
   },
@@ -50,6 +59,7 @@ const PROVIDER_CONFIG = {
     authPrefix: 'Bearer ',
   },
 };
+const byokKeyStore = createByokKeyStore();
 
 class CloudApiProvider extends AiProvider {
   constructor({ baseUrl = DEFAULT_BASE_URL, endpoint = DEFAULT_ENDPOINT } = {}) {
@@ -276,6 +286,12 @@ async function resolveApiKey(provider) {
     } catch {
       // continue with next account
     }
+  }
+  try {
+    const token = await byokKeyStore.get(provider);
+    if (token) return token;
+  } catch {
+    // ignore key-store errors
   }
   return '';
 }

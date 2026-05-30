@@ -294,7 +294,7 @@
         }
       } catch { /* ignore */ }
 
-      if (mode === 'cloud') {
+      if (mode === 'cloud' || mode === 'byok-cloud') {
         document.getElementById('splash-title').textContent = 'Connecting to Cloud Matrix…';
         document.getElementById('splash-subtitle').textContent = 'Verifying subscription status';
         document.getElementById('cloud-check').style.display = 'flex';

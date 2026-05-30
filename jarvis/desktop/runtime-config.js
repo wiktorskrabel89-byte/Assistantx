@@ -10,8 +10,12 @@ const DEFAULT_REMOTE_RUNTIME_API_URL = 'http://127.0.0.1:9001';
 const DEFAULT_REMOTE_RUNTIME_WS_URL = 'ws://127.0.0.1:9000';
 
 // ── Jarvis OS engine defaults ─────────────────────────────────────────────────
-const VALID_ENGINE_MODES = ['local', 'cloud'];
+const VALID_ENGINE_MODES = ['local', 'byok-cloud', 'server-free'];
 const VALID_HARDWARE_PROFILES = ['eco', 'standard', 'pro'];
+const VALID_LLM_TARGETS = ['local-ollama', 'local-vllm', 'cloud-provider', 'remote-server'];
+const VALID_LOCAL_RUNTIMES = ['ollama', 'vllm'];
+const VALID_CLOUD_PROVIDERS = ['openai', 'anthropic', 'openrouter'];
+const VALID_PAIRING_STATES = ['unpaired', 'paired', 'expired'];
 
 // Model matrix: hardware profile → Ollama model tag
 const HARDWARE_PROFILE_MODELS = {
@@ -32,6 +36,11 @@ let _runtimeModeOverride = null;
 let _remoteRuntimeApiUrlOverride = null;
 let _remoteRuntimeWsUrlOverride = null;
 let _engineModeOverride = null;
+
+function writeConfigFile(config) {
+  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+}
 
 function trimTrailingSlash(value) {
   return String(value || '').replace(/\/$/, '');
@@ -54,9 +63,108 @@ function readPersistedWebUrl() {
   }
 }
 
+function normalizeEngineMode(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'cloud') return 'byok-cloud';
+  return VALID_ENGINE_MODES.includes(normalized) ? normalized : null;
+}
+
+function normalizeLlmTarget(value, engineMode = null) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (VALID_LLM_TARGETS.includes(normalized)) return normalized;
+  if (engineMode === 'local') return 'local-ollama';
+  if (engineMode === 'byok-cloud') return 'cloud-provider';
+  if (engineMode === 'server-free') return 'remote-server';
+  return 'local-ollama';
+}
+
+function normalizeCloudProvider(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return VALID_CLOUD_PROVIDERS.includes(normalized) ? normalized : 'openai';
+}
+
+function normalizePairingState(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return VALID_PAIRING_STATES.includes(normalized) ? normalized : 'unpaired';
+}
+
+function normalizeRuntimeConfig(input = {}) {
+  const raw = input && typeof input === 'object' ? input : {};
+  const engine_mode = normalizeEngineMode(raw.engine_mode);
+  const llm_target = normalizeLlmTarget(raw.llm_target, engine_mode);
+  const local = raw.local && typeof raw.local === 'object' ? raw.local : {};
+  const cloud = raw.cloud && typeof raw.cloud === 'object' ? raw.cloud : {};
+  const server = raw.server && typeof raw.server === 'object' ? raw.server : {};
+
+  const profile = normalizeHardwareProfile(local.hardware_profile || raw.hardware_profile);
+  const defaults = HARDWARE_PROFILE_MODELS[profile];
+  const localRuntime = VALID_LOCAL_RUNTIMES.includes(String(local.runtime || '').toLowerCase())
+    ? String(local.runtime || '').toLowerCase()
+    : 'ollama';
+  const cloudProvider = normalizeCloudProvider(cloud.provider || raw.legacy_provider || raw.cloud_provider);
+  const keyAlias = String(cloud.key_alias || `jarvis-byok-${cloudProvider}-key`).trim();
+
+  const normalized = {
+    ...raw,
+    engine_mode,
+    llm_target,
+    local: {
+      runtime: localRuntime,
+      hardware_profile: profile,
+      manifest: {
+        router_model: String(local?.manifest?.router_model || raw.llm_model || defaults.llm).trim() || defaults.llm,
+        coder_model: String(local?.manifest?.coder_model || raw.llm_model || defaults.llm).trim() || defaults.llm,
+        vl_model: String(local?.manifest?.vl_model || raw.llm_model || defaults.llm).trim() || defaults.llm,
+        embedding_model: String(local?.manifest?.embedding_model || 'nomic-embed-text').trim() || 'nomic-embed-text',
+      },
+    },
+    cloud: {
+      provider: cloudProvider,
+      model_router: String(cloud.model_router || raw.llm_model || defaults.llm).trim() || defaults.llm,
+      model_executor: String(cloud.model_executor || raw.llm_model || defaults.llm).trim() || defaults.llm,
+      key_alias: keyAlias || `jarvis-byok-${cloudProvider}-key`,
+      fallback_provider_order: Array.isArray(cloud.fallback_provider_order)
+        ? cloud.fallback_provider_order.map((entry) => String(entry || '').trim().toLowerCase()).filter(Boolean)
+        : [cloudProvider],
+      token_limit_per_task: Number.isFinite(cloud.token_limit_per_task)
+        ? Number(cloud.token_limit_per_task)
+        : 120000,
+    },
+    server: {
+      remoteRuntimeApiUrl: normalizeHttpUrl(server.remoteRuntimeApiUrl || raw.remoteRuntimeApiUrl, DEFAULT_REMOTE_RUNTIME_API_URL),
+      remoteRuntimeWsUrl: normalizeWsUrl(server.remoteRuntimeWsUrl || raw.remoteRuntimeWsUrl, DEFAULT_REMOTE_RUNTIME_WS_URL),
+      accountId: String(server.accountId || '').trim(),
+      pairing_state: normalizePairingState(server.pairing_state),
+    },
+  };
+
+  normalized.hardware_profile = profile;
+  normalized.language = String(raw.language || 'en').trim() || 'en';
+  normalized.stt_model = String(raw.stt_model || defaults.stt).trim() || defaults.stt;
+  normalized.llm_model = String(raw.llm_model || defaults.llm).trim() || defaults.llm;
+  normalized.tts_model = String(raw.tts_model || defaults.tts).trim() || defaults.tts;
+  normalized.remoteRuntimeApiUrl = normalized.server.remoteRuntimeApiUrl;
+  normalized.remoteRuntimeWsUrl = normalized.server.remoteRuntimeWsUrl;
+  return normalized;
+}
+
+function migrateLegacyConfig(input = {}) {
+  const source = input && typeof input === 'object' ? input : {};
+  const migrated = normalizeRuntimeConfig(source);
+  let changed = false;
+  if (String(source.engine_mode || '').trim().toLowerCase() === 'cloud') changed = true;
+  if (source.llm_target !== migrated.llm_target) changed = true;
+  if (source.engine_mode !== migrated.engine_mode) changed = true;
+  if (!source.local || !source.cloud || !source.server) changed = true;
+  return { config: migrated, changed };
+}
+
 function readConfig() {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) || {};
+    const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) || {};
+    const { config, changed } = migrateLegacyConfig(raw);
+    if (changed) writeConfigFile(config);
+    return config;
   } catch {
     return {};
   }
@@ -66,8 +174,7 @@ function writeConfig(mutator) {
   try {
     const current = readConfig();
     const next = mutator({ ...current }) || current;
-    fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2), 'utf-8');
+    writeConfigFile(normalizeRuntimeConfig(next));
   } catch (err) {
     console.warn('[runtime-config] Failed to persist config file:', err?.message || err);
   }
@@ -167,13 +274,16 @@ function getRemoteRuntimeApiUrl() {
   if (_remoteRuntimeApiUrlOverride) return _remoteRuntimeApiUrlOverride;
   const fromEnv = normalizeHttpUrl(process.env.JARVIS_REMOTE_RUNTIME_API_URL, '');
   if (fromEnv) return fromEnv;
-  return normalizeHttpUrl(readConfig().remoteRuntimeApiUrl, DEFAULT_REMOTE_RUNTIME_API_URL);
+  const cfg = readConfig();
+  return normalizeHttpUrl(cfg?.server?.remoteRuntimeApiUrl || cfg.remoteRuntimeApiUrl, DEFAULT_REMOTE_RUNTIME_API_URL);
 }
 
 function setRemoteRuntimeApiUrl(url) {
   const normalized = normalizeHttpUrl(url, DEFAULT_REMOTE_RUNTIME_API_URL);
   _remoteRuntimeApiUrlOverride = normalized;
   writeConfig((current) => {
+    current.server = current.server && typeof current.server === 'object' ? current.server : {};
+    current.server.remoteRuntimeApiUrl = normalized;
     current.remoteRuntimeApiUrl = normalized;
     return current;
   });
@@ -184,13 +294,16 @@ function getRemoteRuntimeWsUrl() {
   if (_remoteRuntimeWsUrlOverride) return _remoteRuntimeWsUrlOverride;
   const fromEnv = normalizeWsUrl(process.env.JARVIS_REMOTE_RUNTIME_WS_URL, '');
   if (fromEnv) return fromEnv;
-  return normalizeWsUrl(readConfig().remoteRuntimeWsUrl, DEFAULT_REMOTE_RUNTIME_WS_URL);
+  const cfg = readConfig();
+  return normalizeWsUrl(cfg?.server?.remoteRuntimeWsUrl || cfg.remoteRuntimeWsUrl, DEFAULT_REMOTE_RUNTIME_WS_URL);
 }
 
 function setRemoteRuntimeWsUrl(url) {
   const normalized = normalizeWsUrl(url, DEFAULT_REMOTE_RUNTIME_WS_URL);
   _remoteRuntimeWsUrlOverride = normalized;
   writeConfig((current) => {
+    current.server = current.server && typeof current.server === 'object' ? current.server : {};
+    current.server.remoteRuntimeWsUrl = normalized;
     current.remoteRuntimeWsUrl = normalized;
     return current;
   });
@@ -198,16 +311,16 @@ function setRemoteRuntimeWsUrl(url) {
 }
 
 /**
- * Returns the configured engine mode ('local' | 'cloud') or null if the
+ * Returns the configured engine mode ('local' | 'byok-cloud' | 'server-free') or null if the
  * first-run wizard has not been completed yet.
  * Priority: in-memory override → env var → config file → null
  */
 function getEngineMode() {
   if (_engineModeOverride) return _engineModeOverride;
-  const fromEnv = String(process.env.JARVIS_ENGINE_MODE || '').trim().toLowerCase();
-  if (VALID_ENGINE_MODES.includes(fromEnv)) return fromEnv;
-  const fromFile = String(readConfig().engine_mode || '').trim().toLowerCase();
-  if (VALID_ENGINE_MODES.includes(fromFile)) return fromFile;
+  const fromEnv = normalizeEngineMode(process.env.JARVIS_ENGINE_MODE || '');
+  if (fromEnv) return fromEnv;
+  const fromFile = normalizeEngineMode(readConfig().engine_mode || '');
+  if (fromFile) return fromFile;
   return null;
 }
 
@@ -215,8 +328,8 @@ function getEngineMode() {
  * Persist the engine mode selection.  Updates in-memory override immediately.
  */
 function setEngineMode(mode) {
-  const normalized = String(mode || '').trim().toLowerCase();
-  if (!VALID_ENGINE_MODES.includes(normalized)) {
+  const normalized = normalizeEngineMode(mode);
+  if (!normalized) {
     throw new Error(`Invalid engine_mode '${normalized}'. Must be one of: ${VALID_ENGINE_MODES.join(', ')}`);
   }
   _engineModeOverride = normalized;
@@ -240,16 +353,20 @@ function normalizeHardwareProfile(value) {
  * merging persisted config with per-profile defaults.
  */
 function getJarvisModelConfig() {
-  const cfg = readConfig();
-  const profile = normalizeHardwareProfile(cfg.hardware_profile);
+  const cfg = normalizeRuntimeConfig(readConfig());
+  const profile = normalizeHardwareProfile(cfg.local?.hardware_profile || cfg.hardware_profile);
   const defaults = HARDWARE_PROFILE_MODELS[profile];
   return {
     engine_mode: getEngineMode(),
+    llm_target: cfg.llm_target,
     hardware_profile: profile,
     language: String(cfg.language || 'en').trim() || 'en',
     stt_model: String(cfg.stt_model || defaults.stt).trim() || defaults.stt,
     llm_model: String(cfg.llm_model || defaults.llm).trim() || defaults.llm,
     tts_model: String(cfg.tts_model || defaults.tts).trim() || defaults.tts,
+    local: cfg.local,
+    cloud: cfg.cloud,
+    server: cfg.server,
   };
 }
 
@@ -257,24 +374,51 @@ function getJarvisModelConfig() {
  * Persist the full Jarvis OS model configuration (written by the Setup Wizard).
  * Also sets the engine_mode in-memory override so it takes effect immediately.
  */
-function setJarvisModelConfig({ engine_mode, hardware_profile, language, stt_model, llm_model, tts_model } = {}) {
-  const normalizedMode = String(engine_mode || '').trim().toLowerCase();
-  if (!VALID_ENGINE_MODES.includes(normalizedMode)) {
+function setJarvisModelConfig({
+  engine_mode,
+  llm_target,
+  hardware_profile,
+  language,
+  stt_model,
+  llm_model,
+  tts_model,
+  local,
+  cloud,
+  server,
+} = {}) {
+  const normalizedMode = normalizeEngineMode(engine_mode);
+  if (!normalizedMode) {
     throw new Error(`Invalid engine_mode '${normalizedMode}'.`);
   }
   const normalizedProfile = normalizeHardwareProfile(hardware_profile);
   const defaults = HARDWARE_PROFILE_MODELS[normalizedProfile];
-  const config = {
+  const config = normalizeRuntimeConfig({
     engine_mode: normalizedMode,
+    llm_target: normalizeLlmTarget(llm_target, normalizedMode),
     hardware_profile: normalizedProfile,
     language: String(language || 'en').trim() || 'en',
     stt_model: String(stt_model || defaults.stt).trim() || defaults.stt,
     llm_model: String(llm_model || defaults.llm).trim() || defaults.llm,
     tts_model: String(tts_model || defaults.tts).trim() || defaults.tts,
-  };
+    local,
+    cloud,
+    server,
+  });
   _engineModeOverride = normalizedMode;
   writeConfig((current) => Object.assign(current, config));
   return config;
+}
+
+function getRuntimeConfig() {
+  return normalizeRuntimeConfig(readConfig());
+}
+
+function setRuntimeConfig(nextConfig = {}) {
+  const current = getRuntimeConfig();
+  const next = normalizeRuntimeConfig({ ...current, ...(nextConfig || {}) });
+  _engineModeOverride = next.engine_mode;
+  writeConfig(() => next);
+  return next;
 }
 
 function normalizeJarvisCodeConfig(value) {
@@ -324,7 +468,10 @@ module.exports = {
   setJarvisModelConfig,
   getJarvisCodeConfig,
   setJarvisCodeConfig,
+  getRuntimeConfig,
+  setRuntimeConfig,
   HARDWARE_PROFILE_MODELS,
   VALID_ENGINE_MODES,
   VALID_HARDWARE_PROFILES,
+  VALID_LLM_TARGETS,
 };
