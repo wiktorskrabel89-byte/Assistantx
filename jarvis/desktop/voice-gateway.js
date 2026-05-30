@@ -3,10 +3,10 @@
 const EventEmitter = require('events');
 const { createVoiceBackendAbstraction } = require('./voice/backend-abstraction');
 
-const DEFAULT_STT_MODEL = 'whisper-large-v3-turbo';
+const DEFAULT_STT_MODEL = 'base';
 const DEFAULT_VOICE_PERSONA = 'jarvis';
 const DEFAULT_LANGUAGE = 'en';
-const DEFAULT_TTS_MODEL = 'playai-tts';
+const DEFAULT_TTS_MODEL = 'kokoro';
 const DEFAULT_TTS_BACKEND = 'kokoro-local';
 const PROVIDER_MODE_SERVER = 'assistantx-server';
 const PROVIDER_MODE_DIRECT = 'desktop-direct';

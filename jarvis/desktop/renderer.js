@@ -49,6 +49,58 @@ const voiceGateway = window.jarvisApi.voiceGateway || null;
 let sidecarConnected = false;
 
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
+const STT_MODEL_ALIASES = {
+	'whisper-tiny': 'tiny',
+	'whisper-base': 'base',
+	'whisper-small': 'small',
+	'whisper-medium': 'medium',
+	'whisper-large-v3': 'large',
+	'whisper-large-v3-turbo': 'large',
+};
+
+function normalizeEngineMode(value) {
+	return String(value || '').trim().toLowerCase() === 'byok-cloud' ? 'cloud' : 'local';
+}
+
+function normalizeSttModel(value) {
+	const raw = String(value || '').trim().toLowerCase();
+	return STT_MODEL_ALIASES[raw] || raw || 'base';
+}
+
+function normalizeTtsModel(value, backend = '') {
+	const raw = String(value || '').trim().toLowerCase();
+	if (raw === 'kokoro-local') return 'kokoro';
+	if (raw === 'piper-local') return 'piper';
+	if (raw === 'auto-local') return 'auto';
+	if (isLocalTtsBackend(backend)) {
+		if (raw === 'piper') return 'piper';
+		if (raw === 'auto') return 'auto';
+		return 'kokoro';
+	}
+	return raw || DEFAULT_CLOUD_TTS_MODEL;
+}
+
+function resolveVoiceLanguage(language) {
+	const normalized = String(language || '').trim().toLowerCase();
+	if (!normalized) return voiceLanguageSelect?.value || (typeof navigator !== 'undefined' ? navigator.language : 'en-US') || 'en-US';
+	const match = Array.from(voiceLanguageSelect?.options || []).find((option) => (
+		String(option.value || '').toLowerCase().startsWith(normalized)
+	));
+	return match?.value || normalized;
+}
+
+function ensureSelectOption(select, value, label) {
+	if (!select || !value) return;
+	const existing = Array.from(select.options).find((option) => option.value === value);
+	if (existing) {
+		if (label) existing.textContent = label;
+		return;
+	}
+	const option = document.createElement('option');
+	option.value = value;
+	option.textContent = label || value;
+	select.insertBefore(option, select.firstChild || null);
+}
 const MAX_SPOKEN_TEXT_LENGTH = 220;
 const VOICE_PROFILES = {
 	default: {
@@ -217,6 +269,13 @@ window.addEventListener('DOMContentLoaded', () => {
 	const sttModelSelect = document.getElementById('stt-model');
 	const ttsBackendSelect = document.getElementById('tts-backend');
 	const ttsModelSelect = document.getElementById('tts-model');
+	const chatModelField = document.getElementById('chat-model-field');
+	const sttModelField = document.getElementById('stt-model-field');
+	const ttsBackendField = document.getElementById('tts-backend-field');
+	const ttsModelField = document.getElementById('tts-model-field');
+	const voiceProviderModeField = document.getElementById('voice-provider-mode-field');
+	const engineProfileSummaryNode = document.getElementById('engine-profile-summary');
+	const modelSettingsNoteNode = document.getElementById('model-settings-note');
 	const ttsVoiceProfileSelect = document.getElementById('tts-voice-profile');
 	const voiceLanguageSelect = document.getElementById('voice-language');
 	const voiceProviderModeSelect = document.getElementById('voice-provider-mode');
@@ -278,6 +337,8 @@ window.addEventListener('DOMContentLoaded', () => {
 	let speechVoicePromise = null;
 
 	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
+	const DEFAULT_LOCAL_TTS_MODEL = 'kokoro';
+	const DEFAULT_CLOUD_TTS_MODEL = 'playai-tts';
 	const AGENT_STATE = {
 		IDLE: 'IDLE',
 		THINKING: 'THINKING',
@@ -649,10 +710,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const defaultVoiceSettings = {
 		chatModel: chatModelSelect?.value || 'auto-smart',
 		sttEnabled: true,
-		sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
+		sttModel: normalizeSttModel(sttModelSelect?.value || 'base'),
 		ttsEnabled: true,
 		ttsBackend: ttsBackendSelect?.value || 'kokoro-local',
-		ttsModel: ttsModelSelect?.value || 'playai-tts',
+		ttsModel: normalizeTtsModel(ttsModelSelect?.value || DEFAULT_LOCAL_TTS_MODEL, ttsBackendSelect?.value || 'kokoro-local'),
 		ttsVoiceId: ttsVoiceProfileSelect?.value || 'jarvis',
 		wakeWordEnabled: true,
 		wakeWordPhrase: DEFAULT_JARVIS_WAKE_PHRASE,
@@ -709,9 +770,20 @@ window.addEventListener('DOMContentLoaded', () => {
 		serverId: null,
 		preferLocalWhenAvailable: false,
 	};
+	let runtimeModelConfig = {
+		engine_mode: 'local',
+		hardware_profile: 'standard',
+		llm_model: defaultVoiceSettings.chatModel,
+		stt_model: defaultVoiceSettings.sttModel,
+		tts_model: defaultVoiceSettings.ttsModel,
+		language: 'en',
+	};
 
 	function applyVoiceSettings(nextSettings, { persist = true } = {}) {
-		voiceSettings = { ...defaultVoiceSettings, ...nextSettings };
+		const merged = { ...defaultVoiceSettings, ...nextSettings };
+		merged.sttModel = normalizeSttModel(merged.sttModel);
+		merged.ttsModel = normalizeTtsModel(merged.ttsModel, merged.ttsBackend);
+		voiceSettings = merged;
 		if (chatModelSelect && voiceSettings.chatModel) chatModelSelect.value = voiceSettings.chatModel;
 		if (sttModelSelect && voiceSettings.sttModel) sttModelSelect.value = voiceSettings.sttModel;
 		if (ttsBackendSelect && voiceSettings.ttsBackend) ttsBackendSelect.value = voiceSettings.ttsBackend;
@@ -735,6 +807,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				voiceInputButton.textContent = voiceSettings.sttEnabled ? '🎙 Talk' : '🎙 STT off';
 			}
 		}
+		updateModelSettingsUi();
 		if (persist) writeVoiceSettings(voiceSettings);
 	}
 
@@ -748,6 +821,69 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (value === 'piper-local') return 'piper';
 		if (value === 'kokoro-local') return 'kokoro';
 		return 'auto';
+	}
+
+	function updateModelSettingsUi() {
+		const engineMode = normalizeEngineMode(runtimeModelConfig.engine_mode);
+		const usingLocalVoice = isLocalTtsBackend(voiceSettings.ttsBackend);
+		const profile = String(runtimeModelConfig.hardware_profile || 'standard').trim() || 'standard';
+		const llmModel = String(runtimeModelConfig.llm_model || voiceSettings.chatModel || 'auto-smart').trim();
+		const sttModel = normalizeSttModel(runtimeModelConfig.stt_model || voiceSettings.sttModel || 'base');
+		const ttsModel = normalizeTtsModel(runtimeModelConfig.tts_model || voiceSettings.ttsModel || DEFAULT_LOCAL_TTS_MODEL, voiceSettings.ttsBackend);
+		if (engineProfileSummaryNode) {
+			engineProfileSummaryNode.textContent = engineMode === 'local'
+				? `Local engine active • ${profile} profile • Ollama ${llmModel} • Whisper ${sttModel} • ${ttsModel === 'piper' ? 'Piper' : 'Kokoro'} voice`
+				: `Cloud engine active • Jarvis keeps the wizard-selected profile in sync and only shows controls that still apply.`;
+		}
+		if (modelSettingsNoteNode) {
+			modelSettingsNoteNode.textContent = usingLocalVoice
+				? 'Local voice playback uses Whisper + Kokoro/Piper assets from your Jarvis install. Cloud-only TTS model selection is hidden until you switch to a cloud voice backend.'
+				: 'Cloud voice playback is enabled. Choose the provider backend and the matching cloud TTS model below.';
+		}
+		if (chatModelField) chatModelField.hidden = false;
+		if (sttModelField) sttModelField.hidden = false;
+		if (ttsBackendField) ttsBackendField.hidden = false;
+		if (ttsModelField) ttsModelField.hidden = usingLocalVoice;
+		if (voiceProviderModeField) voiceProviderModeField.hidden = engineMode === 'local' && usingLocalVoice;
+		if (ttsModelSelect) ttsModelSelect.disabled = usingLocalVoice;
+	}
+
+	async function loadRuntimeModelConfig() {
+		try {
+			const response = await (window.jarvisApi?.config?.getModelConfig?.() || window.jarvisSetup?.getRecommendedConfig?.());
+			const config = response?.config || null;
+			if (!config) {
+				updateModelSettingsUi();
+				return;
+			}
+			runtimeModelConfig = {
+				...runtimeModelConfig,
+				...config,
+				engine_mode: normalizeEngineMode(config.engine_mode),
+				stt_model: normalizeSttModel(config.stt_model || runtimeModelConfig.stt_model),
+				tts_model: normalizeTtsModel(config.tts_model || runtimeModelConfig.tts_model, voiceSettings.ttsBackend),
+			};
+			ensureSelectOption(chatModelSelect, runtimeModelConfig.llm_model, `${runtimeModelConfig.llm_model} (wizard default)`);
+			ensureSelectOption(sttModelSelect, runtimeModelConfig.stt_model, `whisper-${runtimeModelConfig.stt_model}`);
+			ensureSelectOption(ttsModelSelect, 'kokoro', 'kokoro-82m (local voice runtime)');
+			ensureSelectOption(ttsModelSelect, 'piper', 'piper local voice pack');
+			const nextBackend = normalizeEngineMode(runtimeModelConfig.engine_mode) === 'local'
+				? (isLocalTtsBackend(voiceSettings.ttsBackend) ? voiceSettings.ttsBackend : 'kokoro-local')
+				: (String(voiceSettings.ttsBackend || '').trim() || 'groq-cloud');
+			applyVoiceSettings({
+				...voiceSettings,
+				chatModel: runtimeModelConfig.llm_model || voiceSettings.chatModel,
+				sttModel: runtimeModelConfig.stt_model || voiceSettings.sttModel,
+				ttsBackend: nextBackend,
+				ttsModel: normalizeEngineMode(runtimeModelConfig.engine_mode) === 'local'
+					? normalizeTtsModel(runtimeModelConfig.tts_model || DEFAULT_LOCAL_TTS_MODEL, nextBackend)
+					: voiceSettings.ttsModel,
+				voiceLanguage: resolveVoiceLanguage(runtimeModelConfig.language || voiceSettings.voiceLanguage),
+			});
+			syncSidecarVoiceSettings();
+		} catch {
+			updateModelSettingsUi();
+		}
 	}
 
 	function resolveCloudTtsProvider(backend) {
@@ -921,6 +1057,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	applyVoiceSettings(voiceSettings, { persist: false });
+	void loadRuntimeModelConfig();
 	void loadLocalServersState();
 	localServerAddButton?.addEventListener('click', async () => {
 		if (!localServerApi) return;
@@ -1578,14 +1715,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	if (saveVoiceSettingsButton) {
 		saveVoiceSettingsButton.addEventListener('click', () => {
+			const nextBackend = ttsBackendSelect?.value || 'kokoro-local';
 			applyVoiceSettings({
 				...voiceSettings,
 				chatModel: chatModelSelect?.value || 'auto-smart',
 				sttEnabled: Boolean(sttEnabledToggle?.checked),
-				sttModel: sttModelSelect?.value || 'whisper-large-v3-turbo',
+				sttModel: normalizeSttModel(sttModelSelect?.value || 'base'),
 				ttsEnabled: Boolean(autoTtsToggle?.checked),
-				ttsBackend: ttsBackendSelect?.value || 'kokoro-local',
-				ttsModel: ttsModelSelect?.value || 'playai-tts',
+				ttsBackend: nextBackend,
+				ttsModel: normalizeTtsModel(ttsModelSelect?.value || DEFAULT_LOCAL_TTS_MODEL, nextBackend),
 				ttsVoiceId: ttsVoiceProfileSelect?.value || 'jarvis',
 				wakeWordEnabled: Boolean(wakeWordEnabledToggle?.checked),
 				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
@@ -1611,19 +1749,24 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	if (sttModelSelect) {
 		sttModelSelect.addEventListener('change', () => {
-			applyVoiceSettings({ ...voiceSettings, sttModel: sttModelSelect.value });
+			applyVoiceSettings({ ...voiceSettings, sttModel: normalizeSttModel(sttModelSelect.value) });
 		});
 	}
 
 	if (ttsModelSelect) {
 		ttsModelSelect.addEventListener('change', () => {
-			applyVoiceSettings({ ...voiceSettings, ttsModel: ttsModelSelect.value });
+			applyVoiceSettings({ ...voiceSettings, ttsModel: normalizeTtsModel(ttsModelSelect.value, voiceSettings.ttsBackend) });
 		});
 	}
 
 	if (ttsBackendSelect) {
 		ttsBackendSelect.addEventListener('change', () => {
-			applyVoiceSettings({ ...voiceSettings, ttsBackend: ttsBackendSelect.value || 'kokoro-local' });
+			const nextBackend = ttsBackendSelect.value || 'kokoro-local';
+			applyVoiceSettings({
+				...voiceSettings,
+				ttsBackend: nextBackend,
+				ttsModel: normalizeTtsModel(voiceSettings.ttsModel, nextBackend),
+			});
 			resetActiveAiStream();
 			syncSidecarVoiceSettings();
 		});
@@ -1751,7 +1894,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				sttModel: voiceSettings.sttModel,
 				persona: voiceSettings.ttsVoiceId,
 				ttsBackend: voiceSettings.ttsBackend || 'kokoro-local',
-				ttsModel: voiceSettings.ttsModel || 'playai-tts',
+				ttsModel: voiceSettings.ttsModel || (isLocalTtsBackend(voiceSettings.ttsBackend) ? DEFAULT_LOCAL_TTS_MODEL : DEFAULT_CLOUD_TTS_MODEL),
 				fallbackToBrowserSpeech: true,
 			});
 			// Start microphone capture immediately if wake word is enabled
@@ -2025,7 +2168,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			sttModel: voiceSettings.sttModel,
 			persona: voiceSettings.ttsVoiceId,
 			ttsBackend: voiceSettings.ttsBackend || 'kokoro-local',
-			ttsModel: voiceSettings.ttsModel || 'playai-tts',
+			ttsModel: voiceSettings.ttsModel || (isLocalTtsBackend(voiceSettings.ttsBackend) ? DEFAULT_LOCAL_TTS_MODEL : DEFAULT_CLOUD_TTS_MODEL),
 			fallbackToBrowserSpeech: true,
 		});
 		if (voiceSettings.wakeWordEnabled && !sidecar.isCapturing()) {
@@ -2074,7 +2217,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			const tts = await voiceGateway.synthesize(enhanced, {
 				persona: voiceSettings.ttsVoiceId,
 				language: getVoiceLanguage(),
-				model: voiceSettings.ttsModel || 'playai-tts',
+				model: voiceSettings.ttsModel || DEFAULT_CLOUD_TTS_MODEL,
 				provider: resolveCloudTtsProvider(ttsBackend),
 			});
 			if (tts?.ok && tts.audioBase64) {

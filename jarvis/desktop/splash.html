@@ -39,6 +39,19 @@
       padding: 24px;
     }
 
+    .splash-shell {
+      width: min(520px, 100%);
+      padding: 28px;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(12,18,32,0.94), rgba(7,11,20,0.98));
+      box-shadow: 0 26px 80px rgba(0,0,0,0.45);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
     .logo {
       font-size: 40px;
       animation: pulse 2.5s ease-in-out infinite;
@@ -110,6 +123,48 @@
       min-height: 16px;
     }
 
+    .status-card {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.03);
+      padding: 14px 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .status-card-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .status-card-title {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 700;
+    }
+
+    .status-pill {
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(0,255,213,0.12);
+      color: var(--neon-local);
+      border: 1px solid rgba(0,255,213,0.2);
+    }
+
+    .status-note {
+      color: #9bb0d3;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
     /* ── error card ──────────────────────────────────────────────────────────── */
     #error-card {
       display: none;
@@ -144,61 +199,78 @@
 <body>
   <div id="titlebar"></div>
   <div class="container">
+    <div class="splash-shell">
+      <div class="logo">🤖</div>
 
-    <div class="logo">🤖</div>
+      <div class="title-area">
+        <h1 id="splash-title">Starting Jarvis OS…</h1>
+        <p id="splash-subtitle">Preparing your AI runtime</p>
+      </div>
 
-    <div class="title-area">
-      <h1 id="splash-title">Starting Jarvis OS…</h1>
-      <p id="splash-subtitle">Preparing your AI runtime</p>
-    </div>
-
-    <!-- LOCAL mode: two download bars ──────────────────────────────────────── -->
-    <div class="progress-list" id="local-progress" style="display:none">
-      <div class="progress-item">
-        <div class="progress-header">
-          <span class="progress-label">🧠 LLM MODEL (Ollama)</span>
-          <span class="progress-pct" id="llm-pct">0%</span>
+      <div class="status-card">
+        <div class="status-card-header">
+          <span class="status-card-title">Local startup pipeline</span>
+          <span class="status-pill" id="voice-status-pill">Initializing</span>
         </div>
-        <div class="progress-track">
-          <div class="progress-fill fill-local" id="llm-bar"></div>
+        <div class="status-note" id="status-line">Initializing…</div>
+      </div>
+
+      <!-- LOCAL mode: two download bars ────────────────────────────────────── -->
+      <div class="progress-list" id="local-progress" style="display:none">
+        <div class="progress-item">
+          <div class="progress-header">
+            <span class="progress-label">🧠 LLM MODEL (Ollama)</span>
+            <span class="progress-pct" id="llm-pct">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-local" id="llm-bar"></div>
+          </div>
+        </div>
+        <div class="progress-item">
+          <div class="progress-header">
+            <span class="progress-label">🎙️ WHISPER + KOKORO</span>
+            <span class="progress-pct" id="py-pct">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-local" id="py-bar"></div>
+          </div>
         </div>
       </div>
-      <div class="progress-item">
-        <div class="progress-header">
-          <span class="progress-label">🎙️ VOICE MODELS (Python)</span>
-          <span class="progress-pct" id="py-pct">0%</span>
+
+      <!-- CLOUD mode: spinner ───────────────────────────────────────────────── -->
+      <div id="cloud-check">
+        <div class="spinner"></div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-card-header">
+          <span class="status-card-title">App updates</span>
+          <span class="status-pill" id="update-status-pill" style="background:rgba(168,85,247,0.12);color:var(--neon-cloud);border-color:rgba(168,85,247,0.24);">Waiting</span>
         </div>
-        <div class="progress-track">
-          <div class="progress-fill fill-local" id="py-bar"></div>
+        <div class="status-note" id="updater-status-line">Updater: waiting to check…</div>
+        <div class="progress-list" style="max-width:none">
+          <div class="progress-item" id="updater-progress-wrap" style="display:none">
+            <div class="progress-header">
+              <span class="progress-label">⬆️ APP UPDATE</span>
+              <span class="progress-pct" id="updater-pct">0%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill fill-cloud" id="updater-bar"></div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- CLOUD mode: spinner ─────────────────────────────────────────────────── -->
-    <div id="cloud-check">
-      <div class="spinner"></div>
+      <div id="error-card"></div>
     </div>
-
-    <div class="status-line" id="status-line">Initializing…</div>
-    <div class="status-line" id="updater-status-line">Updater: waiting to check…</div>
-    <div class="progress-list" style="max-width:380px">
-      <div class="progress-item" id="updater-progress-wrap" style="display:none">
-        <div class="progress-header">
-          <span class="progress-label">⬆️ APP UPDATE</span>
-          <span class="progress-pct" id="updater-pct">0%</span>
-        </div>
-        <div class="progress-track">
-          <div class="progress-fill fill-cloud" id="updater-bar"></div>
-        </div>
-      </div>
-    </div>
-    <div id="error-card"></div>
 
   </div>
 
   <script>
     function setStatus(text) {
       document.getElementById('status-line').textContent = text;
+      const pill = document.getElementById('voice-status-pill');
+      if (pill) pill.textContent = text && text.length > 24 ? 'Working…' : (text || 'Initializing');
     }
 
     function setLlmProgress(pct) {
@@ -221,6 +293,19 @@
 
     function setUpdaterStatus(text) {
       document.getElementById('updater-status-line').textContent = text;
+      const pill = document.getElementById('update-status-pill');
+      if (!pill) return;
+      if (/download/i.test(text || '')) {
+        pill.textContent = 'Downloading';
+      } else if (/ready|date/i.test(text || '')) {
+        pill.textContent = 'Ready';
+      } else if (/error|unavailable/i.test(text || '')) {
+        pill.textContent = 'Skipped';
+      } else if (/check/i.test(text || '')) {
+        pill.textContent = 'Checking';
+      } else {
+        pill.textContent = 'Waiting';
+      }
     }
 
     function setUpdaterProgress(pct) {

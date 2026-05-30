@@ -52,12 +52,78 @@ function ensureDbReady() {
   return launcherDb.init();
 }
 
+function normalizeSidecarEngineMode(engineMode) {
+  return String(engineMode || '').trim().toLowerCase() === 'byok-cloud' ? 'cloud' : 'local';
+}
+
+function normalizeSidecarSttModel(model) {
+  const value = String(model || '').trim().toLowerCase();
+  if (value === 'whisper-large-v3' || value === 'whisper-large-v3-turbo') return 'large';
+  if (value === 'whisper-medium') return 'medium';
+  if (value === 'whisper-small') return 'small';
+  if (value === 'whisper-tiny') return 'tiny';
+  if (value === 'whisper-base') return 'base';
+  return value || 'base';
+}
+
+function normalizeSidecarTtsBackend(model) {
+  const value = String(model || '').trim().toLowerCase();
+  if (value === 'piper' || value === 'piper-local') return 'piper';
+  if (value === 'auto' || value === 'auto-local') return 'auto';
+  return 'kokoro';
+}
+
+function resetLocalVoiceAssetsState() {
+  localVoiceAssetsState = {
+    started: false,
+    complete: false,
+    percent: 0,
+    status: 'Preparing local voice assets…',
+  };
+}
+
+function getSplashVoiceStatusLabel(phase, fallback) {
+  if (phase === 'downloading_stt') return fallback || 'Downloading Whisper speech model…';
+  if (phase === 'downloading_tts') return fallback || 'Downloading Kokoro voice model…';
+  if (phase === 'downloading_tts_piper') return fallback || 'Downloading Piper fallback voice…';
+  if (phase === 'model_download_complete') return fallback || 'Local voice assets ready.';
+  return fallback || 'Preparing local voice assets…';
+}
+
+function handleSidecarStatusPayload(payload) {
+  if (!payload || payload.type !== 'status') return;
+  const phase = String(payload.phase || '').trim().toLowerCase();
+  if (!phase) return;
+  if (!['downloading_stt', 'downloading_tts', 'downloading_tts_piper', 'model_download_complete'].includes(phase)) {
+    return;
+  }
+  const percent = phase === 'model_download_complete'
+    ? 100
+    : Math.max(0, Math.min(100, Number(payload.percent || 0)));
+  localVoiceAssetsState = {
+    started: true,
+    complete: phase === 'model_download_complete',
+    percent,
+    status: getSplashVoiceStatusLabel(phase, String(payload.status || '').trim()),
+  };
+  sendToRenderer('splash:progress', {
+    pyPercent: localVoiceAssetsState.percent,
+    status: localVoiceAssetsState.status,
+  });
+}
+
 // ── Python AI-Agent sidecar process management ───────────────────────────────
 let sidecarProcess = null;
 let sidecarStatus = 'idle';
 let sidecarHeartbeatInFlight = false;
 let sidecarStdoutBuffer = '';
 let sidecarReady = false;
+let localVoiceAssetsState = {
+  started: false,
+  complete: false,
+  percent: 0,
+  status: 'Preparing local voice assets…',
+};
 const SIDECAR_PORT = process.env.JARVIS_SIDECAR_PORT || '8765';
 const SIDECAR_HEALTH_TIMEOUT_MS = Number(process.env.JARVIS_SIDECAR_HEALTH_TIMEOUT_MS || 5000);
 const SIDECAR_HEALTH_RETRIES = Math.max(1, Number(process.env.JARVIS_SIDECAR_HEALTH_RETRIES || 3));
@@ -344,6 +410,7 @@ function handleSidecarStdoutLine(line) {
     return;
   }
   markSidecarReady({ messageType: payload?.type || 'unknown' });
+  handleSidecarStatusPayload(payload);
   sendToRenderer('sidecar-message', payload);
 }
 
@@ -426,12 +493,21 @@ function startSidecar() {
   sidecarHeartbeatInFlight = false;
   sidecarReady = false;
   sidecarStdoutBuffer = '';
+  resetLocalVoiceAssetsState();
+  const modelConfig = getJarvisModelConfig();
   const sidecarArgs = [mainPy, '--mode', 'stdio'];
   log('[sidecar] Launching sidecar:', python);
   log('[sidecar] Args:', sidecarArgs);
   sidecarProcess = spawn(python, sidecarArgs, {
     cwd: path.dirname(mainPy),
-    env: process.env,
+    env: {
+      ...process.env,
+      JARVIS_ENGINE_MODE: normalizeSidecarEngineMode(modelConfig.engine_mode),
+      JARVIS_STT_MODEL: normalizeSidecarSttModel(modelConfig.stt_model),
+      JARVIS_WHISPER_MODEL: normalizeSidecarSttModel(modelConfig.stt_model),
+      JARVIS_LANGUAGE: String(modelConfig.language || 'en').trim() || 'en',
+      JARVIS_TTS_BACKEND: normalizeSidecarTtsBackend(modelConfig.tts_model),
+    },
     windowsHide: true,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -1179,6 +1255,30 @@ async function startSplashTransition(engineMode) {
     pyPercent: 100,
     status: sidecarReady ? 'AI runtime ready. Launching Jarvis…' : 'Launching Jarvis…',
   });
+
+  if (sidecarReady) {
+    const modelWaitDeadline = Date.now() + 900_000;
+    const startupGraceDeadline = Date.now() + 2_500;
+    while (Date.now() < modelWaitDeadline) {
+      if (localVoiceAssetsState.complete) {
+        sendToRenderer('splash:progress', {
+          pyPercent: 100,
+          status: localVoiceAssetsState.status || 'Local voice assets ready.',
+        });
+        break;
+      }
+      if (!localVoiceAssetsState.started && Date.now() >= startupGraceDeadline) {
+        break;
+      }
+      if (localVoiceAssetsState.started) {
+        sendToRenderer('splash:progress', {
+          pyPercent: localVoiceAssetsState.percent,
+          status: localVoiceAssetsState.status || 'Preparing local voice assets…',
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
 
   await new Promise((resolve) => setTimeout(resolve, 400));
   await startupUpdateGate.catch(() => null);

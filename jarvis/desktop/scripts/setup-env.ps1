@@ -2,6 +2,9 @@ Write-Host "Starting AssistantX local AI environment setup..." -ForegroundColor 
 
 $ErrorActionPreference = "Stop"
 $manifestPath = Join-Path $PSScriptRoot "ollama-model-manifest.json"
+$desktopRoot = Split-Path -Path $PSScriptRoot -Parent
+$repoRoot = Split-Path -Path (Split-Path -Path $desktopRoot -Parent) -Parent
+$aiAgentPath = Join-Path $repoRoot "ai-agent"
 $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
 
 function Test-OllamaReady {
@@ -11,6 +14,74 @@ function Test-OllamaReady {
   } catch {
     return $false
   }
+}
+
+function Resolve-PythonExecutable {
+  $candidates = @(
+    (Join-Path $desktopRoot "python\python.exe"),
+    (Join-Path $aiAgentPath "venv\Scripts\python.exe"),
+    "python.exe",
+    "python"
+  )
+
+  foreach ($candidate in $candidates) {
+    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+    if ($candidate -like "*.exe" -or $candidate -like "python*") {
+      try {
+        if ($candidate -match '[\\/]') {
+          if (Test-Path $candidate) { return $candidate }
+        } else {
+          $resolved = Get-Command $candidate -ErrorAction SilentlyContinue
+          if ($resolved) { return $resolved.Source }
+        }
+      } catch {
+        continue
+      }
+    }
+  }
+
+  throw "Python runtime not found. Expected embedded runtime or python.exe in PATH."
+}
+
+function Ensure-VoiceAssets {
+  param(
+    [string]$Language = "en",
+    [string]$SttModel = "base"
+  )
+
+  $pythonExe = Resolve-PythonExecutable
+  if (-not (Test-Path $aiAgentPath)) {
+    throw "AI agent directory not found: $aiAgentPath"
+  }
+
+  Write-Host "Ensuring Whisper + Kokoro voice assets..." -ForegroundColor Cyan
+  $bootstrapCode = @'
+import os
+import sys
+
+repo_root = os.environ["JARVIS_AI_AGENT_PATH"]
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
+from speech.model_downloader import ensure_whisper_model, ensure_kokoro_model, ensure_piper_model
+
+language = os.environ.get("JARVIS_LANGUAGE", "en").strip().lower()[:2] or "en"
+stt_model = os.environ.get("JARVIS_STT_MODEL", "base").strip().lower() or "base"
+
+ensure_whisper_model(stt_model)
+ensure_kokoro_model()
+if language == "pl":
+    ensure_piper_model(language)
+'@
+
+  $env:JARVIS_AI_AGENT_PATH = $aiAgentPath
+  $env:JARVIS_LANGUAGE = $Language
+  $env:JARVIS_STT_MODEL = $SttModel
+  & $pythonExe -c $bootstrapCode
+  if ($LASTEXITCODE -ne 0) {
+    throw "Voice asset bootstrap failed with exit code $LASTEXITCODE"
+  }
+  Write-Host "Local Whisper/Kokoro assets are ready." -ForegroundColor Green
 }
 
 if (-not (Test-Path $manifestPath)) {
@@ -45,6 +116,12 @@ Write-Host "Ollama service is healthy." -ForegroundColor Green
 
 Write-Host "Ensuring required local models from manifest..." -ForegroundColor Cyan
 & "$PSScriptRoot\ensure-ollama-models.ps1" -ManifestPath $manifestPath
+
+$language = [string]($env:JARVIS_LANGUAGE)
+if ([string]::IsNullOrWhiteSpace($language)) { $language = "en" }
+$sttModel = [string]($env:JARVIS_STT_MODEL)
+if ([string]::IsNullOrWhiteSpace($sttModel)) { $sttModel = "base" }
+Ensure-VoiceAssets -Language $language -SttModel $sttModel
 
 try {
   $manifest = Get-Content -Path $manifestPath -Raw | ConvertFrom-Json
