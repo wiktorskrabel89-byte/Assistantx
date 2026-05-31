@@ -739,6 +739,7 @@ jobs:
           name: JarvisUpdaterMetadata
           path: |
             jarvis/desktop/dist/latest.yml
+            jarvis/desktop/dist/latest.yml.sig
             jarvis/desktop/dist/release-notes.json
             versions.json
             jarvis/desktop/dist/*.blockmap
@@ -957,6 +958,14 @@ jobs:
           path: jarvis/desktop/dist/JarvisSetup-arm64.dmg
           if-no-files-found: warn
 
+      - name: Upload macOS updater metadata artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: JarvisUpdaterMetadata-mac
+          path: |
+            jarvis/desktop/dist/latest-mac.yml
+          if-no-files-found: warn
+
       - name: Publish macOS DMGs to GitHub Release (${{ env.RELEASE_TAG }})
         uses: softprops/action-gh-release@v2
         with:
@@ -1025,6 +1034,14 @@ jobs:
         with:
           name: Jarvis-linux-appimage-x64
           path: ${{ steps.linux_appimage.outputs.path }}
+          if-no-files-found: warn
+
+      - name: Upload Linux updater metadata artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: JarvisUpdaterMetadata-linux
+          path: |
+            jarvis/desktop/dist/latest-linux.yml
           if-no-files-found: warn
 
       - name: Publish Linux AppImage to GitHub Release (${{ env.RELEASE_TAG }})
@@ -1117,6 +1134,62 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Download Windows updater metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: JarvisUpdaterMetadata
+          path: /tmp/updater-windows
+        continue-on-error: true
+
+      - name: Download macOS updater metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: JarvisUpdaterMetadata-mac
+          path: /tmp/updater-mac
+        continue-on-error: true
+
+      - name: Download Linux updater metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: JarvisUpdaterMetadata-linux
+          path: /tmp/updater-linux
+        continue-on-error: true
+
+      - name: Place updater metadata in public platform directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/windows public/mac public/linux public/beta/windows public/beta/linux
+
+          # Windows: latest.yml + sig + release-notes.json
+          if [ -f /tmp/updater-windows/jarvis/desktop/dist/latest.yml ]; then
+            cp /tmp/updater-windows/jarvis/desktop/dist/latest.yml public/windows/latest.yml
+            echo "Placed public/windows/latest.yml"
+          fi
+          if [ -f /tmp/updater-windows/jarvis/desktop/dist/latest.yml.sig ]; then
+            cp /tmp/updater-windows/jarvis/desktop/dist/latest.yml.sig public/windows/latest.yml.sig
+            echo "Placed public/windows/latest.yml.sig"
+          fi
+          if [ -f /tmp/updater-windows/jarvis/desktop/dist/release-notes.json ]; then
+            # Share the same release notes across all platform directories
+            cp /tmp/updater-windows/jarvis/desktop/dist/release-notes.json public/windows/release-notes.json
+            cp /tmp/updater-windows/jarvis/desktop/dist/release-notes.json public/mac/release-notes.json
+            cp /tmp/updater-windows/jarvis/desktop/dist/release-notes.json public/linux/release-notes.json
+            echo "Placed release-notes.json in platform directories"
+          fi
+
+          # macOS: latest-mac.yml
+          if [ -f /tmp/updater-mac/jarvis/desktop/dist/latest-mac.yml ]; then
+            cp /tmp/updater-mac/jarvis/desktop/dist/latest-mac.yml public/mac/latest-mac.yml
+            echo "Placed public/mac/latest-mac.yml"
+          fi
+
+          # Linux: latest-linux.yml
+          if [ -f /tmp/updater-linux/jarvis/desktop/dist/latest-linux.yml ]; then
+            cp /tmp/updater-linux/jarvis/desktop/dist/latest-linux.yml public/linux/latest-linux.yml
+            echo "Placed public/linux/latest-linux.yml"
+          fi
 
       - name: Validate Vercel secrets
         shell: bash
