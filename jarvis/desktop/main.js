@@ -1193,11 +1193,12 @@ function loadStartupScreen() {
 async function startSplashTransition(engineMode) {
   resetSplashTransitionState();
   const startupUpdateGate = startStartupUpdateCheckGate();
-  if (engineMode === 'byok-cloud') {
-    sendToRenderer('splash:progress', { status: 'Verifying cloud credentials…' });
-    // Short delay so the spinner is visible before we transition.
+  if (engineMode !== 'local') {
+    // Cloud and remote-server modes don't need a local Ollama model.
+    const modeLabel = engineMode === 'byok-cloud' ? 'Cloud matrix' : 'Remote server';
+    sendToRenderer('splash:progress', { status: `Verifying credentials for ${modeLabel.toLowerCase()}…` });
     await new Promise((resolve) => setTimeout(resolve, 1_200));
-    sendToRenderer('splash:progress', { status: 'Cloud matrix ready. Launching Jarvis…' });
+    sendToRenderer('splash:progress', { status: `${modeLabel} ready. Launching Jarvis…` });
     await new Promise((resolve) => setTimeout(resolve, 600));
     await startupUpdateGate.catch(() => null);
     transitionToIndexOnce();
