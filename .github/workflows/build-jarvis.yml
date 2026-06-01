@@ -16,11 +16,17 @@ on:
       - 'jarvis/**'
     tags:
       - 'v*'
+  # Auto-trigger on pull requests to build preview versions
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'jarvis/**'
 
 jobs:
   build:
     name: Build Jarvis EXE (Windows)
-    runs-on: windows-latest
+    runs-on: self-hosted
 
     # Minimal permissions: read code + write releases
     permissions:
