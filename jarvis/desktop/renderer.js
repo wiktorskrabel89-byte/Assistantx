@@ -2380,8 +2380,9 @@ window.addEventListener('DOMContentLoaded', () => {
 			window.jarvisApi.checkLocalAiSetup().then(async (state) => {
 				// Check if cloud mode is active without a session
 				try {
-					const engineMode = await ipcRenderer.invoke('config:get-engine-mode').catch(() => null);
-					if (engineMode === 'cloud' || engineMode === 'byok-cloud') {
+					const modeResult = await ipcRenderer.invoke('config:get-engine-mode').catch(() => null);
+					const rawMode = modeResult?.engine_mode || null;
+					if (rawMode === 'byok-cloud' || rawMode === 'server-free') {
 						const session = typeof getAccountSession === 'function' ? await getAccountSession() : null;
 						if (!session?.userId) {
 							const msg = 'Cloud mode requires sign-in. Go to Settings → Account to log in.';
