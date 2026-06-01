@@ -1625,118 +1625,6 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	// ── Prompt submission ────────────────────────────────────────────────────
-	// Task Classifier integration
-	function updateTaskClassificationDisplay(classification) {
-		if (!classification) return;
-
-		const displayEl = document.getElementById('task-classification-display');
-		const badgeEl = document.getElementById('task-classification-badge');
-		const pathLabelEl = document.getElementById('path-label');
-		const pathConfEl = document.getElementById('path-confidence');
-		const iconEl = badgeEl.querySelector('.badge-icon');
-
-		// Remove all path classes and add the correct one
-		badgeEl.classList.remove('path-a', 'path-b', 'path-c');
-
-		const pathMap = {
-			'vision_only': { class: 'path-a', label: '👁️ Vision Only (Fast)', icon: '👁️' },
-			'vision_to_coder': { class: 'path-b', label: '🔄 Vision → Code (Relay)', icon: '🔄' },
-			'text_only': { class: 'path-c', label: '💬 Text Only', icon: '💬' },
-		};
-
-		const pathInfo = pathMap[classification.path] || pathMap['text_only'];
-		badgeEl.classList.add(pathInfo.class);
-		iconEl.textContent = pathInfo.icon;
-		pathLabelEl.textContent = pathInfo.label;
-		pathConfEl.textContent = `(${Math.round(classification.confidence * 100)}%)`;
-
-		displayEl.style.display = 'block';
-
-		// Update model activity indicators
-		updateModelActivityIndicators(classification);
-	}
-
-	function updateModelActivityIndicators(classification) {
-		const visionInd = document.getElementById('vision-indicator');
-		const coderInd = document.getElementById('coder-indicator');
-		const displayEl = document.getElementById('model-activity-display');
-
-		if (!visionInd || !coderInd) return;
-
-		// Update vision indicator
-		if (classification.needsVision) {
-			visionInd.classList.remove('inactive');
-			visionInd.classList.add('active');
-		} else {
-			visionInd.classList.remove('active');
-			visionInd.classList.add('inactive');
-		}
-
-		// Update coder indicator
-		if (classification.needsCoder) {
-			coderInd.classList.remove('inactive');
-			coderInd.classList.add('active');
-		} else {
-			coderInd.classList.remove('active');
-			coderInd.classList.add('inactive');
-		}
-
-		// Show display if any model is needed
-		if (classification.needsVision || classification.needsCoder) {
-			displayEl.style.display = 'flex';
-		} else {
-			displayEl.style.display = 'none';
-		}
-	}
-
-	function hideTaskClassificationDisplay() {
-		const displayEl = document.getElementById('task-classification-display');
-		const modelDisplayEl = document.getElementById('model-activity-display');
-		if (displayEl) displayEl.style.display = 'none';
-		if (modelDisplayEl) modelDisplayEl.style.display = 'none';
-	}
-
-	// Session context for multi-turn classification bias
-	const _classifierSession = { recentPaths: [] };
-
-	function _recordClassificationPath(path) {
-		_classifierSession.recentPaths.push(path);
-		if (_classifierSession.recentPaths.length > 10) {
-			_classifierSession.recentPaths.shift();
-		}
-	}
-
-	function showConfirmationPicker(onAnalysis, onCode) {
-		const existing = document.getElementById('confirm-path-picker');
-		if (existing) existing.remove();
-
-		const picker = document.createElement('div');
-		picker.id = 'confirm-path-picker';
-		picker.style.cssText = `
-			position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
-			background: rgba(15,17,27,0.95); border: 1px solid rgba(99,102,241,0.4);
-			border-radius: 12px; padding: 14px 18px; z-index: 9999;
-			display: flex; gap: 10px; align-items: center; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-			backdrop-filter: blur(12px); color: #e2e8f0; font-size: 13px;
-		`;
-		picker.innerHTML = `
-			<span style="opacity:0.8">Ambiguous request — what do you need?</span>
-			<button id="confirm-analysis" style="padding:6px 14px; border-radius:8px;
-				background:rgba(14,165,233,0.2); border:1px solid rgba(14,165,233,0.4);
-				color:#7dd3fc; cursor:pointer; font-size:12px;">👁️ Analysis</button>
-			<button id="confirm-code" style="padding:6px 14px; border-radius:8px;
-				background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.4);
-				color:#a5b4fc; cursor:pointer; font-size:12px;">⌨️ Code</button>
-		`;
-		document.body.appendChild(picker);
-
-		document.getElementById('confirm-analysis').onclick = () => { picker.remove(); onAnalysis(); };
-		document.getElementById('confirm-code').onclick    = () => { picker.remove(); onCode(); };
-
-		// Auto-dismiss after 12s with no selection (default: analysis)
-		setTimeout(() => { if (document.getElementById('confirm-path-picker')) { picker.remove(); onAnalysis(); } }, 12000);
-	}
-
 	async function submitPrompt() {
 		const text = input.value.trim();
 		if (!text) return;
@@ -1744,45 +1632,9 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (typeof window !== 'undefined' && window.speechSynthesis) {
 			window.speechSynthesis.cancel();
 		}
-
-		// Classify the task using the imported task classifier
-		if (typeof classify === 'function') {
-			const hasImage = false; // TODO: detect if user attached image
-			const classification = classify(text, hasImage, _classifierSession);
-			updateTaskClassificationDisplay(classification);
-			_recordClassificationPath(classification.path);
-
-			// Improvement #4: when confidence is low, ask the user to confirm
-			if (classification.needsConfirmation) {
-				const capturedText = text;
-				input.value = '';
-				showConfirmationPicker(
-					() => {
-						// User chose analysis — re-classify forcing Path A/C
-						const overridden = classify(capturedText, hasImage, { recentPaths: [] });
-						updateTaskClassificationDisplay(overridden);
-						_recordClassificationPath(overridden.path);
-						queuePromptExecution(capturedText, { source: 'local', origin: 'desktop' });
-						appendMessage(log, 'Prompt queued', capturedText, 'system');
-					},
-					() => {
-						// User chose code — re-classify biasing toward coder
-						const codeCtx = { recentPaths: ['vision_to_coder', 'vision_to_coder'] };
-						const overridden = classify(capturedText, hasImage, codeCtx);
-						updateTaskClassificationDisplay(overridden);
-						_recordClassificationPath(overridden.path);
-						queuePromptExecution(capturedText, { source: 'local', origin: 'desktop' });
-						appendMessage(log, 'Prompt queued', capturedText, 'system');
-					},
-				);
-				return;
-			}
-		}
-
 		const handled = await handleIntegratedCommands(text);
 		if (handled) {
 			input.value = '';
-			hideTaskClassificationDisplay();
 			return;
 		}
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
@@ -2528,9 +2380,8 @@ window.addEventListener('DOMContentLoaded', () => {
 			window.jarvisApi.checkLocalAiSetup().then(async (state) => {
 				// Check if cloud mode is active without a session
 				try {
-					const modeResult = await ipcRenderer.invoke('config:get-engine-mode').catch(() => null);
-					const rawMode = modeResult?.engine_mode || null;
-					if (rawMode === 'byok-cloud' || rawMode === 'server-free') {
+					const engineMode = await ipcRenderer.invoke('config:get-engine-mode').catch(() => null);
+					if (engineMode === 'cloud' || engineMode === 'byok-cloud') {
 						const session = typeof getAccountSession === 'function' ? await getAccountSession() : null;
 						if (!session?.userId) {
 							const msg = 'Cloud mode requires sign-in. Go to Settings → Account to log in.';
