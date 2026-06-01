@@ -925,6 +925,9 @@ function failPendingAuth(error) {
     clearTimeout(flow.timeoutId);
     flow.timeoutId = null;
   }
+  sendToRenderer('auth:login-failed', {
+    message: error?.message || String(error || 'Sign-in failed. Please try again from Settings.'),
+  });
   flow.reject(error);
 }
 
@@ -980,6 +983,9 @@ function beginDesktopLogin() {
   pendingAuthFlow.promise = promise;
   pendingAuthFlow.timeoutId = setTimeout(() => {
     console.warn('[auth] Login flow timed out waiting for callback.');
+    sendToRenderer('auth:login-timeout', {
+      message: 'Sign-in timed out. Please try again from Settings → Account.',
+    });
     settlePendingAuth(null);
   }, AUTH_LOGIN_TIMEOUT_MS);
   console.info('[auth] login started');
@@ -1187,11 +1193,12 @@ function loadStartupScreen() {
 async function startSplashTransition(engineMode) {
   resetSplashTransitionState();
   const startupUpdateGate = startStartupUpdateCheckGate();
-  if (engineMode === 'byok-cloud') {
-    sendToRenderer('splash:progress', { status: 'Verifying cloud credentials…' });
-    // Short delay so the spinner is visible before we transition.
+  if (engineMode !== 'local') {
+    // Cloud and remote-server modes don't need a local Ollama model.
+    const modeLabel = engineMode === 'byok-cloud' ? 'Cloud matrix' : 'Remote server';
+    sendToRenderer('splash:progress', { status: `Verifying credentials for ${modeLabel.toLowerCase()}…` });
     await new Promise((resolve) => setTimeout(resolve, 1_200));
-    sendToRenderer('splash:progress', { status: 'Cloud matrix ready. Launching Jarvis…' });
+    sendToRenderer('splash:progress', { status: `${modeLabel} ready. Launching Jarvis…` });
     await new Promise((resolve) => setTimeout(resolve, 600));
     await startupUpdateGate.catch(() => null);
     transitionToIndexOnce();

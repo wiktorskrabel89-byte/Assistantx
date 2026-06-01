@@ -68,7 +68,7 @@ def _snapshot_with_progress(
     ignore_patterns: Optional[list] = None,
 ) -> Path | None:
     """
-    Download a Hugging Face snapshot, emitting coarse progress updates via
+    Download a Hugging Face snapshot, emitting progress updates via
     ``on_progress``.  Returns the local directory path on success, or None.
     """
     try:
@@ -82,6 +82,36 @@ def _snapshot_with_progress(
     if on_progress:
         on_progress({"phase": phase, "percent": 5, "status": f"Connecting to HuggingFace ({repo_id})…"})
 
+    # Track download progress by polling local directory size vs. expected total.
+    # huggingface_hub doesn't expose a per-file callback in older versions, so
+    # we use a background polling thread for intermediate progress updates.
+    _stop_polling = threading.Event()
+
+    def _poll_progress() -> None:
+        if not on_progress:
+            return
+        last_pct = 5
+        while not _stop_polling.wait(timeout=2.0):
+            try:
+                downloaded = sum(
+                    f.stat().st_size
+                    for f in local_dir.rglob("*")
+                    if f.is_file() and not f.name.endswith(".lock")
+                )
+                # Estimate based on file sizes already on disk; cap at 95 until done.
+                # We can't know total reliably without metadata, so scale 0→95 as
+                # downloaded grows. Use 1 GB as soft cap for progress display.
+                SOFT_CAP = 1_073_741_824  # 1 GiB
+                pct = min(95, max(last_pct, int(downloaded / SOFT_CAP * 90) + 5))
+                if pct != last_pct:
+                    on_progress({"phase": phase, "percent": pct, "status": f"Downloading {repo_id}… {pct}%"})
+                    last_pct = pct
+            except Exception:
+                pass
+
+    poll_thread = threading.Thread(target=_poll_progress, daemon=True)
+    poll_thread.start()
+
     try:
         snapshot_download(
             repo_id=repo_id,
@@ -89,10 +119,14 @@ def _snapshot_with_progress(
             local_dir_use_symlinks=False,
             ignore_patterns=ignore_patterns or ["*.md", "*.txt", ".gitattributes"],
         )
+        _stop_polling.set()
+        poll_thread.join(timeout=3)
         if on_progress:
             on_progress({"phase": phase, "percent": 100, "status": f"Model ready: {repo_id}"})
         return local_dir
     except Exception as exc:
+        _stop_polling.set()
+        poll_thread.join(timeout=3)
         logger.warning("Failed to download HF snapshot (%s): %s", repo_id, exc)
         if on_progress:
             on_progress({"phase": phase, "percent": 0, "error": f"Download failed: {exc}"})

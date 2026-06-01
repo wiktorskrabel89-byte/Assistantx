@@ -951,6 +951,15 @@ def _start_model_download_background(endpoint=None, state=None) -> None:
     stt_model_size = os.environ.get("JARVIS_STT_MODEL", "base").strip().lower()
     language = os.environ.get("JARVIS_LANGUAGE", "en").strip().lower()[:2]
 
+    # Capture the running loop in the calling (async) context so the
+    # background thread can safely schedule coroutines via run_coroutine_threadsafe.
+    # Using get_event_loop() inside the thread is deprecated in Python 3.10+
+    # and raises in 3.12+ when there is no current loop for that thread.
+    try:
+        _main_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _main_loop = None
+
     def _run() -> None:
         try:
             from speech.model_downloader import ensure_whisper_model, ensure_kokoro_model, ensure_piper_model
@@ -959,15 +968,12 @@ def _start_model_download_background(endpoint=None, state=None) -> None:
             return
 
         def _emit(data: dict) -> None:
-            if endpoint is not None and state is not None:
-                import asyncio as _asyncio
+            if endpoint is not None and state is not None and _main_loop is not None:
                 try:
-                    loop = _asyncio.get_event_loop()
-                    if loop.is_running():
-                        _asyncio.run_coroutine_threadsafe(
-                            _send(endpoint, {"type": "status", "phase": "model_download", **data}, state),
-                            loop,
-                        )
+                    asyncio.run_coroutine_threadsafe(
+                        _send(endpoint, {"type": "status", "phase": "model_download", **data}, state),
+                        _main_loop,
+                    )
                 except Exception:
                     pass
             logger.info("Model download progress: %s", data)
