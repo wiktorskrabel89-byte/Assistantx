@@ -454,183 +454,98 @@ export default function LoginPage() {
   const isBusy = submitState === "submitting" || oauthLoading !== null || guestLoading;
 
   return (
-    <main
-      className="relative min-h-screen overflow-hidden px-5 py-8 sm:px-8 sm:py-10"
-      style={{
-        background: "linear-gradient(135deg, #0d0d14 0%, #0f1117 50%, #0a0e1a 100%)",
-        color: "#e8eaf0",
-      }}
-    >
-      {/* Grid overlay */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(99,102,241,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,.04) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
-      {/* Top-left glow */}
-      <div
-        className="pointer-events-none absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full opacity-25"
-        style={{ background: "radial-gradient(circle, rgba(99,102,241,0.4) 0%, transparent 70%)" }}
-      />
-      {/* Bottom-right glow */}
-      <div
-        className="pointer-events-none absolute -bottom-32 -right-32 h-[400px] w-[400px] rounded-full opacity-20"
-        style={{ background: "radial-gradient(circle, rgba(56,189,248,0.3) 0%, transparent 70%)" }}
-      />
-
-      <div className="relative mx-auto grid min-h-[86vh] w-full max-w-6xl items-center gap-10 lg:grid-cols-[1.1fr,0.9fr]">
-
-        {/* ── Left panel ── */}
+    <main className="min-h-screen bg-background px-5 py-8 text-foreground sm:px-8 sm:py-10">
+      <div className="mx-auto grid min-h-[86vh] w-full max-w-6xl items-center gap-10 lg:grid-cols-[1.1fr,0.9fr]">
         <section className="hidden lg:block">
-          <div className="mb-5 flex items-center gap-2">
+          <div className="mb-4 flex items-center gap-2">
             <PublicLanguageSelector initialLanguage={uiLanguage} />
           </div>
-
-          {/* Workspace badge */}
-          <div
-            className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-            style={{
-              borderColor: "rgba(99,102,241,0.35)",
-              background: "rgba(99,102,241,0.08)",
-              color: "#a5b4fc",
-            }}
-          >
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#6366f1", boxShadow: "0 0 6px #6366f1" }} />
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground/70">
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground/40" />
             {t.workspaceChip}
           </div>
-
-          <h1
-            className="mt-6 max-w-xl text-5xl font-extrabold leading-tight tracking-tight"
-            style={{ letterSpacing: "-0.03em", color: "#e8eaf0" }}
-          >
+          <h1 className="mt-6 max-w-xl text-5xl font-semibold leading-tight tracking-tight text-foreground">
             {t.buildFaster}
-            <span
-              className="block"
-              style={{
-                background: "linear-gradient(135deg, #6366f1 0%, #38bdf8 60%, #a78bfa 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
-              {t.cloudTitle}
-            </span>
+            <span className="block text-foreground/80">{t.cloudTitle}</span>
           </h1>
-
-          <p className="mt-5 max-w-lg text-base leading-7" style={{ color: "rgba(232,234,240,0.6)" }}>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
             {t.heroSubtitle}
           </p>
+          <p className="mt-4 text-xs text-muted-foreground">{t.socialProof}</p>
 
-          <p className="mt-4 text-xs" style={{ color: "rgba(232,234,240,0.35)" }}>{t.socialProof}</p>
-
-          {/* Feature cards */}
-          <div className="mt-8 grid max-w-xl gap-3 sm:grid-cols-2">
-            {[
-              { title: t.persistentSessions, desc: t.persistentSessionsDesc, icon: "🔄" },
-              { title: t.secureFlow, desc: t.secureFlowDesc, icon: "🔐" },
-            ].map(({ title, desc, icon }) => (
-              <div
-                key={title}
-                className="rounded-xl border p-4"
-                style={{
-                  borderColor: "rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.03)",
-                  backdropFilter: "blur(10px)",
-                }}
-              >
-                <div className="mb-2 text-lg">{icon}</div>
-                <div className="text-sm font-semibold" style={{ color: "#e8eaf0" }}>{title}</div>
-                <p className="mt-1 text-sm leading-6" style={{ color: "rgba(232,234,240,0.5)" }}>{desc}</p>
-              </div>
-            ))}
+          <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-border bg-card px-5 py-4">
+              <div className="text-sm font-semibold text-foreground">{t.persistentSessions}</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.persistentSessionsDesc}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card px-5 py-4">
+              <div className="text-sm font-semibold text-foreground">{t.secureFlow}</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.secureFlowDesc}</p>
+            </div>
           </div>
-
-          <div
-            className="mt-3 rounded-xl border p-4"
-            style={{
-              borderColor: "rgba(255,255,255,0.08)",
-              background: "rgba(255,255,255,0.03)",
-              backdropFilter: "blur(10px)",
-            }}
-          >
-            <div className="text-sm font-semibold" style={{ color: "#e8eaf0" }}>{t.plansHeadline}</div>
-            <p className="mt-1 text-sm" style={{ color: "rgba(232,234,240,0.5)" }}>{t.plansBody}</p>
+          <div className="mt-3 rounded-xl border border-border bg-card px-5 py-4">
+            <div className="text-sm font-semibold text-foreground">{t.plansHeadline}</div>
+            <p className="mt-1 text-sm text-muted-foreground">{t.plansBody}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                href="/pricing"
-                className="rounded-lg border px-3 py-2 text-xs font-medium transition-colors duration-150 hover:border-white/25"
-                style={{ borderColor: "rgba(255,255,255,0.12)", color: "rgba(232,234,240,0.7)", background: "rgba(255,255,255,0.04)" }}
-              >
+              <Link href="/pricing" className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-accent">
                 {t.openPricing}
               </Link>
-              <Link
-                href="/roadmap"
-                className="rounded-lg border px-3 py-2 text-xs font-medium transition-colors duration-150 hover:border-white/25"
-                style={{ borderColor: "rgba(255,255,255,0.12)", color: "rgba(232,234,240,0.7)", background: "rgba(255,255,255,0.04)" }}
-              >
+              <Link href="/roadmap" className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-accent">
                 {t.openRoadmap}
               </Link>
             </div>
           </div>
         </section>
 
-        {/* ── Auth card ── */}
-        <section
-          className="rounded-2xl border p-6 sm:p-8"
-          style={{
-            borderColor: "rgba(99,102,241,0.2)",
-            background: "rgba(15,17,27,0.7)",
-            backdropFilter: "blur(20px)",
-            boxShadow: "0 8px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)",
-          }}
-        >
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
           <div className="mb-4 flex items-center justify-between gap-3">
             <PublicLanguageSelector initialLanguage={uiLanguage} />
-            <div className="flex items-center gap-3 text-xs" style={{ color: "rgba(232,234,240,0.4)" }}>
-              <Link href="/pricing" className="transition-colors hover:text-white">{t.pricing}</Link>
-              <Link href="/roadmap" className="transition-colors hover:text-white">{t.roadmap}</Link>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <Link href="/pricing" className="hover:text-foreground">{t.pricing}</Link>
+              <Link href="/roadmap" className="hover:text-foreground">{t.roadmap}</Link>
             </div>
           </div>
-
           {/* Tab switcher */}
-          <div
-            role="tablist"
-            aria-label="Authentication options"
-            className="mb-6 flex rounded-xl p-1"
-            style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)" }}
-          >
-            {(["login", "register"] as AuthTab[]).map((t_) => (
-              <button
-                key={t_}
-                type="button"
-                role="tab"
-                aria-selected={tab === t_}
-                onClick={() => switchTab(t_)}
-                className="flex-1 rounded-lg py-2 text-sm font-semibold transition-all duration-150"
-                style={
-                  tab === t_
-                    ? {
-                        background: "rgba(99,102,241,0.2)",
-                        color: "#a5b4fc",
-                        border: "1px solid rgba(99,102,241,0.3)",
-                        boxShadow: "0 0 12px rgba(99,102,241,0.15)",
-                      }
-                    : { color: "rgba(232,234,240,0.45)", border: "1px solid transparent" }
-                }
-              >
-                {t_ === "login" ? t.signInTab : t.createAccountTab}
-              </button>
-            ))}
+          <div role="tablist" aria-label="Authentication options" className="mb-6 flex rounded-xl border border-border bg-muted p-1">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "login"}
+              aria-controls="panel-login"
+              id="tab-login"
+              onClick={() => switchTab("login")}
+              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+                tab === "login"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.signInTab}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "register"}
+              aria-controls="panel-register"
+              id="tab-register"
+              onClick={() => switchTab("register")}
+              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+                tab === "register"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.createAccountTab}
+            </button>
           </div>
 
-          <h2 className="mb-1 text-2xl font-extrabold tracking-tight" style={{ color: "#e8eaf0", letterSpacing: "-0.02em" }}>
+          <h2 className="mb-1 text-2xl font-semibold tracking-tight text-foreground">
             {tab === "login" ? t.welcomeBack : t.joinAssistantX}
           </h2>
-          <p className="mb-5 text-sm leading-6" style={{ color: "rgba(232,234,240,0.5)" }}>
-            {tab === "login" ? t.signInSub : t.createSub}
+          <p className="mb-5 text-sm leading-6 text-muted-foreground">
+            {tab === "login"
+              ? t.signInSub
+              : t.createSub}
           </p>
 
           {/* Guest access */}
@@ -638,20 +553,15 @@ export default function LoginPage() {
             type="button"
             onClick={() => void handleGuest()}
             disabled={isBusy}
-            className="mb-4 w-full rounded-xl px-4 py-3 text-sm font-medium transition-all duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-            style={{
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(255,255,255,0.04)",
-              color: "rgba(232,234,240,0.8)",
-            }}
+            className="mb-4 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {guestLoading ? t.entering : t.continueAsGuest}
           </button>
 
-          <div className="mb-4 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: "rgba(232,234,240,0.3)" }}>
-            <span className="h-px flex-1" style={{ background: "rgba(255,255,255,0.08)" }} />
+          <div className="mb-4 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
             <span>{t.orSignIn}</span>
-            <span className="h-px flex-1" style={{ background: "rgba(255,255,255,0.08)" }} />
+            <span className="h-px flex-1 bg-border" />
           </div>
 
           {/* OAuth buttons */}
@@ -660,19 +570,11 @@ export default function LoginPage() {
               type="button"
               onClick={() => void handleOAuth("google")}
               disabled={isBusy}
-              className="flex items-center justify-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-              style={{
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.05)",
-                color: "#e8eaf0",
-              }}
+              className="flex items-center justify-center gap-2.5 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               {oauthLoading === "google" ? (
                 <span className="flex items-center gap-2">
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                  </svg>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                   Redirecting…
                 </span>
               ) : (
@@ -687,24 +589,15 @@ export default function LoginPage() {
                 </>
               )}
             </button>
-
             <button
               type="button"
               onClick={() => void handleOAuth("github")}
               disabled={isBusy}
-              className="flex items-center justify-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-              style={{
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.05)",
-                color: "#e8eaf0",
-              }}
+              className="flex items-center justify-center gap-2.5 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               {oauthLoading === "github" ? (
                 <span className="flex items-center gap-2">
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                  </svg>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                   Redirecting…
                 </span>
               ) : (
@@ -719,39 +612,31 @@ export default function LoginPage() {
           </div>
 
           {oauthLoading && (
-            <div
-              className="mt-4 rounded-xl px-4 py-3 text-xs leading-5"
-              style={{
-                border: "1px solid rgba(99,102,241,0.25)",
-                background: "rgba(99,102,241,0.08)",
-                color: "rgba(232,234,240,0.8)",
-              }}
-            >
+            <div className="mt-4 rounded-xl border border-border bg-muted px-4 py-3 text-xs leading-5 text-foreground">
               <div>
                 Back from {getProviderLabel(oauthLoading)} without finishing sign-in? Reset this attempt and choose another method.
               </div>
               <button
                 type="button"
                 onClick={() => recoverFromInterruptedOAuth(oauthLoading)}
-                className="mt-3 rounded-lg border px-3 py-2 font-medium transition-all duration-150 hover:brightness-110"
-                style={{ borderColor: "rgba(255,255,255,0.12)", color: "#e8eaf0", background: "rgba(255,255,255,0.06)" }}
+                className="mt-3 rounded-lg border border-border px-3 py-2 font-medium text-foreground transition hover:bg-accent"
               >
                 Use another sign-in method
               </button>
             </div>
           )}
 
-          <div className="mt-5 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: "rgba(232,234,240,0.3)" }}>
-            <span className="h-px flex-1" style={{ background: "rgba(255,255,255,0.08)" }} />
-            <span>{t.orEmail}</span>
-            <span className="h-px flex-1" style={{ background: "rgba(255,255,255,0.08)" }} />
+          <div className="mt-5 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+              <span>{t.orEmail}</span>
+            <span className="h-px flex-1 bg-border" />
           </div>
 
           {/* Login form */}
           {tab === "login" && (
             <form id="panel-login" role="tabpanel" aria-labelledby="tab-login" onSubmit={(event) => void handleLogin(event)} className="mt-5 space-y-4">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium" style={{ color: "rgba(232,234,240,0.8)" }}>Email address</span>
+                <span className="mb-2 block text-sm font-medium text-foreground">Email address</span>
                 <input
                   type="email"
                   id="login-email"
@@ -760,19 +645,12 @@ export default function LoginPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="you@example.com"
-                  className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all duration-150"
-                  style={{
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "#e8eaf0",
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = "rgba(99,102,241,0.5)"; e.target.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.1)"; }}
-                  onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; e.target.style.boxShadow = "none"; }}
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium" style={{ color: "rgba(232,234,240,0.8)" }}>Password</span>
+                <span className="mb-2 block text-sm font-medium text-foreground">Password</span>
                 <input
                   type="password"
                   id="login-password"
@@ -781,26 +659,14 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all duration-150"
-                  style={{
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "#e8eaf0",
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = "rgba(99,102,241,0.5)"; e.target.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.1)"; }}
-                  onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; e.target.style.boxShadow = "none"; }}
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
                 />
               </label>
 
               <button
                 type="submit"
                 disabled={isBusy}
-                className="w-full rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                style={{
-                  background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
-                  color: "#fff",
-                  boxShadow: "0 0 20px rgba(99,102,241,0.3)",
-                }}
+                className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitState === "submitting" ? "Signing in…" : "Sign In"}
               </button>
@@ -810,29 +676,49 @@ export default function LoginPage() {
           {/* Register form */}
           {tab === "register" && (
             <form id="panel-register" role="tabpanel" aria-labelledby="tab-register" onSubmit={(event) => void handleRegister(event)} className="mt-5 space-y-4">
-              {[
-                { id: "register-email", label: "Email address", type: "email", val: email, setter: setEmail, autoComplete: "email", placeholder: "you@example.com" },
-                { id: "register-password", label: "Password", type: "password", val: password, setter: setPassword, autoComplete: "new-password", placeholder: "••••••••" },
-                { id: "register-confirm-password", label: "Confirm password", type: "password", val: confirmPassword, setter: setConfirmPassword, autoComplete: "new-password", placeholder: "••••••••" },
-              ].map(({ id, label, type, val, setter, autoComplete, placeholder }) => (
-                <label key={id} className="block">
-                  <span className="mb-2 block text-sm font-medium" style={{ color: "rgba(232,234,240,0.8)" }}>{label}</span>
-                  <input
-                    type={type}
-                    id={id}
-                    name={id}
-                    autoComplete={autoComplete}
-                    value={val}
-                    onChange={(e) => setter(e.target.value)}
-                    placeholder={placeholder}
-                    className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all duration-150"
-                    style={{ border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#e8eaf0" }}
-                    onFocus={(e) => { e.target.style.borderColor = "rgba(99,102,241,0.5)"; e.target.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.1)"; }}
-                    onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; e.target.style.boxShadow = "none"; }}
-                  />
-                </label>
-              ))}
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-foreground">Email address</span>
+                <input
+                  type="email"
+                  id="register-email"
+                  name="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
+                />
+              </label>
 
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-foreground">Password</span>
+                <input
+                  type="password"
+                  id="register-password"
+                  name="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-foreground">Confirm password</span>
+                <input
+                  type="password"
+                  id="register-confirm-password"
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-input focus:ring-2 focus:ring-ring/20"
+                />
+              </label>
+
+              {/* Privacy policy & terms acceptance */}
               <label className="flex cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
@@ -841,54 +727,50 @@ export default function LoginPage() {
                   aria-required="true"
                   checked={acceptedPolicy}
                   onChange={(event) => setAcceptedPolicy(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer rounded"
-                  style={{ accentColor: "#6366f1" }}
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer rounded border-border text-primary focus:ring-ring"
                 />
-                <span className="text-sm leading-6" style={{ color: "rgba(232,234,240,0.5)" }}>
+                <span className="text-sm leading-6 text-muted-foreground">
                   I agree to the{" "}
-                  <Link href="/terms" className="font-medium underline underline-offset-4 hover:text-white" style={{ color: "rgba(232,234,240,0.75)" }}>
+                  <Link href="/terms" className="font-medium text-foreground underline decoration-border underline-offset-4 hover:text-foreground/80">
                     Terms of Service
                   </Link>{" "}
                   and{" "}
-                  <Link href="/privacy" className="font-medium underline underline-offset-4 hover:text-white" style={{ color: "rgba(232,234,240,0.75)" }}>
+                  <Link href="/privacy" className="font-medium text-foreground underline decoration-border underline-offset-4 hover:text-foreground/80">
                     Privacy Policy
                   </Link>
-                  . <span aria-label="required" className="text-rose-400">*</span>
+                  . <span aria-label="required" className="text-rose-500">*</span>
                 </span>
               </label>
 
               <button
                 type="submit"
                 disabled={isBusy}
-                className="w-full rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                style={{
-                  background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
-                  color: "#fff",
-                  boxShadow: "0 0 20px rgba(99,102,241,0.3)",
-                }}
+                className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitState === "submitting" ? "Creating account…" : "Create Account"}
               </button>
             </form>
           )}
 
-          {/* Feedback */}
-          <div className={`mt-4 min-h-6 text-sm ${submitState === "error" || authError ? "text-rose-400" : "text-emerald-400"}`}>
+          <div className={`mt-4 min-h-6 text-sm ${submitState === "error" || authError ? "text-rose-600" : "text-emerald-600"}`}>
             {feedback || authError}
           </div>
 
-          {/* Footer links */}
-          <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs" style={{ color: "rgba(232,234,240,0.3)" }}>
-            {[
-              { href: "/privacy", label: "Privacy Policy" },
-              { href: "/terms", label: "Terms of Service" },
-              { href: "/pricing", label: t.pricing },
-              { href: "/roadmap", label: t.roadmap },
-            ].map(({ href, label }) => (
-              <Link key={href} href={href} className="transition-colors hover:text-white">{label}</Link>
-            ))}
+          <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <Link href="/privacy" className="hover:text-foreground">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-foreground">
+              Terms of Service
+            </Link>
+            <Link href="/pricing" className="hover:text-foreground">
+              {t.pricing}
+            </Link>
+            <Link href="/roadmap" className="hover:text-foreground">
+              {t.roadmap}
+            </Link>
           </div>
-          <div className="mt-3 text-xs" style={{ color: "rgba(232,234,240,0.25)" }}>{t.trustSignals}</div>
+          <div className="mt-3 text-xs text-muted-foreground">{t.trustSignals}</div>
         </section>
       </div>
     </main>
