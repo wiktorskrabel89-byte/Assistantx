@@ -241,7 +241,7 @@ export function AppNavigationColumn({
             </div>
             <div className="min-w-0">
               <div className="text-sm font-semibold tracking-tight">AssistantX</div>
-              <div className="text-[10px] text-sidebar-foreground/50">AssistantX</div>
+              <div className="text-[10px] text-sidebar-foreground/50">Workspace</div>
             </div>
           </div>
           {desktopAccessory}
