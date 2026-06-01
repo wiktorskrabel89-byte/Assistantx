@@ -419,7 +419,8 @@ jobs:
         working-directory: jarvis/desktop
         run: |
           npm ci --ignore-scripts
-          npx electron-builder install-app-deps
+          $electronVer = (Get-Content node_modules/electron/package.json | ConvertFrom-Json).version
+          npx electron-builder install-app-deps --electron-version $electronVer
 
       - name: Provision updater metadata verification key
         shell: pwsh
