@@ -925,6 +925,9 @@ function failPendingAuth(error) {
     clearTimeout(flow.timeoutId);
     flow.timeoutId = null;
   }
+  sendToRenderer('auth:login-failed', {
+    message: error?.message || String(error || 'Sign-in failed. Please try again from Settings.'),
+  });
   flow.reject(error);
 }
 
@@ -980,6 +983,9 @@ function beginDesktopLogin() {
   pendingAuthFlow.promise = promise;
   pendingAuthFlow.timeoutId = setTimeout(() => {
     console.warn('[auth] Login flow timed out waiting for callback.');
+    sendToRenderer('auth:login-timeout', {
+      message: 'Sign-in timed out. Please try again from Settings → Account.',
+    });
     settlePendingAuth(null);
   }, AUTH_LOGIN_TIMEOUT_MS);
   console.info('[auth] login started');

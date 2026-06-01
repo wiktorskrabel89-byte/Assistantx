@@ -136,7 +136,16 @@ class AIRouter {
         provider: cloudProvider,
         options: { temperature: 0.7, ...(request.options || {}) },
       };
-      const response = await this.cloud.stream(resolvedRequest, onChunkWithMetrics);
+      let response;
+      try {
+        response = await this.cloud.stream(resolvedRequest, onChunkWithMetrics);
+      } catch (err) {
+        const isAuth = err?.status === 401 || /401|unauthorized|forbidden/i.test(err?.message || '');
+        err.userMessage = isAuth
+          ? 'Sign in required — go to Settings → Account to log in.'
+          : `Cloud AI request failed: ${err?.message || 'unknown error'}`;
+        throw err;
+      }
       return {
         ...response,
         route: { provider: cloudProvider, model: cloudModel, reason: `engine-mode-cloud-difficulty-${difficulty}` },

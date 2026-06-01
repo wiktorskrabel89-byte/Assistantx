@@ -203,6 +203,7 @@ function resolveSpeechVoice(voices, voiceId, language) {
 
 function setStatusDot(status) {
 	const dot = document.getElementById('status-dot');
+	const headerDot = document.getElementById('header-connection-dot');
 	if (!dot) return;
 	dot.className = 'dot';
 	const normalized = String(status ?? '').toLowerCase();
@@ -210,6 +211,36 @@ function setStatusDot(status) {
 	const errorStates = new Set(['error', 'disconnected', 'unavailable']);
 	if (healthyStates.has(normalized)) dot.classList.add('connected');
 	if (errorStates.has(normalized)) dot.classList.add('error');
+	if (headerDot) {
+		headerDot.style.background = healthyStates.has(normalized) ? '#22c55e'
+			: errorStates.has(normalized) ? '#ef4444' : '#94a3b8';
+		headerDot.style.boxShadow = healthyStates.has(normalized) ? '0 0 6px #22c55e'
+			: errorStates.has(normalized) ? '0 0 6px #ef4444' : 'none';
+	}
+}
+
+function showProviderWarning(message) {
+	const banner = document.getElementById('provider-warning-banner');
+	const text = document.getElementById('provider-warning-text');
+	if (!banner) return;
+	if (text) text.textContent = message;
+	banner.style.display = 'flex';
+}
+
+function hideProviderWarning() {
+	const banner = document.getElementById('provider-warning-banner');
+	if (banner) banner.style.display = 'none';
+	const input = document.getElementById('input');
+	const sendBtn = document.getElementById('send');
+	if (input) { input.disabled = false; input.placeholder = 'Type a Jarvis prompt or command…'; }
+	if (sendBtn) sendBtn.disabled = false;
+}
+
+function disableComposer(reason) {
+	const input = document.getElementById('input');
+	const sendBtn = document.getElementById('send');
+	if (input) { input.disabled = true; input.placeholder = reason || 'Sign in required'; }
+	if (sendBtn) sendBtn.disabled = true;
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -830,6 +861,14 @@ window.addEventListener('DOMContentLoaded', () => {
 		const llmModel = String(runtimeModelConfig.llm_model || voiceSettings.chatModel || 'auto-smart').trim();
 		const sttModel = normalizeSttModel(runtimeModelConfig.stt_model || voiceSettings.sttModel || 'base');
 		const ttsModel = normalizeTtsModel(runtimeModelConfig.tts_model || voiceSettings.ttsModel || DEFAULT_LOCAL_TTS_MODEL, voiceSettings.ttsBackend);
+
+		// Update header model chip
+		const modelBadge = document.getElementById('active-model-badge');
+		if (modelBadge) {
+			const modeLabel = engineMode === 'cloud' || engineMode === 'byok-cloud' ? 'Cloud' : 'Local';
+			const shortModel = llmModel.length > 24 ? llmModel.slice(0, 22) + '…' : llmModel;
+			modelBadge.textContent = `${modeLabel} · ${shortModel}`;
+		}
 		if (engineProfileSummaryNode) {
 			engineProfileSummaryNode.textContent = engineMode === 'local'
 				? `Local engine active • ${profile} profile • Ollama ${llmModel} • Whisper ${sttModel} • ${ttsModel === 'piper' ? 'Piper' : 'Kokoro'} voice`
@@ -2317,6 +2356,20 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 	}
 
+	// Auth feedback from main process
+	if (ipcRenderer) {
+		ipcRenderer.on('auth:login-timeout', (payload) => {
+			appendMessage(log, 'Sign-in', payload?.message || 'Sign-in timed out. Please try again from Settings → Account.', 'error');
+			showProviderWarning(payload?.message || 'Sign-in timed out. Retry from Settings → Account.');
+		});
+		ipcRenderer.on('auth:login-failed', (payload) => {
+			appendMessage(log, 'Sign-in', payload?.message || 'Sign-in failed. Please try again.', 'error');
+		});
+		ipcRenderer.on('auth:login-success', () => {
+			hideProviderWarning();
+		});
+	}
+
 	if (ipcRenderer) {
 		ipcRenderer.invoke('get-desktop-diagnostics').then((snapshot) => {
 			if (!snapshot) return;
@@ -2324,7 +2377,20 @@ window.addEventListener('DOMContentLoaded', () => {
 		}).catch(() => null);
 
 		if (typeof window.jarvisApi?.checkLocalAiSetup === 'function') {
-			window.jarvisApi.checkLocalAiSetup().then((state) => {
+			window.jarvisApi.checkLocalAiSetup().then(async (state) => {
+				// Check if cloud mode is active without a session
+				try {
+					const engineMode = await ipcRenderer.invoke('config:get-engine-mode').catch(() => null);
+					if (engineMode === 'cloud' || engineMode === 'byok-cloud') {
+						const session = typeof getAccountSession === 'function' ? await getAccountSession() : null;
+						if (!session?.userId) {
+							const msg = 'Cloud mode requires sign-in. Go to Settings → Account to log in.';
+							showProviderWarning(msg);
+							disableComposer(msg);
+						}
+					}
+				} catch { /* non-critical */ }
+
 				if (state?.ollama_available) {
 					appendMessage(log, 'Local AI', 'Ollama is ready. GPU-local routing enabled.', 'system');
 					return;
