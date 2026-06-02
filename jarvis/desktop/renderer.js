@@ -1625,6 +1625,77 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	// ── Prompt submission ────────────────────────────────────────────────────
+	// Task Classifier integration
+	function updateTaskClassificationDisplay(classification) {
+		if (!classification) return;
+
+		const displayEl = document.getElementById('task-classification-display');
+		const badgeEl = document.getElementById('task-classification-badge');
+		const pathLabelEl = document.getElementById('path-label');
+		const pathConfEl = document.getElementById('path-confidence');
+		const iconEl = badgeEl.querySelector('.badge-icon');
+
+		// Remove all path classes and add the correct one
+		badgeEl.classList.remove('path-a', 'path-b', 'path-c');
+
+		const pathMap = {
+			'vision_only': { class: 'path-a', label: '👁️ Vision Only (Fast)', icon: '👁️' },
+			'vision_to_coder': { class: 'path-b', label: '🔄 Vision → Code (Relay)', icon: '🔄' },
+			'text_only': { class: 'path-c', label: '💬 Text Only', icon: '💬' },
+		};
+
+		const pathInfo = pathMap[classification.path] || pathMap['text_only'];
+		badgeEl.classList.add(pathInfo.class);
+		iconEl.textContent = pathInfo.icon;
+		pathLabelEl.textContent = pathInfo.label;
+		pathConfEl.textContent = `(${Math.round(classification.confidence * 100)}%)`;
+
+		displayEl.style.display = 'block';
+
+		// Update model activity indicators
+		updateModelActivityIndicators(classification);
+	}
+
+	function updateModelActivityIndicators(classification) {
+		const visionInd = document.getElementById('vision-indicator');
+		const coderInd = document.getElementById('coder-indicator');
+		const displayEl = document.getElementById('model-activity-display');
+
+		if (!visionInd || !coderInd) return;
+
+		// Update vision indicator
+		if (classification.needsVision) {
+			visionInd.classList.remove('inactive');
+			visionInd.classList.add('active');
+		} else {
+			visionInd.classList.remove('active');
+			visionInd.classList.add('inactive');
+		}
+
+		// Update coder indicator
+		if (classification.needsCoder) {
+			coderInd.classList.remove('inactive');
+			coderInd.classList.add('active');
+		} else {
+			coderInd.classList.remove('active');
+			coderInd.classList.add('inactive');
+		}
+
+		// Show display if any model is needed
+		if (classification.needsVision || classification.needsCoder) {
+			displayEl.style.display = 'flex';
+		} else {
+			displayEl.style.display = 'none';
+		}
+	}
+
+	function hideTaskClassificationDisplay() {
+		const displayEl = document.getElementById('task-classification-display');
+		const modelDisplayEl = document.getElementById('model-activity-display');
+		if (displayEl) displayEl.style.display = 'none';
+		if (modelDisplayEl) modelDisplayEl.style.display = 'none';
+	}
+
 	async function submitPrompt() {
 		const text = input.value.trim();
 		if (!text) return;
@@ -1632,9 +1703,18 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (typeof window !== 'undefined' && window.speechSynthesis) {
 			window.speechSynthesis.cancel();
 		}
+
+		// Classify the task using the imported task classifier
+		if (typeof classify === 'function') {
+			const hasImage = false; // TODO: detect if user attached image
+			const classification = classify(text, hasImage);
+			updateTaskClassificationDisplay(classification);
+		}
+
 		const handled = await handleIntegratedCommands(text);
 		if (handled) {
 			input.value = '';
+			hideTaskClassificationDisplay();
 			return;
 		}
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
