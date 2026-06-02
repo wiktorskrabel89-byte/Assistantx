@@ -12,7 +12,6 @@ import {
   Code2,
   UploadCloud,
   ImageIcon,
-  Github,
   HardDrive,
 } from "lucide-react";
 import { PublicLanguageSelector } from "./components/PublicLanguageSelector";
