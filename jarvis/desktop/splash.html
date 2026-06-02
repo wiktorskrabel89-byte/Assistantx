@@ -10,11 +10,11 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --neon-local: #00ffd5;
-      --neon-cloud: #a855f7;
-      --bg: #070b14;
-      --text: #c8d8f0;
-      --text-dim: #5a7399;
+      --neon-local: #7dd3fc;
+      --neon-cloud: #a78bfa;
+      --bg: #06070d;
+      --text: #e8eaf0;
+      --text-dim: #6b7a99;
     }
 
     html, body {
@@ -24,6 +24,37 @@
       font-family: 'Segoe UI', system-ui, sans-serif;
       user-select: none;
       overflow: hidden;
+      position: relative;
+    }
+
+    /* Premium mesh gradient background */
+    @keyframes mesh-drift {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%      { transform: translate(40px, -50px) scale(1.08); }
+      66%      { transform: translate(-30px, 30px) scale(0.96); }
+    }
+    @keyframes mesh-drift-2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50%      { transform: translate(-60px, 40px) scale(1.05); }
+    }
+    body::before, body::after {
+      content: '';
+      position: fixed;
+      pointer-events: none;
+      border-radius: 50%;
+      filter: blur(40px);
+    }
+    body::before {
+      top: -25vh; left: -20vw;
+      width: 80vh; height: 80vh;
+      background: radial-gradient(circle, rgba(125,211,252,0.22) 0%, rgba(99,102,241,0.10) 40%, transparent 70%);
+      animation: mesh-drift 24s ease-in-out infinite;
+    }
+    body::after {
+      bottom: -25vh; right: -20vw;
+      width: 70vh; height: 70vh;
+      background: radial-gradient(circle, rgba(167,139,250,0.22) 0%, rgba(244,114,182,0.08) 45%, transparent 70%);
+      animation: mesh-drift-2 28s ease-in-out infinite;
     }
 
     /* drag region */
@@ -40,21 +71,25 @@
     }
 
     .splash-shell {
-      width: min(520px, 100%);
-      padding: 28px;
-      border-radius: 24px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: linear-gradient(180deg, rgba(12,18,32,0.94), rgba(7,11,20,0.98));
-      box-shadow: 0 26px 80px rgba(0,0,0,0.45);
+      width: min(540px, 100%);
+      padding: 32px;
+      border-radius: 28px;
+      border: 1px solid rgba(129,140,248,0.18);
+      background: linear-gradient(160deg, rgba(20,22,40,0.55) 0%, rgba(10,12,24,0.88) 100%);
+      box-shadow: 0 32px 96px rgba(0,0,0,0.55), 0 0 80px rgba(99,102,241,0.10), inset 0 1px 0 rgba(255,255,255,0.06);
+      backdrop-filter: blur(28px);
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 24px;
+      position: relative;
+      z-index: 1;
     }
 
     .logo {
-      font-size: 40px;
+      font-size: 44px;
       animation: pulse 2.5s ease-in-out infinite;
+      filter: drop-shadow(0 4px 24px rgba(99,102,241,0.55));
     }
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }

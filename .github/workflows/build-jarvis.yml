@@ -46,7 +46,7 @@ jobs:
           fetch-depth: 0
 
       - name: Advance jarvis-latest tag and remove legacy releases
-        shell: pwsh
+        shell: powershell
         if: env.RELEASE_TAG == 'jarvis-latest'
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -83,7 +83,7 @@ jobs:
 
       - name: Bump version and generate changelog
         id: meta
-        shell: pwsh
+        shell: powershell
         run: |
           $releaseTag = "${{ env.RELEASE_TAG }}".Trim()
           $desktopPkg = Get-Content "jarvis/desktop/package.json" -Raw | ConvertFrom-Json
@@ -406,7 +406,7 @@ jobs:
         run: npm ci
 
       - name: Provision updater metadata verification key
-        shell: pwsh
+        shell: powershell
         env:
           UPDATE_FEED_METADATA_PUBLIC_KEY: ${{ secrets.UPDATE_FEED_METADATA_PUBLIC_KEY }}
           UPDATE_FEED_METADATA_PRIVATE_KEY: ${{ secrets.UPDATE_FEED_METADATA_PRIVATE_KEY }}
@@ -438,7 +438,7 @@ jobs:
           Write-Host "Bundled updater metadata verification key at $publicKeyPath"
 
       - name: Validate desktop updater topology (manifest-only generic)
-        shell: pwsh
+        shell: powershell
         run: |
           $pkgPath = "jarvis/desktop/package.json"
           $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
@@ -476,7 +476,7 @@ jobs:
           Write-Host "Desktop publish config validated: generic provider => $actualUrl (channel: $actualChannel)"
 
       - name: Download Windows Python embeddable runtime
-        shell: pwsh
+        shell: powershell
         run: |
           $pythonVersion = "3.11.9"
           $pythonUrl = "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-embed-amd64.zip"
@@ -503,7 +503,7 @@ jobs:
         run: npm run smoke:runtime
 
       - name: Attach release-notes.json to desktop dist
-        shell: pwsh
+        shell: powershell
         run: |
           $src = Join-Path (Get-Location) "release-notes.json"
           $dst = Join-Path (Get-Location) "jarvis/desktop/dist/release-notes.json"
@@ -515,7 +515,7 @@ jobs:
           Write-Host "Copied release notes to $dst"
 
       - name: Validate versions.json manifest schema
-        shell: pwsh
+        shell: powershell
         run: |
           $manifestPath = Join-Path (Get-Location) "versions.json"
           if (-not (Test-Path $manifestPath)) {
@@ -548,7 +548,7 @@ jobs:
         run: dir dist
 
       - name: Harden updater metadata (rollback, rollout, signature)
-        shell: pwsh
+        shell: powershell
         working-directory: jarvis/desktop
         env:
           UPDATE_FEED_METADATA_PRIVATE_KEY: ${{ secrets.UPDATE_FEED_METADATA_PRIVATE_KEY }}
@@ -604,7 +604,7 @@ jobs:
           Write-Host "Updater metadata hardened with minimumAllowedVersion=$minimumAllowedVersion stagingPercentage=$stagingPercentage"
 
       - name: Validate updater metadata and referenced artifacts
-        shell: pwsh
+        shell: powershell
         working-directory: jarvis/desktop
         env:
           UPDATE_FEED_METADATA_PUBLIC_KEY: ${{ secrets.UPDATE_FEED_METADATA_PUBLIC_KEY }}
@@ -759,7 +759,7 @@ jobs:
 
       - name: Build/find Android APK
         id: android_apk
-        shell: pwsh
+        shell: powershell
         run: |
           $repoRoot = (Get-Location).Path
           $distDir = Join-Path $repoRoot "jarvis/android/dist"
@@ -880,7 +880,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Verify release visibility and required assets
-        shell: pwsh
+        shell: powershell
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
