@@ -419,7 +419,7 @@ jobs:
         working-directory: jarvis/desktop
         run: |
           npm ci --ignore-scripts
-          $electronVer = (Get-Content node_modules/electron/package.json | ConvertFrom-Json).version
+          $electronVer = ((Get-Content package.json | ConvertFrom-Json).devDependencies.electron) -replace "[\^~>=]",""
           npx electron-builder install-app-deps --electron-version $electronVer
 
       - name: Provision updater metadata verification key
