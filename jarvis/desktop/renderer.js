@@ -1696,6 +1696,47 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (modelDisplayEl) modelDisplayEl.style.display = 'none';
 	}
 
+	// Session context for multi-turn classification bias
+	const _classifierSession = { recentPaths: [] };
+
+	function _recordClassificationPath(path) {
+		_classifierSession.recentPaths.push(path);
+		if (_classifierSession.recentPaths.length > 10) {
+			_classifierSession.recentPaths.shift();
+		}
+	}
+
+	function showConfirmationPicker(onAnalysis, onCode) {
+		const existing = document.getElementById('confirm-path-picker');
+		if (existing) existing.remove();
+
+		const picker = document.createElement('div');
+		picker.id = 'confirm-path-picker';
+		picker.style.cssText = `
+			position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+			background: rgba(15,17,27,0.95); border: 1px solid rgba(99,102,241,0.4);
+			border-radius: 12px; padding: 14px 18px; z-index: 9999;
+			display: flex; gap: 10px; align-items: center; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+			backdrop-filter: blur(12px); color: #e2e8f0; font-size: 13px;
+		`;
+		picker.innerHTML = `
+			<span style="opacity:0.8">Ambiguous request — what do you need?</span>
+			<button id="confirm-analysis" style="padding:6px 14px; border-radius:8px;
+				background:rgba(14,165,233,0.2); border:1px solid rgba(14,165,233,0.4);
+				color:#7dd3fc; cursor:pointer; font-size:12px;">👁️ Analysis</button>
+			<button id="confirm-code" style="padding:6px 14px; border-radius:8px;
+				background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.4);
+				color:#a5b4fc; cursor:pointer; font-size:12px;">⌨️ Code</button>
+		`;
+		document.body.appendChild(picker);
+
+		document.getElementById('confirm-analysis').onclick = () => { picker.remove(); onAnalysis(); };
+		document.getElementById('confirm-code').onclick    = () => { picker.remove(); onCode(); };
+
+		// Auto-dismiss after 12s with no selection (default: analysis)
+		setTimeout(() => { if (document.getElementById('confirm-path-picker')) { picker.remove(); onAnalysis(); } }, 12000);
+	}
+
 	async function submitPrompt() {
 		const text = input.value.trim();
 		if (!text) return;
@@ -1707,8 +1748,35 @@ window.addEventListener('DOMContentLoaded', () => {
 		// Classify the task using the imported task classifier
 		if (typeof classify === 'function') {
 			const hasImage = false; // TODO: detect if user attached image
-			const classification = classify(text, hasImage);
+			const classification = classify(text, hasImage, _classifierSession);
 			updateTaskClassificationDisplay(classification);
+			_recordClassificationPath(classification.path);
+
+			// Improvement #4: when confidence is low, ask the user to confirm
+			if (classification.needsConfirmation) {
+				const capturedText = text;
+				input.value = '';
+				showConfirmationPicker(
+					() => {
+						// User chose analysis — re-classify forcing Path A/C
+						const overridden = classify(capturedText, hasImage, { recentPaths: [] });
+						updateTaskClassificationDisplay(overridden);
+						_recordClassificationPath(overridden.path);
+						queuePromptExecution(capturedText, { source: 'local', origin: 'desktop' });
+						appendMessage(log, 'Prompt queued', capturedText, 'system');
+					},
+					() => {
+						// User chose code — re-classify biasing toward coder
+						const codeCtx = { recentPaths: ['vision_to_coder', 'vision_to_coder'] };
+						const overridden = classify(capturedText, hasImage, codeCtx);
+						updateTaskClassificationDisplay(overridden);
+						_recordClassificationPath(overridden.path);
+						queuePromptExecution(capturedText, { source: 'local', origin: 'desktop' });
+						appendMessage(log, 'Prompt queued', capturedText, 'system');
+					},
+				);
+				return;
+			}
 		}
 
 		const handled = await handleIntegratedCommands(text);
