@@ -56,7 +56,7 @@ const FEATURE_GRID = [
     key: "imageGen",
   },
   {
-    icon: Github,
+    icon: GitBranch,
     color: "#34d399",
     glow: "rgba(52,211,153,0.25)",
     bg: "rgba(52,211,153,0.12)",
