@@ -867,7 +867,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish to GitHub Release (${{ env.RELEASE_TAG }})
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "Jarvis Desktop — v${{ steps.meta.outputs.version }}"
@@ -887,7 +887,7 @@ jobs:
 
       - name: Publish Android APK to GitHub Release (${{ env.RELEASE_TAG }})
         if: steps.android_apk.outputs.found == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
@@ -992,7 +992,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish macOS DMGs to GitHub Release (${{ env.RELEASE_TAG }})
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
@@ -1071,7 +1071,7 @@ jobs:
 
       - name: Publish Linux AppImage to GitHub Release (${{ env.RELEASE_TAG }})
         if: steps.linux_appimage.outputs.found == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
@@ -1136,7 +1136,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish Android APK to GitHub Release (${{ env.RELEASE_TAG }})
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
