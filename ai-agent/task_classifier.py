@@ -11,16 +11,14 @@ Handles model hot-swap via llama.cpp API with session state tracking.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-_CONFIDENCE_AMBIGUOUS_THRESHOLD = 0.70  # below this → ask user to confirm
 
 
 class ExecutionPath(Enum):
@@ -39,10 +37,6 @@ class ClassificationResult:
     needs_coder: bool
     confidence: float
     reasoning: str
-    # Set when confidence < _CONFIDENCE_AMBIGUOUS_THRESHOLD so callers can prompt user
-    needs_confirmation: bool = False
-    # Coder model prompt prefix built from vision model output (Path B relay)
-    vision_context_prefix: str = ""
 
     def to_dict(self):
         return {
@@ -51,8 +45,6 @@ class ClassificationResult:
             "needs_coder": self.needs_coder,
             "confidence": self.confidence,
             "reasoning": self.reasoning,
-            "needs_confirmation": self.needs_confirmation,
-            "vision_context_prefix": self.vision_context_prefix,
         }
 
 
@@ -63,88 +55,76 @@ class TaskClassifier:
     CODE_KEYWORDS = {
         "write", "generate", "code", "script", "function", "class", "module",
         "refactor", "fix", "debug", "implement", "create", "build", "design",
-        "component", "develop", "program", "coding", "react", "html",
+        "component", "build", "develop", "program", "coding", "react", "html",
         "css", "javascript", "python", "typescript", "rust", "go", "java",
     }
 
+    # Keywords indicating visual analysis without code
+    VISION_ONLY_KEYWORDS = {
+        "analyze", "describe", "explain", "what is", "identify", "recognize",
+        "read", "extract", "ocr", "translate", "summarize", "understand",
+        "diagram", "chart", "graph", "layout", "design review",
+    }
+
     @staticmethod
-    def classify(
+    async def classify(
         prompt: str,
         has_image: bool,
         image_description: Optional[str] = None,
         session_context: Optional[dict] = None,
     ) -> ClassificationResult:
-        """Classify a user request and determine optimal execution path."""
-        prompt_lower = prompt.lower().strip()
+        """
+        Classify a user request and determine optimal execution path.
 
-        # Session bias: if the last 2 turns used a coder, lean toward coder
-        # even for follow-up prompts that lack explicit code keywords.
-        session_code_bias = False
-        if session_context:
-            recent = session_context.get("recent_paths", [])
-            if recent and sum(1 for p in recent[-2:] if "coder" in p) >= 1:
-                session_code_bias = True
+        Args:
+            prompt: User's text prompt
+            has_image: Whether an image is attached
+            image_description: Pre-analyzed image description (if available)
+            session_context: Session state for multi-turn context
+
+        Returns:
+            ClassificationResult with execution strategy
+        """
+        prompt_lower = prompt.lower().strip()
 
         # Path C: Text-only (no image)
         if not has_image:
-            needs_code = TaskClassifier._detect_code_intent(prompt_lower) or session_code_bias
+            needs_code = TaskClassifier._detect_code_intent(prompt_lower)
             path = ExecutionPath.PATH_B if needs_code else ExecutionPath.PATH_C
-            # Lower confidence when the bias came purely from session history
-            if needs_code and session_code_bias and not TaskClassifier._detect_code_intent(prompt_lower):
-                confidence = 0.65
-            else:
-                confidence = 0.85 if needs_code else 0.90
+            confidence = 0.85 if needs_code else 0.90
             reasoning = (
                 "Text-only request " +
-                ("with code generation intent" if needs_code else "for discussion/analysis") +
-                (" (session continuation bias)" if session_code_bias and needs_code else "")
+                ("with code generation intent" if needs_code else "for discussion/analysis")
             )
-            result = ClassificationResult(
+            return ClassificationResult(
                 path=path,
                 needs_vision=False,
                 needs_coder=needs_code,
                 confidence=confidence,
                 reasoning=reasoning,
             )
-            result.needs_confirmation = confidence < _CONFIDENCE_AMBIGUOUS_THRESHOLD
-            return result
 
         # Has image: determine if code generation needed
-        needs_code = TaskClassifier._detect_code_intent(prompt_lower) or session_code_bias
-
-        # Build vision context prefix for Path B relay (improvement #5)
-        vision_context = ""
-        if image_description and image_description.strip():
-            vision_context = (
-                f"[Vision model analysis of the attached image]\n{image_description.strip()}\n\n"
-                f"[User request based on the above image]\n"
-            )
+        needs_code = TaskClassifier._detect_code_intent(prompt_lower)
 
         # Path B: Image + code generation (Vision → Coder relay)
         if needs_code:
-            confidence = 0.95
-            result = ClassificationResult(
+            return ClassificationResult(
                 path=ExecutionPath.PATH_B,
                 needs_vision=True,
                 needs_coder=True,
-                confidence=confidence,
+                confidence=0.95,
                 reasoning="Image present with code generation intent — using Vision→Coder relay",
-                vision_context_prefix=vision_context,
             )
-            result.needs_confirmation = confidence < _CONFIDENCE_AMBIGUOUS_THRESHOLD
-            return result
 
         # Path A: Image analysis only (Vision model)
-        confidence = 0.92
-        result = ClassificationResult(
+        return ClassificationResult(
             path=ExecutionPath.PATH_A,
             needs_vision=True,
             needs_coder=False,
-            confidence=confidence,
+            confidence=0.92,
             reasoning="Image present, code not needed — Vision-only path",
         )
-        result.needs_confirmation = confidence < _CONFIDENCE_AMBIGUOUS_THRESHOLD
-        return result
 
     @staticmethod
     def _detect_code_intent(prompt_lower: str) -> bool:
@@ -165,51 +145,45 @@ class TaskClassifier:
         return False
 
     @staticmethod
-    def get_model_requirements(classification: ClassificationResult) -> dict:
+    async def get_model_requirements(classification: ClassificationResult) -> dict:
         """Get model loading requirements based on classification."""
         return {
             "vision_model": {
                 "enabled": classification.needs_vision,
                 "size_gb": 4.0,  # Gemma-2 2B or PaliGemma-2 4B (Q4_K_M)
                 "alternatives": [
-                    ("qwen2.5-vl-7b", 5.5),
-                    ("llama3.2-vision-11b", 8.0),
+                    ("qwen2.5-vl-7b", 5.5),   # Fallback for medium hardware
+                    ("llama3.2-vision-11b", 8.0),  # For powerful hardware
                 ],
             },
             "coder_model": {
                 "enabled": classification.needs_coder,
-                "size_gb": 18.0,  # Qwen3-Coder-Next 32B (Q4_K_M)
+                "size_gb": 5.0,  # Qwen3 8B (Q4_K_M)
                 "alternatives": [
-                    ("deepseek-coder-v3-distilled", 12.0),
-                    ("qwen3-8b", 5.0),
-                    ("phi-4", 8.5),
-                    ("codestral-25.12", 15.0),
+                    ("qwen3-coder-next", 15.0),    # Better quality
+                    ("deepseek-coder-v3-distilled", 12.0),  # Speed focused
                 ],
             },
         }
 
 
-_SESSION_TTL_SECONDS = 3600  # evict sessions idle for 1 hour
-_MAX_SESSIONS = 500
-
-
-@dataclass
 class SessionState:
     """Track multi-turn conversation state and model lifecycle."""
-    session_id: str
-    history: list = field(default_factory=list)
-    current_models_loaded: set = field(default_factory=set)
-    model_load_time: dict = field(default_factory=dict)
-    error_count: int = 0
-    last_classification: Optional[ClassificationResult] = None
-    last_active: float = field(default_factory=time.monotonic)
+
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self.history = []
+        self.current_models_loaded = set()  # {'vision', 'coder'} or subsets
+        self.model_load_time = {}  # timestamp when each model was loaded
+        self.error_count = 0
+        self.last_classification = None
 
     def add_turn(
         self,
         user_prompt: str,
         classification: ClassificationResult,
         response: str,
-    ) -> None:
+    ):
         """Record a turn in the conversation."""
         self.history.append({
             "user": user_prompt,
@@ -217,17 +191,9 @@ class SessionState:
             "response": response,
         })
         self.last_classification = classification
-        self.last_active = time.monotonic()
-
-    def to_session_context(self) -> dict:
-        """Build the session_context dict consumed by TaskClassifier.classify()."""
-        recent_paths = [
-            t["classification"]["path"]
-            for t in self.history[-5:]
-        ]
-        return {"recent_paths": recent_paths}
 
     def should_unload_vision(self) -> bool:
+        """Heuristic: unload vision model if next path doesn't need it."""
         if not self.history:
             return False
         if self.last_classification and not self.last_classification.needs_vision:
@@ -235,6 +201,7 @@ class SessionState:
         return False
 
     def should_unload_coder(self) -> bool:
+        """Heuristic: unload coder if next path doesn't need it."""
         if not self.history:
             return False
         if self.last_classification and not self.last_classification.needs_coder:
@@ -246,60 +213,37 @@ class SessionState:
 _sessions: dict[str, SessionState] = {}
 
 
-def _evict_stale_sessions() -> None:
-    """Remove sessions idle longer than TTL; cap total count."""
-    now = time.monotonic()
-    stale = [sid for sid, s in _sessions.items() if now - s.last_active > _SESSION_TTL_SECONDS]
-    for sid in stale:
-        del _sessions[sid]
-    if len(_sessions) > _MAX_SESSIONS:
-        by_age = sorted(_sessions.items(), key=lambda kv: kv[1].last_active)
-        for sid, _ in by_age[: len(_sessions) - _MAX_SESSIONS]:
-            del _sessions[sid]
-
-
-def get_or_create_session(session_id: str) -> SessionState:
+async def get_or_create_session(session_id: str) -> SessionState:
     """Get or create a session with state tracking."""
-    _evict_stale_sessions()
     if session_id not in _sessions:
-        _sessions[session_id] = SessionState(session_id=session_id)
+        _sessions[session_id] = SessionState(session_id)
     return _sessions[session_id]
 
 
-def classify_request(
+async def classify_request(
     prompt: str,
     has_image: bool = False,
-    image_description: Optional[str] = None,
     session_id: Optional[str] = None,
 ) -> ClassificationResult:
     """
     Main entry point: classify a user request and return execution strategy.
 
     Used by the router to determine whether to use Vision, Coder, or cloud.
-    image_description is the text output of the vision model for Path B relay.
     """
-    session: Optional[SessionState] = None
-    session_context: Optional[dict] = None
-
-    if session_id:
-        session = get_or_create_session(session_id)
-        session_context = session.to_session_context()
-
-    result = TaskClassifier.classify(
+    result = await TaskClassifier.classify(
         prompt=prompt,
         has_image=has_image,
-        image_description=image_description,
-        session_context=session_context,
+        session_context=None,  # TODO: integrate session context
     )
 
-    if session:
+    if session_id:
+        session = await get_or_create_session(session_id)
         session.last_classification = result
-        session.last_active = time.monotonic()
 
     logger.info(
-        "Task classified: path=%s, vision=%s, coder=%s, conf=%.2f, confirm=%s",
-        result.path.value, result.needs_vision, result.needs_coder,
-        result.confidence, result.needs_confirmation,
+        f"Task classified: path={result.path.value}, "
+        f"vision={result.needs_vision}, coder={result.needs_coder}, "
+        f"conf={result.confidence:.2f}"
     )
 
     return result
