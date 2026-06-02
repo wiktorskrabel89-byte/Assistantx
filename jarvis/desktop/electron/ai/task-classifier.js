@@ -7,6 +7,8 @@
  *   - Path C: Text-only (no image, lightweight processing)
  */
 
+const CONFIDENCE_AMBIGUOUS_THRESHOLD = 0.70; // below this → needsConfirmation=true
+
 const EXECUTION_PATHS = {
   VISION_ONLY: 'vision_only',      // Path A: Vision model only
   VISION_TO_CODER: 'vision_to_coder', // Path B: Vision + Coder relay
@@ -22,31 +24,36 @@ const CODE_KEYWORDS = new Set([
   'api', 'endpoint', 'algorithm', 'data structure', 'database',
 ]);
 
-const VISION_ONLY_KEYWORDS = new Set([
-  'analyze', 'describe', 'explain', 'what is', 'identify', 'recognize',
-  'read', 'extract', 'ocr', 'translate', 'summarize', 'understand',
-  'diagram', 'chart', 'graph', 'layout', 'design review', 'screenshot',
-]);
-
 /**
  * Classify a user request and determine optimal execution path.
  *
  * @param {string} prompt - User's text prompt
  * @param {boolean} hasImage - Whether an image is attached
- * @param {object} [sessionContext] - Optional session state for multi-turn
+ * @param {object|null} sessionContext - Optional: { recentPaths: string[] }
+ * @param {string|null} imageDescription - Vision model output to relay to coder (Path B)
  * @returns {object} Classification result with execution path and metadata
  */
-function classify(prompt, hasImage = false, sessionContext = null) {
+function classify(prompt, hasImage = false, sessionContext = null, imageDescription = null) {
   const promptLower = prompt.toLowerCase().trim();
+
+  // Session bias: if recent turns used the coder path, lean toward coder for follow-ups
+  const sessionCodeBias = (() => {
+    const recent = sessionContext?.recentPaths ?? [];
+    return recent.slice(-2).filter((p) => p.includes('coder')).length >= 1;
+  })();
 
   // Path C: Text-only (no image)
   if (!hasImage) {
-    const needsCode = detectCodeIntent(promptLower);
-    const path = needsCode ? EXECUTION_PATHS.VISION_TO_CODER : EXECUTION_PATHS.TEXT_ONLY;
-    const confidence = needsCode ? 0.85 : 0.90;
+    const explicitCode = detectCodeIntent(promptLower);
+    const needsCode = explicitCode || sessionCodeBias;
+    // Lower confidence when bias comes purely from session history, not keywords
+    const confidence = needsCode
+      ? (explicitCode ? 0.85 : 0.65)
+      : 0.90;
     const reasoning = needsCode
-      ? 'Text-only request with code generation intent'
+      ? `Text-only request with code generation intent${sessionCodeBias && !explicitCode ? ' (session continuation bias)' : ''}`
       : 'Text-only request for discussion/analysis';
+    const path = needsCode ? EXECUTION_PATHS.VISION_TO_CODER : EXECUTION_PATHS.TEXT_ONLY;
 
     return {
       path,
@@ -54,12 +61,20 @@ function classify(prompt, hasImage = false, sessionContext = null) {
       needsCoder: needsCode,
       confidence,
       reasoning,
+      needsConfirmation: confidence < CONFIDENCE_AMBIGUOUS_THRESHOLD,
+      visionContextPrefix: '',
       models: getModelRequirements(path, needsCode, false),
     };
   }
 
   // Has image: determine if code generation needed
-  const needsCode = detectCodeIntent(promptLower);
+  const explicitCode = detectCodeIntent(promptLower);
+  const needsCode = explicitCode || sessionCodeBias;
+
+  // Build vision context prefix for the coder model (improvement #5)
+  const visionContextPrefix = imageDescription
+    ? `[Vision model analysis of the attached image]\n${imageDescription.trim()}\n\n[User request based on the above image]\n`
+    : '';
 
   // Path B: Image + code generation (Vision → Coder relay)
   if (needsCode) {
@@ -69,6 +84,8 @@ function classify(prompt, hasImage = false, sessionContext = null) {
       needsCoder: true,
       confidence: 0.95,
       reasoning: 'Image present with code generation intent — using Vision→Coder relay',
+      needsConfirmation: false,
+      visionContextPrefix,
       models: getModelRequirements(EXECUTION_PATHS.VISION_TO_CODER, true, true),
     };
   }
@@ -80,6 +97,8 @@ function classify(prompt, hasImage = false, sessionContext = null) {
     needsCoder: false,
     confidence: 0.92,
     reasoning: 'Image present, code not needed — Vision-only path',
+    needsConfirmation: false,
+    visionContextPrefix: '',
     models: getModelRequirements(EXECUTION_PATHS.VISION_ONLY, false, true),
   };
 }
@@ -120,7 +139,7 @@ function getModelRequirements(path, needsCode, needsVision) {
   return {
     visionModel: {
       enabled: needsVision,
-      primary: 'gemma-2-2b-vision', // Lightweight, fast
+      primary: 'gemma-2-2b-vision',
       sizeGb: 2.5,
       alternatives: [
         { name: 'paligemma-2-4b', sizeGb: 4.0 },
@@ -130,7 +149,7 @@ function getModelRequirements(path, needsCode, needsVision) {
     },
     coderModel: {
       enabled: needsCode,
-      primary: 'qwen3-coder-next-32b-q4_k_m', // Best overall for coding
+      primary: 'qwen3-coder-next-32b-q4_k_m',
       sizeGb: 18.0,
       alternatives: [
         { name: 'deepseek-coder-v3-distilled-q4_k_m', sizeGb: 12.0, note: 'Fast & reliable' },
@@ -163,4 +182,5 @@ module.exports = {
   getModelRequirements,
   getPathLabel,
   EXECUTION_PATHS,
+  CONFIDENCE_AMBIGUOUS_THRESHOLD,
 };
