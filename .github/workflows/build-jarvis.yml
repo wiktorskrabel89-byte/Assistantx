@@ -848,6 +848,7 @@ jobs:
             }
             Write-Host "Android APK not found; skipping Android release asset."
           }
+          exit 0
 
       - name: Upload Android installer artifact
         if: steps.android_apk.outputs.found == 'true'
