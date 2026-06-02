@@ -1110,7 +1110,7 @@ jobs:
             jarvis/android/android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android JS dependencies
         working-directory: jarvis/android
