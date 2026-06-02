@@ -22,12 +22,6 @@ const CODE_KEYWORDS = new Set([
   'api', 'endpoint', 'algorithm', 'data structure', 'database',
 ]);
 
-const VISION_ONLY_KEYWORDS = new Set([
-  'analyze', 'describe', 'explain', 'what is', 'identify', 'recognize',
-  'read', 'extract', 'ocr', 'translate', 'summarize', 'understand',
-  'diagram', 'chart', 'graph', 'layout', 'design review', 'screenshot',
-]);
-
 /**
  * Classify a user request and determine optimal execution path.
  *

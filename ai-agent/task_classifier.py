@@ -11,9 +11,9 @@ Handles model hot-swap via llama.cpp API with session state tracking.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -55,36 +55,18 @@ class TaskClassifier:
     CODE_KEYWORDS = {
         "write", "generate", "code", "script", "function", "class", "module",
         "refactor", "fix", "debug", "implement", "create", "build", "design",
-        "component", "build", "develop", "program", "coding", "react", "html",
+        "component", "develop", "program", "coding", "react", "html",
         "css", "javascript", "python", "typescript", "rust", "go", "java",
     }
 
-    # Keywords indicating visual analysis without code
-    VISION_ONLY_KEYWORDS = {
-        "analyze", "describe", "explain", "what is", "identify", "recognize",
-        "read", "extract", "ocr", "translate", "summarize", "understand",
-        "diagram", "chart", "graph", "layout", "design review",
-    }
-
     @staticmethod
-    async def classify(
+    def classify(
         prompt: str,
         has_image: bool,
         image_description: Optional[str] = None,
         session_context: Optional[dict] = None,
     ) -> ClassificationResult:
-        """
-        Classify a user request and determine optimal execution path.
-
-        Args:
-            prompt: User's text prompt
-            has_image: Whether an image is attached
-            image_description: Pre-analyzed image description (if available)
-            session_context: Session state for multi-turn context
-
-        Returns:
-            ClassificationResult with execution strategy
-        """
+        """Classify a user request and determine optimal execution path."""
         prompt_lower = prompt.lower().strip()
 
         # Path C: Text-only (no image)
@@ -145,7 +127,7 @@ class TaskClassifier:
         return False
 
     @staticmethod
-    async def get_model_requirements(classification: ClassificationResult) -> dict:
+    def get_model_requirements(classification: ClassificationResult) -> dict:
         """Get model loading requirements based on classification."""
         return {
             "vision_model": {
@@ -167,6 +149,10 @@ class TaskClassifier:
         }
 
 
+_SESSION_TTL_SECONDS = 3600  # evict sessions idle for 1 hour
+_MAX_SESSIONS = 500
+
+
 class SessionState:
     """Track multi-turn conversation state and model lifecycle."""
 
@@ -177,6 +163,7 @@ class SessionState:
         self.model_load_time = {}  # timestamp when each model was loaded
         self.error_count = 0
         self.last_classification = None
+        self.last_active = time.monotonic()
 
     def add_turn(
         self,
@@ -191,6 +178,7 @@ class SessionState:
             "response": response,
         })
         self.last_classification = classification
+        self.last_active = time.monotonic()
 
     def should_unload_vision(self) -> bool:
         """Heuristic: unload vision model if next path doesn't need it."""
@@ -213,14 +201,28 @@ class SessionState:
 _sessions: dict[str, SessionState] = {}
 
 
-async def get_or_create_session(session_id: str) -> SessionState:
+def _evict_stale_sessions() -> None:
+    """Remove sessions idle longer than TTL; cap total count."""
+    now = time.monotonic()
+    stale = [sid for sid, s in _sessions.items() if now - s.last_active > _SESSION_TTL_SECONDS]
+    for sid in stale:
+        del _sessions[sid]
+    # If still over cap, drop oldest by last_active
+    if len(_sessions) > _MAX_SESSIONS:
+        by_age = sorted(_sessions.items(), key=lambda kv: kv[1].last_active)
+        for sid, _ in by_age[: len(_sessions) - _MAX_SESSIONS]:
+            del _sessions[sid]
+
+
+def get_or_create_session(session_id: str) -> SessionState:
     """Get or create a session with state tracking."""
+    _evict_stale_sessions()
     if session_id not in _sessions:
         _sessions[session_id] = SessionState(session_id)
     return _sessions[session_id]
 
 
-async def classify_request(
+def classify_request(
     prompt: str,
     has_image: bool = False,
     session_id: Optional[str] = None,
@@ -230,14 +232,14 @@ async def classify_request(
 
     Used by the router to determine whether to use Vision, Coder, or cloud.
     """
-    result = await TaskClassifier.classify(
+    result = TaskClassifier.classify(
         prompt=prompt,
         has_image=has_image,
-        session_context=None,  # TODO: integrate session context
+        session_context=None,
     )
 
     if session_id:
-        session = await get_or_create_session(session_id)
+        session = get_or_create_session(session_id)
         session.last_classification = result
 
     logger.info(
