@@ -17,7 +17,7 @@ deprecation==2.1.0
 distro==1.9.0
 docstring_parser==0.18.0
 duckduckgo_search==8.1.1
-fastapi==0.136.1
+fastapi==0.136.3
 frozenlist==1.8.0
 fsspec==2026.4.0
 greenlet==3.5.0
@@ -95,7 +95,7 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==2.7.0
 uuid_utils==0.14.1
-uvicorn==0.47.0
+uvicorn==0.48.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
