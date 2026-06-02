@@ -101,6 +101,8 @@ const ALLOWED_INVOKE = new Set([
   'index:get-jobs',
   'index:get-job',
   'index:cancel-job',
+  // Splash screen control
+  'splash:skip',
 ]);
 
 const ALLOWED_RECEIVE = new Set([

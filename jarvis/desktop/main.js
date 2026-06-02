@@ -118,6 +118,7 @@ let sidecarStatus = 'idle';
 let sidecarHeartbeatInFlight = false;
 let sidecarStdoutBuffer = '';
 let sidecarReady = false;
+let splashSkipRequested = false;
 let localVoiceAssetsState = {
   started: false,
   complete: false,
@@ -868,6 +869,7 @@ function startStartupUpdateCheckGate() {
 
 function resetSplashTransitionState() {
   splashTransitionDone = false;
+  splashSkipRequested = false;
   startupUpdateGatePromise = null;
   startupUpdateGateResolver = null;
   resetStartupUpdateGate();
@@ -1250,7 +1252,7 @@ async function startSplashTransition(engineMode) {
   const sidecarTimeoutMs = 20_000;
   const sidecarPollMs = 500;
   const sidecarStart = Date.now();
-  while (!sidecarReady && (Date.now() - sidecarStart) < sidecarTimeoutMs) {
+  while (!sidecarReady && (Date.now() - sidecarStart) < sidecarTimeoutMs && !splashSkipRequested) {
     await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
     const elapsed = Date.now() - sidecarStart;
     sendToRenderer('splash:progress', {
@@ -1264,9 +1266,12 @@ async function startSplashTransition(engineMode) {
   });
 
   if (sidecarReady) {
-    const modelWaitDeadline = Date.now() + 900_000;
+    // Wait for voice assets up to 90 s (was 15 min). Voice models can finish
+    // downloading in the background after the main UI is shown — they aren't
+    // strictly required to use chat features.
+    const modelWaitDeadline = Date.now() + 90_000;
     const startupGraceDeadline = Date.now() + 2_500;
-    while (Date.now() < modelWaitDeadline) {
+    while (Date.now() < modelWaitDeadline && !splashSkipRequested) {
       if (localVoiceAssetsState.complete) {
         sendToRenderer('splash:progress', {
           pyPercent: 100,
@@ -1280,11 +1285,22 @@ async function startSplashTransition(engineMode) {
       if (localVoiceAssetsState.started) {
         sendToRenderer('splash:progress', {
           pyPercent: localVoiceAssetsState.percent,
-          status: localVoiceAssetsState.status || 'Preparing local voice assets…',
+          status: localVoiceAssetsState.status || 'Preparing local voice assets… (will continue in background)',
         });
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
+    if (!localVoiceAssetsState.complete && localVoiceAssetsState.started) {
+      sendToRenderer('splash:progress', {
+        status: 'Voice models still downloading in background — launching Jarvis now.',
+      });
+    }
+  } else {
+    // Sidecar never reported ready. Tell the user we're proceeding anyway so
+    // chat still works (cloud or BYOK paths don't need the sidecar).
+    sendToRenderer('splash:progress', {
+      error: 'AI runtime did not start (Python sidecar offline). Chat works in cloud mode; voice features may be unavailable.',
+    });
   }
 
   await new Promise((resolve) => setTimeout(resolve, 400));
@@ -1536,6 +1552,16 @@ function restartSidecarNow() {
   telemetryBus.publish('sidecar.restart');
   setTimeout(() => startSidecar(), 500);
 }
+
+// Allow the splash screen to bail out of long startup waits. The renderer
+// shows a "Skip" button after 15 s; clicking it flips this flag and the
+// splash transition loops break out, jumping straight to index.html. Voice
+// models keep downloading in the background — they just stop blocking the UI.
+ipcMain.handle('splash:skip', () => {
+  splashSkipRequested = true;
+  transitionToIndexOnce();
+  return { ok: true };
+});
 
 createMainIpcHandlers({
   ipcMain,
