@@ -417,10 +417,9 @@ jobs:
 
       - name: Install desktop dependencies
         working-directory: jarvis/desktop
-        run: |
-          npm ci --ignore-scripts
-          $electronVer = ((Get-Content package.json | ConvertFrom-Json).devDependencies.electron) -replace "[\^~>=]",""
-          npx electron-builder install-app-deps --electron-version $electronVer
+        env:
+          NODE_ENV: development
+        run: npm ci
 
       - name: Provision updater metadata verification key
         shell: pwsh
