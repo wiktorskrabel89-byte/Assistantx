@@ -529,6 +529,18 @@ function startSidecar() {
     if (/reconnect|retry|re-?connect/i.test(line)) {
       telemetryBus.publish('sidecar.reconnect');
     }
+    // Detect missing Python deps and surface a clear, actionable error.
+    // huggingface_hub, kokoro, websockets, etc. are all installed via
+    // ai-agent/requirements.txt; without them the sidecar crashes on import
+    // and the user sees nothing but a stuck splash screen.
+    const missingModuleMatch = line.match(/ModuleNotFoundError: No module named ['"]([^'"]+)['"]/);
+    if (missingModuleMatch) {
+      const moduleName = missingModuleMatch[1];
+      const message = `Python dependency missing: '${moduleName}'. Run: pip install -r ai-agent/requirements.txt`;
+      startupDiagnostics.pushEvent('sidecar', 'error', message, { module: moduleName });
+      sendToRenderer('splash:progress', { error: message });
+      sendToRenderer('sidecar-status', { status: 'unavailable', detail: message });
+    }
     sendToRenderer('sidecar-status', { status: sidecarStatus });
   });
 
