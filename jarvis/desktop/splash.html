@@ -178,6 +178,27 @@
       text-align: center;
     }
 
+    /* ── skip button ─────────────────────────────────────────────────────────── */
+    #skip-button {
+      display: none;
+      margin-top: 8px;
+      padding: 9px 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(125,211,252,0.32);
+      background: rgba(125,211,252,0.08);
+      color: var(--neon-local);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    #skip-button:hover {
+      transform: translateY(-1px);
+      background: rgba(125,211,252,0.18);
+    }
+    #skip-button.visible { display: inline-flex; }
+
     /* ── cloud fast-start ────────────────────────────────────────────────────── */
     #cloud-check {
       display: none;
@@ -262,6 +283,8 @@
       </div>
 
       <div id="error-card"></div>
+
+      <button id="skip-button" type="button">Skip and continue to app →</button>
     </div>
 
   </div>
@@ -354,6 +377,27 @@
       }
     }
 
+    // ── Skip button: shown after 15s, lets user bypass slow setup ────────────
+    const skipBtn = document.getElementById('skip-button');
+    let skipTimer = null;
+    function showSkipButton() {
+      if (skipBtn) skipBtn.classList.add('visible');
+    }
+    function startSkipCountdown() {
+      if (skipTimer) return;
+      skipTimer = setTimeout(showSkipButton, 15000);
+    }
+    if (skipBtn) {
+      skipBtn.addEventListener('click', () => {
+        skipBtn.disabled = true;
+        skipBtn.textContent = 'Launching…';
+        if (window.jarvisIpc?.invoke) {
+          window.jarvisIpc.invoke('splash:skip').catch(() => {});
+        }
+      });
+    }
+    startSkipCountdown();
+
     // ── IPC listeners (set up before main process sends events) ──────────────
     if (window.jarvisIpc?.on) {
       window.jarvisIpc.on('splash:progress', (data) => {
@@ -361,7 +405,10 @@
         if (data.llmPercent !== undefined) setLlmProgress(data.llmPercent);
         if (data.pyPercent  !== undefined) setPyProgress(data.pyPercent);
         if (data.status)   setStatus(data.status);
-        if (data.error)    showError(data.error);
+        if (data.error)    {
+          showError(data.error);
+          showSkipButton();  // On error, let user proceed anyway
+        }
       });
       window.jarvisIpc.on('auto-update-status', (payload) => {
         if (!payload) return;
