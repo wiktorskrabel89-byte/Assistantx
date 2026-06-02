@@ -709,12 +709,32 @@ async function installLocalAiEngine() {
   if (!fs.existsSync(scriptPath)) {
     return { success: false, error: `Setup script missing: ${scriptPath}` };
   }
+
+  sendToRenderer('splash:progress', {
+    depsPercent: 0,
+    status: 'Installing Python dependencies…'
+  });
+
   return new Promise((resolve) => {
     execFile(
       'powershell.exe',
       ['-ExecutionPolicy', 'Bypass', '-File', scriptPath],
       { windowsHide: true },
       async (error, stdout, stderr) => {
+        // Parse progress from stdout (if any JSON-formatted progress messages)
+        if (stdout) {
+          const lines = String(stdout).split('\n');
+          lines.forEach((line, idx) => {
+            if (/pip install|Installing/.test(line)) {
+              const progress = Math.min(100, 30 + Math.round((idx / lines.length) * 50));
+              sendToRenderer('splash:progress', {
+                depsPercent: progress,
+                status: 'Installing Python dependencies…'
+              });
+            }
+          });
+        }
+
         if (error) {
           startupDiagnostics.pushEvent('ollama', 'error', 'Local AI setup script failed.', {
             message: String(error?.message || error),
@@ -728,6 +748,12 @@ async function installLocalAiEngine() {
           });
           return;
         }
+
+        sendToRenderer('splash:progress', {
+          depsPercent: 100,
+          status: 'Python dependencies installed.'
+        });
+
         const availability = await probeOllamaAvailability('post-install');
         resolve({
           success: true,

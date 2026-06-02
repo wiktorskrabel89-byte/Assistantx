@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "description": "Lightweight GGUF vision models for local desktop AI",
+  "models": [
+    {
+      "name": "moondream2:1.4b",
+      "provider": "ollama",
+      "size_gb": 1.4,
+      "description": "Lightweight vision model (1.4B) - fast image understanding, ~4GB VRAM",
+      "use_case": "vision-only,image-analysis"
+    },
+    {
+      "name": "llava-phi:2.7b",
+      "provider": "ollama",
+      "size_gb": 2.7,
+      "description": "Vision-language model (2.7B) - balanced speed/quality, ~6GB VRAM",
+      "use_case": "vision-code,image-understanding"
+    }
+  ],
+  "python_packages": [
+    "pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "opencv-python>=4.8.0"
+  ]
+}

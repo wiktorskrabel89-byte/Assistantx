@@ -137,4 +137,16 @@ try {
   throw "Local AI bootstrap validation failed: $($_.Exception.Message)"
 }
 
+# Optional: Install vision models from manifest (non-critical)
+$visionManifestPath = Join-Path $PSScriptRoot "vision-model-manifest.json"
+$visionScriptPath = Join-Path $PSScriptRoot "ensure-vision-models.ps1"
+if ((Test-Path $visionManifestPath) -and (Test-Path $visionScriptPath)) {
+  Write-Host "Checking optional vision models…" -ForegroundColor Cyan
+  try {
+    & $visionScriptPath -ManifestPath $visionManifestPath -SkipInstall
+  } catch {
+    Write-Host "Vision model check skipped (non-critical): $_" -ForegroundColor DarkGray
+  }
+}
+
 Write-Host "AssistantX local AI setup completed." -ForegroundColor Green

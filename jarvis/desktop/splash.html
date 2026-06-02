@@ -235,6 +235,15 @@
             <div class="progress-fill fill-local" id="py-bar"></div>
           </div>
         </div>
+        <div class="progress-item" id="deps-progress-wrap" style="display:none">
+          <div class="progress-header">
+            <span class="progress-label">📦 PYTHON DEPENDENCIES</span>
+            <span class="progress-pct" id="deps-pct">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-local" id="deps-bar"></div>
+          </div>
+        </div>
       </div>
 
       <!-- CLOUD mode: spinner ───────────────────────────────────────────────── -->
@@ -283,6 +292,14 @@
       const p = Math.min(100, Math.max(0, pct));
       document.getElementById('py-bar').style.width = p + '%';
       document.getElementById('py-pct').textContent = Math.round(p) + '%';
+    }
+
+    function setDepsProgress(pct) {
+      const p = Math.min(100, Math.max(0, pct));
+      const wrap = document.getElementById('deps-progress-wrap');
+      if (wrap && p > 0) wrap.style.display = 'block';
+      document.getElementById('deps-bar').style.width = p + '%';
+      document.getElementById('deps-pct').textContent = Math.round(p) + '%';
     }
 
     function showError(msg) {
@@ -360,6 +377,7 @@
         if (!data) return;
         if (data.llmPercent !== undefined) setLlmProgress(data.llmPercent);
         if (data.pyPercent  !== undefined) setPyProgress(data.pyPercent);
+        if (data.depsPercent !== undefined) setDepsProgress(data.depsPercent);
         if (data.status)   setStatus(data.status);
         if (data.error)    showError(data.error);
       });
