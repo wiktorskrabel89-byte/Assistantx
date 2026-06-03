@@ -54,6 +54,24 @@ function Ensure-VoiceAssets {
     throw "AI agent directory not found: $aiAgentPath"
   }
 
+  # Install Python dependencies first — without huggingface_hub, kokoro, onnxruntime,
+  # the model downloader silently fails. This is the most common cause of voice models
+  # never downloading.
+  $requirementsPath = Join-Path $aiAgentPath "requirements.txt"
+  if (Test-Path $requirementsPath) {
+    Write-Host "Installing Python dependencies (huggingface_hub, kokoro, onnxruntime)..." -ForegroundColor Cyan
+    & $pythonExe -m pip install --upgrade pip --quiet 2>$null
+    & $pythonExe -m pip install -r $requirementsPath --quiet
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "WARNING: Some Python dependencies failed to install. Voice models may not download." -ForegroundColor Yellow
+      Write-Host "         Try manually: $pythonExe -m pip install -r $requirementsPath" -ForegroundColor Yellow
+    } else {
+      Write-Host "Python dependencies installed." -ForegroundColor Green
+    }
+  } else {
+    Write-Host "WARNING: requirements.txt not found at $requirementsPath" -ForegroundColor Yellow
+  }
+
   Write-Host "Ensuring Whisper + Kokoro voice assets..." -ForegroundColor Cyan
   $bootstrapCode = @'
 import os

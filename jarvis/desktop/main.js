@@ -927,6 +927,7 @@ function startStartupUpdateCheckGate() {
 
 function resetSplashTransitionState() {
   splashTransitionDone = false;
+  splashSkipRequested = false;
   startupUpdateGatePromise = null;
   startupUpdateGateResolver = null;
   sidecarDead = false;
@@ -1394,7 +1395,7 @@ async function startSplashTransition(engineMode) {
     const isFirstRun = !localVoiceAssetsState.complete && !localVoiceAssetsState.started;
     const modelWaitDeadline = Date.now() + (isFirstRun ? 600_000 : 60_000);
     const startupGraceDeadline = Date.now() + 2_500;
-    while (Date.now() < modelWaitDeadline) {
+    while (Date.now() < modelWaitDeadline && !splashSkipRequested) {
       if (localVoiceAssetsState.complete) {
         sendToRenderer('splash:progress', {
           pyPercent: 100,
@@ -1408,11 +1409,22 @@ async function startSplashTransition(engineMode) {
       if (localVoiceAssetsState.started) {
         sendToRenderer('splash:progress', {
           pyPercent: localVoiceAssetsState.percent,
-          status: localVoiceAssetsState.status || 'Preparing local voice assets…',
+          status: localVoiceAssetsState.status || 'Preparing local voice assets… (will continue in background)',
         });
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
+    if (!localVoiceAssetsState.complete && localVoiceAssetsState.started) {
+      sendToRenderer('splash:progress', {
+        status: 'Voice models still downloading in background — launching Jarvis now.',
+      });
+    }
+  } else {
+    // Sidecar never reported ready. Tell the user we're proceeding anyway so
+    // chat still works (cloud or BYOK paths don't need the sidecar).
+    sendToRenderer('splash:progress', {
+      error: 'AI runtime did not start (Python sidecar offline). Chat works in cloud mode; voice features may be unavailable.',
+    });
   }
 
   await new Promise((resolve) => setTimeout(resolve, 400));

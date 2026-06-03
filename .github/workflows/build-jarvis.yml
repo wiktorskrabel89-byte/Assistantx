@@ -50,7 +50,7 @@ jobs:
           fetch-depth: 0
 
       - name: Advance jarvis-latest tag and remove legacy releases
-        shell: pwsh
+        shell: powershell
         if: env.RELEASE_TAG == 'jarvis-latest'
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -87,7 +87,7 @@ jobs:
 
       - name: Bump version and generate changelog
         id: meta
-        shell: pwsh
+        shell: powershell
         run: |
           $releaseTag = "${{ env.RELEASE_TAG }}".Trim()
           $desktopPkg = Get-Content "jarvis/desktop/package.json" -Raw | ConvertFrom-Json
@@ -136,7 +136,7 @@ jobs:
             ForEach-Object {
               $normalized = $_ -replace '^\s*v\d+(?:\.\d+)*(?:[-_\s:]+)?', ''
               $normalized = $normalized -replace '^\s*(release|build)\s*[:\-]?\s*', ''
-              $normalized = ($normalized -replace '\s+', ' ').Trim(" -_:;,.")
+              $normalized = ($normalized -replace '\s+', ' ').Trim([char[]]' -_:;,.')
               if ([string]::IsNullOrWhiteSpace($normalized)) { return }
               $wordCount = ($normalized -split '\s+' | Where-Object { $_ }).Count
               $looksLikeNoise = $normalized -match '^(?:wip|tmp|test|misc|update|fixup!|squash!|dwadawdwa|asdf|qwe)+$'
@@ -261,7 +261,7 @@ jobs:
           # Use the download proxy so private GitHub release assets don't redirect
           # unauthenticated users to GitHub login. The proxy at assistantx.pl
           # authenticates server-side using GITHUB_TOKEN.
-          $downloadProxyBase = "https://assistantx.pl/api/jarvis/download?tag=$releaseTag"
+          $downloadProxyBase = "https://assistantx.pl/api/jarvis/download?tag=$releaseTag$([char]38)file="
 
           $versionsManifest = [ordered]@{
             schema = "assistantx-updates-manifest"
@@ -272,13 +272,13 @@ jobs:
                 windows = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "$downloadProxyBase&file=JarvisSetup-x64.exe"
-                  url = "$downloadProxyBase&file=JarvisSetup-x64.exe"
+                  path = "${downloadProxyBase}JarvisSetup-x64.exe"
+                  url = "${downloadProxyBase}JarvisSetup-x64.exe"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$downloadProxyBase&file=JarvisSetup-x64.exe"
-                    arm64 = "$downloadProxyBase&file=JarvisSetup-arm64.exe"
+                    x64 = "${downloadProxyBase}JarvisSetup-x64.exe"
+                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.exe"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/windows"
@@ -288,13 +288,13 @@ jobs:
                 mac = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "$downloadProxyBase&file=JarvisSetup-x64.dmg"
-                  url = "$downloadProxyBase&file=JarvisSetup-x64.dmg"
+                  path = "${downloadProxyBase}JarvisSetup-x64.dmg"
+                  url = "${downloadProxyBase}JarvisSetup-x64.dmg"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$downloadProxyBase&file=JarvisSetup-x64.dmg"
-                    arm64 = "$downloadProxyBase&file=JarvisSetup-arm64.dmg"
+                    x64 = "${downloadProxyBase}JarvisSetup-x64.dmg"
+                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.dmg"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/mac"
@@ -304,12 +304,12 @@ jobs:
                 linux = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "$downloadProxyBase&file=Jarvis-x64.AppImage"
-                  url = "$downloadProxyBase&file=Jarvis-x64.AppImage"
+                  path = "${downloadProxyBase}Jarvis-x64.AppImage"
+                  url = "${downloadProxyBase}Jarvis-x64.AppImage"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$downloadProxyBase&file=Jarvis-x64.AppImage"
+                    x64 = "${downloadProxyBase}Jarvis-x64.AppImage"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/linux"
@@ -319,12 +319,12 @@ jobs:
                 android = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "$downloadProxyBase&file=Jarvis-android.apk"
-                  url = "$downloadProxyBase&file=Jarvis-android.apk"
+                  path = "${downloadProxyBase}Jarvis-android.apk"
+                  url = "${downloadProxyBase}Jarvis-android.apk"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    apk = "$downloadProxyBase&file=Jarvis-android.apk"
+                    apk = "${downloadProxyBase}Jarvis-android.apk"
                   }
                 }
               }
@@ -332,13 +332,13 @@ jobs:
                 windows = [ordered]@{
                   version = "${version}-beta.1"
                   latestVersion = "${version}-beta.1"
-                  path = "$downloadProxyBase&file=JarvisSetup-x64.exe"
-                  url = "$downloadProxyBase&file=JarvisSetup-x64.exe"
+                  path = "${downloadProxyBase}JarvisSetup-x64.exe"
+                  url = "${downloadProxyBase}JarvisSetup-x64.exe"
                   releaseNotes = "Beta channel build."
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$downloadProxyBase&file=JarvisSetup-x64.exe"
-                    arm64 = "$downloadProxyBase&file=JarvisSetup-arm64.exe"
+                    x64 = "${downloadProxyBase}JarvisSetup-x64.exe"
+                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.exe"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/beta/windows"
@@ -410,7 +410,7 @@ jobs:
         run: npm ci
 
       - name: Provision updater metadata verification key
-        shell: pwsh
+        shell: powershell
         env:
           UPDATE_FEED_METADATA_PUBLIC_KEY: ${{ secrets.UPDATE_FEED_METADATA_PUBLIC_KEY }}
           UPDATE_FEED_METADATA_PRIVATE_KEY: ${{ secrets.UPDATE_FEED_METADATA_PRIVATE_KEY }}
@@ -442,7 +442,7 @@ jobs:
           Write-Host "Bundled updater metadata verification key at $publicKeyPath"
 
       - name: Validate desktop updater topology (manifest-only generic)
-        shell: pwsh
+        shell: powershell
         run: |
           $pkgPath = "jarvis/desktop/package.json"
           $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
@@ -480,7 +480,7 @@ jobs:
           Write-Host "Desktop publish config validated: generic provider => $actualUrl (channel: $actualChannel)"
 
       - name: Download Windows Python embeddable runtime
-        shell: pwsh
+        shell: powershell
         run: |
           $pythonVersion = "3.11.9"
           $pythonUrl = "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-embed-amd64.zip"
@@ -507,7 +507,7 @@ jobs:
         run: npm run smoke:runtime
 
       - name: Attach release-notes.json to desktop dist
-        shell: pwsh
+        shell: powershell
         run: |
           $src = Join-Path (Get-Location) "release-notes.json"
           $dst = Join-Path (Get-Location) "jarvis/desktop/dist/release-notes.json"
@@ -519,7 +519,7 @@ jobs:
           Write-Host "Copied release notes to $dst"
 
       - name: Validate versions.json manifest schema
-        shell: pwsh
+        shell: powershell
         run: |
           $manifestPath = Join-Path (Get-Location) "versions.json"
           if (-not (Test-Path $manifestPath)) {
@@ -552,7 +552,7 @@ jobs:
         run: dir dist
 
       - name: Harden updater metadata (rollback, rollout, signature)
-        shell: pwsh
+        shell: powershell
         working-directory: jarvis/desktop
         env:
           UPDATE_FEED_METADATA_PRIVATE_KEY: ${{ secrets.UPDATE_FEED_METADATA_PRIVATE_KEY }}
@@ -608,7 +608,7 @@ jobs:
           Write-Host "Updater metadata hardened with minimumAllowedVersion=$minimumAllowedVersion stagingPercentage=$stagingPercentage"
 
       - name: Validate updater metadata and referenced artifacts
-        shell: pwsh
+        shell: powershell
         working-directory: jarvis/desktop
         env:
           UPDATE_FEED_METADATA_PUBLIC_KEY: ${{ secrets.UPDATE_FEED_METADATA_PUBLIC_KEY }}
@@ -763,7 +763,7 @@ jobs:
 
       - name: Build/find Android APK
         id: android_apk
-        shell: pwsh
+        shell: powershell
         run: |
           $repoRoot = (Get-Location).Path
           $distDir = Join-Path $repoRoot "jarvis/android/dist"
@@ -884,7 +884,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Verify release visibility and required assets
-        shell: pwsh
+        shell: powershell
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
