@@ -1325,6 +1325,9 @@ window.addEventListener('DOMContentLoaded', () => {
 		voiceVisualizer.classList.remove('listening', 'speaking', 'thinking');
 		const statusEl = document.getElementById('voice-orb-status');
 		const setStatus = (text) => { if (statusEl) statusEl.textContent = text; };
+		// Mirror state into the palette context signals so predictive
+		// suggestions reflect what's happening right now.
+		try { (window.jarvisContext = window.jarvisContext || {}).voiceState = state || 'idle'; } catch { /* noop */ }
 		// Mirror orb state into the task list so the agent's "inner monologue"
 		// stays in sync with what users hear/see.
 		if (state === 'listening') {
@@ -1847,9 +1850,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
 		appendMessage(log, 'Prompt queued', text, 'system');
-		// Surface in the Devin-style task list.
+		// Surface in the Devin-style task list + persist to palette recents.
 		pushTaskStep('PROMPT', text.length > 100 ? text.slice(0, 100) + '…' : text, 'done');
 		pushTaskStep('ROUTER', 'Classifying intent and selecting model…', 'active');
+		try { window.jarvisPaletteRecent?.push?.(text); } catch { /* palette not loaded */ }
 		input.value = '';
 	}
 
@@ -2123,6 +2127,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (!sidecar) return;
 
 		sidecar.on('connected', () => {
+			pushTaskStep('SIDECAR', 'Connected to AI runtime', 'done');
+			try { (window.jarvisContext = window.jarvisContext || {}).sidecarStatus = 'connected'; } catch { /* noop */ }
 			sidecarConnected = true;
 			sidecarCapabilities = sidecar.getCapabilities ? sidecar.getCapabilities() || sidecarCapabilities : sidecarCapabilities;
 			appendMessage(log, 'AI Sidecar', '🤖 Python voice sidecar connected (offline mode active).', 'system');
@@ -2154,6 +2160,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 
 		sidecar.on('disconnected', () => {
+			pushTaskStep('SIDECAR', 'Disconnected from AI runtime — self-heal pending', 'error');
+			try { (window.jarvisContext = window.jarvisContext || {}).sidecarStatus = 'disconnected'; } catch { /* noop */ }
 			sidecarConnected = false;
 			sidecarManualListening = false;
 			resetActiveAiStream();
@@ -2199,6 +2207,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		sidecar.on('wake_word', () => {
 			if (!voiceSettings.allowBackgroundWake && !document.hasFocus()) return;
 			appendMessage(log, 'AI Sidecar', `Wake word detected — listening…`);
+			pushTaskStep('WAKE', 'Wake word "Hey Jarvis" detected', 'done');
 			setVoiceVisualizer('listening');
 			(voiceGateway || sidecar).setListeningForCommand(true);
 		});
@@ -2220,6 +2229,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (!text) return;
 			input.value = text;
 			if (isFinal) {
+				pushTaskStep('STT', `Transcribed: "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`, 'done');
 				setVoiceVisualizer('idle');
 				sidecar.setListeningForCommand(false);
 				if (sidecarManualListening) {
@@ -2278,6 +2288,8 @@ window.addEventListener('DOMContentLoaded', () => {
 				clearTimeout(pendingVoiceIntentFallbackTimer);
 				pendingVoiceIntentFallbackTimer = null;
 			}
+			pushTaskStep('INTENT', `Parsed "${intent || 'unknown'}" (confidence ${Math.round((confidence || 0) * 100)}%)`, confidence >= 0.6 ? 'done' : 'error');
+			try { (window.jarvisContext = window.jarvisContext || {}).lastIntent = intent || 'unknown'; } catch { /* noop */ }
 			// Route structured intents from NLP back through the desktop executor
 			if (confidence < 0.6 || !intent || intent === 'unknown') {
 				if (entities?.transcript) fallbackVoicePrompt(entities.transcript);
@@ -2334,6 +2346,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 
 		sidecar.on('tool_result', ({ tool, ok, results }) => {
+			pushTaskStep('TOOL', `${tool || 'unknown tool'} ${ok ? 'completed' : 'failed'}`, ok ? 'done' : 'error');
 			if (tool !== 'web_search') return;
 			const count = Array.isArray(results) ? results.length : 0;
 			const tone = ok ? 'system' : 'error';
