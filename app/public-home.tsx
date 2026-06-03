@@ -611,7 +611,7 @@ export default function PublicHome() {
                   }}
                 />
                 <span style={{ color: "rgba(232,234,240,0.75)" }}>
-                  {t[key as keyof typeof t]}
+                  {t[key]}
                 </span>
               </span>
             ))}
