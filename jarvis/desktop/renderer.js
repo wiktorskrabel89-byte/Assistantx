@@ -830,6 +830,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
 		if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
 		if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
+		// 'desktop-direct' is not implemented in voice-gateway.js — silently migrate to the working default.
+		if (voiceSettings.providerMode === 'desktop-direct') voiceSettings.providerMode = 'assistantx-server';
 		if (voiceProviderModeSelect && voiceSettings.providerMode) voiceProviderModeSelect.value = voiceSettings.providerMode;
 		if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
 		if (temporalAwarenessToggle) temporalAwarenessToggle.checked = Boolean(voiceSettings.temporalAwareness);
@@ -1206,25 +1208,31 @@ window.addEventListener('DOMContentLoaded', () => {
 	function setVoiceVisualizer(state, options = {}) {
 		if (!voiceVisualizer) return;
 		voiceVisualizer.classList.remove('listening', 'speaking', 'thinking');
+		const statusEl = document.getElementById('voice-orb-status');
+		const setStatus = (text) => { if (statusEl) statusEl.textContent = text; };
 		if (state === 'listening') {
 			voiceVisualizer.classList.add('listening');
 			setAgentState(AGENT_STATE.LISTENING);
+			setStatus('Listening…');
 			touchAgentActivity();
 			return;
 		}
 		if (state === 'speaking') {
 			voiceVisualizer.classList.add('speaking');
 			setAgentState(AGENT_STATE.SPEAKING);
+			setStatus('Speaking…');
 			touchAgentActivity();
 			return;
 		}
 		if (state === 'thinking') {
 			voiceVisualizer.classList.add('thinking');
 			setAgentState(AGENT_STATE.THINKING);
+			setStatus('Thinking…');
 			touchAgentActivity();
 			return;
 		}
 		setAgentState(AGENT_STATE.IDLE);
+		setStatus('');
 		if (options.resetEnergy !== false) applyVisualizerEnergy(0);
 		touchAgentActivity();
 	}

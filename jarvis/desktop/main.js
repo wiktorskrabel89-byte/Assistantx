@@ -118,6 +118,8 @@ let sidecarStatus = 'idle';
 let sidecarHeartbeatInFlight = false;
 let sidecarStdoutBuffer = '';
 let sidecarReady = false;
+let sidecarDead = false;
+let sidecarFatalError = null;
 let localVoiceAssetsState = {
   started: false,
   complete: false,
@@ -528,6 +530,16 @@ function startSidecar() {
     if (/reconnect|retry|re-?connect/i.test(line)) {
       telemetryBus.publish('sidecar.reconnect');
     }
+    // Surface fatal Python errors to splash so users see WHY startup hangs.
+    if (/ModuleNotFoundError|ImportError|Traceback \(most recent call last\)/.test(line)) {
+      sidecarFatalError = line.slice(0, 240);
+      startupDiagnostics.pushEvent('sidecar', 'error', 'Python sidecar reported a fatal error.', {
+        message: sidecarFatalError,
+      });
+      sendToRenderer('splash:progress', {
+        error: `Python runtime error: ${sidecarFatalError}`,
+      });
+    }
     sendToRenderer('sidecar-status', { status: sidecarStatus });
   });
 
@@ -536,6 +548,8 @@ function startSidecar() {
     sidecarProcess = null;
     sidecarHeartbeatInFlight = false;
     sidecarReady = false;
+    // Flag for the splash poll so it can break out of the wait loop instead of timing out.
+    if (code && code !== 0) sidecarDead = true;
     sidecarStdoutBuffer = '';
     sidecarStatus = 'stopped';
     startupDiagnostics.setComponent('sidecar', code && code !== 0 ? 'crashed' : 'stopped', {
@@ -896,6 +910,8 @@ function resetSplashTransitionState() {
   splashTransitionDone = false;
   startupUpdateGatePromise = null;
   startupUpdateGateResolver = null;
+  sidecarDead = false;
+  sidecarFatalError = null;
   resetStartupUpdateGate();
 }
 
@@ -1145,6 +1161,45 @@ function getTrayIcon() {
   return iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
 }
 
+// ── Ollama daemon liveness check + autostart ─────────────────────────────────
+// The splash used to call /api/pull directly even when the Ollama daemon was
+// not running, producing an unrecoverable "fetch failed" error. This helper
+// probes /api/tags, spawns `ollama serve` detached if missing, and retries
+// the probe with a short backoff. Returns true if the daemon is reachable.
+async function probeOllamaOnce(ollamaUrl, timeoutMs = 2_000) {
+  try {
+    const resp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(timeoutMs) });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureOllamaRunning(ollamaUrl) {
+  if (await probeOllamaOnce(ollamaUrl)) return true;
+  log('[ollama] Daemon not reachable. Attempting to spawn `ollama serve`.');
+  try {
+    const child = spawn('ollama', ['serve'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.unref();
+  } catch (err) {
+    log('[ollama] Failed to spawn `ollama serve`:', err?.message || err);
+    return false;
+  }
+  for (let i = 0; i < 10; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    if (await probeOllamaOnce(ollamaUrl)) {
+      log(`[ollama] Daemon became reachable after ${i + 1}s.`);
+      return true;
+    }
+  }
+  log('[ollama] Daemon never became reachable after 10s of retries.');
+  return false;
+}
+
 // ── Ollama NDJSON model-pull helper ──────────────────────────────────────────
 // Ollama's /api/pull stream sends multiple JSON objects per TCP chunk.  We
 // split the raw response body on newline boundaries before calling JSON.parse()
@@ -1238,37 +1293,53 @@ async function startSplashTransition(engineMode) {
 
   sendToRenderer('splash:progress', { llmPercent: 0, status: `Checking for AI model ${llmModel}…` });
 
-  let modelPresent = false;
-  try {
-    const tagsResp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3_000) });
-    if (tagsResp.ok) {
-      const payload = await tagsResp.json();
-      const names = Array.isArray(payload?.models)
-        ? payload.models.map((m) => String(m?.name || '').split(':')[0])
-        : [];
-      const llmBase = llmModel.split(':')[0];
-      modelPresent = names.includes(llmBase) || names.includes(llmModel);
-    }
-  } catch { /* Ollama may not be running yet */ }
-
-  if (!modelPresent) {
-    sendToRenderer('splash:progress', { llmPercent: 0, status: `Downloading ${llmModel}… (this may take a few minutes)` });
-    try {
-      await pullOllamaModel(llmModel, (event) => {
-        const total = Number(event?.total) || 0;
-        const completed = Number(event?.completed) || 0;
-        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-        sendToRenderer('splash:progress', {
-          llmPercent: pct,
-          status: String(event?.status || 'Downloading…'),
-        });
-      });
-      sendToRenderer('splash:progress', { llmPercent: 100, status: 'Model download complete.' });
-    } catch (err) {
-      sendToRenderer('splash:progress', { error: `Failed to pull model: ${String(err?.message || err)}` });
-    }
+  // Make sure the Ollama daemon is alive before we try to talk to it. Without
+  // this, /api/pull throws "fetch failed" and the splash gets stuck.
+  const ollamaUp = await ensureOllamaRunning(ollamaUrl);
+  if (!ollamaUp) {
+    sendToRenderer('splash:progress', {
+      llmPercent: 100,
+      status: 'Local AI unavailable — switching to cloud mode.',
+    });
+    // Skip the pull entirely. The renderer's router has cloud fallback already.
   } else {
-    sendToRenderer('splash:progress', { llmPercent: 100, status: `Model ${llmModel} is ready.` });
+    let modelPresent = false;
+    try {
+      const tagsResp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3_000) });
+      if (tagsResp.ok) {
+        const payload = await tagsResp.json();
+        const names = Array.isArray(payload?.models)
+          ? payload.models.map((m) => String(m?.name || '').split(':')[0])
+          : [];
+        const llmBase = llmModel.split(':')[0];
+        modelPresent = names.includes(llmBase) || names.includes(llmModel);
+      }
+    } catch { /* tags probe failed; treat as missing and try pull */ }
+
+    if (!modelPresent) {
+      sendToRenderer('splash:progress', { llmPercent: 0, status: `Downloading ${llmModel}… (this may take a few minutes)` });
+      try {
+        await pullOllamaModel(llmModel, (event) => {
+          const total = Number(event?.total) || 0;
+          const completed = Number(event?.completed) || 0;
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          sendToRenderer('splash:progress', {
+            llmPercent: pct,
+            status: String(event?.status || 'Downloading…'),
+          });
+        });
+        sendToRenderer('splash:progress', { llmPercent: 100, status: 'Model download complete.' });
+      } catch (err) {
+        // Soft-fail: log it, mark the bar full, and let cloud fallback handle requests.
+        log('[ollama] Model pull failed:', err?.message || err);
+        sendToRenderer('splash:progress', {
+          llmPercent: 100,
+          status: 'Model unavailable. Cloud mode active.',
+        });
+      }
+    } else {
+      sendToRenderer('splash:progress', { llmPercent: 100, status: `Model ${llmModel} is ready.` });
+    }
   }
 
   // Wait for the Python sidecar to finish its health handshake (up to 20 s).
@@ -1276,7 +1347,7 @@ async function startSplashTransition(engineMode) {
   const sidecarTimeoutMs = 20_000;
   const sidecarPollMs = 500;
   const sidecarStart = Date.now();
-  while (!sidecarReady && (Date.now() - sidecarStart) < sidecarTimeoutMs) {
+  while (!sidecarReady && !sidecarDead && (Date.now() - sidecarStart) < sidecarTimeoutMs) {
     await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
     const elapsed = Date.now() - sidecarStart;
     sendToRenderer('splash:progress', {
@@ -1284,13 +1355,25 @@ async function startSplashTransition(engineMode) {
       status: 'Waiting for AI runtime…',
     });
   }
-  sendToRenderer('splash:progress', {
-    pyPercent: 100,
-    status: sidecarReady ? 'AI runtime ready. Launching Jarvis…' : 'Launching Jarvis…',
-  });
+  if (sidecarDead) {
+    sendToRenderer('splash:progress', {
+      pyPercent: 100,
+      status: 'AI runtime crashed — using cloud mode.',
+      error: sidecarFatalError ? `Python runtime: ${sidecarFatalError}` : 'Python runtime exited unexpectedly.',
+    });
+  } else {
+    sendToRenderer('splash:progress', {
+      pyPercent: 100,
+      status: sidecarReady ? 'AI runtime ready. Launching Jarvis…' : 'Launching Jarvis…',
+    });
+  }
 
   if (sidecarReady) {
-    const modelWaitDeadline = Date.now() + 900_000;
+    // First-run install can legitimately take many minutes (downloading
+    // Whisper + Kokoro). Warm boots should never wait more than ~60s.
+    // We detect first run by checking if voice assets are tracked at all.
+    const isFirstRun = !localVoiceAssetsState.complete && !localVoiceAssetsState.started;
+    const modelWaitDeadline = Date.now() + (isFirstRun ? 600_000 : 60_000);
     const startupGraceDeadline = Date.now() + 2_500;
     while (Date.now() < modelWaitDeadline) {
       if (localVoiceAssetsState.complete) {

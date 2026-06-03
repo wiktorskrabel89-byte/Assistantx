@@ -1099,6 +1099,89 @@
         justify-self: start;
       }
     }
+
+    /* ───────────────────────────────────────────────────────────────────────
+       Iron Man J.A.R.V.I.S. layout overrides
+       - Tab rail migrates to the right edge
+       - Voice orb scales up as the centerpiece
+       - Ambient halo + status text for the "talking" feel
+       ─────────────────────────────────────────────────────────────────────── */
+    .main-shell {
+      grid-template-columns: 1fr 56px;
+    }
+    .main-shell > .tab-switcher-side {
+      grid-column: 2;
+      grid-row: 1;
+      width: 52px;
+      padding: 8px 4px;
+      background: rgba(8, 12, 20, 0.45);
+      border: 1px solid rgba(125, 211, 252, 0.10);
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+    }
+    .main-shell > .tab-content {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    @media (max-width: 920px) {
+      .main-shell { grid-template-columns: 1fr; }
+      .main-shell > .tab-switcher-side {
+        grid-column: 1;
+        grid-row: auto;
+        justify-self: end;
+      }
+    }
+
+    /* Scale the existing orb up to be the visual focal point. */
+    #voice-visualizer.voice-visualizer {
+      width: 220px;
+      height: 220px;
+      margin: 28px auto 12px;
+    }
+    #voice-visualizer .orb-halo {
+      filter: blur(28px);
+      opacity: 0.6;
+    }
+    #voice-visualizer .orb-core {
+      filter: drop-shadow(0 0 30px rgba(125, 211, 252, 0.55));
+    }
+    #voice-visualizer.listening .orb-halo,
+    #voice-visualizer.speaking .orb-halo {
+      opacity: 0.85;
+    }
+
+    /* Status pill underneath the orb. */
+    .voice-orb-status {
+      text-align: center;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(165, 200, 240, 0.85);
+      min-height: 16px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    /* Ambient particle background — subtle radial gradients that drift. */
+    .panel.stack:has(#voice-visualizer)::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.08), transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(125, 211, 252, 0.08), transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.06), transparent 50%);
+      animation: ambient-drift 18s ease-in-out infinite alternate;
+      z-index: 0;
+    }
+    .panel.stack { position: relative; overflow: hidden; }
+    .panel.stack > * { position: relative; z-index: 1; }
+    @keyframes ambient-drift {
+      0%   { transform: translate(0, 0) scale(1); }
+      50%  { transform: translate(-4%, 3%) scale(1.05); }
+      100% { transform: translate(3%, -2%) scale(1); }
+    }
   </style>
 </head>
 <body>
@@ -1251,6 +1334,7 @@
                   <div class="orb-ring"></div>
                   <div class="orb-core"></div>
                 </div>
+                <div id="voice-orb-status" class="voice-orb-status" aria-live="polite"></div>
 
                 <div id="model-activity-display" class="model-activity-display" style="display:none;">
                   <div class="model-indicator active" id="vision-indicator">
@@ -1468,7 +1552,17 @@
                   <span>Voice provider mode</span>
                   <select id="voice-provider-mode">
                     <option value="assistantx-server">AssistantX API gateway (default)</option>
-                    <option value="desktop-direct">Desktop-direct (BYOK / advanced)</option>
+                  </select>
+                </label>
+                <label class="field" id="voice-language-field">
+                  <span>Voice language</span>
+                  <select id="voice-language">
+                    <option value="en-US">English (US)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="pl-PL">Polski</option>
+                    <option value="de-DE">Deutsch</option>
+                    <option value="es-ES">Español</option>
+                    <option value="fr-FR">Français</option>
                   </select>
                 </label>
                 <div id="model-settings-note" class="field-note" style="grid-column:1 / -1;">
