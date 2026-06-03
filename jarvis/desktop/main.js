@@ -1608,6 +1608,9 @@ function registerWindowControlHandlers() {
   healthObserver.on('heal-attempted', (payload) => {
     sendToRenderer('health:heal-attempted', payload);
   });
+  healthObserver.on('heal-outcome', (payload) => {
+    sendToRenderer('health:heal-outcome', payload);
+  });
   // Start the loop after a short delay so initial startup probes don't fire
   // before Ollama/sidecar have had a chance to come up.
   setTimeout(() => {

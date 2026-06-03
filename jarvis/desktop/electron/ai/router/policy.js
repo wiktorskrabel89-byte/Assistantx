@@ -70,13 +70,19 @@ function decideRoute(analysis, options = {}) {
   }
 
   // Cloud fallback path. The semantic intent still informs the model pick.
-  const fallbackProvider = chooseCloudProvider(cloudOrder, availability.cloud?.providers || {});
-  const cloudModel = resolveCloudModel(fallbackProvider, intent, escalate);
+  // If no cloud provider is actually ready, drop the escalation flag so we
+  // pick the cheaper chat-tier model instead of paying for GPT-4o etc. on
+  // a request that's about to fail anyway.
+  const providers = availability.cloud?.providers || {};
+  const fallbackProvider = chooseCloudProvider(cloudOrder, providers);
+  const cloudReady = Boolean(providers?.[fallbackProvider]?.ready);
+  const effectiveEscalate = escalate && cloudReady;
+  const cloudModel = resolveCloudModel(fallbackProvider, intent, effectiveEscalate);
   return {
     provider: fallbackProvider,
     model: cloudModel,
     keepAlive: null,
-    reason: `cloud-fallback-intent-${intent}${escalate ? '-escalated' : ''}`,
+    reason: `cloud-fallback-intent-${intent}${effectiveEscalate ? '-escalated' : ''}${cloudReady ? '' : '-no-ready-provider'}`,
     intent,
     intentConfidence: analysis.intentConfidence,
     priority: analysis.priority,

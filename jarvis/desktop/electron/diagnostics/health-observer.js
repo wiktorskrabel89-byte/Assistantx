@@ -66,14 +66,25 @@ function createHealthObserver({
       if (sinceLastHeal >= cooldownMs) {
         subsystemState.lastHealAt = Date.now();
         log(`[health] triggering self-heal for ${subsystem} (status=${status}, detail=${detail || 'n/a'})`);
+        // Emit BEFORE the healer runs so the UI shows the attempt
+        // immediately. We additionally emit 'heal-outcome' once the
+        // healer's promise resolves/rejects so observers can show the
+        // real result — not a guess based on timing.
+        emitter.emit('heal-attempted', { subsystem, status, timestamp: Date.now() });
+        let healerPromise;
         try {
-          Promise.resolve(healers[subsystem]({ subsystem, status, detail })).catch((err) => {
-            log(`[health] healer for ${subsystem} threw:`, err?.message || err);
-          });
+          healerPromise = Promise.resolve(healers[subsystem]({ subsystem, status, detail }));
         } catch (err) {
           log(`[health] healer for ${subsystem} threw sync:`, err?.message || err);
+          emitter.emit('heal-outcome', { subsystem, ok: false, error: String(err?.message || err), timestamp: Date.now() });
+          return;
         }
-        emitter.emit('heal-attempted', { subsystem, status, timestamp: Date.now() });
+        healerPromise
+          .then(() => emitter.emit('heal-outcome', { subsystem, ok: true, timestamp: Date.now() }))
+          .catch((err) => {
+            log(`[health] healer for ${subsystem} threw:`, err?.message || err);
+            emitter.emit('heal-outcome', { subsystem, ok: false, error: String(err?.message || err), timestamp: Date.now() });
+          });
       }
     }
   }

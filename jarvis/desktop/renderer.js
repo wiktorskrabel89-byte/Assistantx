@@ -285,6 +285,12 @@ function disableComposer(reason) {
 	if (sendBtn) sendBtn.disabled = true;
 }
 
+// V2.0 — clean up VoiceGateway sidecar subscriptions on renderer teardown so
+// hot-reloads / refreshes don't accumulate dangling listeners (audit finding).
+window.addEventListener('beforeunload', () => {
+	try { voiceGateway?.dispose?.(); } catch { /* gateway never bound */ }
+});
+
 window.addEventListener('DOMContentLoaded', () => {
 	const tokenPromise = Promise.resolve(getToken()).catch((error) => {
 		console.warn('[renderer] Failed to get device token:', error?.message || error);
@@ -2738,6 +2744,13 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 		ipcRenderer.on('health:heal-attempted', (payload) => {
 			pushTaskStep('HEAL', `Auto-heal: ${payload?.subsystem} (was ${payload?.status})`, 'active');
+		});
+		ipcRenderer.on('health:heal-outcome', (payload) => {
+			const status = payload?.ok ? 'done' : 'error';
+			const msg = payload?.ok
+				? `Auto-heal: ${payload.subsystem} recovered`
+				: `Auto-heal: ${payload.subsystem} failed — ${payload.error || 'unknown'}`;
+			pushTaskStep('HEAL', msg, status);
 		});
 	}
 

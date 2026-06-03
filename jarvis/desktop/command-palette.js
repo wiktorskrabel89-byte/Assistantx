@@ -155,24 +155,35 @@
   }
 
   // ─── Recent prompts ──────────────────────────────────────────────────────
+  // Maintain a single source of truth in-memory so two near-simultaneous
+  // pushes don't race on localStorage (read-stale-write-back). All mutations
+  // happen against `_recentBuffer`; localStorage is just persistence.
+  let _recentBuffer = null;
   function loadRecent() {
+    if (_recentBuffer) return _recentBuffer.slice();
     try {
       const raw = localStorage.getItem(RECENT_PROMPTS_KEY);
       const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr.slice(0, MAX_RECENT) : [];
-    } catch { return []; }
+      _recentBuffer = Array.isArray(arr) ? arr.slice(0, MAX_RECENT) : [];
+    } catch {
+      _recentBuffer = [];
+    }
+    return _recentBuffer.slice();
   }
   function saveRecent(list) {
-    try { localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(list.slice(0, MAX_RECENT))); }
+    _recentBuffer = list.slice(0, MAX_RECENT);
+    try { localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(_recentBuffer)); }
     catch { /* storage unavailable */ }
   }
   function pushRecent(text) {
     if (!text || typeof text !== 'string') return;
     const trimmed = text.trim();
     if (!trimmed) return;
-    const list = loadRecent().filter((entry) => entry !== trimmed);
-    list.unshift(trimmed);
-    saveRecent(list);
+    // Mutate the canonical buffer in place — eliminates the read-modify-write
+    // race the audit flagged for concurrent submissions.
+    loadRecent(); // ensures _recentBuffer is populated
+    _recentBuffer = [trimmed, ..._recentBuffer.filter((entry) => entry !== trimmed)].slice(0, MAX_RECENT);
+    saveRecent(_recentBuffer);
   }
   // Expose for renderer.js to call when a prompt is submitted.
   window.jarvisPaletteRecent = { push: pushRecent };
@@ -344,11 +355,18 @@
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
     });
-    // Global hotkey — Ctrl+K / Cmd+K.
+    // Global hotkey — Ctrl+K / Cmd+K opens; Escape always closes (even if the
+    // palette input never received focus, e.g. user pressed Ctrl+K then
+    // immediately Esc before the focus settled).
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         if (isOpen()) close(); else open();
+        return;
+      }
+      if (e.key === 'Escape' && isOpen()) {
+        e.preventDefault();
+        close();
       }
     });
   }

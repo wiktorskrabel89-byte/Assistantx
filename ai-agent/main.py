@@ -463,8 +463,10 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                 if state.speech_active:
                     state.command_audio_buffer.append(pcm_bytes)
                 state.trailing_silence_frames += 1
-
-            # ~0.4 s silence threshold for end-of-utterance with 100 ms chunks.
+                # ~0.4 s silence threshold for end-of-utterance with 100 ms chunks.
+                # (Comment + check live inside the silence branch — only firing
+                # on silence frames is correct; was previously misindented so the
+                # comment looked sibling-level even though the `if` was nested.)
                 if state.speech_active and state.trailing_silence_frames >= 4:
                     segment = b"".join(state.command_audio_buffer).strip()
                     await _send(ws, {

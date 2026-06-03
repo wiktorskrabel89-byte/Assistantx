@@ -128,6 +128,7 @@ const ALLOWED_RECEIVE = new Set([
   'exec:chunk',
   'health:pulse',
   'health:heal-attempted',
+  'health:heal-outcome',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────

@@ -137,10 +137,13 @@ function createLocalExecutionBridge({ getConfig, log = () => {}, defaultCwd } = 
     if (!cwd) {
       return { ok: false, error: 'cwd_unsafe', detail: 'cwd is missing, contains "..", or points to a system root.' };
     }
-    const timeoutMs = Math.min(
-      Math.max(Number(request.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000),
-      MAX_TIMEOUT_MS,
-    );
+    // Robust timeout parsing — NaN, negative, or missing all snap to the
+    // sane default. Caller-supplied values are clamped to [1s, 5min].
+    const rawTimeout = Number(request.timeoutMs);
+    const safeTimeout = Number.isFinite(rawTimeout) && rawTimeout > 0
+      ? rawTimeout
+      : DEFAULT_TIMEOUT_MS;
+    const timeoutMs = Math.max(1_000, Math.min(safeTimeout, MAX_TIMEOUT_MS));
 
     log(`[exec] running ${entry.command} ${args.join(' ')} in ${cwd}`);
 

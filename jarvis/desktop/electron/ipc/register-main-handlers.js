@@ -427,8 +427,11 @@ function createMainIpcHandlers(deps) {
     },
 
     'jarvis-ai-route': async (_event, payload) => {
-      const auth = await permissions.authorize('jarvis-ai-request');
-      if (!auth.allowed) return denied('jarvis-ai-request', auth.reason);
+      // Use the route-specific permission name (was incorrectly reusing
+      // 'jarvis-ai-request' which would silently grant access even if the
+      // operator wanted to scope route differently from request).
+      const auth = await permissions.authorize('jarvis-ai-route');
+      if (!auth.allowed) return denied('jarvis-ai-route', auth.reason);
       const body = validatePlainObject(payload) || {};
       const message = validateString(body.message, { allowEmpty: false, maxLen: 30000 });
       if (!message) {
