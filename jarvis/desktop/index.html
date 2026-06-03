@@ -124,6 +124,86 @@
       box-shadow: 0 0 8px #ef4444;
       animation: pulse-dot 1.4s infinite ease-in-out;
     }
+    /* Idea #5 — Memory-replay messages are dimmed so they read as context
+       rather than fresh activity. */
+    .message.memory-replay {
+      opacity: 0.6;
+      border-left: 2px solid rgba(125, 211, 252, 0.3);
+    }
+    .message.memory-replay small::before {
+      content: '↩ ';
+      color: rgba(125, 211, 252, 0.7);
+    }
+
+    /* Idea #1 — Live mic waveform. Twelve thin bars under the orb that scale
+       from the rms_level event stream. Reinforces "I'm hearing you" — the
+       #1 trust signal for voice assistants. */
+    .voice-waveform {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+      align-items: flex-end;
+      height: 28px;
+      margin: 6px auto 4px;
+      opacity: 0.4;
+      transition: opacity 0.3s ease;
+    }
+    body.voice-priority .voice-waveform,
+    body.mic-active .voice-waveform { opacity: 1; }
+    .voice-waveform span {
+      display: block;
+      width: 3px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(125, 211, 252, 0.55);
+      box-shadow: 0 0 4px rgba(125, 211, 252, 0.35);
+      transition: height 80ms ease-out, background-color 200ms ease;
+      transform-origin: bottom center;
+    }
+    body.mic-active .voice-waveform span {
+      background: rgba(125, 211, 252, 0.9);
+      box-shadow: 0 0 6px rgba(125, 211, 252, 0.6);
+    }
+
+    /* Idea #2 — Quick-action chips below the orb. Compact, glassmorphic,
+       hover scales them subtly so they feel like physical buttons. */
+    .orb-quick-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin: 8px auto 14px;
+      flex-wrap: wrap;
+    }
+    .orb-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(125, 211, 252, 0.22);
+      background: rgba(8, 12, 20, 0.62);
+      color: rgba(220, 232, 255, 0.85);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+    }
+    .orb-action:hover {
+      background: rgba(125, 211, 252, 0.14);
+      border-color: rgba(125, 211, 252, 0.45);
+      transform: translateY(-1px);
+    }
+    .orb-action:active { transform: translateY(0) scale(0.97); }
+    .orb-action.danger {
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fecaca;
+    }
+    .orb-action.danger:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.65);
+    }
+
     /* Wake-word listening chip — replaces the legacy 🎙 Talk button.
        Always-on listening means the user just speaks; the chip surfaces
        what the mic is doing so they know the agent is "alive". */
@@ -1874,6 +1954,19 @@
                   <div class="orb-core"></div>
                 </div>
                 <div id="voice-orb-status" class="voice-orb-status" aria-live="polite"></div>
+
+                <!-- Idea #1: real-time mic waveform — 12 bars driven by rms_level -->
+                <div id="voice-waveform" class="voice-waveform" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+
+                <!-- Idea #2: contextual quick-action chips under the orb -->
+                <div id="orb-quick-actions" class="orb-quick-actions" role="toolbar" aria-label="Quick actions">
+                  <button type="button" class="orb-action" id="action-new-conv" title="Start a fresh conversation">↻ New</button>
+                  <button type="button" class="orb-action" id="action-copy-last" title="Copy last response">📋 Copy</button>
+                  <button type="button" class="orb-action" id="action-capture-screen" title="Capture screen for vision model (Ctrl+Shift+V)">📸 Vision</button>
+                </div>
 
                 <div id="model-activity-display" class="model-activity-display" style="display:none;">
                   <div class="model-indicator active" id="vision-indicator">

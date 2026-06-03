@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
+const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, screen, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
 const {
   getEngineMode,
   getJarvisModelConfig,
@@ -1651,6 +1651,116 @@ function registerWindowControlHandlers() {
       return { ok: false, error: String(err?.message || err) };
     }
   });
+
+  // ─── Idea #5 — Conversation memory (cross-session persistence) ───────────
+  // Thin disk-backed log of {timestamp, role, text} entries persisted to
+  // userData. Complements the sidecar's RAG MemoryStore — this is the
+  // recall layer for "what did we just talk about?" rather than vector
+  // search. Capped at 200 entries to keep the JSON small.
+  const memoryLogPath = path.join(app.getPath('userData'), 'jarvis-conversation.json');
+  const MEMORY_LOG_MAX = 200;
+  function readMemoryLog() {
+    try {
+      if (!fs.existsSync(memoryLogPath)) return [];
+      const raw = JSON.parse(fs.readFileSync(memoryLogPath, 'utf8'));
+      return Array.isArray(raw) ? raw : [];
+    } catch { return []; }
+  }
+  function writeMemoryLog(list) {
+    try {
+      fs.writeFileSync(
+        memoryLogPath,
+        JSON.stringify(list.slice(-MEMORY_LOG_MAX)),
+        'utf8',
+      );
+    } catch (err) {
+      log('[memory] write failed:', err?.message || err);
+    }
+  }
+  ipcMain.handle('memory:save', (_event, payload) => {
+    try {
+      const role = String(payload?.role || 'user').slice(0, 16);
+      const text = String(payload?.text || '').trim();
+      if (!text) return { ok: false, error: 'empty-text' };
+      const entry = { ts: Date.now(), role, text: text.slice(0, 4_000) };
+      const list = readMemoryLog();
+      list.push(entry);
+      writeMemoryLog(list);
+      return { ok: true, count: list.length };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('memory:list-recent', (_event, payload) => {
+    try {
+      const limit = Math.max(1, Math.min(50, Number(payload?.limit) || 20));
+      const list = readMemoryLog();
+      return { ok: true, entries: list.slice(-limit) };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err), entries: [] };
+    }
+  });
+
+  // ─── Idea #3 — Screen capture for the vision dispatch slot ───────────────
+  // Grabs the primary display via desktopCapturer (already supported in
+  // Electron without extra entitlements on Win/Linux), returns a data URL
+  // the renderer can hand to the vision model.
+  ipcMain.handle('vision:capture-screen', async () => {
+    try {
+      const display = screen.getPrimaryDisplay();
+      const { width, height } = display.workAreaSize;
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: {
+          width: Math.min(1920, width),
+          height: Math.min(1080, height),
+        },
+      });
+      const source = sources?.[0];
+      if (!source || source.thumbnail.isEmpty()) {
+        return { ok: false, error: 'no-display-source' };
+      }
+      const thumb = source.thumbnail;
+      const size = thumb.getSize();
+      return {
+        ok: true,
+        dataUrl: thumb.toDataURL(),
+        width: size.width,
+        height: size.height,
+        sourceName: source.name,
+      };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
+  // ─── Idea #4 — Global hotkey to summon the orb window ─────────────────────
+  // CommandOrControl+Alt+J jumps the user back to Jarvis from anywhere.
+  // If the window is hidden / minimized / behind other apps, it's restored
+  // and focused; if it's already visible and focused, it's hidden so the
+  // hotkey acts as a toggle.
+  try {
+    const summonAccelerator = process.platform === 'darwin' ? 'CommandOrControl+Option+J' : 'Control+Alt+J';
+    const summonOk = globalShortcut.register(summonAccelerator, () => {
+      try {
+        const target = win;
+        if (!target || target.isDestroyed()) return;
+        const focused = BrowserWindow.getFocusedWindow();
+        if (target.isVisible() && focused === target) {
+          target.hide();
+        } else {
+          if (target.isMinimized()) target.restore();
+          target.show();
+          target.focus();
+        }
+      } catch (err) {
+        log('[hotkey] summon failed:', err?.message || err);
+      }
+    });
+    if (summonOk) log(`[hotkey] Jarvis summon bound to ${summonAccelerator}`);
+  } catch (err) {
+    log('[hotkey] global registration failed:', err?.message || err);
+  }
 
   // Hardware tier auto-detect for the setup wizard.
   // Returns { totalRamGB, cpuCount, gpus[], suggestedProfile } where profile is

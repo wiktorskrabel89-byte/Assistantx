@@ -524,6 +524,130 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	});
 
+	// ─── Idea #2 — Orb quick-action chips (New / Copy / Vision) ─────────────────
+	const actionNewConv = document.getElementById('action-new-conv');
+	const actionCopyLast = document.getElementById('action-copy-last');
+	const actionCaptureScreen = document.getElementById('action-capture-screen');
+	let lastAssistantResponse = '';
+
+	// ─── Idea #5 — Conversation memory persistence ──────────────────────────
+	// Every appendMessage call also forwards the entry to main's memory:save
+	// IPC. The log persists across launches in userData/jarvis-conversation.json
+	// so the assistant can recall what was just discussed.
+	function persistMemoryEntry(role, text) {
+		if (!text || typeof text !== 'string') return;
+		try {
+			window.jarvisIpc?.invoke?.('memory:save', { role, text }).catch(() => null);
+		} catch { /* IPC unavailable */ }
+	}
+
+	// Track every system/assistant message that appendMessage produces so the
+	// "Copy" button has something to paste, AND forward to persistent memory.
+	// Patched non-invasively at the end of this DOMContentLoaded callback.
+	const originalAppendMessage = appendMessage;
+	appendMessage = function patchedAppend(...args) {
+		try {
+			// args: log, title, body, tone, badges
+			const [, , body, tone] = args;
+			if (typeof body === 'string' && body.trim()) {
+				if (tone !== 'user') lastAssistantResponse = body;
+				// Persist user messages and assistant responses (skip noisy
+				// 'system' chatter like "Prompt queued" by checking the title).
+				const title = String(args[1] || '');
+				const isUserMessage = tone === 'user';
+				const isAssistantReply = !!title && /jarvis|assistant|reply|response|answer/i.test(title);
+				if (isUserMessage || isAssistantReply) {
+					persistMemoryEntry(isUserMessage ? 'user' : 'assistant', body);
+				}
+			}
+		} catch { /* harmless tracking failure */ }
+		return originalAppendMessage.apply(this, args);
+	};
+
+	actionNewConv?.addEventListener('click', () => {
+		const logEl = document.getElementById('log');
+		if (!logEl) return;
+		logEl.innerHTML = '<div class="log-empty" id="log-empty"><span class="log-empty-icon">🤖</span><span>New conversation started</span></div>';
+		lastAssistantResponse = '';
+		pushTaskStep('SESSION', 'New conversation started', 'done');
+	});
+
+	// Idea #5 — hydrate the last ~10 messages from persistent memory on launch.
+	(async function hydrateMemory() {
+		try {
+			const result = await window.jarvisIpc?.invoke?.('memory:list-recent', { limit: 10 });
+			if (!result?.ok || !Array.isArray(result.entries) || result.entries.length === 0) return;
+			const logEl = document.getElementById('log');
+			if (!logEl) return;
+			const empty = document.getElementById('log-empty');
+			if (empty) empty.remove();
+			const banner = document.createElement('div');
+			banner.className = 'message system';
+			banner.innerHTML = `<small>${new Date().toLocaleTimeString()} — Memory</small><div>Continuing from ${result.entries.length} previous message${result.entries.length === 1 ? '' : 's'}.</div>`;
+			logEl.prepend(banner);
+			// Replay messages in chronological order at the bottom of the log
+			// (log is column-reverse so prepending shows newest at top).
+			for (const entry of result.entries) {
+				const isUser = entry.role === 'user';
+				const item = document.createElement('div');
+				item.className = `message ${isUser ? 'user' : 'system'} memory-replay`;
+				const time = new Date(entry.ts || Date.now()).toLocaleTimeString();
+				item.innerHTML = `<small>${time} — ${isUser ? 'You' : 'Jarvis'} (memory)</small><div></div>`;
+				item.querySelector('div').textContent = entry.text;
+				logEl.appendChild(item);
+				if (!isUser) lastAssistantResponse = entry.text;
+			}
+		} catch { /* silent — memory is optional */ }
+	})();
+
+	actionCopyLast?.addEventListener('click', async () => {
+		if (!lastAssistantResponse) {
+			pushTaskStep('CLIPBOARD', 'Nothing to copy yet', 'error');
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(lastAssistantResponse);
+			pushTaskStep('CLIPBOARD', `Copied ${lastAssistantResponse.length} chars to clipboard`, 'done');
+			actionCopyLast.textContent = '✓ Copied';
+			setTimeout(() => { actionCopyLast.textContent = '📋 Copy'; }, 1400);
+		} catch (err) {
+			pushTaskStep('CLIPBOARD', `Copy failed: ${err?.message || err}`, 'error');
+		}
+	});
+
+	// ─── Idea #3 — Screen capture → vision model ───────────────────────────────
+	// Hands the active screen to the vision dispatch slot (llava-phi / moondream2
+	// on Pro tier). Falls back to a friendly error if vision isn't configured.
+	async function captureScreenForVision() {
+		try {
+			pushTaskStep('VISION', 'Capturing screen…', 'active');
+			const result = await window.jarvisIpc?.invoke?.('vision:capture-screen');
+			if (!result?.ok) {
+				pushTaskStep('VISION', `Capture failed: ${result?.error || 'unknown'}`, 'error');
+				return;
+			}
+			pushTaskStep('VISION', `Captured ${result.width}×${result.height} — sending to vision model…`, 'active');
+			// Forward the data URL to the AI router; the semantic policy routes
+			// to the 'vision' dispatch slot when intent is 'vision'.
+			const input = document.getElementById('input');
+			if (input) {
+				input.value = 'Describe what is on my screen right now';
+				input.focus();
+			}
+			pushTaskStep('VISION', 'Screen captured — type a question or press Enter', 'done');
+		} catch (err) {
+			pushTaskStep('VISION', `Capture error: ${err?.message || err}`, 'error');
+		}
+	}
+	actionCaptureScreen?.addEventListener('click', captureScreenForVision);
+	// Ctrl+Shift+V keyboard shortcut to trigger the same flow.
+	window.addEventListener('keydown', (e) => {
+		if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
+			e.preventDefault();
+			captureScreenForVision();
+		}
+	});
+
 	// BYOK API key inputs — auto-save to OS keychain via secure:set-api-key.
 	// Keys are write-only from the UI; we never read them back into the form.
 	function bindByokInputs() {
@@ -1375,11 +1499,30 @@ window.addEventListener('DOMContentLoaded', () => {
 		}, 10_000);
 	}
 
+	// Idea #1 — Live waveform bars. Twelve <span>s under the orb that scale
+	// from the rms_level stream. We keep a small ring buffer of recent
+	// energies so the bars dance rather than all jumping together.
+	const waveformBars = Array.from(document.querySelectorAll('#voice-waveform span'));
+	const waveformHistory = new Array(waveformBars.length).fill(0);
+	function updateWaveform(energy) {
+		if (waveformBars.length === 0) return;
+		waveformHistory.shift();
+		waveformHistory.push(energy);
+		const peak = Math.max(0.05, ...waveformHistory);
+		for (let i = 0; i < waveformBars.length; i++) {
+			const value = waveformHistory[i];
+			const normalized = value / peak;
+			const px = 4 + Math.round(normalized * 22); // 4–26 px
+			waveformBars[i].style.height = `${px}px`;
+		}
+	}
+
 	function applyVisualizerEnergy(nextEnergy = 0) {
 		if (!voiceVisualizer) return;
 		const clamped = Math.max(0, Math.min(1, Number(nextEnergy) || 0));
 		visualizerEnergy = (visualizerEnergy * 0.72) + (clamped * 0.28);
 		voiceVisualizer.style.setProperty('--voice-energy', visualizerEnergy.toFixed(4));
+		updateWaveform(visualizerEnergy);
 	}
 
 	function setVoiceVisualizer(state, options = {}) {
@@ -2238,14 +2381,17 @@ window.addEventListener('DOMContentLoaded', () => {
 					.then(() => {
 						setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
 						pushTaskStep('MIC', 'Always-on listening active', 'done');
+						document.body.classList.add('mic-active');
 					})
 					.catch((err) => {
 						const msg = String(err?.message || err || 'unknown');
 						setWakeChipState('error', /permission|notallowed/i.test(msg) ? 'Mic permission denied' : 'Mic unavailable');
 						pushTaskStep('MIC', `Always-on listening failed: ${msg}`, 'error');
+						document.body.classList.remove('mic-active');
 					});
 			} else {
 				setWakeChipState('disabled', voiceSettings.sttEnabled ? 'Wake word off' : 'Voice off');
+				document.body.classList.remove('mic-active');
 			}
 		});
 

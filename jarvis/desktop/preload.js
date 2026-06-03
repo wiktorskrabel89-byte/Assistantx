@@ -108,6 +108,9 @@ const ALLOWED_INVOKE = new Set([
   'exec:run',
   'exec:list-allowed',
   'health:snapshot',
+  'vision:capture-screen',
+  'memory:list-recent',
+  'memory:save',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
