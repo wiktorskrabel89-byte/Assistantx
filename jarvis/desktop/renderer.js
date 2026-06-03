@@ -2656,19 +2656,37 @@ window.addEventListener('DOMContentLoaded', () => {
 			hideProviderWarning();
 		});
 		// V2.0 Health Observer pulses — surface subsystem state into the task
-		// list + repaint the header connection dot per worst observed status.
+		// list, repaint the header connection dot, AND label the health chip
+		// so the user has a glanceable summary of what's degraded.
 		const healthState = { sidecar: 'unknown', ollama: 'unknown' };
 		ipcRenderer.on('health:pulse', (payload) => {
 			if (!payload?.subsystem) return;
 			healthState[payload.subsystem] = payload.status;
 			const dot = document.getElementById('header-connection-dot');
+			const chip = document.getElementById('health-chip');
+			const label = document.getElementById('health-chip-label');
+			const worst = Object.values(healthState);
+			const dotCls = worst.includes('unavailable') ? 'connection-bad'
+				: worst.includes('degraded') ? 'connection-warn'
+				: 'connection-ok';
+			const chipCls = worst.includes('unavailable') ? 'bad'
+				: worst.includes('degraded') ? 'warn'
+				: '';
 			if (dot) {
-				const worst = Object.values(healthState);
-				const cls = worst.includes('unavailable') ? 'connection-bad'
-					: worst.includes('degraded') ? 'connection-warn'
-					: 'connection-ok';
 				dot.classList.remove('connection-bad', 'connection-warn', 'connection-ok');
-				dot.classList.add(cls);
+				dot.classList.add(dotCls);
+			}
+			if (chip) {
+				chip.classList.remove('warn', 'bad');
+				if (chipCls) chip.classList.add(chipCls);
+			}
+			if (label) {
+				const degraded = Object.entries(healthState)
+					.filter(([, status]) => status === 'degraded' || status === 'unavailable')
+					.map(([sub]) => sub);
+				label.textContent = degraded.length === 0
+					? 'All systems nominal'
+					: `${degraded.join(' + ')} ${degraded.length === 1 ? 'degraded' : 'degraded'}`;
 			}
 		});
 		ipcRenderer.on('health:heal-attempted', (payload) => {
