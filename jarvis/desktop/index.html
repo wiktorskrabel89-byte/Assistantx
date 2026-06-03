@@ -1175,6 +1175,140 @@
       }
     }
 
+    /* Devin-style real-time task list — slide-out from right edge */
+    #task-list-panel {
+      position: fixed;
+      right: 14px;
+      top: 64px;
+      bottom: 14px;
+      width: 320px;
+      z-index: 85;
+      display: flex;
+      flex-direction: column;
+      background: rgba(8, 12, 20, 0.82);
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      border-radius: 16px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+      transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+    }
+    body.task-list-collapsed #task-list-panel {
+      transform: translateX(calc(100% + 24px));
+      opacity: 0;
+      pointer-events: none;
+    }
+    #task-list-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(125, 211, 252, 0.12);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(165, 200, 240, 0.85);
+    }
+    #task-list-header .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent, #7dd3fc);
+      box-shadow: 0 0 8px rgba(125,211,252,0.7);
+      animation: pulse-dot 1.6s infinite ease-in-out;
+    }
+    #task-list-clear {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      color: rgba(200, 216, 240, 0.7);
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      letter-spacing: 0.08em;
+    }
+    #task-list-clear:hover { color: white; border-color: rgba(125, 211, 252, 0.5); }
+    #task-list-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .task-step {
+      position: relative;
+      padding: 9px 11px 9px 22px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 12px;
+      color: rgba(220, 232, 255, 0.85);
+      line-height: 1.45;
+      animation: msg-in 0.25s ease-out;
+    }
+    .task-step::before {
+      content: '';
+      position: absolute;
+      left: 9px;
+      top: 13px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(125, 211, 252, 0.6);
+    }
+    .task-step.active::before {
+      background: var(--accent, #7dd3fc);
+      box-shadow: 0 0 8px rgba(125,211,252,0.7);
+      animation: pulse-dot 1.4s infinite ease-in-out;
+    }
+    .task-step.done::before { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+    .task-step.error::before { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+    .task-step .step-meta {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 10px;
+      color: rgba(160, 180, 210, 0.55);
+      margin-bottom: 2px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .task-step .step-body { color: rgba(230, 240, 255, 0.92); }
+    #task-list-empty {
+      text-align: center;
+      color: rgba(160, 180, 210, 0.4);
+      font-size: 11px;
+      padding: 30px 12px;
+      font-style: italic;
+    }
+
+    /* Toggle button for task list — pinned top-right */
+    #task-list-toggle {
+      position: fixed;
+      right: 14px;
+      top: 14px;
+      z-index: 95;
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      border: 1px solid rgba(125, 211, 252, 0.22);
+      background: rgba(8, 12, 20, 0.75);
+      backdrop-filter: blur(12px);
+      color: rgba(220, 232, 255, 0.85);
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    }
+    #task-list-toggle:hover {
+      background: rgba(125, 211, 252, 0.14);
+      border-color: rgba(125, 211, 252, 0.42);
+      transform: scale(1.05);
+    }
+    #task-list-toggle:active { transform: scale(0.93); }
+
     /* HUD window controls — replaces native traffic lights with neon buttons */
     .window-controls {
       display: inline-flex;
@@ -1262,6 +1396,20 @@
 <body>
   <!-- Tab rail toggle — always visible, click to show/hide the left tab nav -->
   <button id="tab-rail-toggle" type="button" aria-label="Toggle tab rail" title="Toggle tab rail (Ctrl+B)">☰</button>
+  <!-- Task list toggle — opens the right-side Devin-style activity panel -->
+  <button id="task-list-toggle" type="button" aria-label="Toggle task list" title="Toggle task list (Ctrl+J)">⚡</button>
+
+  <!-- Devin-style real-time task list — streams the agent's inner monologue -->
+  <aside id="task-list-panel" aria-label="Agent task list">
+    <div id="task-list-header">
+      <span class="pulse-dot"></span>
+      Agent Activity
+      <button id="task-list-clear" type="button" title="Clear log">Clear</button>
+    </div>
+    <div id="task-list-body">
+      <div id="task-list-empty">Awaiting first command…</div>
+    </div>
+  </aside>
 
   <!-- App header -->
   <header class="app-header">

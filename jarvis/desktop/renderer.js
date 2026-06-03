@@ -201,6 +201,48 @@ function resolveSpeechVoice(voices, voiceId, language) {
 		return item;
 	}
 
+	// Devin-style task list — streams the agent's "inner monologue" as discrete
+	// steps. Each pushTaskStep() call appends a row; status can be 'active',
+	// 'done', or 'error'. The panel collapses via #task-list-toggle (Ctrl+J).
+	const MAX_TASK_STEPS = 80;
+	function pushTaskStep(category, message, status = 'active') {
+		try {
+			const body = document.getElementById('task-list-body');
+			if (!body) return null;
+			const empty = document.getElementById('task-list-empty');
+			if (empty) empty.remove();
+			const step = document.createElement('div');
+			step.className = `task-step ${status}`;
+			const meta = document.createElement('div');
+			meta.className = 'step-meta';
+			const time = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+			meta.textContent = `${time} · ${category}`;
+			const bodyText = document.createElement('div');
+			bodyText.className = 'step-body';
+			bodyText.textContent = String(message ?? '');
+			step.append(meta, bodyText);
+			body.appendChild(step);
+			body.scrollTop = body.scrollHeight;
+			// Trim oldest entries to bound memory.
+			while (body.children.length > MAX_TASK_STEPS) body.removeChild(body.firstChild);
+			return step;
+		} catch (err) {
+			console.warn('[task-list] pushTaskStep failed:', err?.message || err);
+			return null;
+		}
+	}
+	function updateTaskStep(stepEl, status, message) {
+		if (!stepEl) return;
+		stepEl.classList.remove('active', 'done', 'error');
+		stepEl.classList.add(status);
+		if (typeof message === 'string') {
+			const bodyEl = stepEl.querySelector('.step-body');
+			if (bodyEl) bodyEl.textContent = message;
+		}
+	}
+	// Expose for other modules to call (e.g. task-classifier.js).
+	window.jarvisTaskList = { push: pushTaskStep, update: updateTaskStep };
+
 function setStatusDot(status) {
 	const dot = document.getElementById('status-dot');
 	const headerDot = document.getElementById('header-connection-dot');
@@ -427,6 +469,39 @@ window.addEventListener('DOMContentLoaded', () => {
 		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b' && !e.shiftKey && !e.altKey) {
 			e.preventDefault();
 			tabRailToggle?.click();
+		}
+	});
+
+	// Task list panel — Devin-style real-time agent activity.
+	const taskListToggle = document.getElementById('task-list-toggle');
+	const taskListClear = document.getElementById('task-list-clear');
+	const TASK_LIST_PREF_KEY = 'jarvis.taskList.collapsed';
+	function applyTaskListState(collapsed) {
+		document.body.classList.toggle('task-list-collapsed', !!collapsed);
+		if (taskListToggle) {
+			taskListToggle.setAttribute('aria-pressed', collapsed ? 'false' : 'true');
+			taskListToggle.title = collapsed ? 'Show task list (Ctrl+J)' : 'Hide task list (Ctrl+J)';
+		}
+	}
+	try {
+		// Default to COLLAPSED so it doesn't surprise first-time users.
+		applyTaskListState(localStorage.getItem(TASK_LIST_PREF_KEY) !== '0');
+	} catch { applyTaskListState(true); }
+	taskListToggle?.addEventListener('click', () => {
+		const nowCollapsed = !document.body.classList.contains('task-list-collapsed');
+		applyTaskListState(nowCollapsed);
+		try { localStorage.setItem(TASK_LIST_PREF_KEY, nowCollapsed ? '1' : '0'); } catch { /* storage unavailable */ }
+	});
+	taskListClear?.addEventListener('click', () => {
+		const body = document.getElementById('task-list-body');
+		if (!body) return;
+		body.innerHTML = '<div id="task-list-empty">Awaiting first command…</div>';
+	});
+	// Ctrl+J shortcut to toggle the task list (J for "Jarvis activity").
+	window.addEventListener('keydown', (e) => {
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j' && !e.shiftKey && !e.altKey) {
+			e.preventDefault();
+			taskListToggle?.click();
 		}
 	});
 
@@ -1250,10 +1325,13 @@ window.addEventListener('DOMContentLoaded', () => {
 		voiceVisualizer.classList.remove('listening', 'speaking', 'thinking');
 		const statusEl = document.getElementById('voice-orb-status');
 		const setStatus = (text) => { if (statusEl) statusEl.textContent = text; };
+		// Mirror orb state into the task list so the agent's "inner monologue"
+		// stays in sync with what users hear/see.
 		if (state === 'listening') {
 			voiceVisualizer.classList.add('listening');
 			setAgentState(AGENT_STATE.LISTENING);
 			setStatus('Listening…');
+			pushTaskStep('VOICE', 'Listening to microphone…', 'active');
 			touchAgentActivity();
 			return;
 		}
@@ -1261,6 +1339,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			voiceVisualizer.classList.add('speaking');
 			setAgentState(AGENT_STATE.SPEAKING);
 			setStatus('Speaking…');
+			pushTaskStep('TTS', 'Synthesizing audio…', 'active');
 			touchAgentActivity();
 			return;
 		}
@@ -1268,6 +1347,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			voiceVisualizer.classList.add('thinking');
 			setAgentState(AGENT_STATE.THINKING);
 			setStatus('Thinking…');
+			pushTaskStep('REASON', 'Reasoning over context…', 'active');
 			touchAgentActivity();
 			return;
 		}
@@ -1767,6 +1847,9 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
 		appendMessage(log, 'Prompt queued', text, 'system');
+		// Surface in the Devin-style task list.
+		pushTaskStep('PROMPT', text.length > 100 ? text.slice(0, 100) + '…' : text, 'done');
+		pushTaskStep('ROUTER', 'Classifying intent and selecting model…', 'active');
 		input.value = '';
 	}
 
