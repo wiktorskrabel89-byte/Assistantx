@@ -44,6 +44,16 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      -webkit-app-region: drag; /* HUD titlebar — drag the whole header to move window */
+      padding: 6px 12px 6px 60px; /* leave room for fixed tab-rail toggle */
+    }
+    .app-header button,
+    .app-header a,
+    .app-header input,
+    .app-header select,
+    .app-header .header-status,
+    .app-header .window-controls {
+      -webkit-app-region: no-drag; /* interactive elements stay clickable */
     }
 
     .logo {
@@ -1165,6 +1175,38 @@
       }
     }
 
+    /* HUD window controls — replaces native traffic lights with neon buttons */
+    .window-controls {
+      display: inline-flex;
+      gap: 6px;
+      margin-left: auto;
+      align-items: center;
+    }
+    .window-controls button {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      background: rgba(8, 12, 20, 0.6);
+      color: rgba(220, 232, 255, 0.85);
+      font-size: 13px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+    }
+    .window-controls button:hover {
+      background: rgba(125, 211, 252, 0.14);
+      border-color: rgba(125, 211, 252, 0.42);
+    }
+    .window-controls button:active { transform: scale(0.93); }
+    .window-controls button.close-btn:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.55);
+      color: #fecaca;
+    }
+
     /* Scale the existing orb up to be the visual focal point. */
     #voice-visualizer.voice-visualizer {
       width: 220px;
@@ -1231,6 +1273,11 @@
       <span class="model-chip" id="active-model-badge">AI · Ready</span>
       <span class="connection-indicator" id="header-connection-dot"></span>
       <span class="app-subtitle" id="account-badge" style="margin-left:0;"></span>
+    </div>
+    <div class="window-controls" role="toolbar" aria-label="Window controls">
+      <button id="win-minimize" type="button" aria-label="Minimize" title="Minimize">—</button>
+      <button id="win-maximize" type="button" aria-label="Maximize / restore" title="Maximize">▢</button>
+      <button id="win-close" type="button" class="close-btn" aria-label="Close" title="Close">✕</button>
     </div>
   </header>
 

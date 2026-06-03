@@ -430,6 +430,19 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	});
 
+	// HUD window controls — minimize / maximize / close on the borderless frame.
+	const winMinimize = document.getElementById('win-minimize');
+	const winMaximize = document.getElementById('win-maximize');
+	const winClose = document.getElementById('win-close');
+	const invokeWindow = (channel) => {
+		try {
+			ipcRenderer?.invoke?.(channel).catch(() => null);
+		} catch { /* ipc unavailable in non-electron context */ }
+	};
+	winMinimize?.addEventListener('click', () => invokeWindow('window:minimize'));
+	winMaximize?.addEventListener('click', () => invokeWindow('window:toggle-maximize'));
+	winClose?.addEventListener('click', () => invokeWindow('window:close'));
+
 	function switchViewport(mode) {
 		viewportWelcome?.classList.toggle('active', mode === 'welcome');
 		viewportMap?.classList.toggle('active', mode === 'map');

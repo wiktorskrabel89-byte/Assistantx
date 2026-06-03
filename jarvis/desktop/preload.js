@@ -101,6 +101,10 @@ const ALLOWED_INVOKE = new Set([
   'index:get-jobs',
   'index:get-job',
   'index:cancel-job',
+  'window:minimize',
+  'window:toggle-maximize',
+  'window:close',
+  'hardware:probe',
 ]);
 
 const ALLOWED_RECEIVE = new Set([

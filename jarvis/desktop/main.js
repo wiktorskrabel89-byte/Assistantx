@@ -18,6 +18,7 @@ const {
   signOutAccountSession,
 } = require('./accounts');
 const { execFile, spawn } = require('child_process');
+const os = require('os');
 const launcherService = require('./launcher/launch-service');
 const launcherDb = require('./launcher/db');
 const { createStartupDiagnostics } = require('./services/startup-diagnostics');
@@ -120,6 +121,13 @@ let sidecarStdoutBuffer = '';
 let sidecarReady = false;
 let sidecarDead = false;
 let sidecarFatalError = null;
+// Self-healing IPC observer state — automatic retry with exponential backoff
+// after unexpected sidecar exits.
+let sidecarHealRetryCount = 0;
+let sidecarHealTimer = null;
+const SIDECAR_HEAL_MAX_RETRIES = 5;
+const SIDECAR_HEAL_BASE_DELAY_MS = 1_500;
+let sidecarUserInitiatedStop = false;
 let localVoiceAssetsState = {
   started: false,
   complete: false,
@@ -383,6 +391,12 @@ function markSidecarReady(details = {}) {
   if (sidecarReady || !sidecarProcess) return;
   sidecarReady = true;
   sidecarStatus = 'running';
+  // Self-healing observer succeeded — clear the retry counter so future
+  // crashes get a fresh exponential-backoff budget.
+  if (sidecarHealRetryCount > 0) {
+    log(`[sidecar:heal] handshake succeeded after ${sidecarHealRetryCount} retries; resetting counter.`);
+    sidecarHealRetryCount = 0;
+  }
   startupDiagnostics.setComponent('sidecar', 'healthy', {
     detail: 'AI runtime stdio bridge is ready.',
     reason: 'stdio_ready',
@@ -569,6 +583,11 @@ function startSidecar() {
     telemetryBus.publish('startup.degraded');
     emitDesktopHealth();
     sendToRenderer('sidecar-status', { status: sidecarStatus });
+    // Self-healing: schedule an automatic restart if this wasn't user-initiated.
+    if (!sidecarUserInitiatedStop) {
+      scheduleSidecarHeal(`exit-code-${code ?? 'unknown'}`);
+    }
+    sidecarUserInitiatedStop = false;
   });
 
   sidecarProcess.on('error', (err) => {
@@ -1513,6 +1532,98 @@ function createWindow() {
   });
 }
 
+// HUD window controls — renderer-driven min/max/close so the borderless
+// frame still gives users full window agency. Registered once at module load.
+let windowControlsRegistered = false;
+function registerWindowControlHandlers() {
+  if (windowControlsRegistered) return;
+  windowControlsRegistered = true;
+  ipcMain.handle('window:minimize', () => {
+    try {
+      const w = BrowserWindow.getFocusedWindow() || win;
+      if (w && !w.isDestroyed()) w.minimize();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('window:toggle-maximize', () => {
+    try {
+      const w = BrowserWindow.getFocusedWindow() || win;
+      if (!w || w.isDestroyed()) return { ok: false, error: 'no-window' };
+      if (w.isMaximized()) w.unmaximize();
+      else w.maximize();
+      return { ok: true, maximized: w.isMaximized() };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('window:close', () => {
+    try {
+      const w = BrowserWindow.getFocusedWindow() || win;
+      if (w && !w.isDestroyed()) w.close();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
+  // Hardware tier auto-detect for the setup wizard.
+  // Returns { totalRamGB, cpuCount, gpus[], suggestedProfile } where profile is
+  // one of: 'eco' (Potato) | 'standard' (Pro) | 'pro' (Enthusiast).
+  ipcMain.handle('hardware:probe', async () => {
+    try {
+      const totalRamGB = +(os.totalmem() / (1024 ** 3)).toFixed(1);
+      const cpuCount = os.cpus().length;
+      let gpus = [];
+      try {
+        const info = await app.getGPUInfo('complete');
+        const devices = Array.isArray(info?.gpuDevice) ? info.gpuDevice : [];
+        gpus = devices
+          .filter((d) => !d.softwareRendering)
+          .map((d) => ({
+            vendorId: d.vendorId,
+            deviceId: d.deviceId,
+            active: Boolean(d.active),
+          }));
+      } catch (err) {
+        log('[hardware] getGPUInfo failed:', err?.message || err);
+      }
+
+      // Heuristic: discrete GPU is detected by non-Intel/non-software renderer.
+      // Vendor IDs: 0x10de=NVIDIA, 0x1002=AMD. We can't read VRAM directly from
+      // Electron, so we trust RAM + GPU count as a rough discriminator.
+      const hasDiscreteGpu = gpus.some((g) => {
+        const v = Number(g.vendorId);
+        return v === 0x10de || v === 0x1002;
+      });
+
+      let suggestedProfile = 'eco';
+      if (totalRamGB >= 32 && hasDiscreteGpu && gpus.length >= 1) {
+        suggestedProfile = 'pro';
+      } else if (totalRamGB >= 16 && hasDiscreteGpu) {
+        suggestedProfile = 'standard';
+      } else if (totalRamGB >= 8 && hasDiscreteGpu) {
+        suggestedProfile = 'standard';
+      }
+
+      return {
+        ok: true,
+        totalRamGB,
+        cpuCount,
+        gpus,
+        hasDiscreteGpu,
+        suggestedProfile,
+        platform: process.platform,
+        arch: process.arch,
+      };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+}
+registerWindowControlHandlers();
+
 function createLauncherOverlayWindow() {
   overlayWin = new BrowserWindow({
     width: 640,
@@ -1641,9 +1752,46 @@ function getSidecarStatus() {
 }
 
 function restartSidecarNow() {
+  sidecarUserInitiatedStop = true;
   stopSidecar();
   telemetryBus.publish('sidecar.restart');
+  // Cancel any pending auto-heal — user explicitly requested a restart.
+  if (sidecarHealTimer) { clearTimeout(sidecarHealTimer); sidecarHealTimer = null; }
+  sidecarHealRetryCount = 0;
   setTimeout(() => startSidecar(), 500);
+}
+
+// Self-healing observer: schedules an automatic sidecar restart with
+// exponential backoff (1.5s, 3s, 6s, 12s, 24s) up to SIDECAR_HEAL_MAX_RETRIES.
+// On successful sidecar handshake, retry count resets in markSidecarReady().
+function scheduleSidecarHeal(reason = 'unknown') {
+  if (sidecarHealTimer) return; // already pending
+  if (sidecarHealRetryCount >= SIDECAR_HEAL_MAX_RETRIES) {
+    log(`[sidecar:heal] max retries reached (${SIDECAR_HEAL_MAX_RETRIES}); giving up. reason=${reason}`);
+    startupDiagnostics.pushEvent('sidecar', 'error', 'Auto-heal gave up after max retries.', {
+      retries: sidecarHealRetryCount,
+      reason,
+    });
+    return;
+  }
+  sidecarHealRetryCount += 1;
+  const delayMs = SIDECAR_HEAL_BASE_DELAY_MS * Math.pow(2, sidecarHealRetryCount - 1);
+  log(`[sidecar:heal] scheduling restart #${sidecarHealRetryCount} in ${delayMs}ms (reason=${reason})`);
+  startupDiagnostics.pushEvent('sidecar', 'info', 'Auto-heal scheduled.', {
+    attempt: sidecarHealRetryCount,
+    delayMs,
+    reason,
+  });
+  sidecarHealTimer = setTimeout(() => {
+    sidecarHealTimer = null;
+    if (sidecarProcess) return; // already running again
+    log(`[sidecar:heal] running auto-restart #${sidecarHealRetryCount}`);
+    try {
+      startSidecar();
+    } catch (err) {
+      log('[sidecar:heal] startSidecar threw:', err?.message || err);
+    }
+  }, delayMs);
 }
 
 createMainIpcHandlers({
