@@ -2251,6 +2251,30 @@ window.addEventListener('DOMContentLoaded', () => {
 			(voiceGateway || sidecar).setListeningForCommand(true);
 		});
 
+		// V2.0 — Python sidecar streams reasoning steps via 'task_step' events.
+		// We maintain a Map of stepId → DOM element so the same row can flip
+		// from active → done/error when the sidecar emits a second message
+		// with the same stepId (matches the Devin pattern of replacing rows
+		// in place rather than appending duplicates).
+		const sidecarTaskStepIndex = new Map();
+		sidecar.on('task_step', ({ category, message, status, stepId }) => {
+			const existing = stepId ? sidecarTaskStepIndex.get(stepId) : null;
+			if (existing && existing.isConnected) {
+				try { updateTaskStep(existing, status, message); }
+				catch { /* updater rejected DOM node */ }
+				if (status === 'done' || status === 'error') sidecarTaskStepIndex.delete(stepId);
+				return;
+			}
+			const el = pushTaskStep(category, message, status);
+			if (el && stepId) {
+				sidecarTaskStepIndex.set(stepId, el);
+				if (status === 'done' || status === 'error') {
+					// One-shot terminal step — drop the entry immediately.
+					setTimeout(() => sidecarTaskStepIndex.delete(stepId), 0);
+				}
+			}
+		});
+
 		sidecar.on('rms_level', ({ source, rms }) => {
 			const scaled = Math.min(1, Math.max(0, Number(rms || 0) * 5.25));
 			applyVisualizerEnergy(scaled);

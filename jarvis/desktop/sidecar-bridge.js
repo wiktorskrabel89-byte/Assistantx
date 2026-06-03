@@ -328,6 +328,16 @@ class SidecarBridge extends EventEmitter {
       case 'wake_word':
         this.emit('wake_word', rest);
         break;
+      case 'task_step':
+        // V2.0 — bridges the Python sidecar's reasoning steps into the
+        // Devin task list panel via window.jarvisTaskList in the renderer.
+        this.emit('task_step', {
+          category: String(rest.category || 'SIDECAR').slice(0, 24),
+          message: String(rest.message || ''),
+          status: ['active', 'done', 'error'].includes(rest.status) ? rest.status : 'active',
+          stepId: rest.stepId || null,
+        });
+        break;
       case 'stt_result':
         this.emit('stt_result', { text: rest.text || '', isFinal: Boolean(rest.isFinal) });
         break;
