@@ -132,7 +132,7 @@ jobs:
             ForEach-Object {
               $normalized = $_ -replace '^\s*v\d+(?:\.\d+)*(?:[-_\s:]+)?', ''
               $normalized = $normalized -replace '^\s*(release|build)\s*[:\-]?\s*', ''
-              $normalized = ($normalized -replace '\s+', ' ').Trim(" -_:;,.")
+              $normalized = ($normalized -replace '\s+', ' ').Trim([char[]]' -_:;,.')
               if ([string]::IsNullOrWhiteSpace($normalized)) { return }
               $wordCount = ($normalized -split '\s+' | Where-Object { $_ }).Count
               $looksLikeNoise = $normalized -match '^(?:wip|tmp|test|misc|update|fixup!|squash!|dwadawdwa|asdf|qwe)+$'
@@ -257,7 +257,7 @@ jobs:
           # Use the download proxy so private GitHub release assets don't redirect
           # unauthenticated users to GitHub login. The proxy at assistantx.pl
           # authenticates server-side using GITHUB_TOKEN.
-          $downloadProxyBase = "https://assistantx.pl/api/jarvis/download?tag=$releaseTag"
+          $downloadProxyBase = "https://assistantx.pl/api/jarvis/download?tag=$releaseTag$([char]38)file="
 
           $versionsManifest = [ordered]@{
             schema = "assistantx-updates-manifest"
@@ -268,13 +268,13 @@ jobs:
                 windows = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "$downloadProxyBase&file=JarvisSetup-x64.exe"
-                  url = "$downloadProxyBase&file=JarvisSetup-x64.exe"
+                  path = "${downloadProxyBase}JarvisSetup-x64.exe"
+                  url = "${downloadProxyBase}JarvisSetup-x64.exe"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$downloadProxyBase&file=JarvisSetup-x64.exe"
-                    arm64 = "$downloadProxyBase&file=JarvisSetup-arm64.exe"
+                    x64 = "${downloadProxyBase}JarvisSetup-x64.exe"
+                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.exe"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/windows"
@@ -284,13 +284,13 @@ jobs:
                 mac = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "$downloadProxyBase&file=JarvisSetup-x64.dmg"
-                  url = "$downloadProxyBase&file=JarvisSetup-x64.dmg"
+                  path = "${downloadProxyBase}JarvisSetup-x64.dmg"
+                  url = "${downloadProxyBase}JarvisSetup-x64.dmg"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$downloadProxyBase&file=JarvisSetup-x64.dmg"
-                    arm64 = "$downloadProxyBase&file=JarvisSetup-arm64.dmg"
+                    x64 = "${downloadProxyBase}JarvisSetup-x64.dmg"
+                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.dmg"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/mac"
@@ -300,12 +300,12 @@ jobs:
                 linux = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "$downloadProxyBase&file=Jarvis-x64.AppImage"
-                  url = "$downloadProxyBase&file=Jarvis-x64.AppImage"
+                  path = "${downloadProxyBase}Jarvis-x64.AppImage"
+                  url = "${downloadProxyBase}Jarvis-x64.AppImage"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$downloadProxyBase&file=Jarvis-x64.AppImage"
+                    x64 = "${downloadProxyBase}Jarvis-x64.AppImage"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/linux"
@@ -315,12 +315,12 @@ jobs:
                 android = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "$downloadProxyBase&file=Jarvis-android.apk"
-                  url = "$downloadProxyBase&file=Jarvis-android.apk"
+                  path = "${downloadProxyBase}Jarvis-android.apk"
+                  url = "${downloadProxyBase}Jarvis-android.apk"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    apk = "$downloadProxyBase&file=Jarvis-android.apk"
+                    apk = "${downloadProxyBase}Jarvis-android.apk"
                   }
                 }
               }
@@ -328,13 +328,13 @@ jobs:
                 windows = [ordered]@{
                   version = "${version}-beta.1"
                   latestVersion = "${version}-beta.1"
-                  path = "$downloadProxyBase&file=JarvisSetup-x64.exe"
-                  url = "$downloadProxyBase&file=JarvisSetup-x64.exe"
+                  path = "${downloadProxyBase}JarvisSetup-x64.exe"
+                  url = "${downloadProxyBase}JarvisSetup-x64.exe"
                   releaseNotes = "Beta channel build."
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "$downloadProxyBase&file=JarvisSetup-x64.exe"
-                    arm64 = "$downloadProxyBase&file=JarvisSetup-arm64.exe"
+                    x64 = "${downloadProxyBase}JarvisSetup-x64.exe"
+                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.exe"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/beta/windows"
