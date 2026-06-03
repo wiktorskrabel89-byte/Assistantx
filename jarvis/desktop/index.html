@@ -1102,33 +1102,66 @@
 
     /* ───────────────────────────────────────────────────────────────────────
        Iron Man J.A.R.V.I.S. layout overrides
-       - Tab rail migrates to the right edge
+       - Tab rail pinned to the far left edge, Claude-style collapsible
+       - Toggle button always visible top-left to show/hide the rail
        - Voice orb scales up as the centerpiece
        - Ambient halo + status text for the "talking" feel
        ─────────────────────────────────────────────────────────────────────── */
     .main-shell {
-      grid-template-columns: 1fr 56px;
+      grid-template-columns: 1fr;
     }
     .main-shell > .tab-switcher-side {
-      grid-column: 2;
-      grid-row: 1;
-      width: 52px;
-      padding: 8px 4px;
-      background: rgba(8, 12, 20, 0.45);
-      border: 1px solid rgba(125, 211, 252, 0.10);
-      border-radius: 14px;
-      backdrop-filter: blur(10px);
+      position: fixed;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 90;
+      width: 56px;
+      padding: 10px 6px;
+      gap: 10px;
+      background: rgba(8, 12, 20, 0.78);
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      border-radius: 16px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
     }
-    .main-shell > .tab-content {
-      grid-column: 1;
-      grid-row: 1;
+    body.tabs-collapsed .main-shell > .tab-switcher-side {
+      transform: translateY(-50%) translateX(calc(-100% - 24px));
+      opacity: 0;
+      pointer-events: none;
     }
+
+    /* Toggle button — always visible, top-left, click to show/hide rail */
+    #tab-rail-toggle {
+      position: fixed;
+      left: 14px;
+      top: 14px;
+      z-index: 95;
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      border: 1px solid rgba(125, 211, 252, 0.22);
+      background: rgba(8, 12, 20, 0.75);
+      backdrop-filter: blur(12px);
+      color: rgba(220, 232, 255, 0.85);
+      font-size: 18px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    }
+    #tab-rail-toggle:hover {
+      background: rgba(125, 211, 252, 0.12);
+      border-color: rgba(125, 211, 252, 0.4);
+      transform: scale(1.05);
+    }
+    #tab-rail-toggle:active { transform: scale(0.95); }
+
     @media (max-width: 920px) {
-      .main-shell { grid-template-columns: 1fr; }
       .main-shell > .tab-switcher-side {
-        grid-column: 1;
-        grid-row: auto;
-        justify-self: end;
+        left: 8px;
+        width: 48px;
       }
     }
 
@@ -1185,6 +1218,9 @@
   </style>
 </head>
 <body>
+  <!-- Tab rail toggle — always visible, click to show/hide the left tab nav -->
+  <button id="tab-rail-toggle" type="button" aria-label="Toggle tab rail" title="Toggle tab rail (Ctrl+B)">☰</button>
+
   <!-- App header -->
   <header class="app-header">
     <div class="logo">🤖</div>

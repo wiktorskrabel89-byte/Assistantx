@@ -403,6 +403,33 @@ window.addEventListener('DOMContentLoaded', () => {
 	settingsTabButton?.addEventListener('click', () => setMainPanelTab('settings'));
 	setMainPanelTab('command');
 
+	// Left tab rail — Claude-style toggle. Persist the collapsed preference so
+	// the rail stays in the user's preferred state across launches.
+	const tabRailToggle = document.getElementById('tab-rail-toggle');
+	const TAB_RAIL_PREF_KEY = 'jarvis.tabRail.collapsed';
+	function applyTabRailState(collapsed) {
+		document.body.classList.toggle('tabs-collapsed', !!collapsed);
+		if (tabRailToggle) {
+			tabRailToggle.setAttribute('aria-pressed', collapsed ? 'false' : 'true');
+			tabRailToggle.title = collapsed ? 'Show tabs (Ctrl+B)' : 'Hide tabs (Ctrl+B)';
+		}
+	}
+	try {
+		applyTabRailState(localStorage.getItem(TAB_RAIL_PREF_KEY) === '1');
+	} catch { applyTabRailState(false); }
+	tabRailToggle?.addEventListener('click', () => {
+		const nowCollapsed = !document.body.classList.contains('tabs-collapsed');
+		applyTabRailState(nowCollapsed);
+		try { localStorage.setItem(TAB_RAIL_PREF_KEY, nowCollapsed ? '1' : '0'); } catch { /* storage unavailable */ }
+	});
+	// Ctrl+B shortcut matches Claude / VS Code muscle memory.
+	window.addEventListener('keydown', (e) => {
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b' && !e.shiftKey && !e.altKey) {
+			e.preventDefault();
+			tabRailToggle?.click();
+		}
+	});
+
 	function switchViewport(mode) {
 		viewportWelcome?.classList.toggle('active', mode === 'welcome');
 		viewportMap?.classList.toggle('active', mode === 'map');
