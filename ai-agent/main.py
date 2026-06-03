@@ -307,6 +307,35 @@ async def _warmup_tts_if_needed() -> None:
             logger.debug("TTS warmup skipped: %s", exc)
 
 
+async def _emit_task_step(ws: WebSocketServerProtocol, state: ConnectionState | None,
+                          category: str, message: str, status: str = "active",
+                          step_id: str | None = None) -> str:
+    """V2.0: emit a Devin-style task step from the Python side.
+
+    Bridges the FastAPI sidecar's reasoning loop into the Electron renderer's
+    task list panel. The renderer listens for type='task_step' messages and
+    calls window.jarvisTaskList.push() — completing the live agent-monologue
+    stream described in V2.0 Section 3.
+
+    Returns the step_id so callers can later flip the same row's status
+    (active -> done / error) by passing the same id.
+    """
+    import uuid
+    sid = step_id or f"py-{uuid.uuid4().hex[:8]}"
+    try:
+        await _send(ws, {
+            "type": "task_step",
+            "category": str(category)[:24],
+            "message": str(message)[:200],
+            "status": status if status in {"active", "done", "error"} else "active",
+            "stepId": sid,
+            "source": "sidecar",
+        }, state)
+    except Exception as exc:
+        logger.debug("task_step emit failed: %s", exc)
+    return sid
+
+
 async def _send(ws: WebSocketServerProtocol, payload: dict, state: ConnectionState | None = None) -> None:
     if state is not None:
         try:
@@ -434,8 +463,10 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                 if state.speech_active:
                     state.command_audio_buffer.append(pcm_bytes)
                 state.trailing_silence_frames += 1
-
-            # ~0.4 s silence threshold for end-of-utterance with 100 ms chunks.
+                # ~0.4 s silence threshold for end-of-utterance with 100 ms chunks.
+                # (Comment + check live inside the silence branch — only firing
+                # on silence frames is correct; was previously misindented so the
+                # comment looked sibling-level even though the `if` was nested.)
                 if state.speech_active and state.trailing_silence_frames >= 4:
                     segment = b"".join(state.command_audio_buffer).strip()
                     await _send(ws, {
@@ -617,21 +648,33 @@ async def _handle_parse_intent(ws: WebSocketServerProtocol, state: ConnectionSta
     if not text:
         return
 
+    step_id = await _emit_task_step(
+        ws, state, "NLP", f"Parsing intent: \"{text[:60]}{'…' if len(text) > 60 else ''}\"", "active",
+    )
     loop = asyncio.get_event_loop()
     try:
         nlp = _get_nlp_engine()
         result = await loop.run_in_executor(None, nlp.parse, text)
+        intent = result.get("intent", "unknown")
+        confidence = float(result.get("confidence", 0.0) or 0.0)
+        await _emit_task_step(
+            ws, state, "NLP",
+            f"Intent: {intent} ({int(confidence * 100)}%)",
+            "done" if confidence >= 0.6 else "error",
+            step_id=step_id,
+        )
         await _send(ws, {
             "type": "intent_parsed",
             "requestId": request_id,
-            "intent": result.get("intent", "unknown"),
-            "action": result.get("action", result.get("intent", "unknown")),
+            "intent": intent,
+            "action": result.get("action", intent),
             "intentKind": result.get("intent_kind", "system"),
             "entities": result.get("entities", {}),
-            "confidence": result.get("confidence", 0.0),
+            "confidence": confidence,
         }, state)
     except Exception as exc:
         logger.warning("NLP error: %s", exc)
+        await _emit_task_step(ws, state, "NLP", f"Failed: {exc}", "error", step_id=step_id)
         await _send(ws, {
             "type": "error",
             "message": f"Intent parsing failed: {exc}",
@@ -692,12 +735,16 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
     request_id = str(msg.get("requestId", ""))
     query = str(msg.get("query", "")).strip()
     action = str(msg.get("action", "")).strip()
+    # Pre-existing bug fix: `tool` was referenced below but never extracted
+    # from `msg`, raising NameError on every tool call. Restored here.
+    tool = str(msg.get("tool", "")).strip().lower()
     payload = msg.get("payload")
     if not isinstance(payload, dict):
         payload = {}
     if not tool:
         return
     if tool not in {"web_search", "git_core"}:
+        await _emit_task_step(ws, _state, "TOOL", f"Rejected: unknown tool '{tool}'", "error")
         await _send(ws, {
             "type": "tool_result",
             "requestId": request_id,
@@ -706,6 +753,11 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
             "results": [],
         }, _state)
         return
+    tool_step = await _emit_task_step(
+        ws, _state, "TOOL",
+        f"Calling {tool}" + (f": {query[:40]}…" if query else ""),
+        "active",
+    )
     loop = asyncio.get_event_loop()
 
     async def _handle_web_search(params: dict[str, Any]) -> list[dict]:
@@ -727,22 +779,34 @@ async def _handle_tool_call(ws: WebSocketServerProtocol, _state: ConnectionState
                 "ok": True,
                 "results": results,
             }, _state)
+            await _emit_task_step(
+                ws, _state, "TOOL",
+                f"web_search returned {len(results) if isinstance(results, list) else 0} results",
+                "done", step_id=tool_step,
+            )
         else:
             from tools.git_core import execute_git_core_action
             result = await loop.run_in_executor(None, execute_git_core_action, action, payload)
+            ok = bool(result.get("ok"))
             await _send(ws, {
                 "type": "tool_result",
                 "requestId": request_id,
                 "tool": "git_core",
-                "ok": bool(result.get("ok")),
+                "ok": ok,
                 "result": result.get("result"),
                 "error": result.get("error"),
             }, _state)
+            await _emit_task_step(
+                ws, _state, "TOOL",
+                f"git_core {action or 'action'} {'completed' if ok else 'failed'}",
+                "done" if ok else "error", step_id=tool_step,
+            )
         _state.runtime_state = "idle"
     except Exception as exc:
         logger.warning("Tool call error: %s", exc)
         action_type = str(((msg.get("action") or {}).get("action_type")) or msg.get("tool") or "").strip().lower()
         formatted = format_action_error(exc, action_type=action_type, request_id=request_id)
+        await _emit_task_step(ws, _state, "TOOL", f"Tool error: {exc}", "error", step_id=tool_step)
         await _send(ws, {
             "type": "tool_result",
             "requestId": request_id,
@@ -774,22 +838,35 @@ async def _handle_llm_route(ws: WebSocketServerProtocol, _state: ConnectionState
             "error": "prompt-required",
         }, _state)
         return
+    route_step = await _emit_task_step(
+        ws, _state, "LLM",
+        f"Routing {intent or 'prompt'} ({_state.model_mode} mode, {len(prompt)} chars)",
+        "active",
+    )
     try:
         _state.runtime_state = "thinking_fast" if _state.model_mode == "fast" else "coding_hardcore"
         from routing.llm_router import route_llm_request
         result = await route_llm_request(intent, prompt, context, model_mode=_state.model_mode)
+        provider = result.get("provider")
+        model = result.get("model")
+        await _emit_task_step(
+            ws, _state, "LLM",
+            f"Answered via {provider}/{model}",
+            "done", step_id=route_step,
+        )
         await _send(ws, {
             "type": "llm_route_result",
             "requestId": request_id,
             "ok": True,
             "intent": intent,
-            "provider": result.get("provider"),
-            "model": result.get("model"),
+            "provider": provider,
+            "model": model,
             "text": result.get("text", ""),
             "modelMode": _state.model_mode,
         }, _state)
         _state.runtime_state = "idle"
     except Exception as exc:
+        await _emit_task_step(ws, _state, "LLM", f"Routing failed: {exc}", "error", step_id=route_step)
         await _send(ws, {
             "type": "llm_route_result",
             "requestId": request_id,

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
+const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, screen, shell, Tray, Menu, nativeImage, autoUpdater: nativeAutoUpdater } = require('electron');
 const {
   getEngineMode,
   getJarvisModelConfig,
@@ -18,6 +18,7 @@ const {
   signOutAccountSession,
 } = require('./accounts');
 const { execFile, spawn } = require('child_process');
+const os = require('os');
 const launcherService = require('./launcher/launch-service');
 const launcherDb = require('./launcher/db');
 const { createStartupDiagnostics } = require('./services/startup-diagnostics');
@@ -118,7 +119,15 @@ let sidecarStatus = 'idle';
 let sidecarHeartbeatInFlight = false;
 let sidecarStdoutBuffer = '';
 let sidecarReady = false;
-let splashSkipRequested = false;
+let sidecarDead = false;
+let sidecarFatalError = null;
+// Self-healing IPC observer state — automatic retry with exponential backoff
+// after unexpected sidecar exits.
+let sidecarHealRetryCount = 0;
+let sidecarHealTimer = null;
+const SIDECAR_HEAL_MAX_RETRIES = 5;
+const SIDECAR_HEAL_BASE_DELAY_MS = 1_500;
+let sidecarUserInitiatedStop = false;
 let localVoiceAssetsState = {
   started: false,
   complete: false,
@@ -382,6 +391,12 @@ function markSidecarReady(details = {}) {
   if (sidecarReady || !sidecarProcess) return;
   sidecarReady = true;
   sidecarStatus = 'running';
+  // Self-healing observer succeeded — clear the retry counter so future
+  // crashes get a fresh exponential-backoff budget.
+  if (sidecarHealRetryCount > 0) {
+    log(`[sidecar:heal] handshake succeeded after ${sidecarHealRetryCount} retries; resetting counter.`);
+    sidecarHealRetryCount = 0;
+  }
   startupDiagnostics.setComponent('sidecar', 'healthy', {
     detail: 'AI runtime stdio bridge is ready.',
     reason: 'stdio_ready',
@@ -529,17 +544,15 @@ function startSidecar() {
     if (/reconnect|retry|re-?connect/i.test(line)) {
       telemetryBus.publish('sidecar.reconnect');
     }
-    // Detect missing Python deps and surface a clear, actionable error.
-    // huggingface_hub, kokoro, websockets, etc. are all installed via
-    // ai-agent/requirements.txt; without them the sidecar crashes on import
-    // and the user sees nothing but a stuck splash screen.
-    const missingModuleMatch = line.match(/ModuleNotFoundError: No module named ['"]([^'"]+)['"]/);
-    if (missingModuleMatch) {
-      const moduleName = missingModuleMatch[1];
-      const message = `Python dependency missing: '${moduleName}'. Run: pip install -r ai-agent/requirements.txt`;
-      startupDiagnostics.pushEvent('sidecar', 'error', message, { module: moduleName });
-      sendToRenderer('splash:progress', { error: message });
-      sendToRenderer('sidecar-status', { status: 'unavailable', detail: message });
+    // Surface fatal Python errors to splash so users see WHY startup hangs.
+    if (/ModuleNotFoundError|ImportError|Traceback \(most recent call last\)/.test(line)) {
+      sidecarFatalError = line.slice(0, 240);
+      startupDiagnostics.pushEvent('sidecar', 'error', 'Python sidecar reported a fatal error.', {
+        message: sidecarFatalError,
+      });
+      sendToRenderer('splash:progress', {
+        error: `Python runtime error: ${sidecarFatalError}`,
+      });
     }
     sendToRenderer('sidecar-status', { status: sidecarStatus });
   });
@@ -549,6 +562,8 @@ function startSidecar() {
     sidecarProcess = null;
     sidecarHeartbeatInFlight = false;
     sidecarReady = false;
+    // Flag for the splash poll so it can break out of the wait loop instead of timing out.
+    if (code && code !== 0) sidecarDead = true;
     sidecarStdoutBuffer = '';
     sidecarStatus = 'stopped';
     startupDiagnostics.setComponent('sidecar', code && code !== 0 ? 'crashed' : 'stopped', {
@@ -568,6 +583,11 @@ function startSidecar() {
     telemetryBus.publish('startup.degraded');
     emitDesktopHealth();
     sendToRenderer('sidecar-status', { status: sidecarStatus });
+    // Self-healing: schedule an automatic restart if this wasn't user-initiated.
+    if (!sidecarUserInitiatedStop) {
+      scheduleSidecarHeal(`exit-code-${code ?? 'unknown'}`);
+    }
+    sidecarUserInitiatedStop = false;
   });
 
   sidecarProcess.on('error', (err) => {
@@ -910,6 +930,8 @@ function resetSplashTransitionState() {
   splashSkipRequested = false;
   startupUpdateGatePromise = null;
   startupUpdateGateResolver = null;
+  sidecarDead = false;
+  sidecarFatalError = null;
   resetStartupUpdateGate();
 }
 
@@ -1159,6 +1181,45 @@ function getTrayIcon() {
   return iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
 }
 
+// ── Ollama daemon liveness check + autostart ─────────────────────────────────
+// The splash used to call /api/pull directly even when the Ollama daemon was
+// not running, producing an unrecoverable "fetch failed" error. This helper
+// probes /api/tags, spawns `ollama serve` detached if missing, and retries
+// the probe with a short backoff. Returns true if the daemon is reachable.
+async function probeOllamaOnce(ollamaUrl, timeoutMs = 2_000) {
+  try {
+    const resp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(timeoutMs) });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureOllamaRunning(ollamaUrl) {
+  if (await probeOllamaOnce(ollamaUrl)) return true;
+  log('[ollama] Daemon not reachable. Attempting to spawn `ollama serve`.');
+  try {
+    const child = spawn('ollama', ['serve'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.unref();
+  } catch (err) {
+    log('[ollama] Failed to spawn `ollama serve`:', err?.message || err);
+    return false;
+  }
+  for (let i = 0; i < 10; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    if (await probeOllamaOnce(ollamaUrl)) {
+      log(`[ollama] Daemon became reachable after ${i + 1}s.`);
+      return true;
+    }
+  }
+  log('[ollama] Daemon never became reachable after 10s of retries.');
+  return false;
+}
+
 // ── Ollama NDJSON model-pull helper ──────────────────────────────────────────
 // Ollama's /api/pull stream sends multiple JSON objects per TCP chunk.  We
 // split the raw response body on newline boundaries before calling JSON.parse()
@@ -1252,37 +1313,53 @@ async function startSplashTransition(engineMode) {
 
   sendToRenderer('splash:progress', { llmPercent: 0, status: `Checking for AI model ${llmModel}…` });
 
-  let modelPresent = false;
-  try {
-    const tagsResp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3_000) });
-    if (tagsResp.ok) {
-      const payload = await tagsResp.json();
-      const names = Array.isArray(payload?.models)
-        ? payload.models.map((m) => String(m?.name || '').split(':')[0])
-        : [];
-      const llmBase = llmModel.split(':')[0];
-      modelPresent = names.includes(llmBase) || names.includes(llmModel);
-    }
-  } catch { /* Ollama may not be running yet */ }
-
-  if (!modelPresent) {
-    sendToRenderer('splash:progress', { llmPercent: 0, status: `Downloading ${llmModel}… (this may take a few minutes)` });
-    try {
-      await pullOllamaModel(llmModel, (event) => {
-        const total = Number(event?.total) || 0;
-        const completed = Number(event?.completed) || 0;
-        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-        sendToRenderer('splash:progress', {
-          llmPercent: pct,
-          status: String(event?.status || 'Downloading…'),
-        });
-      });
-      sendToRenderer('splash:progress', { llmPercent: 100, status: 'Model download complete.' });
-    } catch (err) {
-      sendToRenderer('splash:progress', { error: `Failed to pull model: ${String(err?.message || err)}` });
-    }
+  // Make sure the Ollama daemon is alive before we try to talk to it. Without
+  // this, /api/pull throws "fetch failed" and the splash gets stuck.
+  const ollamaUp = await ensureOllamaRunning(ollamaUrl);
+  if (!ollamaUp) {
+    sendToRenderer('splash:progress', {
+      llmPercent: 100,
+      status: 'Local AI unavailable — switching to cloud mode.',
+    });
+    // Skip the pull entirely. The renderer's router has cloud fallback already.
   } else {
-    sendToRenderer('splash:progress', { llmPercent: 100, status: `Model ${llmModel} is ready.` });
+    let modelPresent = false;
+    try {
+      const tagsResp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3_000) });
+      if (tagsResp.ok) {
+        const payload = await tagsResp.json();
+        const names = Array.isArray(payload?.models)
+          ? payload.models.map((m) => String(m?.name || '').split(':')[0])
+          : [];
+        const llmBase = llmModel.split(':')[0];
+        modelPresent = names.includes(llmBase) || names.includes(llmModel);
+      }
+    } catch { /* tags probe failed; treat as missing and try pull */ }
+
+    if (!modelPresent) {
+      sendToRenderer('splash:progress', { llmPercent: 0, status: `Downloading ${llmModel}… (this may take a few minutes)` });
+      try {
+        await pullOllamaModel(llmModel, (event) => {
+          const total = Number(event?.total) || 0;
+          const completed = Number(event?.completed) || 0;
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          sendToRenderer('splash:progress', {
+            llmPercent: pct,
+            status: String(event?.status || 'Downloading…'),
+          });
+        });
+        sendToRenderer('splash:progress', { llmPercent: 100, status: 'Model download complete.' });
+      } catch (err) {
+        // Soft-fail: log it, mark the bar full, and let cloud fallback handle requests.
+        log('[ollama] Model pull failed:', err?.message || err);
+        sendToRenderer('splash:progress', {
+          llmPercent: 100,
+          status: 'Model unavailable. Cloud mode active.',
+        });
+      }
+    } else {
+      sendToRenderer('splash:progress', { llmPercent: 100, status: `Model ${llmModel} is ready.` });
+    }
   }
 
   // Wait for the Python sidecar to finish its health handshake (up to 20 s).
@@ -1290,7 +1367,7 @@ async function startSplashTransition(engineMode) {
   const sidecarTimeoutMs = 20_000;
   const sidecarPollMs = 500;
   const sidecarStart = Date.now();
-  while (!sidecarReady && (Date.now() - sidecarStart) < sidecarTimeoutMs && !splashSkipRequested) {
+  while (!sidecarReady && !sidecarDead && (Date.now() - sidecarStart) < sidecarTimeoutMs) {
     await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
     const elapsed = Date.now() - sidecarStart;
     sendToRenderer('splash:progress', {
@@ -1298,16 +1375,25 @@ async function startSplashTransition(engineMode) {
       status: 'Waiting for AI runtime…',
     });
   }
-  sendToRenderer('splash:progress', {
-    pyPercent: 100,
-    status: sidecarReady ? 'AI runtime ready. Launching Jarvis…' : 'Launching Jarvis…',
-  });
+  if (sidecarDead) {
+    sendToRenderer('splash:progress', {
+      pyPercent: 100,
+      status: 'AI runtime crashed — using cloud mode.',
+      error: sidecarFatalError ? `Python runtime: ${sidecarFatalError}` : 'Python runtime exited unexpectedly.',
+    });
+  } else {
+    sendToRenderer('splash:progress', {
+      pyPercent: 100,
+      status: sidecarReady ? 'AI runtime ready. Launching Jarvis…' : 'Launching Jarvis…',
+    });
+  }
 
   if (sidecarReady) {
-    // Wait for voice assets up to 90 s (was 15 min). Voice models can finish
-    // downloading in the background after the main UI is shown — they aren't
-    // strictly required to use chat features.
-    const modelWaitDeadline = Date.now() + 90_000;
+    // First-run install can legitimately take many minutes (downloading
+    // Whisper + Kokoro). Warm boots should never wait more than ~60s.
+    // We detect first run by checking if voice assets are tracked at all.
+    const isFirstRun = !localVoiceAssetsState.complete && !localVoiceAssetsState.started;
+    const modelWaitDeadline = Date.now() + (isFirstRun ? 600_000 : 60_000);
     const startupGraceDeadline = Date.now() + 2_500;
     while (Date.now() < modelWaitDeadline && !splashSkipRequested) {
       if (localVoiceAssetsState.complete) {
@@ -1458,6 +1544,292 @@ function createWindow() {
   });
 }
 
+// HUD window controls — renderer-driven min/max/close so the borderless
+// frame still gives users full window agency. Registered once at module load.
+let windowControlsRegistered = false;
+function registerWindowControlHandlers() {
+  if (windowControlsRegistered) return;
+  windowControlsRegistered = true;
+  ipcMain.handle('window:minimize', () => {
+    try {
+      const w = BrowserWindow.getFocusedWindow() || win;
+      if (w && !w.isDestroyed()) w.minimize();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('window:toggle-maximize', () => {
+    try {
+      const w = BrowserWindow.getFocusedWindow() || win;
+      if (!w || w.isDestroyed()) return { ok: false, error: 'no-window' };
+      if (w.isMaximized()) w.unmaximize();
+      else w.maximize();
+      return { ok: true, maximized: w.isMaximized() };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('window:close', () => {
+    try {
+      const w = BrowserWindow.getFocusedWindow() || win;
+      if (w && !w.isDestroyed()) w.close();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
+  // V2.0 Health Observer — periodic Ollama + sidecar probes with auto-heal.
+  const { createHealthObserver } = require('./electron/diagnostics/health-observer');
+  const healthObserver = createHealthObserver({
+    intervalMs: 12_000,
+    cooldownMs: 45_000,
+    probeTimeoutMs: 4_000,
+    log: (...args) => log('[health]', ...args),
+  });
+  healthObserver.registerProbe('sidecar', () => {
+    if (!sidecarProcess) return { status: 'unavailable', detail: 'no-process' };
+    if (sidecarReady) return { status: 'healthy', detail: 'stdio-handshake-ok' };
+    return { status: 'degraded', detail: `status=${sidecarStatus}` };
+  });
+  healthObserver.registerProbe('ollama', async () => {
+    const url = String(process.env.JARVIS_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+    try {
+      const resp = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(2_500) });
+      if (resp.ok) return { status: 'healthy', detail: 'tags-endpoint-200' };
+      return { status: 'degraded', detail: `tags-endpoint-${resp.status}` };
+    } catch (err) {
+      return { status: 'unavailable', detail: String(err?.message || err) };
+    }
+  });
+  healthObserver.registerHealer('sidecar', () => {
+    if (sidecarHealTimer || sidecarHealRetryCount >= SIDECAR_HEAL_MAX_RETRIES) return;
+    log('[health] sidecar healer invoked');
+    scheduleSidecarHeal('health-observer');
+  });
+  healthObserver.registerHealer('ollama', async () => {
+    log('[health] ollama healer invoked');
+    const url = String(process.env.JARVIS_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+    await ensureOllamaRunning(url);
+  });
+  healthObserver.on('change', (payload) => {
+    log(`[health] ${payload.subsystem} → ${payload.status}`, payload.detail || '');
+    sendToRenderer('health:pulse', payload);
+  });
+  healthObserver.on('heal-attempted', (payload) => {
+    sendToRenderer('health:heal-attempted', payload);
+  });
+  healthObserver.on('heal-outcome', (payload) => {
+    sendToRenderer('health:heal-outcome', payload);
+  });
+  // Start the loop after a short delay so initial startup probes don't fire
+  // before Ollama/sidecar have had a chance to come up.
+  setTimeout(() => {
+    try { healthObserver.start(); }
+    catch (err) { log('[health] observer failed to start:', err?.message || err); }
+  }, 6_000);
+  ipcMain.handle('health:snapshot', () => healthObserver.snapshot());
+
+  // Local Execution Bridge — sandboxed CLI runner per V2.0 Section 4.
+  // Off by default; user must flip dev_mode_exec in settings.
+  const { createLocalExecutionBridge } = require('./electron/exec/local-execution-bridge');
+  const localExecutionBridge = createLocalExecutionBridge({
+    getConfig: () => {
+      try {
+        const cfg = getJarvisModelConfig();
+        return { dev_mode_exec: Boolean(cfg?.local?.dev_mode_exec) };
+      } catch { return { dev_mode_exec: false }; }
+    },
+    log: (...args) => log('[exec-bridge]', ...args),
+    defaultCwd: app.getPath('userData'),
+  });
+  ipcMain.handle('exec:run', async (event, payload) => {
+    try {
+      const requestId = String(payload?.requestId || Date.now());
+      return await localExecutionBridge.exec(payload, (chunk) => {
+        try {
+          event.sender?.send('exec:chunk', { requestId, ...chunk });
+        } catch { /* sender gone */ }
+      });
+    } catch (err) {
+      return { ok: false, error: 'handler_threw', detail: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('exec:list-allowed', () => {
+    try {
+      return { ok: true, categories: localExecutionBridge.listAllowedCategories(), enabled: localExecutionBridge.isEnabled() };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
+  // ─── Idea #5 — Conversation memory (cross-session persistence) ───────────
+  // Thin disk-backed log of {timestamp, role, text} entries persisted to
+  // userData. Complements the sidecar's RAG MemoryStore — this is the
+  // recall layer for "what did we just talk about?" rather than vector
+  // search. Capped at 200 entries to keep the JSON small.
+  const memoryLogPath = path.join(app.getPath('userData'), 'jarvis-conversation.json');
+  const MEMORY_LOG_MAX = 200;
+  function readMemoryLog() {
+    try {
+      if (!fs.existsSync(memoryLogPath)) return [];
+      const raw = JSON.parse(fs.readFileSync(memoryLogPath, 'utf8'));
+      return Array.isArray(raw) ? raw : [];
+    } catch { return []; }
+  }
+  function writeMemoryLog(list) {
+    try {
+      fs.writeFileSync(
+        memoryLogPath,
+        JSON.stringify(list.slice(-MEMORY_LOG_MAX)),
+        'utf8',
+      );
+    } catch (err) {
+      log('[memory] write failed:', err?.message || err);
+    }
+  }
+  ipcMain.handle('memory:save', (_event, payload) => {
+    try {
+      const role = String(payload?.role || 'user').slice(0, 16);
+      const text = String(payload?.text || '').trim();
+      if (!text) return { ok: false, error: 'empty-text' };
+      const entry = { ts: Date.now(), role, text: text.slice(0, 4_000) };
+      const list = readMemoryLog();
+      list.push(entry);
+      writeMemoryLog(list);
+      return { ok: true, count: list.length };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('memory:list-recent', (_event, payload) => {
+    try {
+      const limit = Math.max(1, Math.min(50, Number(payload?.limit) || 20));
+      const list = readMemoryLog();
+      return { ok: true, entries: list.slice(-limit) };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err), entries: [] };
+    }
+  });
+
+  // ─── Idea #3 — Screen capture for the vision dispatch slot ───────────────
+  // Grabs the primary display via desktopCapturer (already supported in
+  // Electron without extra entitlements on Win/Linux), returns a data URL
+  // the renderer can hand to the vision model.
+  ipcMain.handle('vision:capture-screen', async () => {
+    try {
+      const display = screen.getPrimaryDisplay();
+      const { width, height } = display.workAreaSize;
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: {
+          width: Math.min(1920, width),
+          height: Math.min(1080, height),
+        },
+      });
+      const source = sources?.[0];
+      if (!source || source.thumbnail.isEmpty()) {
+        return { ok: false, error: 'no-display-source' };
+      }
+      const thumb = source.thumbnail;
+      const size = thumb.getSize();
+      return {
+        ok: true,
+        dataUrl: thumb.toDataURL(),
+        width: size.width,
+        height: size.height,
+        sourceName: source.name,
+      };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
+  // ─── Idea #4 — Global hotkey to summon the orb window ─────────────────────
+  // CommandOrControl+Alt+J jumps the user back to Jarvis from anywhere.
+  // If the window is hidden / minimized / behind other apps, it's restored
+  // and focused; if it's already visible and focused, it's hidden so the
+  // hotkey acts as a toggle.
+  try {
+    const summonAccelerator = process.platform === 'darwin' ? 'CommandOrControl+Option+J' : 'Control+Alt+J';
+    const summonOk = globalShortcut.register(summonAccelerator, () => {
+      try {
+        const target = win;
+        if (!target || target.isDestroyed()) return;
+        const focused = BrowserWindow.getFocusedWindow();
+        if (target.isVisible() && focused === target) {
+          target.hide();
+        } else {
+          if (target.isMinimized()) target.restore();
+          target.show();
+          target.focus();
+        }
+      } catch (err) {
+        log('[hotkey] summon failed:', err?.message || err);
+      }
+    });
+    if (summonOk) log(`[hotkey] Jarvis summon bound to ${summonAccelerator}`);
+  } catch (err) {
+    log('[hotkey] global registration failed:', err?.message || err);
+  }
+
+  // Hardware tier auto-detect for the setup wizard.
+  // Returns { totalRamGB, cpuCount, gpus[], suggestedProfile } where profile is
+  // one of: 'eco' (Potato) | 'standard' (Pro) | 'pro' (Enthusiast).
+  ipcMain.handle('hardware:probe', async () => {
+    try {
+      const totalRamGB = +(os.totalmem() / (1024 ** 3)).toFixed(1);
+      const cpuCount = os.cpus().length;
+      let gpus = [];
+      try {
+        const info = await app.getGPUInfo('complete');
+        const devices = Array.isArray(info?.gpuDevice) ? info.gpuDevice : [];
+        gpus = devices
+          .filter((d) => !d.softwareRendering)
+          .map((d) => ({
+            vendorId: d.vendorId,
+            deviceId: d.deviceId,
+            active: Boolean(d.active),
+          }));
+      } catch (err) {
+        log('[hardware] getGPUInfo failed:', err?.message || err);
+      }
+
+      // Heuristic: discrete GPU is detected by non-Intel/non-software renderer.
+      // Vendor IDs: 0x10de=NVIDIA, 0x1002=AMD. We can't read VRAM directly from
+      // Electron, so we trust RAM + GPU count as a rough discriminator.
+      const hasDiscreteGpu = gpus.some((g) => {
+        const v = Number(g.vendorId);
+        return v === 0x10de || v === 0x1002;
+      });
+
+      let suggestedProfile = 'eco';
+      if (totalRamGB >= 32 && hasDiscreteGpu && gpus.length >= 1) {
+        suggestedProfile = 'pro';
+      } else if (totalRamGB >= 16 && hasDiscreteGpu) {
+        suggestedProfile = 'standard';
+      } else if (totalRamGB >= 8 && hasDiscreteGpu) {
+        suggestedProfile = 'standard';
+      }
+
+      return {
+        ok: true,
+        totalRamGB,
+        cpuCount,
+        gpus,
+        hasDiscreteGpu,
+        suggestedProfile,
+        platform: process.platform,
+        arch: process.arch,
+      };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+}
+registerWindowControlHandlers();
+
 function createLauncherOverlayWindow() {
   overlayWin = new BrowserWindow({
     width: 640,
@@ -1586,20 +1958,47 @@ function getSidecarStatus() {
 }
 
 function restartSidecarNow() {
+  sidecarUserInitiatedStop = true;
   stopSidecar();
   telemetryBus.publish('sidecar.restart');
+  // Cancel any pending auto-heal — user explicitly requested a restart.
+  if (sidecarHealTimer) { clearTimeout(sidecarHealTimer); sidecarHealTimer = null; }
+  sidecarHealRetryCount = 0;
   setTimeout(() => startSidecar(), 500);
 }
 
-// Allow the splash screen to bail out of long startup waits. The renderer
-// shows a "Skip" button after 15 s; clicking it flips this flag and the
-// splash transition loops break out, jumping straight to index.html. Voice
-// models keep downloading in the background — they just stop blocking the UI.
-ipcMain.handle('splash:skip', () => {
-  splashSkipRequested = true;
-  transitionToIndexOnce();
-  return { ok: true };
-});
+// Self-healing observer: schedules an automatic sidecar restart with
+// exponential backoff (1.5s, 3s, 6s, 12s, 24s) up to SIDECAR_HEAL_MAX_RETRIES.
+// On successful sidecar handshake, retry count resets in markSidecarReady().
+function scheduleSidecarHeal(reason = 'unknown') {
+  if (sidecarHealTimer) return; // already pending
+  if (sidecarHealRetryCount >= SIDECAR_HEAL_MAX_RETRIES) {
+    log(`[sidecar:heal] max retries reached (${SIDECAR_HEAL_MAX_RETRIES}); giving up. reason=${reason}`);
+    startupDiagnostics.pushEvent('sidecar', 'error', 'Auto-heal gave up after max retries.', {
+      retries: sidecarHealRetryCount,
+      reason,
+    });
+    return;
+  }
+  sidecarHealRetryCount += 1;
+  const delayMs = SIDECAR_HEAL_BASE_DELAY_MS * Math.pow(2, sidecarHealRetryCount - 1);
+  log(`[sidecar:heal] scheduling restart #${sidecarHealRetryCount} in ${delayMs}ms (reason=${reason})`);
+  startupDiagnostics.pushEvent('sidecar', 'info', 'Auto-heal scheduled.', {
+    attempt: sidecarHealRetryCount,
+    delayMs,
+    reason,
+  });
+  sidecarHealTimer = setTimeout(() => {
+    sidecarHealTimer = null;
+    if (sidecarProcess) return; // already running again
+    log(`[sidecar:heal] running auto-restart #${sidecarHealRetryCount}`);
+    try {
+      startSidecar();
+    } catch (err) {
+      log('[sidecar:heal] startSidecar threw:', err?.message || err);
+    }
+  }, delayMs);
+}
 
 createMainIpcHandlers({
   ipcMain,

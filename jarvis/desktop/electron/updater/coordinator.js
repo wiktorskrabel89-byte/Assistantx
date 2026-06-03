@@ -538,12 +538,15 @@ class UpdateCoordinator {
       };
     }
     if (errorMeta.statusCode === 404) {
+      // Treat a missing manifest as a soft "unavailable" — surface it in settings,
+      // but don't trip the splash error pill. This prevents a 404'd update feed
+      // (e.g. private repo, missing latest.yml) from blocking startup UX.
       return {
-        status: 'error',
-        health: 'unavailable',
-        severity: 'error',
+        status: 'unavailable',
+        health: 'degraded',
+        severity: 'warn',
         reason: 'feed-not-found-or-private',
-        detail: 'Update feed returned 404 (private feed usually requires valid credentials).',
+        detail: 'Update check unavailable (feed not published yet).',
       };
     }
     if (errorMeta.isMetadataIssue || errorMeta.statusCode === 404) {

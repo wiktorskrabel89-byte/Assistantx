@@ -44,16 +44,34 @@ class VoiceGateway extends EventEmitter {
 
   _bindSidecarEvents() {
     if (!this._sidecar || typeof this._sidecar.on !== 'function') return;
-    this._sidecar.on('connected', () => this.emit('status', { phase: 'connected', source: 'sidecar' }));
-    this._sidecar.on('disconnected', () => this.emit('status', { phase: 'disconnected', source: 'sidecar' }));
-    this._sidecar.on('unavailable', () => this.emit('status', { phase: 'unavailable', source: 'sidecar' }));
-    this._sidecar.on('wake_word', (payload) => this.emit('wake_word', payload || {}));
-    this._sidecar.on('vad_event', (payload) => this.emit('vad_event', payload || {}));
-    this._sidecar.on('rms_level', (payload) => this.emit('rms_level', payload || {}));
-    this._sidecar.on('error', (error) => this.emit('error', error));
-    this._sidecar.on('audio_segment', (payload) => {
-      void this._handleAudioSegment(payload || {});
-    });
+    // Store bound handlers so dispose() can remove them and prevent
+    // listener accumulation across reconnects (audit finding).
+    this._sidecarHandlers = {
+      connected: () => this.emit('status', { phase: 'connected', source: 'sidecar' }),
+      disconnected: () => this.emit('status', { phase: 'disconnected', source: 'sidecar' }),
+      unavailable: () => this.emit('status', { phase: 'unavailable', source: 'sidecar' }),
+      wake_word: (payload) => this.emit('wake_word', payload || {}),
+      vad_event: (payload) => this.emit('vad_event', payload || {}),
+      rms_level: (payload) => this.emit('rms_level', payload || {}),
+      error: (error) => this.emit('error', error),
+      audio_segment: (payload) => { void this._handleAudioSegment(payload || {}); },
+    };
+    for (const [evt, fn] of Object.entries(this._sidecarHandlers)) {
+      this._sidecar.on(evt, fn);
+    }
+  }
+
+  dispose() {
+    // Detach every sidecar listener registered by _bindSidecarEvents so
+    // reconstructing the gateway (or hot-reloading the renderer) doesn't
+    // leave dangling subscribers.
+    if (this._sidecar && this._sidecarHandlers && typeof this._sidecar.off === 'function') {
+      for (const [evt, fn] of Object.entries(this._sidecarHandlers)) {
+        try { this._sidecar.off(evt, fn); } catch { /* listener already gone */ }
+      }
+    }
+    this._sidecarHandlers = null;
+    this.removeAllListeners?.();
   }
 
   configure(settings = {}) {

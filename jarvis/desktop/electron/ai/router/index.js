@@ -159,13 +159,17 @@ class AIRouter {
     const profileChatModel = modelConfig?.hardware_profile
       ? (HARDWARE_PROFILE_CHAT_MODEL[modelConfig.hardware_profile] || ROUTING_PROFILES.chat.local)
       : ROUTING_PROFILES.chat.local;
+    // V2.0 tier-aware dispatch — pass the live dispatch table from the
+    // hardware profile so the semantic policy picks the right model per intent.
     const route = decideRoute(analysis, {
       availability,
       profile,
       cloudProviderOrder: this.cloudProviderOrder,
+      dispatch: modelConfig?.dispatch,
     });
-    // Apply hardware-profile model when routing locally for chat
-    if (route.provider === 'ollama' && profile === 'chat') {
+    // Legacy override: keep chat-profile pinning for backwards compatibility
+    // with the V1.0 hardware profile chat models when no dispatch table exists.
+    if (!modelConfig?.dispatch && route.provider === 'ollama' && profile === 'chat') {
       route.model = profileChatModel;
     }
     const effectiveRoute = localRoute || route;

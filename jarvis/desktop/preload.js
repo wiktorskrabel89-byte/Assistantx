@@ -101,8 +101,16 @@ const ALLOWED_INVOKE = new Set([
   'index:get-jobs',
   'index:get-job',
   'index:cancel-job',
-  // Splash screen control
-  'splash:skip',
+  'window:minimize',
+  'window:toggle-maximize',
+  'window:close',
+  'hardware:probe',
+  'exec:run',
+  'exec:list-allowed',
+  'health:snapshot',
+  'vision:capture-screen',
+  'memory:list-recent',
+  'memory:save',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -117,6 +125,13 @@ const ALLOWED_RECEIVE = new Set([
   'clipboard:status',
   'index:job-update',
   'splash:progress',
+  'auth:login-timeout',
+  'auth:login-failed',
+  'auth:login-success',
+  'exec:chunk',
+  'health:pulse',
+  'health:heal-attempted',
+  'health:heal-outcome',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────

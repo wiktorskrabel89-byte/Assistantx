@@ -1,86 +1,132 @@
 'use strict';
 
-const LOCAL_LANE_MODELS = {
-  fast: { model: 'qwen2.5-coder:14b', gpuAffinity: 'gpu0' },
-  coding: { model: 'qwen2.5-coder:14b', gpuAffinity: 'gpu0' },
-  utility: { model: 'gemma3:4b', gpuAffinity: 'gpu1' },
+/* ARCHITECT'S NOTE: INNOVATION
+ * V2.0 tier-aware semantic policy. The legacy policy was a 3-lane switch
+ * (fast / coding / utility) bound to hardcoded Ollama tags. The new policy:
+ *   1. Reads the live HARDWARE_PROFILE_MODELS dispatch table so the user's
+ *      benchmarked tier (eco / standard / pro) actually picks the right model.
+ *   2. Maps semantic intent (chat / code / vision / tool / memory) to the
+ *      matching dispatch slot.
+ *   3. Honors priority from the analyzer — high-priority requests can
+ *      preempt cloud fallback with a more expensive local model.
+ *   4. Falls back through ordered cloud providers if Ollama is unavailable.
+ */
+
+// Default dispatch table used when the caller doesn't pass one (e.g. early
+// startup before runtime-config has resolved). Mirrors the 'standard' tier.
+const DEFAULT_DISPATCH = {
+  chat: 'gemma3:4b',
+  code: 'qwen2.5-coder:7b',
+  router: 'qwen2.5:1.5b',
+  vision: 'moondream2:1.4b',
+};
+
+// Map of intent → preferred dispatch slot. Most intents map 1:1 but some
+// (memory, tool) reuse the chat model because they're conversational.
+const INTENT_TO_SLOT = {
+  chat: 'chat',
+  code: 'code',
+  vision: 'vision',
+  tool: 'chat',
+  memory: 'chat',
 };
 
 function decideRoute(analysis, options = {}) {
   const availability = options.availability || {};
   const profile = normalizeProfile(options.profile);
-  const ollamaAvailable = Boolean(availability.ollama_available && availability.required_models_present !== false);
+  const dispatch = options.dispatch || DEFAULT_DISPATCH;
+  const ollamaAvailable = Boolean(
+    availability.ollama_available && availability.required_models_present !== false,
+  );
   const cloudOrder = normalizeCloudOrder(options.cloudProviderOrder);
+  const intent = analysis.intent || 'chat';
+  const slot = INTENT_TO_SLOT[intent] || 'chat';
+
+  // Escalation triggers — push to a heavier model even if intent suggests chat.
   const escalate = analysis.confidence < 0.55
     || analysis.retryCount > 0
     || analysis.contextSize === 'huge'
     || analysis.codingDepth === 'architecture'
-    || analysis.complexity === 'hard';
+    || analysis.complexity === 'hard'
+    || (analysis.priority || 0) >= 85;
 
   if (ollamaAvailable) {
-    const lane = resolveLocalLane(profile, escalate);
+    // Pick the dispatch slot, but if escalating a chat request, jump to code.
+    const targetSlot = escalate && slot === 'chat' ? 'code' : slot;
+    const model = dispatch[targetSlot] || dispatch.chat || DEFAULT_DISPATCH.chat;
     return {
       provider: 'ollama',
-      model: lane.model,
-      lane: lane.name,
-      gpuAffinity: lane.gpuAffinity,
-      keepAlive: lane.name === 'coding' ? '15m' : -1,
-      reason: lane.reason,
+      model,
+      lane: targetSlot,
+      // Pin code/vision models to GPU 0 (heavy lane) and router to GPU 1.
+      gpuAffinity: targetSlot === 'code' || targetSlot === 'vision' ? 'gpu0' : 'gpu1',
+      keepAlive: targetSlot === 'code' ? '15m' : -1,
+      reason: `intent-${intent}${escalate ? '-escalated' : ''}-${profile}`,
+      intent,
+      intentConfidence: analysis.intentConfidence,
+      priority: analysis.priority,
       profile,
     };
   }
 
-  const fallbackProvider = chooseCloudProvider(cloudOrder, availability.cloud?.providers || {});
-  const target = {
-    provider: fallbackProvider,
-    model: resolveCloudModel(
-      fallbackProvider,
-      escalate ? 'coding' : profile,
-    ),
-  };
-
+  // Cloud fallback path. The semantic intent still informs the model pick.
+  // If no cloud provider is actually ready, drop the escalation flag so we
+  // pick the cheaper chat-tier model instead of paying for GPT-4o etc. on
+  // a request that's about to fail anyway.
+  const providers = availability.cloud?.providers || {};
+  const fallbackProvider = chooseCloudProvider(cloudOrder, providers);
+  const cloudReady = Boolean(providers?.[fallbackProvider]?.ready);
+  const effectiveEscalate = escalate && cloudReady;
+  const cloudModel = resolveCloudModel(fallbackProvider, intent, effectiveEscalate);
   return {
-    provider: target.provider,
-    model: target.model || resolveCloudModel(target.provider, profile),
+    provider: fallbackProvider,
+    model: cloudModel,
     keepAlive: null,
-    reason: 'local-unavailable-fallback',
+    reason: `cloud-fallback-intent-${intent}${effectiveEscalate ? '-escalated' : ''}${cloudReady ? '' : '-no-ready-provider'}`,
+    intent,
+    intentConfidence: analysis.intentConfidence,
+    priority: analysis.priority,
     profile,
   };
 }
 
 function normalizeProfile(profile) {
   const normalized = String(profile || '').toLowerCase().trim();
-  if (normalized === 'coding' || normalized === 'tool') return normalized;
-  return 'chat';
+  if (['eco', 'standard', 'pro'].includes(normalized)) return normalized;
+  // Legacy profile names from V1.0 — fold them onto the new tier system.
+  if (normalized === 'coding') return 'pro';
+  if (normalized === 'tool') return 'standard';
+  return 'standard';
 }
 
-function resolveLocalLane(profile, escalate) {
-  if (profile === 'coding') {
-    return { name: 'coding', reason: 'coding-lane', ...LOCAL_LANE_MODELS.coding };
-  }
-  if (profile === 'tool' && !escalate) {
-    return { name: 'utility', reason: 'utility-lane', ...LOCAL_LANE_MODELS.utility };
-  }
-  return { name: 'fast', reason: escalate ? 'fast-lane-escalated' : 'fast-lane', ...LOCAL_LANE_MODELS.fast };
-}
-
-function resolveCloudModel(provider, profile) {
+function resolveCloudModel(provider, intent, escalate) {
   const providerName = String(provider || '').toLowerCase();
-  const profileName = normalizeProfile(profile);
+  // Cloud matrix keyed by intent. Falls back to chat if intent unknown.
   const matrix = {
     openrouter: {
       chat: 'qwen/qwen-2.5-32b-instruct',
-      coding: 'openai/gpt-4o',
+      code: escalate ? 'openai/gpt-4o' : 'qwen/qwen-2.5-coder-32b-instruct',
+      vision: 'google/gemini-2.0-flash',
       tool: 'google/gemini-2.0-flash',
+      memory: 'qwen/qwen-2.5-32b-instruct',
     },
     groq: {
-      chat: 'qwen-2.5-32b-instruct',
-      coding: 'openai/gpt-4o',
-      tool: 'google/gemini-2.0-flash',
+      chat: 'llama-3.3-70b-versatile',
+      code: 'qwen-2.5-coder-32b',
+      vision: 'llama-3.2-90b-vision-preview',
+      tool: 'llama-3.3-70b-versatile',
+      memory: 'llama-3.3-70b-versatile',
+    },
+    google: {
+      chat: 'gemini-2.0-flash',
+      code: 'gemini-2.5-pro',
+      vision: 'gemini-2.0-flash',
+      tool: 'gemini-2.0-flash',
+      memory: 'gemini-2.0-flash',
     },
   };
   const providerMatrix = matrix[providerName] || matrix.openrouter;
-  return providerMatrix[profileName] || providerMatrix.chat;
+  return providerMatrix[intent] || providerMatrix.chat;
 }
 
 function normalizeCloudOrder(order) {
@@ -89,7 +135,7 @@ function normalizeCloudOrder(order) {
     .map((item) => String(item || '').toLowerCase().trim())
     .filter(Boolean)
     .filter((value, index, list) => list.indexOf(value) === index);
-  return normalized.length > 0 ? normalized : ['groq', 'openrouter'];
+  return normalized.length > 0 ? normalized : ['groq', 'openrouter', 'google'];
 }
 
 function chooseCloudProvider(order, providers = {}) {
@@ -99,4 +145,6 @@ function chooseCloudProvider(order, providers = {}) {
   return normalizeCloudOrder(order)[0];
 }
 
-module.exports = { decideRoute };
+module.exports = { decideRoute, classifyIntent: undefined /* re-exported below for ergonomics */ };
+// Convenience re-export so callers don't need two requires.
+module.exports.classifyIntent = require('./analyzer').classifyIntent;

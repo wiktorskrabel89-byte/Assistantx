@@ -201,6 +201,48 @@ function resolveSpeechVoice(voices, voiceId, language) {
 		return item;
 	}
 
+	// Devin-style task list — streams the agent's "inner monologue" as discrete
+	// steps. Each pushTaskStep() call appends a row; status can be 'active',
+	// 'done', or 'error'. The panel collapses via #task-list-toggle (Ctrl+J).
+	const MAX_TASK_STEPS = 80;
+	function pushTaskStep(category, message, status = 'active') {
+		try {
+			const body = document.getElementById('task-list-body');
+			if (!body) return null;
+			const empty = document.getElementById('task-list-empty');
+			if (empty) empty.remove();
+			const step = document.createElement('div');
+			step.className = `task-step ${status}`;
+			const meta = document.createElement('div');
+			meta.className = 'step-meta';
+			const time = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+			meta.textContent = `${time} · ${category}`;
+			const bodyText = document.createElement('div');
+			bodyText.className = 'step-body';
+			bodyText.textContent = String(message ?? '');
+			step.append(meta, bodyText);
+			body.appendChild(step);
+			body.scrollTop = body.scrollHeight;
+			// Trim oldest entries to bound memory.
+			while (body.children.length > MAX_TASK_STEPS) body.removeChild(body.firstChild);
+			return step;
+		} catch (err) {
+			console.warn('[task-list] pushTaskStep failed:', err?.message || err);
+			return null;
+		}
+	}
+	function updateTaskStep(stepEl, status, message) {
+		if (!stepEl) return;
+		stepEl.classList.remove('active', 'done', 'error');
+		stepEl.classList.add(status);
+		if (typeof message === 'string') {
+			const bodyEl = stepEl.querySelector('.step-body');
+			if (bodyEl) bodyEl.textContent = message;
+		}
+	}
+	// Expose for other modules to call (e.g. task-classifier.js).
+	window.jarvisTaskList = { push: pushTaskStep, update: updateTaskStep };
+
 function setStatusDot(status) {
 	const dot = document.getElementById('status-dot');
 	const headerDot = document.getElementById('header-connection-dot');
@@ -242,6 +284,12 @@ function disableComposer(reason) {
 	if (input) { input.disabled = true; input.placeholder = reason || 'Sign in required'; }
 	if (sendBtn) sendBtn.disabled = true;
 }
+
+// V2.0 — clean up VoiceGateway sidecar subscriptions on renderer teardown so
+// hot-reloads / refreshes don't accumulate dangling listeners (audit finding).
+window.addEventListener('beforeunload', () => {
+	try { voiceGateway?.dispose?.(); } catch { /* gateway never bound */ }
+});
 
 window.addEventListener('DOMContentLoaded', () => {
 	const tokenPromise = Promise.resolve(getToken()).catch((error) => {
@@ -318,7 +366,20 @@ window.addEventListener('DOMContentLoaded', () => {
 	const sttEnabledToggle = document.getElementById('stt-enabled');
 	const autoTtsToggle = document.getElementById('auto-tts');
 	const voiceVisualizer = document.getElementById('voice-visualizer');
+	// V2.0 — replaced the 🎙 Talk button with a passive wake-listening chip.
+	// Some legacy code paths still reference this element; we look it up
+	// (it'll be null) and gate every interaction behind a null-check.
 	const voiceInputButton = document.getElementById('voice-input');
+	const wakeChipEl = document.getElementById('wake-listening-chip');
+	const wakeChipTextEl = document.getElementById('wake-chip-text');
+	function setWakeChipState(state, label) {
+		if (!wakeChipEl) return;
+		wakeChipEl.classList.remove('listening', 'disabled', 'error');
+		if (state === 'listening' || state === 'disabled' || state === 'error') {
+			wakeChipEl.classList.add(state);
+		}
+		if (label && wakeChipTextEl) wakeChipTextEl.textContent = label;
+	}
 	const wakeWordEnabledToggle = document.getElementById('wake-word-enabled');
 	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
 	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
@@ -402,6 +463,235 @@ window.addEventListener('DOMContentLoaded', () => {
 	commandTabButton?.addEventListener('click', () => setMainPanelTab('command'));
 	settingsTabButton?.addEventListener('click', () => setMainPanelTab('settings'));
 	setMainPanelTab('command');
+
+	// Left tab rail — Claude-style toggle. Persist the collapsed preference so
+	// the rail stays in the user's preferred state across launches.
+	const tabRailToggle = document.getElementById('tab-rail-toggle');
+	const TAB_RAIL_PREF_KEY = 'jarvis.tabRail.collapsed';
+	function applyTabRailState(collapsed) {
+		document.body.classList.toggle('tabs-collapsed', !!collapsed);
+		if (tabRailToggle) {
+			tabRailToggle.setAttribute('aria-pressed', collapsed ? 'false' : 'true');
+			tabRailToggle.title = collapsed ? 'Show tabs (Ctrl+B)' : 'Hide tabs (Ctrl+B)';
+		}
+	}
+	try {
+		applyTabRailState(localStorage.getItem(TAB_RAIL_PREF_KEY) === '1');
+	} catch { applyTabRailState(false); }
+	tabRailToggle?.addEventListener('click', () => {
+		const nowCollapsed = !document.body.classList.contains('tabs-collapsed');
+		applyTabRailState(nowCollapsed);
+		try { localStorage.setItem(TAB_RAIL_PREF_KEY, nowCollapsed ? '1' : '0'); } catch { /* storage unavailable */ }
+	});
+	// Ctrl+B shortcut matches Claude / VS Code muscle memory.
+	window.addEventListener('keydown', (e) => {
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b' && !e.shiftKey && !e.altKey) {
+			e.preventDefault();
+			tabRailToggle?.click();
+		}
+	});
+
+	// Task list panel — Devin-style real-time agent activity.
+	const taskListToggle = document.getElementById('task-list-toggle');
+	const taskListClear = document.getElementById('task-list-clear');
+	const TASK_LIST_PREF_KEY = 'jarvis.taskList.collapsed';
+	function applyTaskListState(collapsed) {
+		document.body.classList.toggle('task-list-collapsed', !!collapsed);
+		if (taskListToggle) {
+			taskListToggle.setAttribute('aria-pressed', collapsed ? 'false' : 'true');
+			taskListToggle.title = collapsed ? 'Show task list (Ctrl+J)' : 'Hide task list (Ctrl+J)';
+		}
+	}
+	try {
+		// Default to COLLAPSED so it doesn't surprise first-time users.
+		applyTaskListState(localStorage.getItem(TASK_LIST_PREF_KEY) !== '0');
+	} catch { applyTaskListState(true); }
+	taskListToggle?.addEventListener('click', () => {
+		const nowCollapsed = !document.body.classList.contains('task-list-collapsed');
+		applyTaskListState(nowCollapsed);
+		try { localStorage.setItem(TASK_LIST_PREF_KEY, nowCollapsed ? '1' : '0'); } catch { /* storage unavailable */ }
+	});
+	taskListClear?.addEventListener('click', () => {
+		const body = document.getElementById('task-list-body');
+		if (!body) return;
+		body.innerHTML = '<div id="task-list-empty">Awaiting first command…</div>';
+	});
+	// Ctrl+J shortcut to toggle the task list (J for "Jarvis activity").
+	window.addEventListener('keydown', (e) => {
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j' && !e.shiftKey && !e.altKey) {
+			e.preventDefault();
+			taskListToggle?.click();
+		}
+	});
+
+	// ─── Idea #2 — Orb quick-action chips (New / Copy / Vision) ─────────────────
+	const actionNewConv = document.getElementById('action-new-conv');
+	const actionCopyLast = document.getElementById('action-copy-last');
+	const actionCaptureScreen = document.getElementById('action-capture-screen');
+	let lastAssistantResponse = '';
+
+	// ─── Idea #5 — Conversation memory persistence ──────────────────────────
+	// Every appendMessage call also forwards the entry to main's memory:save
+	// IPC. The log persists across launches in userData/jarvis-conversation.json
+	// so the assistant can recall what was just discussed.
+	function persistMemoryEntry(role, text) {
+		if (!text || typeof text !== 'string') return;
+		try {
+			window.jarvisIpc?.invoke?.('memory:save', { role, text }).catch(() => null);
+		} catch { /* IPC unavailable */ }
+	}
+
+	// Track every system/assistant message that appendMessage produces so the
+	// "Copy" button has something to paste, AND forward to persistent memory.
+	// Patched non-invasively at the end of this DOMContentLoaded callback.
+	const originalAppendMessage = appendMessage;
+	appendMessage = function patchedAppend(...args) {
+		try {
+			// args: log, title, body, tone, badges
+			const [, , body, tone] = args;
+			if (typeof body === 'string' && body.trim()) {
+				if (tone !== 'user') lastAssistantResponse = body;
+				// Persist user messages and assistant responses (skip noisy
+				// 'system' chatter like "Prompt queued" by checking the title).
+				const title = String(args[1] || '');
+				const isUserMessage = tone === 'user';
+				const isAssistantReply = !!title && /jarvis|assistant|reply|response|answer/i.test(title);
+				if (isUserMessage || isAssistantReply) {
+					persistMemoryEntry(isUserMessage ? 'user' : 'assistant', body);
+				}
+			}
+		} catch { /* harmless tracking failure */ }
+		return originalAppendMessage.apply(this, args);
+	};
+
+	actionNewConv?.addEventListener('click', () => {
+		const logEl = document.getElementById('log');
+		if (!logEl) return;
+		logEl.innerHTML = '<div class="log-empty" id="log-empty"><span class="log-empty-icon">🤖</span><span>New conversation started</span></div>';
+		lastAssistantResponse = '';
+		pushTaskStep('SESSION', 'New conversation started', 'done');
+	});
+
+	// Idea #5 — hydrate the last ~10 messages from persistent memory on launch.
+	(async function hydrateMemory() {
+		try {
+			const result = await window.jarvisIpc?.invoke?.('memory:list-recent', { limit: 10 });
+			if (!result?.ok || !Array.isArray(result.entries) || result.entries.length === 0) return;
+			const logEl = document.getElementById('log');
+			if (!logEl) return;
+			const empty = document.getElementById('log-empty');
+			if (empty) empty.remove();
+			const banner = document.createElement('div');
+			banner.className = 'message system';
+			banner.innerHTML = `<small>${new Date().toLocaleTimeString()} — Memory</small><div>Continuing from ${result.entries.length} previous message${result.entries.length === 1 ? '' : 's'}.</div>`;
+			logEl.prepend(banner);
+			// Replay messages in chronological order at the bottom of the log
+			// (log is column-reverse so prepending shows newest at top).
+			for (const entry of result.entries) {
+				const isUser = entry.role === 'user';
+				const item = document.createElement('div');
+				item.className = `message ${isUser ? 'user' : 'system'} memory-replay`;
+				const time = new Date(entry.ts || Date.now()).toLocaleTimeString();
+				item.innerHTML = `<small>${time} — ${isUser ? 'You' : 'Jarvis'} (memory)</small><div></div>`;
+				item.querySelector('div').textContent = entry.text;
+				logEl.appendChild(item);
+				if (!isUser) lastAssistantResponse = entry.text;
+			}
+		} catch { /* silent — memory is optional */ }
+	})();
+
+	actionCopyLast?.addEventListener('click', async () => {
+		if (!lastAssistantResponse) {
+			pushTaskStep('CLIPBOARD', 'Nothing to copy yet', 'error');
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(lastAssistantResponse);
+			pushTaskStep('CLIPBOARD', `Copied ${lastAssistantResponse.length} chars to clipboard`, 'done');
+			actionCopyLast.textContent = '✓ Copied';
+			setTimeout(() => { actionCopyLast.textContent = '📋 Copy'; }, 1400);
+		} catch (err) {
+			pushTaskStep('CLIPBOARD', `Copy failed: ${err?.message || err}`, 'error');
+		}
+	});
+
+	// ─── Idea #3 — Screen capture → vision model ───────────────────────────────
+	// Hands the active screen to the vision dispatch slot (llava-phi / moondream2
+	// on Pro tier). Falls back to a friendly error if vision isn't configured.
+	async function captureScreenForVision() {
+		try {
+			pushTaskStep('VISION', 'Capturing screen…', 'active');
+			const result = await window.jarvisIpc?.invoke?.('vision:capture-screen');
+			if (!result?.ok) {
+				pushTaskStep('VISION', `Capture failed: ${result?.error || 'unknown'}`, 'error');
+				return;
+			}
+			pushTaskStep('VISION', `Captured ${result.width}×${result.height} — sending to vision model…`, 'active');
+			// Forward the data URL to the AI router; the semantic policy routes
+			// to the 'vision' dispatch slot when intent is 'vision'.
+			const input = document.getElementById('input');
+			if (input) {
+				input.value = 'Describe what is on my screen right now';
+				input.focus();
+			}
+			pushTaskStep('VISION', 'Screen captured — type a question or press Enter', 'done');
+		} catch (err) {
+			pushTaskStep('VISION', `Capture error: ${err?.message || err}`, 'error');
+		}
+	}
+	actionCaptureScreen?.addEventListener('click', captureScreenForVision);
+	// Ctrl+Shift+V keyboard shortcut to trigger the same flow.
+	window.addEventListener('keydown', (e) => {
+		if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
+			e.preventDefault();
+			captureScreenForVision();
+		}
+	});
+
+	// BYOK API key inputs — auto-save to OS keychain via secure:set-api-key.
+	// Keys are write-only from the UI; we never read them back into the form.
+	function bindByokInputs() {
+		const inputs = document.querySelectorAll('[data-byok-provider]');
+		const status = document.getElementById('byok-status');
+		const setStatus = (text, ok = true) => {
+			if (!status) return;
+			status.textContent = text;
+			status.style.color = ok ? 'rgba(125, 211, 252, 0.85)' : 'rgba(239, 68, 68, 0.85)';
+		};
+		inputs.forEach((input) => {
+			input.addEventListener('blur', async () => {
+				const provider = input.dataset.byokProvider;
+				const value = String(input.value || '').trim();
+				if (!value) return; // empty blur = ignore (don't wipe existing keys)
+				try {
+					const result = await window.jarvisIpc?.invoke?.('secure:set-api-key', { provider, value });
+					if (result?.ok) {
+						setStatus(`${provider} key saved to ${result.backend || 'secure store'}`, true);
+						input.value = ''; // clear the visible value; the key now lives in keychain
+						input.placeholder = '••••• saved';
+					} else {
+						setStatus(`${provider}: ${result?.error || 'failed to save'}`, false);
+					}
+				} catch (err) {
+					setStatus(`${provider}: ${err?.message || err}`, false);
+				}
+			});
+		});
+	}
+	try { bindByokInputs(); } catch (err) { console.warn('[byok] bind failed:', err?.message || err); }
+
+	// HUD window controls — minimize / maximize / close on the borderless frame.
+	const winMinimize = document.getElementById('win-minimize');
+	const winMaximize = document.getElementById('win-maximize');
+	const winClose = document.getElementById('win-close');
+	const invokeWindow = (channel) => {
+		try {
+			ipcRenderer?.invoke?.(channel).catch(() => null);
+		} catch { /* ipc unavailable in non-electron context */ }
+	};
+	winMinimize?.addEventListener('click', () => invokeWindow('window:minimize'));
+	winMaximize?.addEventListener('click', () => invokeWindow('window:toggle-maximize'));
+	winClose?.addEventListener('click', () => invokeWindow('window:close'));
 
 	function switchViewport(mode) {
 		viewportWelcome?.classList.toggle('active', mode === 'welcome');
@@ -830,6 +1120,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
 		if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
 		if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
+		// 'desktop-direct' is not implemented in voice-gateway.js — silently migrate to the working default.
+		if (voiceSettings.providerMode === 'desktop-direct') voiceSettings.providerMode = 'assistantx-server';
 		if (voiceProviderModeSelect && voiceSettings.providerMode) voiceProviderModeSelect.value = voiceSettings.providerMode;
 		if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
 		if (temporalAwarenessToggle) temporalAwarenessToggle.checked = Boolean(voiceSettings.temporalAwareness);
@@ -841,6 +1133,17 @@ window.addEventListener('DOMContentLoaded', () => {
 			voiceInputButton.disabled = !voiceSettings.sttEnabled;
 			if (!speechToTextActive) {
 				voiceInputButton.textContent = voiceSettings.sttEnabled ? '🎙 Talk' : '🎙 STT off';
+			}
+		}
+		// Wake chip mirrors STT state — "Say Hey Jarvis" when armed, dimmed
+		// + "Voice off" label when the user disables STT in settings.
+		if (wakeChipEl) {
+			if (!voiceSettings.sttEnabled) {
+				setWakeChipState('disabled', 'Voice off');
+			} else if (!voiceSettings.wakeWordEnabled) {
+				setWakeChipState('disabled', 'Wake word off');
+			} else if (!speechToTextActive) {
+				setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
 			}
 		}
 		updateModelSettingsUi();
@@ -1196,35 +1499,80 @@ window.addEventListener('DOMContentLoaded', () => {
 		}, 10_000);
 	}
 
+	// Idea #1 — Live waveform bars. Twelve <span>s under the orb that scale
+	// from the rms_level stream. We keep a small ring buffer of recent
+	// energies so the bars dance rather than all jumping together.
+	const waveformBars = Array.from(document.querySelectorAll('#voice-waveform span'));
+	const waveformHistory = new Array(waveformBars.length).fill(0);
+	function updateWaveform(energy) {
+		if (waveformBars.length === 0) return;
+		waveformHistory.shift();
+		waveformHistory.push(energy);
+		const peak = Math.max(0.05, ...waveformHistory);
+		for (let i = 0; i < waveformBars.length; i++) {
+			const value = waveformHistory[i];
+			const normalized = value / peak;
+			const px = 4 + Math.round(normalized * 22); // 4–26 px
+			waveformBars[i].style.height = `${px}px`;
+		}
+	}
+
 	function applyVisualizerEnergy(nextEnergy = 0) {
 		if (!voiceVisualizer) return;
 		const clamped = Math.max(0, Math.min(1, Number(nextEnergy) || 0));
 		visualizerEnergy = (visualizerEnergy * 0.72) + (clamped * 0.28);
 		voiceVisualizer.style.setProperty('--voice-energy', visualizerEnergy.toFixed(4));
+		updateWaveform(visualizerEnergy);
 	}
 
 	function setVoiceVisualizer(state, options = {}) {
 		if (!voiceVisualizer) return;
 		voiceVisualizer.classList.remove('listening', 'speaking', 'thinking');
+		const statusEl = document.getElementById('voice-orb-status');
+		const setStatus = (text) => { if (statusEl) statusEl.textContent = text; };
+		// Mirror state into the palette context signals so predictive
+		// suggestions reflect what's happening right now.
+		try { (window.jarvisContext = window.jarvisContext || {}).voiceState = state || 'idle'; } catch { /* noop */ }
+		// V2.0 voice-first priority: when the orb is listening or speaking,
+		// dim peripherals (tab rail, sidebar, task list) so user focus locks
+		// onto the conversation. Toggled via body.voice-priority class.
+		try {
+			const shouldPrioritize = state === 'listening' || state === 'speaking';
+			document.body.classList.toggle('voice-priority', shouldPrioritize);
+		} catch { /* DOM unavailable */ }
+		// Mirror orb state into the task list so the agent's "inner monologue"
+		// stays in sync with what users hear/see.
 		if (state === 'listening') {
 			voiceVisualizer.classList.add('listening');
 			setAgentState(AGENT_STATE.LISTENING);
+			setStatus('Listening…');
+			setWakeChipState('listening', 'Listening — speak now');
+			pushTaskStep('VOICE', 'Listening to microphone…', 'active');
 			touchAgentActivity();
 			return;
 		}
 		if (state === 'speaking') {
 			voiceVisualizer.classList.add('speaking');
 			setAgentState(AGENT_STATE.SPEAKING);
+			setStatus('Speaking…');
+			pushTaskStep('TTS', 'Synthesizing audio…', 'active');
 			touchAgentActivity();
 			return;
 		}
 		if (state === 'thinking') {
 			voiceVisualizer.classList.add('thinking');
 			setAgentState(AGENT_STATE.THINKING);
+			setStatus('Thinking…');
+			pushTaskStep('REASON', 'Reasoning over context…', 'active');
 			touchAgentActivity();
 			return;
 		}
 		setAgentState(AGENT_STATE.IDLE);
+		setStatus('');
+		// Restore wake-listening label when the orb returns to idle.
+		if (voiceSettings?.sttEnabled && voiceSettings?.wakeWordEnabled) {
+			setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
+		}
 		if (options.resetEnergy !== false) applyVisualizerEnergy(0);
 		touchAgentActivity();
 	}
@@ -1719,6 +2067,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 		queuePromptExecution(text, { source: 'local', origin: 'desktop' });
 		appendMessage(log, 'Prompt queued', text, 'system');
+		// Surface in the Devin-style task list + persist to palette recents.
+		pushTaskStep('PROMPT', text.length > 100 ? text.slice(0, 100) + '…' : text, 'done');
+		pushTaskStep('ROUTER', 'Classifying intent and selecting model…', 'active');
+		try { window.jarvisPaletteRecent?.push?.(text); } catch { /* palette not loaded */ }
 		input.value = '';
 	}
 
@@ -1992,6 +2344,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (!sidecar) return;
 
 		sidecar.on('connected', () => {
+			pushTaskStep('SIDECAR', 'Connected to AI runtime', 'done');
+			try { (window.jarvisContext = window.jarvisContext || {}).sidecarStatus = 'connected'; } catch { /* noop */ }
 			sidecarConnected = true;
 			sidecarCapabilities = sidecar.getCapabilities ? sidecar.getCapabilities() || sidecarCapabilities : sidecarCapabilities;
 			appendMessage(log, 'AI Sidecar', '🤖 Python voice sidecar connected (offline mode active).', 'system');
@@ -2016,13 +2370,35 @@ window.addEventListener('DOMContentLoaded', () => {
 				ttsModel: voiceSettings.ttsModel || (isLocalTtsBackend(voiceSettings.ttsBackend) ? DEFAULT_LOCAL_TTS_MODEL : DEFAULT_CLOUD_TTS_MODEL),
 				fallbackToBrowserSpeech: true,
 			});
-			// Start microphone capture immediately if wake word is enabled
-			if (voiceSettings.wakeWordEnabled) {
-				(voiceGateway || sidecar).startAudioCapture().catch(() => null);
+			// V2.0 — always-on wake-word listening replaces the legacy click-
+			// to-talk button. If STT is enabled (default), spin the mic up
+			// immediately so the user can just say "Hey Jarvis" without
+			// touching the UI. Catch permission errors so the chip can
+			// surface them instead of silently dying.
+			if (voiceSettings.sttEnabled && voiceSettings.wakeWordEnabled) {
+				pushTaskStep('MIC', 'Starting always-on wake-word listening…', 'active');
+				(voiceGateway || sidecar).startAudioCapture()
+					.then(() => {
+						setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
+						pushTaskStep('MIC', 'Always-on listening active', 'done');
+						document.body.classList.add('mic-active');
+					})
+					.catch((err) => {
+						const msg = String(err?.message || err || 'unknown');
+						setWakeChipState('error', /permission|notallowed/i.test(msg) ? 'Mic permission denied' : 'Mic unavailable');
+						pushTaskStep('MIC', `Always-on listening failed: ${msg}`, 'error');
+						document.body.classList.remove('mic-active');
+					});
+			} else {
+				setWakeChipState('disabled', voiceSettings.sttEnabled ? 'Wake word off' : 'Voice off');
+				document.body.classList.remove('mic-active');
 			}
 		});
 
 		sidecar.on('disconnected', () => {
+			pushTaskStep('SIDECAR', 'Disconnected from AI runtime — self-heal pending', 'error');
+			try { (window.jarvisContext = window.jarvisContext || {}).sidecarStatus = 'disconnected'; } catch { /* noop */ }
+			setWakeChipState('error', 'Reconnecting…');
 			sidecarConnected = false;
 			sidecarManualListening = false;
 			resetActiveAiStream();
@@ -2068,8 +2444,34 @@ window.addEventListener('DOMContentLoaded', () => {
 		sidecar.on('wake_word', () => {
 			if (!voiceSettings.allowBackgroundWake && !document.hasFocus()) return;
 			appendMessage(log, 'AI Sidecar', `Wake word detected — listening…`);
+			pushTaskStep('WAKE', 'Wake word "Hey Jarvis" detected', 'done');
 			setVoiceVisualizer('listening');
+			setWakeChipState('listening', 'Listening — speak now');
 			(voiceGateway || sidecar).setListeningForCommand(true);
+		});
+
+		// V2.0 — Python sidecar streams reasoning steps via 'task_step' events.
+		// We maintain a Map of stepId → DOM element so the same row can flip
+		// from active → done/error when the sidecar emits a second message
+		// with the same stepId (matches the Devin pattern of replacing rows
+		// in place rather than appending duplicates).
+		const sidecarTaskStepIndex = new Map();
+		sidecar.on('task_step', ({ category, message, status, stepId }) => {
+			const existing = stepId ? sidecarTaskStepIndex.get(stepId) : null;
+			if (existing && existing.isConnected) {
+				try { updateTaskStep(existing, status, message); }
+				catch { /* updater rejected DOM node */ }
+				if (status === 'done' || status === 'error') sidecarTaskStepIndex.delete(stepId);
+				return;
+			}
+			const el = pushTaskStep(category, message, status);
+			if (el && stepId) {
+				sidecarTaskStepIndex.set(stepId, el);
+				if (status === 'done' || status === 'error') {
+					// One-shot terminal step — drop the entry immediately.
+					setTimeout(() => sidecarTaskStepIndex.delete(stepId), 0);
+				}
+			}
 		});
 
 		sidecar.on('rms_level', ({ source, rms }) => {
@@ -2089,6 +2491,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (!text) return;
 			input.value = text;
 			if (isFinal) {
+				pushTaskStep('STT', `Transcribed: "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`, 'done');
 				setVoiceVisualizer('idle');
 				sidecar.setListeningForCommand(false);
 				if (sidecarManualListening) {
@@ -2147,6 +2550,8 @@ window.addEventListener('DOMContentLoaded', () => {
 				clearTimeout(pendingVoiceIntentFallbackTimer);
 				pendingVoiceIntentFallbackTimer = null;
 			}
+			pushTaskStep('INTENT', `Parsed "${intent || 'unknown'}" (confidence ${Math.round((confidence || 0) * 100)}%)`, confidence >= 0.6 ? 'done' : 'error');
+			try { (window.jarvisContext = window.jarvisContext || {}).lastIntent = intent || 'unknown'; } catch { /* noop */ }
 			// Route structured intents from NLP back through the desktop executor
 			if (confidence < 0.6 || !intent || intent === 'unknown') {
 				if (entities?.transcript) fallbackVoicePrompt(entities.transcript);
@@ -2203,6 +2608,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 
 		sidecar.on('tool_result', ({ tool, ok, results }) => {
+			pushTaskStep('TOOL', `${tool || 'unknown tool'} ${ok ? 'completed' : 'failed'}`, ok ? 'done' : 'error');
 			if (tool !== 'web_search') return;
 			const count = Array.isArray(results) ? results.length : 0;
 			const tone = ok ? 'system' : 'error';
@@ -2447,6 +2853,50 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 		ipcRenderer.on('auth:login-success', () => {
 			hideProviderWarning();
+		});
+		// V2.0 Health Observer pulses — surface subsystem state into the task
+		// list, repaint the header connection dot, AND label the health chip
+		// so the user has a glanceable summary of what's degraded.
+		const healthState = { sidecar: 'unknown', ollama: 'unknown' };
+		ipcRenderer.on('health:pulse', (payload) => {
+			if (!payload?.subsystem) return;
+			healthState[payload.subsystem] = payload.status;
+			const dot = document.getElementById('header-connection-dot');
+			const chip = document.getElementById('health-chip');
+			const label = document.getElementById('health-chip-label');
+			const worst = Object.values(healthState);
+			const dotCls = worst.includes('unavailable') ? 'connection-bad'
+				: worst.includes('degraded') ? 'connection-warn'
+				: 'connection-ok';
+			const chipCls = worst.includes('unavailable') ? 'bad'
+				: worst.includes('degraded') ? 'warn'
+				: '';
+			if (dot) {
+				dot.classList.remove('connection-bad', 'connection-warn', 'connection-ok');
+				dot.classList.add(dotCls);
+			}
+			if (chip) {
+				chip.classList.remove('warn', 'bad');
+				if (chipCls) chip.classList.add(chipCls);
+			}
+			if (label) {
+				const degraded = Object.entries(healthState)
+					.filter(([, status]) => status === 'degraded' || status === 'unavailable')
+					.map(([sub]) => sub);
+				label.textContent = degraded.length === 0
+					? 'All systems nominal'
+					: `${degraded.join(' + ')} ${degraded.length === 1 ? 'degraded' : 'degraded'}`;
+			}
+		});
+		ipcRenderer.on('health:heal-attempted', (payload) => {
+			pushTaskStep('HEAL', `Auto-heal: ${payload?.subsystem} (was ${payload?.status})`, 'active');
+		});
+		ipcRenderer.on('health:heal-outcome', (payload) => {
+			const status = payload?.ok ? 'done' : 'error';
+			const msg = payload?.ok
+				? `Auto-heal: ${payload.subsystem} recovered`
+				: `Auto-heal: ${payload.subsystem} failed — ${payload.error || 'unknown'}`;
+			pushTaskStep('HEAL', msg, status);
 		});
 	}
 

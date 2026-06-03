@@ -303,7 +303,9 @@
             <button class="profile-btn" data-profile="eco"      onclick="selectProfile('eco',event)">Eco</button>
             <button class="profile-btn active" data-profile="standard" onclick="selectProfile('standard',event)">Standard</button>
             <button class="profile-btn" data-profile="pro"      onclick="selectProfile('pro',event)">Pro</button>
+            <button class="profile-btn" data-profile="auto" onclick="autoDetectProfile(event)" title="Benchmark this PC and pick the best tier">⚡ Auto-detect</button>
           </div>
+          <div id="hardware-summary" style="margin-top:8px;font-size:11px;color:rgba(200,216,240,0.6);min-height:14px;"></div>
           <div class="model-preview" id="model-preview">
             <!-- filled by JS -->
           </div>
@@ -418,6 +420,34 @@
         btn.classList.toggle('active', btn.dataset.profile === profile);
       });
       renderModelPreview();
+    }
+
+    // Hardware benchmark → tier auto-selection. Talks to main via IPC,
+    // gracefully degrades if the channel isn't available.
+    async function autoDetectProfile(event) {
+      event.stopPropagation();
+      const summary = document.getElementById('hardware-summary');
+      summary.textContent = 'Probing hardware…';
+      try {
+        const probe = await window.jarvisIpc?.invoke?.('hardware:probe');
+        if (!probe || probe.ok === false) {
+          summary.textContent = 'Hardware probe unavailable — pick a tier manually.';
+          return;
+        }
+        const ram = probe.totalRamGB;
+        const cpu = probe.cpuCount;
+        const gpu = probe.hasDiscreteGpu ? 'discrete GPU' : 'integrated GPU only';
+        const tierLabel = { eco: 'Eco (Potato)', standard: 'Standard (Pro)', pro: 'Pro (Enthusiast)' }[probe.suggestedProfile] || probe.suggestedProfile;
+        summary.textContent = `${ram} GB RAM · ${cpu} CPU cores · ${gpu} → ${tierLabel}`;
+        // Apply the suggested profile.
+        selectedProfile = probe.suggestedProfile;
+        document.querySelectorAll('.profile-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.profile === probe.suggestedProfile);
+        });
+        renderModelPreview();
+      } catch (err) {
+        summary.textContent = `Probe failed: ${String(err?.message || err)}`;
+      }
     }
 
     function renderModelPreview() {

@@ -28,10 +28,49 @@ const STT_MODEL_ALIASES = {
 const VALID_LOCAL_TTS_MODELS = ['kokoro', 'piper', 'auto'];
 
 // Model matrix: hardware profile → Ollama model tag
+// V2.0 — Each profile now declares a multi-model dispatch table so the
+// semantic router (electron/ai/router/policy.js) can pick the right model
+// per intent (chat, code, vision, routing) instead of running every prompt
+// through one general LLM.
+//   - eco: single small model, no specialization
+//   - standard: split chat + code, share vision/router with small Qwen
+//   - pro: full dual-GPU layout per the V2.0 spec — Qwen2.5-Coder 14B for
+//     reasoning/code, lightweight Qwen 1.5B for fast intent classification,
+//     and llava/moondream for vision
 const HARDWARE_PROFILE_MODELS = {
-  eco: { llm: 'qwen2.5:1.5b', stt: 'tiny', tts: 'kokoro' },
-  standard: { llm: 'gemma3:4b', stt: 'base', tts: 'kokoro' },
-  pro: { llm: 'qwen2.5:7b', stt: 'base', tts: 'kokoro' },
+  eco: {
+    llm: 'qwen2.5:1.5b',
+    stt: 'tiny',
+    tts: 'kokoro',
+    dispatch: {
+      chat: 'qwen2.5:1.5b',
+      code: 'qwen2.5:1.5b',
+      router: 'qwen2.5:1.5b',
+      vision: null,
+    },
+  },
+  standard: {
+    llm: 'gemma3:4b',
+    stt: 'base',
+    tts: 'kokoro',
+    dispatch: {
+      chat: 'gemma3:4b',
+      code: 'qwen2.5-coder:7b',
+      router: 'qwen2.5:1.5b',
+      vision: 'moondream2:1.4b',
+    },
+  },
+  pro: {
+    llm: 'qwen2.5-coder:14b',
+    stt: 'base',
+    tts: 'kokoro',
+    dispatch: {
+      chat: 'qwen2.5-coder:14b',
+      code: 'qwen2.5-coder:14b',
+      router: 'qwen2.5:3b',
+      vision: 'llava-phi:2.7b',
+    },
+  },
 };
 
 // Legacy config path used before userData migration (kept for one-time migration).
@@ -420,6 +459,15 @@ function getJarvisModelConfig() {
     stt_model: String(cfg.stt_model || defaults.stt).trim() || defaults.stt,
     llm_model: String(cfg.llm_model || defaults.llm).trim() || defaults.llm,
     tts_model: String(cfg.tts_model || defaults.tts).trim() || defaults.tts,
+    // V2.0: tier-aware multi-model dispatch table consumed by the semantic
+    // router. Always exposes a complete dispatch object even if the persisted
+    // profile predates the V2.0 schema (defaults backfill missing slots).
+    dispatch: {
+      chat: defaults.dispatch?.chat || defaults.llm,
+      code: defaults.dispatch?.code || defaults.llm,
+      router: defaults.dispatch?.router || defaults.llm,
+      vision: defaults.dispatch?.vision || null,
+    },
     local: cfg.local,
     cloud: cfg.cloud,
     server: cfg.server,

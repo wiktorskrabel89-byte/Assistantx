@@ -856,24 +856,94 @@ export default function PublicHome() {
                   "0 12px 48px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)",
               }}
             >
-              <div
-                className="pointer-events-none absolute -left-32 -top-32 h-80 w-80 rounded-full opacity-40"
-                style={{
-                  background:
-                    "radial-gradient(circle, rgba(99,102,241,0.45) 0%, transparent 70%)",
-                  animation: "mesh-drift 18s ease-in-out infinite",
-                  filter: "blur(20px)",
-                }}
-              />
-              <div
-                className="pointer-events-none absolute -bottom-32 -right-32 h-80 w-80 rounded-full opacity-30"
-                style={{
-                  background:
-                    "radial-gradient(circle, rgba(244,114,182,0.40) 0%, transparent 70%)",
-                  animation: "mesh-drift-2 22s ease-in-out infinite",
-                  filter: "blur(20px)",
-                }}
-              />
+              {t.socialProofSubtitle}
+            </p>
+          </div>
+        </section>
+
+        {/* ── Animated Stats Bar ── */}
+        <div
+          className="relative my-4 overflow-hidden rounded-2xl border px-6 py-4"
+          style={{
+            borderColor: "rgba(99,102,241,0.2)",
+            background:
+              "linear-gradient(90deg, rgba(99,102,241,0.08) 0%, rgba(56,189,248,0.06) 50%, rgba(167,139,250,0.08) 100%)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+          }}
+        >
+          {/* Moving shimmer */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.07) 40%, rgba(56,189,248,0.07) 60%, transparent 100%)",
+              animation: "shimmer 4s ease-in-out infinite",
+            }}
+          />
+          <style>{`
+            @keyframes shimmer {
+              0%   { transform: translateX(-100%); }
+              100% { transform: translateX(100%); }
+            }
+            @keyframes pulse-dot {
+              0%, 100% { opacity: 1; }
+              50%       { opacity: 0.4; }
+            }
+          `}</style>
+
+          <div className="relative flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-medium">
+            {STATS_KEYS.map((key, idx) => (
+              <span key={key} className="flex items-center gap-2">
+                {idx > 0 && <StatDot />}
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{
+                    background:
+                      idx === 0
+                        ? "#6366f1"
+                        : idx === 1
+                          ? "#38bdf8"
+                          : idx === 2
+                            ? "#a78bfa"
+                            : "#34d399",
+                    boxShadow: `0 0 5px ${
+                      idx === 0
+                        ? "#6366f1"
+                        : idx === 1
+                          ? "#38bdf8"
+                          : idx === 2
+                            ? "#a78bfa"
+                            : "#34d399"
+                    }`,
+                    animation: "pulse-dot 2s ease-in-out infinite",
+                    animationDelay: `${idx * 0.4}s`,
+                  }}
+                />
+                <span style={{ color: "rgba(232,234,240,0.75)" }}>
+                  {t[key]}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Features Grid ── */}
+        <section className="py-16">
+          {/* Section heading */}
+          <div className="mb-10 text-center">
+            <h2
+              className="text-3xl font-bold tracking-tight sm:text-4xl"
+              style={{ letterSpacing: "-0.03em", color: "#e8eaf0" }}
+            >
+              {t.featureSectionTitle}
+            </h2>
+            <p
+              className="mx-auto mt-3 max-w-xl text-base leading-7"
+              style={{ color: "rgba(232,234,240,0.55)" }}
+            >
+              {t.featureSectionSubtitle}
+            </p>
+          </div>
 
               <div className="relative">
                 <h2
