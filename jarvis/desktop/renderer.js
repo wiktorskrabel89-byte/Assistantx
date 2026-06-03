@@ -1328,6 +1328,13 @@ window.addEventListener('DOMContentLoaded', () => {
 		// Mirror state into the palette context signals so predictive
 		// suggestions reflect what's happening right now.
 		try { (window.jarvisContext = window.jarvisContext || {}).voiceState = state || 'idle'; } catch { /* noop */ }
+		// V2.0 voice-first priority: when the orb is listening or speaking,
+		// dim peripherals (tab rail, sidebar, task list) so user focus locks
+		// onto the conversation. Toggled via body.voice-priority class.
+		try {
+			const shouldPrioritize = state === 'listening' || state === 'speaking';
+			document.body.classList.toggle('voice-priority', shouldPrioritize);
+		} catch { /* DOM unavailable */ }
 		// Mirror orb state into the task list so the agent's "inner monologue"
 		// stays in sync with what users hear/see.
 		if (state === 'listening') {

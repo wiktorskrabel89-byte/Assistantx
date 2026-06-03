@@ -1471,6 +1471,111 @@
       font-weight: 600;
     }
 
+    /* ───────────────────────────────────────────────────────────────────────
+       Arc-reactor motif — turns the existing 3-div orb into Tony Stark's
+       chest reactor. We override the inherited shapes via more-specific
+       selectors so the legacy CSS still loads cleanly.
+       ─────────────────────────────────────────────────────────────────────── */
+    #voice-visualizer.voice-visualizer .orb-core {
+      width: calc(64px + (var(--voice-energy, 0) * 30px));
+      height: calc(64px + (var(--voice-energy, 0) * 30px));
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 38%, rgba(255,255,255,0.95) 0%, rgba(125,211,252,0.85) 22%, rgba(56,189,248,0.4) 55%, rgba(8,12,20,0.0) 75%);
+      box-shadow:
+        0 0 28px rgba(125, 211, 252, 0.65),
+        inset 0 0 20px rgba(255, 255, 255, 0.35);
+      transition: width 200ms ease, height 200ms ease, filter 200ms ease;
+    }
+    #voice-visualizer.voice-visualizer .orb-halo {
+      width: 180px;
+      height: 180px;
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      border-radius: 50%;
+      opacity: 0.55;
+      /* Segmented outer ring via conic gradient — creates the reactor "spokes". */
+      background:
+        conic-gradient(
+          from 0deg,
+          rgba(125, 211, 252, 0.55) 0deg 6deg,
+          transparent 6deg 30deg,
+          rgba(125, 211, 252, 0.55) 30deg 36deg,
+          transparent 36deg 60deg,
+          rgba(125, 211, 252, 0.55) 60deg 66deg,
+          transparent 66deg 90deg,
+          rgba(125, 211, 252, 0.55) 90deg 96deg,
+          transparent 96deg 120deg,
+          rgba(125, 211, 252, 0.55) 120deg 126deg,
+          transparent 126deg 150deg,
+          rgba(125, 211, 252, 0.55) 150deg 156deg,
+          transparent 156deg 180deg,
+          rgba(125, 211, 252, 0.55) 180deg 186deg,
+          transparent 186deg 210deg,
+          rgba(125, 211, 252, 0.55) 210deg 216deg,
+          transparent 216deg 240deg,
+          rgba(125, 211, 252, 0.55) 240deg 246deg,
+          transparent 246deg 270deg,
+          rgba(125, 211, 252, 0.55) 270deg 276deg,
+          transparent 276deg 300deg,
+          rgba(125, 211, 252, 0.55) 300deg 306deg,
+          transparent 306deg 330deg,
+          rgba(125, 211, 252, 0.55) 330deg 336deg,
+          transparent 336deg 360deg
+        );
+      -webkit-mask: radial-gradient(circle, transparent 60%, black 62%, black 100%);
+              mask: radial-gradient(circle, transparent 60%, black 62%, black 100%);
+      animation: arc-spin 24s linear infinite;
+      filter: drop-shadow(0 0 6px rgba(125, 211, 252, 0.45));
+    }
+    #voice-visualizer.voice-visualizer .orb-ring {
+      width: 140px;
+      height: 140px;
+      border: 2px solid rgba(125, 211, 252, 0.4);
+      border-radius: 50%;
+      opacity: 0.7;
+      box-shadow:
+        inset 0 0 18px rgba(125, 211, 252, 0.25),
+        0 0 18px rgba(125, 211, 252, 0.3);
+    }
+    @keyframes arc-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    /* State-driven intensification — listening/speaking spin faster + glow. */
+    #voice-visualizer.voice-visualizer.listening .orb-halo,
+    #voice-visualizer.voice-visualizer.speaking .orb-halo {
+      animation-duration: 6s;
+      opacity: 0.95;
+      filter: drop-shadow(0 0 14px rgba(125, 211, 252, 0.75));
+    }
+    #voice-visualizer.voice-visualizer.thinking .orb-halo {
+      animation-duration: 3s;
+      filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.65));
+    }
+    #voice-visualizer.voice-visualizer.listening .orb-core,
+    #voice-visualizer.voice-visualizer.speaking .orb-core {
+      filter: brightness(1.25) drop-shadow(0 0 36px rgba(125, 211, 252, 0.85));
+    }
+    #voice-visualizer.voice-visualizer.thinking .orb-core {
+      animation: arc-think 1.4s ease-in-out infinite;
+    }
+    @keyframes arc-think {
+      0%, 100% { filter: brightness(0.9) drop-shadow(0 0 18px rgba(168, 85, 247, 0.5)); }
+      50%      { filter: brightness(1.3) drop-shadow(0 0 32px rgba(168, 85, 247, 0.85)); }
+    }
+
+    /* Voice-first priority shift — when the orb is active, fade peripherals so
+       the user's attention locks onto the conversation. */
+    body.voice-priority .main-shell > .tab-switcher-side,
+    body.voice-priority #task-list-panel,
+    body.voice-priority .panel.stack:first-child {
+      opacity: 0.45;
+      transition: opacity 0.4s ease;
+    }
+    body.voice-priority #voice-visualizer.voice-visualizer .orb-core {
+      filter: brightness(1.35) drop-shadow(0 0 48px rgba(125, 211, 252, 0.95));
+    }
+
     /* Ambient particle background — subtle radial gradients that drift. */
     .panel.stack:has(#voice-visualizer)::before {
       content: '';
