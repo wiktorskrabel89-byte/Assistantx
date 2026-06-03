@@ -505,6 +505,38 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 	});
 
+	// BYOK API key inputs — auto-save to OS keychain via secure:set-api-key.
+	// Keys are write-only from the UI; we never read them back into the form.
+	function bindByokInputs() {
+		const inputs = document.querySelectorAll('[data-byok-provider]');
+		const status = document.getElementById('byok-status');
+		const setStatus = (text, ok = true) => {
+			if (!status) return;
+			status.textContent = text;
+			status.style.color = ok ? 'rgba(125, 211, 252, 0.85)' : 'rgba(239, 68, 68, 0.85)';
+		};
+		inputs.forEach((input) => {
+			input.addEventListener('blur', async () => {
+				const provider = input.dataset.byokProvider;
+				const value = String(input.value || '').trim();
+				if (!value) return; // empty blur = ignore (don't wipe existing keys)
+				try {
+					const result = await window.jarvisIpc?.invoke?.('secure:set-api-key', { provider, value });
+					if (result?.ok) {
+						setStatus(`${provider} key saved to ${result.backend || 'secure store'}`, true);
+						input.value = ''; // clear the visible value; the key now lives in keychain
+						input.placeholder = '••••• saved';
+					} else {
+						setStatus(`${provider}: ${result?.error || 'failed to save'}`, false);
+					}
+				} catch (err) {
+					setStatus(`${provider}: ${err?.message || err}`, false);
+				}
+			});
+		});
+	}
+	try { bindByokInputs(); } catch (err) { console.warn('[byok] bind failed:', err?.message || err); }
+
 	// HUD window controls — minimize / maximize / close on the borderless frame.
 	const winMinimize = document.getElementById('win-minimize');
 	const winMaximize = document.getElementById('win-maximize');

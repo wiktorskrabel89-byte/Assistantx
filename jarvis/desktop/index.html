@@ -2034,6 +2034,40 @@
             </div>
 
             <div class="stack">
+              <div class="section-label">Cloud API Keys (BYOK)</div>
+              <div class="field-note" style="font-size:11px;color:rgba(200,216,240,0.55);margin-bottom:8px;">
+                Keys are stored in your OS keychain (never plain text on disk).
+                Required for Tier 3 (Cloud / BYOK) routing.
+              </div>
+              <div class="settings-grid byok-grid">
+                <label class="field"><span>OpenAI</span>
+                  <input id="byok-openai" type="password" placeholder="sk-…" autocomplete="off" data-byok-provider="openai" />
+                </label>
+                <label class="field"><span>Anthropic</span>
+                  <input id="byok-anthropic" type="password" placeholder="sk-ant-…" autocomplete="off" data-byok-provider="anthropic" />
+                </label>
+                <label class="field"><span>Groq</span>
+                  <input id="byok-groq" type="password" placeholder="gsk_…" autocomplete="off" data-byok-provider="groq" />
+                </label>
+                <label class="field"><span>OpenRouter</span>
+                  <input id="byok-openrouter" type="password" placeholder="sk-or-…" autocomplete="off" data-byok-provider="openrouter" />
+                </label>
+                <label class="field"><span>Google AI Studio</span>
+                  <input id="byok-google" type="password" placeholder="AIza…" autocomplete="off" data-byok-provider="google" />
+                </label>
+                <label class="field"><span>DeepSeek</span>
+                  <input id="byok-deepseek" type="password" placeholder="sk-…" autocomplete="off" data-byok-provider="deepseek" />
+                </label>
+                <label class="field"><span>ElevenLabs (TTS)</span>
+                  <input id="byok-elevenlabs" type="password" placeholder="…" autocomplete="off" data-byok-provider="elevenlabs" />
+                </label>
+                <div id="byok-status" class="field-note" style="grid-column:1 / -1;font-size:11px;color:rgba(200,216,240,0.5);">
+                  Tip: paste a key and tab away — it'll auto-save to your keychain.
+                </div>
+              </div>
+            </div>
+
+            <div class="stack">
               <div class="section-label">Jarvis Voice Settings</div>
               <div class="settings-grid">
                 <label class="toggle field-full" for="wake-word-enabled">
