@@ -134,9 +134,10 @@ jobs:
             ForEach-Object { $_.Trim() } |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
             ForEach-Object {
+              $trimChars = [char[]]" -_:;,."
               $normalized = $_ -replace '^\s*v\d+(?:\.\d+)*(?:[-_\s:]+)?', ''
               $normalized = $normalized -replace '^\s*(release|build)\s*[:\-]?\s*', ''
-              $normalized = ($normalized -replace '\s+', ' ').Trim([char[]]' -_:;,.')
+              $normalized = ($normalized -replace '\s+', ' ').Trim($trimChars)
               if ([string]::IsNullOrWhiteSpace($normalized)) { return }
               $wordCount = ($normalized -split '\s+' | Where-Object { $_ }).Count
               $looksLikeNoise = $normalized -match '^(?:wip|tmp|test|misc|update|fixup!|squash!|dwadawdwa|asdf|qwe)+$'
@@ -261,7 +262,9 @@ jobs:
           # Use the download proxy so private GitHub release assets don't redirect
           # unauthenticated users to GitHub login. The proxy at assistantx.pl
           # authenticates server-side using GITHUB_TOKEN.
-          $downloadProxyBase = "https://assistantx.pl/api/jarvis/download?tag=$releaseTag$([char]38)file="
+          $downloadProxyBase = "https://assistantx.pl/api/jarvis/download?tag=$releaseTag"
+          $downloadProxySeparator = [char]38
+          $downloadProxyBaseWithFile = "${downloadProxyBase}${downloadProxySeparator}file="
 
           $versionsManifest = [ordered]@{
             schema = "assistantx-updates-manifest"
@@ -272,13 +275,13 @@ jobs:
                 windows = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "${downloadProxyBase}JarvisSetup-x64.exe"
-                  url = "${downloadProxyBase}JarvisSetup-x64.exe"
+                  path = "${downloadProxyBaseWithFile}JarvisSetup-x64.exe"
+                  url = "${downloadProxyBaseWithFile}JarvisSetup-x64.exe"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "${downloadProxyBase}JarvisSetup-x64.exe"
-                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.exe"
+                    x64 = "${downloadProxyBaseWithFile}JarvisSetup-x64.exe"
+                    arm64 = "${downloadProxyBaseWithFile}JarvisSetup-arm64.exe"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/windows"
@@ -288,13 +291,13 @@ jobs:
                 mac = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "${downloadProxyBase}JarvisSetup-x64.dmg"
-                  url = "${downloadProxyBase}JarvisSetup-x64.dmg"
+                  path = "${downloadProxyBaseWithFile}JarvisSetup-x64.dmg"
+                  url = "${downloadProxyBaseWithFile}JarvisSetup-x64.dmg"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "${downloadProxyBase}JarvisSetup-x64.dmg"
-                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.dmg"
+                    x64 = "${downloadProxyBaseWithFile}JarvisSetup-x64.dmg"
+                    arm64 = "${downloadProxyBaseWithFile}JarvisSetup-arm64.dmg"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/mac"
@@ -304,12 +307,12 @@ jobs:
                 linux = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "${downloadProxyBase}Jarvis-x64.AppImage"
-                  url = "${downloadProxyBase}Jarvis-x64.AppImage"
+                  path = "${downloadProxyBaseWithFile}Jarvis-x64.AppImage"
+                  url = "${downloadProxyBaseWithFile}Jarvis-x64.AppImage"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "${downloadProxyBase}Jarvis-x64.AppImage"
+                    x64 = "${downloadProxyBaseWithFile}Jarvis-x64.AppImage"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/linux"
@@ -319,12 +322,12 @@ jobs:
                 android = [ordered]@{
                   version = $version
                   latestVersion = $version
-                  path = "${downloadProxyBase}Jarvis-android.apk"
-                  url = "${downloadProxyBase}Jarvis-android.apk"
+                  path = "${downloadProxyBaseWithFile}Jarvis-android.apk"
+                  url = "${downloadProxyBaseWithFile}Jarvis-android.apk"
                   releaseNotes = ($highlights -join " ")
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    apk = "${downloadProxyBase}Jarvis-android.apk"
+                    apk = "${downloadProxyBaseWithFile}Jarvis-android.apk"
                   }
                 }
               }
@@ -332,13 +335,13 @@ jobs:
                 windows = [ordered]@{
                   version = "${version}-beta.1"
                   latestVersion = "${version}-beta.1"
-                  path = "${downloadProxyBase}JarvisSetup-x64.exe"
-                  url = "${downloadProxyBase}JarvisSetup-x64.exe"
+                  path = "${downloadProxyBaseWithFile}JarvisSetup-x64.exe"
+                  url = "${downloadProxyBaseWithFile}JarvisSetup-x64.exe"
                   releaseNotes = "Beta channel build."
                   publishedAt = $publishedAt
                   artifacts = [ordered]@{
-                    x64 = "${downloadProxyBase}JarvisSetup-x64.exe"
-                    arm64 = "${downloadProxyBase}JarvisSetup-arm64.exe"
+                    x64 = "${downloadProxyBaseWithFile}JarvisSetup-x64.exe"
+                    arm64 = "${downloadProxyBaseWithFile}JarvisSetup-arm64.exe"
                   }
                   desktop = [ordered]@{
                     feedUrl = "$updatesBaseUrl/beta/windows"
