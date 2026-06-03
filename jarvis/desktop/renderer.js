@@ -360,7 +360,20 @@ window.addEventListener('DOMContentLoaded', () => {
 	const sttEnabledToggle = document.getElementById('stt-enabled');
 	const autoTtsToggle = document.getElementById('auto-tts');
 	const voiceVisualizer = document.getElementById('voice-visualizer');
+	// V2.0 — replaced the 🎙 Talk button with a passive wake-listening chip.
+	// Some legacy code paths still reference this element; we look it up
+	// (it'll be null) and gate every interaction behind a null-check.
 	const voiceInputButton = document.getElementById('voice-input');
+	const wakeChipEl = document.getElementById('wake-listening-chip');
+	const wakeChipTextEl = document.getElementById('wake-chip-text');
+	function setWakeChipState(state, label) {
+		if (!wakeChipEl) return;
+		wakeChipEl.classList.remove('listening', 'disabled', 'error');
+		if (state === 'listening' || state === 'disabled' || state === 'error') {
+			wakeChipEl.classList.add(state);
+		}
+		if (label && wakeChipTextEl) wakeChipTextEl.textContent = label;
+	}
 	const wakeWordEnabledToggle = document.getElementById('wake-word-enabled');
 	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
 	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
@@ -992,6 +1005,17 @@ window.addEventListener('DOMContentLoaded', () => {
 				voiceInputButton.textContent = voiceSettings.sttEnabled ? '🎙 Talk' : '🎙 STT off';
 			}
 		}
+		// Wake chip mirrors STT state — "Say Hey Jarvis" when armed, dimmed
+		// + "Voice off" label when the user disables STT in settings.
+		if (wakeChipEl) {
+			if (!voiceSettings.sttEnabled) {
+				setWakeChipState('disabled', 'Voice off');
+			} else if (!voiceSettings.wakeWordEnabled) {
+				setWakeChipState('disabled', 'Wake word off');
+			} else if (!speechToTextActive) {
+				setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
+			}
+		}
 		updateModelSettingsUi();
 		if (persist) writeVoiceSettings(voiceSettings);
 	}
@@ -1373,6 +1397,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			voiceVisualizer.classList.add('listening');
 			setAgentState(AGENT_STATE.LISTENING);
 			setStatus('Listening…');
+			setWakeChipState('listening', 'Listening — speak now');
 			pushTaskStep('VOICE', 'Listening to microphone…', 'active');
 			touchAgentActivity();
 			return;
@@ -1395,6 +1420,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		}
 		setAgentState(AGENT_STATE.IDLE);
 		setStatus('');
+		// Restore wake-listening label when the orb returns to idle.
+		if (voiceSettings?.sttEnabled && voiceSettings?.wakeWordEnabled) {
+			setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
+		}
 		if (options.resetEnergy !== false) applyVisualizerEnergy(0);
 		touchAgentActivity();
 	}
@@ -2192,15 +2221,32 @@ window.addEventListener('DOMContentLoaded', () => {
 				ttsModel: voiceSettings.ttsModel || (isLocalTtsBackend(voiceSettings.ttsBackend) ? DEFAULT_LOCAL_TTS_MODEL : DEFAULT_CLOUD_TTS_MODEL),
 				fallbackToBrowserSpeech: true,
 			});
-			// Start microphone capture immediately if wake word is enabled
-			if (voiceSettings.wakeWordEnabled) {
-				(voiceGateway || sidecar).startAudioCapture().catch(() => null);
+			// V2.0 — always-on wake-word listening replaces the legacy click-
+			// to-talk button. If STT is enabled (default), spin the mic up
+			// immediately so the user can just say "Hey Jarvis" without
+			// touching the UI. Catch permission errors so the chip can
+			// surface them instead of silently dying.
+			if (voiceSettings.sttEnabled && voiceSettings.wakeWordEnabled) {
+				pushTaskStep('MIC', 'Starting always-on wake-word listening…', 'active');
+				(voiceGateway || sidecar).startAudioCapture()
+					.then(() => {
+						setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
+						pushTaskStep('MIC', 'Always-on listening active', 'done');
+					})
+					.catch((err) => {
+						const msg = String(err?.message || err || 'unknown');
+						setWakeChipState('error', /permission|notallowed/i.test(msg) ? 'Mic permission denied' : 'Mic unavailable');
+						pushTaskStep('MIC', `Always-on listening failed: ${msg}`, 'error');
+					});
+			} else {
+				setWakeChipState('disabled', voiceSettings.sttEnabled ? 'Wake word off' : 'Voice off');
 			}
 		});
 
 		sidecar.on('disconnected', () => {
 			pushTaskStep('SIDECAR', 'Disconnected from AI runtime — self-heal pending', 'error');
 			try { (window.jarvisContext = window.jarvisContext || {}).sidecarStatus = 'disconnected'; } catch { /* noop */ }
+			setWakeChipState('error', 'Reconnecting…');
 			sidecarConnected = false;
 			sidecarManualListening = false;
 			resetActiveAiStream();
@@ -2248,6 +2294,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			appendMessage(log, 'AI Sidecar', `Wake word detected — listening…`);
 			pushTaskStep('WAKE', 'Wake word "Hey Jarvis" detected', 'done');
 			setVoiceVisualizer('listening');
+			setWakeChipState('listening', 'Listening — speak now');
 			(voiceGateway || sidecar).setListeningForCommand(true);
 		});
 

@@ -124,6 +124,60 @@
       box-shadow: 0 0 8px #ef4444;
       animation: pulse-dot 1.4s infinite ease-in-out;
     }
+    /* Wake-word listening chip — replaces the legacy 🎙 Talk button.
+       Always-on listening means the user just speaks; the chip surfaces
+       what the mic is doing so they know the agent is "alive". */
+    .wake-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(125, 211, 252, 0.08);
+      border: 1px solid rgba(125, 211, 252, 0.22);
+      color: rgba(220, 232, 255, 0.85);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: default;
+      transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+      user-select: none;
+    }
+    .wake-chip .wake-chip-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: rgba(125, 211, 252, 0.65);
+      box-shadow: 0 0 6px rgba(125, 211, 252, 0.55);
+      animation: pulse-dot 2.2s infinite ease-in-out;
+    }
+    .wake-chip.listening {
+      background: rgba(34, 197, 94, 0.14);
+      border-color: rgba(34, 197, 94, 0.45);
+      color: #d1fae5;
+    }
+    .wake-chip.listening .wake-chip-dot {
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
+      animation: pulse-dot 0.9s infinite ease-in-out;
+    }
+    .wake-chip.disabled {
+      opacity: 0.45;
+      background: rgba(255, 255, 255, 0.03);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+    .wake-chip.disabled .wake-chip-dot {
+      background: rgba(160, 180, 210, 0.5);
+      box-shadow: none;
+      animation: none;
+    }
+    .wake-chip.error {
+      background: rgba(239, 68, 68, 0.14);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fecaca;
+    }
+
     /* V2.0 labeled health chip — sits next to the connection dot. */
     .health-chip {
       display: inline-flex;
@@ -1807,8 +1861,11 @@
                 </div>
 
                 <div class="composer">
-                  <input id="input" type="text" placeholder="Type a Jarvis prompt or command… (e.g. &quot;open YouTube&quot;, &quot;screenshot&quot;)" />
-                  <button id="voice-input" type="button" class="secondary" title="Talk to Jarvis">🎙 Talk</button>
+                  <input id="input" type="text" placeholder="Say &quot;Hey Jarvis&quot; or type a command…" />
+                  <span id="wake-listening-chip" class="wake-chip" title="Wake word listening">
+                    <span class="wake-chip-dot"></span>
+                    <span id="wake-chip-text">Say "Hey Jarvis"</span>
+                  </span>
                   <button id="send" type="button">Send</button>
                 </div>
                 <div id="voice-visualizer" class="voice-visualizer" aria-hidden="true">
