@@ -1568,6 +1568,39 @@ function registerWindowControlHandlers() {
     }
   });
 
+  // Local Execution Bridge — sandboxed CLI runner per V2.0 Section 4.
+  // Off by default; user must flip dev_mode_exec in settings.
+  const { createLocalExecutionBridge } = require('./electron/exec/local-execution-bridge');
+  const localExecutionBridge = createLocalExecutionBridge({
+    getConfig: () => {
+      try {
+        const cfg = getJarvisModelConfig();
+        return { dev_mode_exec: Boolean(cfg?.local?.dev_mode_exec) };
+      } catch { return { dev_mode_exec: false }; }
+    },
+    log: (...args) => log('[exec-bridge]', ...args),
+    defaultCwd: app.getPath('userData'),
+  });
+  ipcMain.handle('exec:run', async (event, payload) => {
+    try {
+      const requestId = String(payload?.requestId || Date.now());
+      return await localExecutionBridge.exec(payload, (chunk) => {
+        try {
+          event.sender?.send('exec:chunk', { requestId, ...chunk });
+        } catch { /* sender gone */ }
+      });
+    } catch (err) {
+      return { ok: false, error: 'handler_threw', detail: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('exec:list-allowed', () => {
+    try {
+      return { ok: true, categories: localExecutionBridge.listAllowedCategories(), enabled: localExecutionBridge.isEnabled() };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
   // Hardware tier auto-detect for the setup wizard.
   // Returns { totalRamGB, cpuCount, gpus[], suggestedProfile } where profile is
   // one of: 'eco' (Potato) | 'standard' (Pro) | 'pro' (Enthusiast).

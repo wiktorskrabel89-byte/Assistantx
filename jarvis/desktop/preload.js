@@ -105,6 +105,8 @@ const ALLOWED_INVOKE = new Set([
   'window:toggle-maximize',
   'window:close',
   'hardware:probe',
+  'exec:run',
+  'exec:list-allowed',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -119,6 +121,10 @@ const ALLOWED_RECEIVE = new Set([
   'clipboard:status',
   'index:job-update',
   'splash:progress',
+  'auth:login-timeout',
+  'auth:login-failed',
+  'auth:login-success',
+  'exec:chunk',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────
