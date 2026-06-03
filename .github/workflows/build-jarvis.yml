@@ -26,7 +26,11 @@ on:
 jobs:
   build:
     name: Build Jarvis EXE (Windows)
-    runs-on: self-hosted
+    # Switched from self-hosted to GitHub-hosted so the queue never blocks
+    # on the developer's local PC being online. windows-latest has both
+    # pwsh and powershell pre-installed, plus Node 22, Python, and the
+    # MSVC toolchain that electron-builder needs.
+    runs-on: windows-latest
 
     # Minimal permissions: read code + write releases
     permissions:
