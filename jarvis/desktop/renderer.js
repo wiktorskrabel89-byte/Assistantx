@@ -2599,6 +2599,25 @@ window.addEventListener('DOMContentLoaded', () => {
 		ipcRenderer.on('auth:login-success', () => {
 			hideProviderWarning();
 		});
+		// V2.0 Health Observer pulses — surface subsystem state into the task
+		// list + repaint the header connection dot per worst observed status.
+		const healthState = { sidecar: 'unknown', ollama: 'unknown' };
+		ipcRenderer.on('health:pulse', (payload) => {
+			if (!payload?.subsystem) return;
+			healthState[payload.subsystem] = payload.status;
+			const dot = document.getElementById('header-connection-dot');
+			if (dot) {
+				const worst = Object.values(healthState);
+				const cls = worst.includes('unavailable') ? 'connection-bad'
+					: worst.includes('degraded') ? 'connection-warn'
+					: 'connection-ok';
+				dot.classList.remove('connection-bad', 'connection-warn', 'connection-ok');
+				dot.classList.add(cls);
+			}
+		});
+		ipcRenderer.on('health:heal-attempted', (payload) => {
+			pushTaskStep('HEAL', `Auto-heal: ${payload?.subsystem} (was ${payload?.status})`, 'active');
+		});
 	}
 
 	if (ipcRenderer) {

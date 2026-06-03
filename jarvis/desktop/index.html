@@ -113,6 +113,16 @@
       background: #22c55e;
       box-shadow: 0 0 6px #22c55e;
       flex-shrink: 0;
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+    .connection-indicator.connection-warn {
+      background: #f59e0b;
+      box-shadow: 0 0 6px #f59e0b;
+    }
+    .connection-indicator.connection-bad {
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+      animation: pulse-dot 1.4s infinite ease-in-out;
     }
 
     /* ── Layout ─────────────────────────────────────────────────────────── */

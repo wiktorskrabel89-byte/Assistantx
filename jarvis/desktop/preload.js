@@ -107,6 +107,7 @@ const ALLOWED_INVOKE = new Set([
   'hardware:probe',
   'exec:run',
   'exec:list-allowed',
+  'health:snapshot',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -125,6 +126,8 @@ const ALLOWED_RECEIVE = new Set([
   'auth:login-failed',
   'auth:login-success',
   'exec:chunk',
+  'health:pulse',
+  'health:heal-attempted',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────

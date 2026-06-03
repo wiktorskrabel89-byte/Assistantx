@@ -1568,6 +1568,54 @@ function registerWindowControlHandlers() {
     }
   });
 
+  // V2.0 Health Observer — periodic Ollama + sidecar probes with auto-heal.
+  const { createHealthObserver } = require('./electron/diagnostics/health-observer');
+  const healthObserver = createHealthObserver({
+    intervalMs: 12_000,
+    cooldownMs: 45_000,
+    probeTimeoutMs: 4_000,
+    log: (...args) => log('[health]', ...args),
+  });
+  healthObserver.registerProbe('sidecar', () => {
+    if (!sidecarProcess) return { status: 'unavailable', detail: 'no-process' };
+    if (sidecarReady) return { status: 'healthy', detail: 'stdio-handshake-ok' };
+    return { status: 'degraded', detail: `status=${sidecarStatus}` };
+  });
+  healthObserver.registerProbe('ollama', async () => {
+    const url = String(process.env.JARVIS_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+    try {
+      const resp = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(2_500) });
+      if (resp.ok) return { status: 'healthy', detail: 'tags-endpoint-200' };
+      return { status: 'degraded', detail: `tags-endpoint-${resp.status}` };
+    } catch (err) {
+      return { status: 'unavailable', detail: String(err?.message || err) };
+    }
+  });
+  healthObserver.registerHealer('sidecar', () => {
+    if (sidecarHealTimer || sidecarHealRetryCount >= SIDECAR_HEAL_MAX_RETRIES) return;
+    log('[health] sidecar healer invoked');
+    scheduleSidecarHeal('health-observer');
+  });
+  healthObserver.registerHealer('ollama', async () => {
+    log('[health] ollama healer invoked');
+    const url = String(process.env.JARVIS_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+    await ensureOllamaRunning(url);
+  });
+  healthObserver.on('change', (payload) => {
+    log(`[health] ${payload.subsystem} → ${payload.status}`, payload.detail || '');
+    sendToRenderer('health:pulse', payload);
+  });
+  healthObserver.on('heal-attempted', (payload) => {
+    sendToRenderer('health:heal-attempted', payload);
+  });
+  // Start the loop after a short delay so initial startup probes don't fire
+  // before Ollama/sidecar have had a chance to come up.
+  setTimeout(() => {
+    try { healthObserver.start(); }
+    catch (err) { log('[health] observer failed to start:', err?.message || err); }
+  }, 6_000);
+  ipcMain.handle('health:snapshot', () => healthObserver.snapshot());
+
   // Local Execution Bridge — sandboxed CLI runner per V2.0 Section 4.
   // Off by default; user must flip dev_mode_exec in settings.
   const { createLocalExecutionBridge } = require('./electron/exec/local-execution-bridge');
