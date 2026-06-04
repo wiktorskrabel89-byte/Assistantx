@@ -290,7 +290,9 @@ function resolveConfiguredLocalRoute(localConfig, profile, availability) {
     ? assignment.codeModelId
     : profile === 'tool'
       ? assignment.externalApiModelId
-      : assignment.chatModelId;
+      : profile === 'vision'
+        ? assignment.visionModelId
+        : assignment.chatModelId;
   if (!roleModelId) return null;
   const server = Array.isArray(localConfig.localServers)
     ? localConfig.localServers.find((entry) => entry?.id === serverId && entry?.enabled)
