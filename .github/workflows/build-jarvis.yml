@@ -104,7 +104,7 @@ jobs:
             $runIncrement = [Math]::Max([int]"${{ github.run_number }}", 1)
             $patch = $basePatch + $runIncrement
             $version = "$major.$minor.$patch"
-            Write-Host "Rolling build — version generated from run number: $version"
+            Write-Host "Rolling build - version generated from run number: $version"
           } elseif ($releaseTag -notmatch '^[vV](\d+)(?:\.(\d+))?(?:\.(\d+))?([+-][0-9A-Za-z.-]+)?$') {
             Write-Error "Invalid release tag '$releaseTag'. Expected format like v1.1.0, v2, or V2."
             exit 1
@@ -134,7 +134,7 @@ jobs:
             ForEach-Object { $_.Trim() } |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
             ForEach-Object {
-              $trimChars = [char[]]" -_:;,."
+              $trimChars = [char[]]' -_:;,.'
               $normalized = $_ -replace '^\s*v\d+(?:\.\d+)*(?:[-_\s:]+)?', ''
               $normalized = $normalized -replace '^\s*(release|build)\s*[:\-]?\s*', ''
               $normalized = ($normalized -replace '\s+', ' ').Trim($trimChars)
@@ -373,7 +373,7 @@ jobs:
             "",
             "**How to use:**",
             "1. Download the installer for your architecture.",
-            "2. Run it — Windows may warn about an unsigned binary; click *More info → Run anyway*.",
+            "2. Run it - Windows may warn about an unsigned binary; click *More info -> Run anyway*.",
             "3. Jarvis will start and connect to your AssistantX backend automatically.",
             "",
              "**Release validation checklist:**",
