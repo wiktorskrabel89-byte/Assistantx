@@ -116,15 +116,24 @@ jobs:
             $version = "$major.$minor.$patch$suffix"
             Write-Host "Version: $version"
           }
-          # Patch desktop package.json
+          # Write UTF-8 *without* BOM. PowerShell 5.1's `Set-Content -Encoding UTF8`
+          # emits a BOM, which Node's JSON.parse (used by @electron/rebuild and
+          # several downstream tools) rejects with "Unexpected token ﻿".
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          function Write-Utf8NoBom([string]$path, [string]$content) {
+            $abs = (Resolve-Path -LiteralPath (Split-Path -Parent $path)).ProviderPath
+            $full = Join-Path $abs (Split-Path -Leaf $path)
+            [System.IO.File]::WriteAllText($full, $content, $utf8NoBom)
+          }
+
           # Patch desktop package.json
           $desktopPkg.version = $version
-          $desktopPkg | ConvertTo-Json -Depth 20 | Set-Content "jarvis/desktop/package.json" -Encoding UTF8
+          Write-Utf8NoBom "jarvis/desktop/package.json" ($desktopPkg | ConvertTo-Json -Depth 20)
 
           # Patch android package.json
           $androidPkg = Get-Content "jarvis/android/package.json" -Raw | ConvertFrom-Json
           $androidPkg.version = $version
-          $androidPkg | ConvertTo-Json -Depth 20 | Set-Content "jarvis/android/package.json" -Encoding UTF8
+          Write-Utf8NoBom "jarvis/android/package.json" ($androidPkg | ConvertTo-Json -Depth 20)
 
           # Generate segmented, human-readable release notes from recent jarvis/ commits.
           # Redirect stderr to null so git error output never leaks into the release notes.
@@ -254,7 +263,7 @@ jobs:
               }
             }
           }
-          $releaseNotes | ConvertTo-Json -Depth 20 | Set-Content -Path "release-notes.json" -Encoding UTF8
+          Write-Utf8NoBom "release-notes.json" ($releaseNotes | ConvertTo-Json -Depth 20)
 
           $updatesBaseUrl = "${{ env.UPDATES_BASE_URL }}".TrimEnd('/')
           if ([string]::IsNullOrWhiteSpace($updatesBaseUrl)) {
@@ -352,7 +361,7 @@ jobs:
               }
             }
           }
-          $versionsManifest | ConvertTo-Json -Depth 20 | Set-Content -Path "versions.json" -Encoding UTF8
+          Write-Utf8NoBom "versions.json" ($versionsManifest | ConvertTo-Json -Depth 20)
 
           $body = @(
             "## What's new in v$version",
