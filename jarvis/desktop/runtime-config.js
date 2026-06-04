@@ -238,6 +238,11 @@ function normalizeRuntimeConfig(input = {}) {
   normalized.stt_model = normalizeSttModel(raw.stt_model, defaults.stt);
   normalized.llm_model = String(raw.llm_model || defaults.llm).trim() || defaults.llm;
   normalized.tts_model = normalizeTtsModel(raw.tts_model, defaults.tts);
+  // Vision model: explicit value, else profile default from dispatch table, else null.
+  // Routes used by the AI router (router/index.js) for profile === 'vision' intents.
+  normalized.vision_model = raw.vision_model
+    ? String(raw.vision_model).trim() || (defaults.dispatch?.vision || null)
+    : (defaults.dispatch?.vision || null);
   normalized.remoteRuntimeApiUrl = normalized.server.remoteRuntimeApiUrl;
   normalized.remoteRuntimeWsUrl = normalized.server.remoteRuntimeWsUrl;
   return normalized;
@@ -486,6 +491,7 @@ function setJarvisModelConfig({
   stt_model,
   llm_model,
   tts_model,
+  vision_model,
   local,
   cloud,
   server,
@@ -496,6 +502,7 @@ function setJarvisModelConfig({
   }
   const normalizedProfile = normalizeHardwareProfile(hardware_profile);
   const defaults = HARDWARE_PROFILE_MODELS[normalizedProfile];
+  const defaultVision = defaults.dispatch?.vision || null;
   const config = normalizeRuntimeConfig({
     engine_mode: normalizedMode,
     llm_target: normalizeLlmTarget(llm_target, normalizedMode),
@@ -504,6 +511,9 @@ function setJarvisModelConfig({
     stt_model: String(stt_model || defaults.stt).trim() || defaults.stt,
     llm_model: String(llm_model || defaults.llm).trim() || defaults.llm,
     tts_model: String(tts_model || defaults.tts).trim() || defaults.tts,
+    vision_model: vision_model === undefined
+      ? defaultVision
+      : (String(vision_model || '').trim() || defaultVision),
     local,
     cloud,
     server,
