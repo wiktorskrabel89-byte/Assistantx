@@ -348,6 +348,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const localChatModelSelect = document.getElementById('local-chat-model');
 	const localCodeModelSelect = document.getElementById('local-code-model');
 	const localExternalModelSelect = document.getElementById('local-external-model');
+	const localVisionModelSelect = document.getElementById('local-vision-model');
 	const localPreferEnabledToggle = document.getElementById('local-prefer-enabled');
 	const localServerSaveAssignmentButton = document.getElementById('local-server-save-assignment');
 	const sttModelSelect = document.getElementById('stt-model');
@@ -1093,6 +1094,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		chatModelId: null,
 		codeModelId: null,
 		externalApiModelId: null,
+		visionModelId: null,
 		serverId: null,
 		preferLocalWhenAvailable: false,
 	};
@@ -1372,6 +1374,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		fillLocalModelSelect(localChatModelSelect, localAssignmentValue('chatModelId'));
 		fillLocalModelSelect(localCodeModelSelect, localAssignmentValue('codeModelId'));
 		fillLocalModelSelect(localExternalModelSelect, localAssignmentValue('externalApiModelId'));
+		fillLocalModelSelect(localVisionModelSelect, localAssignmentValue('visionModelId'));
 		if (localPreferEnabledToggle) {
 			localPreferEnabledToggle.checked = Boolean(desktopLocalAssignment.preferLocalWhenAvailable);
 		}
@@ -1389,6 +1392,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				chatModelId: assignmentRes?.localModelAssignment?.chatModelId || null,
 				codeModelId: assignmentRes?.localModelAssignment?.codeModelId || null,
 				externalApiModelId: assignmentRes?.localModelAssignment?.externalApiModelId || null,
+				visionModelId: assignmentRes?.localModelAssignment?.visionModelId || null,
 				serverId: assignmentRes?.localModelAssignment?.serverId || null,
 				preferLocalWhenAvailable: Boolean(assignmentRes?.preferLocalWhenAvailable),
 			};
@@ -1458,13 +1462,15 @@ window.addEventListener('DOMContentLoaded', () => {
 		const chat = parseSelection(localChatModelSelect?.value);
 		const code = parseSelection(localCodeModelSelect?.value);
 		const external = parseSelection(localExternalModelSelect?.value);
-		const resolvedServerId = chat.serverId || code.serverId || external.serverId || null;
+		const vision = parseSelection(localVisionModelSelect?.value);
+		const resolvedServerId = chat.serverId || code.serverId || external.serverId || vision.serverId || null;
 		const result = await localServerApi.setModelAssignment({
 			localModelAssignment: {
 				serverId: resolvedServerId,
 				chatModelId: chat.modelId,
 				codeModelId: code.modelId,
 				externalApiModelId: external.modelId,
+				visionModelId: vision.modelId,
 			},
 			preferLocalWhenAvailable: Boolean(localPreferEnabledToggle?.checked),
 		});

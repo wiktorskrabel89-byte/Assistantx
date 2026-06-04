@@ -23,6 +23,7 @@ function createLocalServerStore() {
         chatModelId: null,
         codeModelId: null,
         externalApiModelId: null,
+        visionModelId: null,
         serverId: null,
       },
       preferLocalWhenAvailable: true,
@@ -60,6 +61,7 @@ function createLocalServerStore() {
         chatModelId: assignment.chatModelId ? String(assignment.chatModelId) : null,
         codeModelId: assignment.codeModelId ? String(assignment.codeModelId) : null,
         externalApiModelId: assignment.externalApiModelId ? String(assignment.externalApiModelId) : null,
+        visionModelId: assignment.visionModelId ? String(assignment.visionModelId) : null,
         serverId: assignment.serverId ? String(assignment.serverId) : null,
       },
       preferLocalWhenAvailable: Boolean(source.preferLocalWhenAvailable),
@@ -158,6 +160,7 @@ function createLocalServerStore() {
           chatModelId: null,
           codeModelId: null,
           externalApiModelId: null,
+          visionModelId: null,
           serverId: null,
         }
         : state.localModelAssignment,
