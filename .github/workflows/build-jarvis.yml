@@ -231,8 +231,9 @@ jobs:
           }
 
           $sha7 = "${{ github.sha }}".Substring(0, 7)
-          $date = (Get-Date -AsUTC -Format "yyyy-MM-dd HH:mm") + " UTC"
-          $publishedAt = (Get-Date -AsUTC).ToString("o")
+          $nowUtc = [DateTime]::UtcNow
+          $date = $nowUtc.ToString("yyyy-MM-dd HH:mm") + " UTC"
+          $publishedAt = $nowUtc.ToString("o")
 
           $bt = '``'
           $commitUrl = "https://github.com/wiktorskrabel89-byte/Assistantx/commit/${{ github.sha }}"
