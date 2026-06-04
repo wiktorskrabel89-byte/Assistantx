@@ -359,9 +359,9 @@
   <script>
     // ── model matrix (mirrors runtime-config.js HARDWARE_PROFILE_MODELS) ──────
     const MODELS = {
-      eco:      { llm: 'qwen2.5:1.5b', stt: 'tiny',  tts: 'kokoro' },
-      standard: { llm: 'gemma3:4b',     stt: 'base',  tts: 'kokoro' },
-      pro:      { llm: 'qwen2.5:7b',    stt: 'base',  tts: 'kokoro' },
+      eco:      { llm: 'qwen2.5:1.5b', stt: 'tiny',  tts: 'kokoro', vision: 'moondream2:1.4b' },
+      standard: { llm: 'gemma3:4b',     stt: 'base',  tts: 'kokoro', vision: 'moondream2:1.4b' },
+      pro:      { llm: 'qwen2.5:7b',    stt: 'base',  tts: 'kokoro', vision: 'llava-phi:2.7b' },
     };
 
     // Fallback cloud model highlights shown before catalog loads
@@ -456,6 +456,7 @@
         `<span class="model-tag">🧠 LLM <span>${m.llm}</span></span>`,
         `<span class="model-tag">🎙️ STT <span>${m.stt}</span></span>`,
         `<span class="model-tag">🔊 TTS <span>${m.tts}</span></span>`,
+        `<span class="model-tag">📸 Vision <span>${m.vision}</span></span>`,
       ].join('');
     }
 
@@ -552,6 +553,7 @@
         stt_model: m.stt,
         llm_model: m.llm,
         tts_model: m.tts,
+        vision_model: m.vision,
       };
 
       try {
