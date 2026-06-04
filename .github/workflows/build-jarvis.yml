@@ -121,8 +121,11 @@ jobs:
           # several downstream tools) rejects with "Unexpected token ﻿".
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
           function Write-Utf8NoBom([string]$path, [string]$content) {
-            $abs = (Resolve-Path -LiteralPath (Split-Path -Parent $path)).ProviderPath
-            $full = Join-Path $abs (Split-Path -Leaf $path)
+            if ([System.IO.Path]::IsPathRooted($path)) {
+              $full = $path
+            } else {
+              $full = Join-Path (Get-Location).ProviderPath $path
+            }
             [System.IO.File]::WriteAllText($full, $content, $utf8NoBom)
           }
 
