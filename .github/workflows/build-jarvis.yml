@@ -549,6 +549,55 @@ jobs:
           Write-Host "Python embeddable runtime ready at $extractPath"
           Get-ChildItem $extractPath | Select-Object -First 10
 
+      - name: Install bootstrap Python deps into embedded runtime
+        shell: powershell
+        run: |
+          # Embedded Python ships without pip and with site-packages disabled,
+          # so `import websockets` / `import pathspec` fails immediately at
+          # sidecar startup. We enable site-packages, bootstrap pip, then
+          # install the *minimum* deps needed for main.py to import without
+          # crashing. Heavier voice/ML deps (numpy, onnxruntime, kokoro...)
+          # are loaded lazily by the sidecar and can be installed at runtime
+          # via setup-env.ps1 when the user enables voice features.
+          $pythonDir = "jarvis/desktop/python"
+          $pthFile = Get-ChildItem -Path $pythonDir -Filter "python*._pth" | Select-Object -First 1
+          if (-not $pthFile) {
+            Write-Error "No python*._pth file found in $pythonDir"
+            exit 1
+          }
+          $pthContent = Get-Content $pthFile.FullName
+          $pthContent = $pthContent | ForEach-Object {
+            if ($_ -match '^\s*#\s*import\s+site\s*$') { 'import site' } else { $_ }
+          }
+          Set-Content -Path $pthFile.FullName -Value $pthContent -Encoding ASCII
+          Write-Host "Enabled site-packages in $($pthFile.Name)."
+
+          $getPipPath = Join-Path $pythonDir "get-pip.py"
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath -UseBasicParsing
+          & "$pythonDir/python.exe" $getPipPath --no-warn-script-location
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to bootstrap pip into embedded Python."
+            exit 1
+          }
+          Write-Host "Bootstrapped pip into embedded Python."
+
+          # Minimum imports required by ai-agent/main.py + action_hub at startup.
+          # If any of these fail the sidecar will crash before the WebSocket
+          # server starts, and the splash sticks at "Starting...".
+          & "$pythonDir/python.exe" -m pip install --no-warn-script-location websockets pathspec requests
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to install bootstrap Python deps."
+            exit 1
+          }
+
+          # Verify the imports actually work before bundling
+          & "$pythonDir/python.exe" -c "import websockets, pathspec, requests; print('Bootstrap imports OK')"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Bootstrap import smoke failed in embedded Python."
+            exit 1
+          }
+          Write-Host "Embedded Python is import-ready for sidecar startup."
+
       - name: Build installers (x64 + ARM64)
         working-directory: jarvis/desktop
         run: npm run dist:win:all
@@ -1359,19 +1408,6 @@ jobs:
               },
               "beta": {
                 "windows": {
-                  "version": "${version}-beta.1",
-                  "latestVersion": "${version}-beta.1",
-                  "path": "${base_url}&file=JarvisSetup-x64.exe",
-                  "url": "${base_url}&file=JarvisSetup-x64.exe",
-                  "artifacts": {
-                    "x64": "${base_url}&file=JarvisSetup-x64.exe",
-                    "arm64": "${base_url}&file=JarvisSetup-arm64.exe"
-                  },
-                  "desktop": {
-                    "feedUrl": "https://updates.assistantx.pl/beta/windows"
-                  }
-                },
-                "linux": {
                   "version": "${version}-beta.1",
                   "latestVersion": "${version}-beta.1",
                   "path": "${base_url}&file=Jarvis-x64.AppImage",
