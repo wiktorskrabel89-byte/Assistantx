@@ -8,6 +8,11 @@ on:
         description: "Release tag (e.g. v1.1.0). Leave blank to publish to jarvis-latest."
         required: false
         type: string
+      force_self_hosted:
+        description: "Wait for self-hosted runner (use when GitHub minutes are exhausted)"
+        required: false
+        type: boolean
+        default: false
   # Auto-trigger when jarvis changes land on main, or when a versioned tag is pushed
   push:
     branches:
@@ -24,24 +29,48 @@ on:
       - 'jarvis/**'
 
 jobs:
+  # Runs on a free Linux runner, calls the GitHub API to check whether
+  # the self-hosted Windows runner is currently online. The build job
+  # then picks the right runner without ever blocking in the queue.
+  # If you need to wait for the self-hosted runner (e.g. GitHub minutes
+  # are exhausted), trigger manually with force_self_hosted=true.
   runner-check:
     name: Check self-hosted runner availability
-    runs-on: [self-hosted-runner, self-hosted, Windows, X64]
-    timeout-minutes: 5
-    continue-on-error: true
+    runs-on: ubuntu-latest
     outputs:
-      available: ${{ steps.ping.outputs.available }}
+      runner: ${{ steps.pick.outputs.runner }}
     steps:
-      - id: ping
-        shell: powershell
+      - name: Pick Windows runner
+        id: pick
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          "available=true" >> $env:GITHUB_OUTPUT
-          Write-Host "Self-hosted runner is available."
+          # Honour the manual override first
+          if [ "${{ inputs.force_self_hosted }}" = "true" ]; then
+            echo 'runner=["self-hosted", "Windows", "X64"]' >> "$GITHUB_OUTPUT"
+            echo "force_self_hosted=true: queuing on self-hosted runner (will wait until it is online)."
+            exit 0
+          fi
+
+          # Query the Repo Actions API for an online self-hosted Windows runner
+          ONLINE=$(curl -sf \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runners" \
+            | jq '[.runners[] | select(.status == "online") | select(any(.labels[]; .name == "Windows"))] | length > 0')
+
+          if [ "$ONLINE" = "true" ]; then
+            echo 'runner=["self-hosted", "Windows", "X64"]' >> "$GITHUB_OUTPUT"
+            echo "Self-hosted Windows runner is online – using it."
+          else
+            echo 'runner="windows-latest"' >> "$GITHUB_OUTPUT"
+            echo "No self-hosted Windows runner online – falling back to windows-latest."
+          fi
 
   build:
     name: Build Jarvis EXE (Windows)
     needs: runner-check
-    runs-on: ${{ needs.runner-check.result == 'success' && fromJSON('["self-hosted-runner", "self-hosted", "Windows", "X64"]') || 'windows-latest' }}
+    runs-on: ${{ fromJSON(needs.runner-check.outputs.runner) }}
 
     # Minimal permissions: read code + write releases
     permissions:
