@@ -24,13 +24,24 @@ on:
       - 'jarvis/**'
 
 jobs:
+  runner-check:
+    name: Check self-hosted runner availability
+    runs-on: [self-hosted-runner, self-hosted, Windows, X64]
+    timeout-minutes: 5
+    continue-on-error: true
+    outputs:
+      available: ${{ steps.ping.outputs.available }}
+    steps:
+      - id: ping
+        shell: powershell
+        run: |
+          "available=true" >> $env:GITHUB_OUTPUT
+          Write-Host "Self-hosted runner is available."
+
   build:
     name: Build Jarvis EXE (Windows)
-    # Switched from self-hosted to GitHub-hosted so the queue never blocks
-    # on the developer's local PC being online. windows-latest has both
-    # pwsh and powershell pre-installed, plus Node 22, Python, and the
-    # MSVC toolchain that electron-builder needs.
-    runs-on: windows-latest
+    needs: runner-check
+    runs-on: ${{ needs.runner-check.result == 'success' && fromJSON('["self-hosted-runner", "self-hosted", "Windows", "X64"]') || 'windows-latest' }}
 
     # Minimal permissions: read code + write releases
     permissions:
