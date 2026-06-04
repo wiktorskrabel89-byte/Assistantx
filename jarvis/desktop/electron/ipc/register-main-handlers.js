@@ -178,6 +178,7 @@ function createMainIpcHandlers(deps) {
       const stt_model = validateString(body.stt_model, { allowEmpty: true, maxLen: 40 }) || 'base';
       const llm_model = validateString(body.llm_model, { allowEmpty: true, maxLen: 80 }) || 'gemma3:4b';
       const tts_model = validateString(body.tts_model, { allowEmpty: true, maxLen: 40 }) || 'kokoro';
+      const vision_model = validateString(body.vision_model, { allowEmpty: true, maxLen: 80 }) || undefined;
       const llm_target = validateString(body.llm_target, { allowEmpty: true, maxLen: 30 }) || undefined;
       const local = validatePlainObject(body.local) || undefined;
       const cloud = validatePlainObject(body.cloud) || undefined;
@@ -191,6 +192,7 @@ function createMainIpcHandlers(deps) {
           stt_model,
           llm_model,
           tts_model,
+          vision_model,
           local,
           cloud,
           server,
