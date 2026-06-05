@@ -3142,6 +3142,21 @@ window.addEventListener('DOMContentLoaded', () => {
 				appendMessage(log, 'Presence', `Connected clients: ${parsed?.active_connections ?? 0}`, 'system');
 				return;
 			}
+			if (parsed.type === 'auth_required') {
+				// Flash the Sign In button so the user can recover without
+				// hunting through the sidebar. Auto-trigger the same IPC the
+				// button uses so they don't have to click twice.
+				if (accountLoginButton) {
+					accountLoginButton.style.animation = 'pulse 1.2s ease-in-out 3';
+					accountLoginButton.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.45)';
+					setTimeout(() => {
+						accountLoginButton.style.animation = '';
+						accountLoginButton.style.boxShadow = '';
+					}, 6000);
+				}
+				appendMessage(log, 'Sign in needed', parsed?.message || 'Sign in to chat with Jarvis.', 'error');
+				return;
+			}
 			if (parsed.type === 'peer_registered') {
 				appendMessage(log, 'Presence', `${parsed.role || 'Device'} connected`, 'system');
 				return;

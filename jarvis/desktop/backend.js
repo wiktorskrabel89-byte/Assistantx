@@ -647,10 +647,17 @@ async function runAiPrompt(prompt, meta = {}) {
       pendingAiRouteStreams.delete(streamId);
     }
     emitRawMessage({ type: 'ai_thinking', inFlight: false });
+    // Surface a structured auth-required event so the renderer can flash the
+    // Sign In button instead of leaving the user to read a tiny log line.
+    emitRawMessage({
+      type: 'auth_required',
+      reason: 'no-session',
+      message: 'Sign in to chat with Jarvis.',
+    });
     return publishResult({
-      title: 'Not logged in',
-      text: 'Please log in to use the AI assistant.',
-      summary: 'Please log in to use the AI assistant.',
+      title: 'Sign in to talk to Jarvis',
+      text: 'You need to sign in before Jarvis can answer. Click the 🔑 Sign in button in the sidebar — it opens your default browser, completes Supabase OAuth, and bounces back to the app via assistantx://auth/callback.',
+      summary: 'Sign in to talk to Jarvis.',
       level: 'error',
       source: meta.source || 'local',
       origin: meta.origin || 'desktop',
