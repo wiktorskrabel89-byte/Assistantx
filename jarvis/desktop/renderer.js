@@ -291,7 +291,29 @@ window.addEventListener('beforeunload', () => {
 	try { voiceGateway?.dispose?.(); } catch { /* gateway never bound */ }
 });
 
+// Surface uncaught errors in the connection panel so the UI never appears
+// silently frozen on the initial "Starting…" string. Without this, any
+// exception during the 3000-line init sequence would leave the user looking
+// at a hung "Starting…" with no signal of what went wrong.
+function renderInitError(scope, error) {
+	const message = error?.message || String(error) || 'unknown error';
+	console.error(`[renderer] Init error (${scope}):`, error);
+	const node = document.getElementById('connection-status');
+	if (node) {
+		node.textContent = `error: ${message.slice(0, 160)}`;
+	}
+	const dot = document.getElementById('status-dot');
+	if (dot) {
+		dot.className = 'dot';
+		dot.classList.add('error');
+	}
+}
+window.addEventListener('error', (event) => renderInitError('window.error', event.error || event.message));
+window.addEventListener('unhandledrejection', (event) => renderInitError('unhandledrejection', event.reason));
+
 window.addEventListener('DOMContentLoaded', () => {
+	const statusNode = document.getElementById('connection-status');
+	if (statusNode) statusNode.textContent = 'initializing…';
 	const tokenPromise = Promise.resolve(getToken()).catch((error) => {
 		console.warn('[renderer] Failed to get device token:', error?.message || error);
 		return null;
@@ -299,7 +321,6 @@ window.addEventListener('DOMContentLoaded', () => {
 	const log = document.getElementById('log');
 	const input = document.getElementById('input');
 	const send = document.getElementById('send');
-	const statusNode = document.getElementById('connection-status');
 	const appVersionNode = document.getElementById('app-version');
 	const updateStatusNode = document.getElementById('update-status');
 	const checkUpdatesButton = document.getElementById('check-updates');
@@ -1730,8 +1751,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	// ── Status ──────────────────────────────────────────────────────────────
 	function updateStatus(status, detail) {
-		statusNode.textContent = detail ? `${status}: ${detail}` : status;
-		setStatusDot(status);
+		if (statusNode) {
+			statusNode.textContent = detail ? `${status}: ${detail}` : status;
+		}
+		try {
+			setStatusDot(status);
+		} catch (err) {
+			console.warn('[renderer] setStatusDot failed:', err?.message || err);
+		}
 	}
 
 	function updateAutoUpdateStatus(payload) {

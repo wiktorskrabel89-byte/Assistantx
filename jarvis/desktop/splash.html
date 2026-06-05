@@ -429,7 +429,10 @@
       }
     }
 
-    // ── Skip button: shown after 15s, lets user bypass slow setup ────────────
+    // ── Skip button: shown after 6s, lets user bypass slow setup ─────────────
+    // The launcher waits up to 10 min on first run for ML model downloads, so
+    // the Skip button is the user's escape hatch when anything along the way
+    // hangs (network down, Python missing, Ollama not installed).
     const skipBtn = document.getElementById('skip-button');
     let skipTimer = null;
     function showSkipButton() {
@@ -437,7 +440,7 @@
     }
     function startSkipCountdown() {
       if (skipTimer) return;
-      skipTimer = setTimeout(showSkipButton, 15000);
+      skipTimer = setTimeout(showSkipButton, 6000);
     }
     if (skipBtn) {
       skipBtn.addEventListener('click', () => {

@@ -450,6 +450,8 @@ function startSidecar() {
   setLauncherPhase('validating-runtime', 'Validating AI runtime paths.');
   if (!fs.existsSync(mainPy)) {
     sidecarStatus = 'unavailable';
+    sidecarDead = true;
+    sidecarFatalError = `AI runtime entry script missing: ${mainPy}. Reinstall Jarvis or restore the ai-agent folder.`;
     startupDiagnostics.setComponent('sidecar', 'unavailable', {
       detail: 'AI runtime executable not found.',
       reason: 'main_py_missing',
@@ -462,6 +464,11 @@ function startSidecar() {
       phase: 'validating-runtime',
     });
     startupDiagnostics.pushEvent('sidecar', 'warn', 'Sidecar unavailable: main.py missing.');
+    sendToRenderer('splash:progress', {
+      pyPercent: 100,
+      status: 'Python AI runtime files missing.',
+      error: sidecarFatalError,
+    });
     telemetryBus.publish('sidecar.unavailable');
     telemetryBus.publish('startup.unavailable');
     emitDesktopHealth();
@@ -471,6 +478,8 @@ function startSidecar() {
   const { python, candidates: pythonCandidates, candidateDetails: pythonCandidateDetails } = resolvePythonExecutable();
   if (!python) {
     sidecarStatus = 'unavailable';
+    sidecarDead = true;
+    sidecarFatalError = 'Python 3.10+ is not installed on this PC. Install it from https://python.org and relaunch Jarvis.';
     startupDiagnostics.setComponent('sidecar', 'unavailable', {
       detail: 'AI runtime Python executable not found.',
       reason: 'python_missing',
@@ -487,6 +496,11 @@ function startSidecar() {
       mainPy,
       pythonCandidates,
       pythonCandidateDetails,
+    });
+    sendToRenderer('splash:progress', {
+      pyPercent: 100,
+      status: 'Python AI runtime missing.',
+      error: sidecarFatalError,
     });
     telemetryBus.publish('sidecar.unavailable');
     telemetryBus.publish('startup.unavailable');
