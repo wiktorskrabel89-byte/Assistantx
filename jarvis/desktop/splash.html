@@ -328,6 +328,11 @@
 
       <div id="error-card"></div>
 
+      <div id="recovery-actions" style="display:none;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px;">
+        <button id="run-setup-button" type="button" style="padding:9px 18px;border-radius:999px;border:1px solid rgba(248,113,113,0.32);background:rgba(248,113,113,0.12);color:#fca5a5;font-size:12px;font-weight:600;letter-spacing:0.04em;cursor:pointer;">🔧 Run local-AI setup</button>
+        <button id="restart-sidecar-button" type="button" style="padding:9px 18px;border-radius:999px;border:1px solid rgba(168,85,247,0.32);background:rgba(168,85,247,0.08);color:#c4b5fd;font-size:12px;font-weight:600;letter-spacing:0.04em;cursor:pointer;">🔁 Restart Python runtime</button>
+      </div>
+
       <button id="skip-button" type="button">Skip and continue to app →</button>
     </div>
 
@@ -364,7 +369,58 @@
       const card = document.getElementById('error-card');
       card.textContent = '⚠️ ' + msg;
       card.style.display = 'block';
+      const recovery = document.getElementById('recovery-actions');
+      if (recovery) recovery.style.display = 'flex';
     }
+
+    function clearError() {
+      const card = document.getElementById('error-card');
+      if (card) { card.textContent = ''; card.style.display = 'none'; }
+      const recovery = document.getElementById('recovery-actions');
+      if (recovery) recovery.style.display = 'none';
+    }
+
+    document.getElementById('run-setup-button')?.addEventListener('click', async () => {
+      const btn = document.getElementById('run-setup-button');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.textContent = 'Setting up…';
+      clearError();
+      setStatus('Running setup-env.ps1 (installs Python deps, pulls Ollama models)…');
+      try {
+        const result = await window.jarvisIpc?.invoke?.('setup:install-local');
+        if (result?.success) {
+          setStatus('Setup complete. Restarting AI runtime…');
+          await window.jarvisIpc?.invoke?.('restart-sidecar').catch(() => null);
+          btn.textContent = '✓ Setup complete';
+        } else {
+          showError(result?.error || 'Setup script failed. See logs.');
+          btn.disabled = false;
+          btn.textContent = '🔧 Try setup again';
+        }
+      } catch (err) {
+        showError(String(err?.message || err || 'Setup failed.'));
+        btn.disabled = false;
+        btn.textContent = '🔧 Try setup again';
+      }
+    });
+
+    document.getElementById('restart-sidecar-button')?.addEventListener('click', async () => {
+      const btn = document.getElementById('restart-sidecar-button');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.textContent = 'Restarting…';
+      try {
+        await window.jarvisIpc?.invoke?.('restart-sidecar');
+        setStatus('Python runtime restarted. Waiting for it to come up…');
+        clearError();
+        btn.textContent = '🔁 Restart Python runtime';
+      } catch (err) {
+        showError(String(err?.message || err || 'Restart failed.'));
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     function setUpdaterStatus(text) {
       document.getElementById('updater-status-line').textContent = text;
