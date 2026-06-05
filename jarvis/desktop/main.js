@@ -128,6 +128,14 @@ let sidecarHealTimer = null;
 const SIDECAR_HEAL_MAX_RETRIES = 5;
 const SIDECAR_HEAL_BASE_DELAY_MS = 1_500;
 let sidecarUserInitiatedStop = false;
+// Detected when stderr surfaces `ModuleNotFoundError` / `ImportError`. We can
+// auto-recover by running `python -m pip install -r requirements.txt` once
+// before falling back to the generic heal loop, which dramatically reduces
+// first-run "Python sidecar offline" failures on fresh installs.
+let sidecarMissingDepsDetected = false;
+let sidecarDepInstallAttempted = false;
+let sidecarDepInstallInFlight = false;
+let lastResolvedPython = null;
 let localVoiceAssetsState = {
   started: false,
   complete: false,
@@ -445,6 +453,93 @@ function sendSidecarMessage(payload) {
   }
 }
 
+// First-time installs and reinstalls often leave the embedded Python without
+// the heavy ML deps (websockets, openwakeword, kokoro, etc.) installed. The
+// sidecar crashes immediately with ModuleNotFoundError. Rather than asking the
+// user to open PowerShell and run setup-env.ps1, attempt one automated
+// `pip install -r requirements.txt` and re-spawn the sidecar.
+//
+// Returns true if the install reported success (pip exit code 0).
+async function attemptAutoInstallPythonDeps() {
+  if (sidecarDepInstallInFlight || sidecarDepInstallAttempted) return false;
+  sidecarDepInstallInFlight = true;
+  sidecarDepInstallAttempted = true;
+  try {
+    const mainPy = getSidecarMainPath();
+    const sidecarDir = path.dirname(mainPy);
+    const requirementsPath = path.join(sidecarDir, 'requirements.txt');
+    const python = lastResolvedPython || resolvePythonExecutable().python;
+    if (!python) {
+      log('[sidecar:auto-install] No python executable resolved — cannot install deps.');
+      return false;
+    }
+    if (!fs.existsSync(requirementsPath)) {
+      log(`[sidecar:auto-install] requirements.txt not found at ${requirementsPath}.`);
+      return false;
+    }
+    log(`[sidecar:auto-install] Running ${python} -m pip install -r ${requirementsPath}`);
+    sendToRenderer('splash:progress', {
+      pyPercent: 30,
+      status: 'Installing Python AI dependencies (this can take a few minutes on first run)…',
+    });
+    startupDiagnostics.pushEvent('sidecar', 'info', 'Auto-installing Python dependencies.', {
+      python,
+      requirementsPath,
+    });
+    const installResult = await new Promise((resolve) => {
+      const child = spawn(python, ['-m', 'pip', 'install', '--upgrade', '--no-input', '-r', requirementsPath], {
+        cwd: sidecarDir,
+        env: { ...process.env, PIP_DISABLE_PIP_VERSION_CHECK: '1' },
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stderrTail = '';
+      child.stdout?.on('data', (chunk) => {
+        const text = chunk.toString();
+        const lastLine = text.split(/\r?\n/).reverse().find((line) => line.trim());
+        if (lastLine) {
+          sendToRenderer('splash:progress', {
+            pyPercent: 60,
+            status: `pip: ${lastLine.trim().slice(0, 120)}`,
+          });
+        }
+      });
+      child.stderr?.on('data', (chunk) => {
+        const text = chunk.toString();
+        stderrTail = (stderrTail + text).slice(-1024);
+        console.error(`[sidecar:auto-install:pip] ${text.trim()}`);
+      });
+      child.on('error', (err) => {
+        log('[sidecar:auto-install] pip spawn error:', err.message);
+        resolve({ ok: false, code: -1, stderr: err.message });
+      });
+      child.on('exit', (code) => {
+        resolve({ ok: code === 0, code, stderr: stderrTail });
+      });
+    });
+    if (installResult.ok) {
+      log('[sidecar:auto-install] pip install succeeded.');
+      sendToRenderer('splash:progress', {
+        pyPercent: 90,
+        status: 'Python AI dependencies installed. Restarting runtime…',
+      });
+      startupDiagnostics.pushEvent('sidecar', 'info', 'Auto-install of Python dependencies succeeded.');
+      return true;
+    }
+    log(`[sidecar:auto-install] pip install failed (code=${installResult.code}).`);
+    sendToRenderer('splash:progress', {
+      error: `Could not auto-install Python AI dependencies (pip exit ${installResult.code}). Open PowerShell as admin and run: "${python}" -m pip install -r "${requirementsPath}"`,
+    });
+    startupDiagnostics.pushEvent('sidecar', 'error', 'Auto-install of Python dependencies failed.', {
+      code: installResult.code,
+      stderrTail: installResult.stderr,
+    });
+    return false;
+  } finally {
+    sidecarDepInstallInFlight = false;
+  }
+}
+
 function startSidecar() {
   const mainPy = getSidecarMainPath();
   setLauncherPhase('validating-runtime', 'Validating AI runtime paths.');
@@ -523,6 +618,8 @@ function startSidecar() {
   sidecarHeartbeatInFlight = false;
   sidecarReady = false;
   sidecarStdoutBuffer = '';
+  sidecarMissingDepsDetected = false;
+  lastResolvedPython = python;
   resetLocalVoiceAssetsState();
   const modelConfig = getJarvisModelConfig();
   const sidecarArgs = [mainPy, '--mode', 'stdio'];
@@ -561,6 +658,11 @@ function startSidecar() {
     // Surface fatal Python errors to splash so users see WHY startup hangs.
     if (/ModuleNotFoundError|ImportError|Traceback \(most recent call last\)/.test(line)) {
       sidecarFatalError = line.slice(0, 240);
+      // Flag the dep-install recovery path. The exit handler will pick this
+      // up and run pip install once before resorting to the heal loop.
+      if (/ModuleNotFoundError|ImportError/i.test(line)) {
+        sidecarMissingDepsDetected = true;
+      }
       startupDiagnostics.pushEvent('sidecar', 'error', 'Python sidecar reported a fatal error.', {
         message: sidecarFatalError,
       });
@@ -599,7 +701,30 @@ function startSidecar() {
     sendToRenderer('sidecar-status', { status: sidecarStatus });
     // Self-healing: schedule an automatic restart if this wasn't user-initiated.
     if (!sidecarUserInitiatedStop) {
-      scheduleSidecarHeal(`exit-code-${code ?? 'unknown'}`);
+      // If the crash looked like missing Python deps, try installing them
+      // once before falling back to the generic exponential-backoff loop.
+      // This is the single most common first-run failure on fresh installs.
+      if (sidecarMissingDepsDetected && !sidecarDepInstallAttempted && !sidecarDepInstallInFlight) {
+        void attemptAutoInstallPythonDeps().then((installed) => {
+          if (installed) {
+            sidecarDead = false;
+            sidecarFatalError = null;
+            try {
+              startSidecar();
+            } catch (err) {
+              log('[sidecar:auto-install] restart threw:', err?.message || err);
+              scheduleSidecarHeal('post-auto-install-restart-failed');
+            }
+          } else {
+            scheduleSidecarHeal('auto-install-failed');
+          }
+        }).catch((err) => {
+          log('[sidecar:auto-install] threw:', err?.message || err);
+          scheduleSidecarHeal('auto-install-error');
+        });
+      } else {
+        scheduleSidecarHeal(`exit-code-${code ?? 'unknown'}`);
+      }
     }
     sidecarUserInitiatedStop = false;
   });
@@ -1374,19 +1499,65 @@ async function startSplashTransition(engineMode) {
     } else {
       sendToRenderer('splash:progress', { llmPercent: 100, status: `Model ${llmModel} is ready.` });
     }
+
+    // ── Pull vision model if configured and not yet installed ────────────────
+    // The setup wizard picks a vision model per hardware profile (moondream,
+    // llava-phi, etc.), but earlier builds never actually downloaded it — the
+    // setup script ran `ensure-vision-models.ps1 -SkipInstall`. Pull it now so
+    // the Vision agent in the UI has something to dispatch to.
+    const visionModel = (cfg.dispatch?.vision || cfg.local?.manifest?.vl_model || '').trim();
+    if (visionModel && visionModel !== llmModel) {
+      let visionPresent = false;
+      try {
+        const tagsResp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3_000) });
+        if (tagsResp.ok) {
+          const payload = await tagsResp.json();
+          const names = Array.isArray(payload?.models)
+            ? payload.models.map((m) => String(m?.name || ''))
+            : [];
+          const visionBase = visionModel.split(':')[0];
+          visionPresent = names.some((n) => n === visionModel || n.split(':')[0] === visionBase);
+        }
+      } catch { /* probe failed; treat as missing */ }
+
+      if (!visionPresent) {
+        sendToRenderer('splash:progress', { status: `Downloading vision model ${visionModel}…` });
+        try {
+          await pullOllamaModel(visionModel, (event) => {
+            sendToRenderer('splash:progress', {
+              status: `Vision: ${String(event?.status || 'downloading…').slice(0, 80)}`,
+            });
+          });
+          sendToRenderer('splash:progress', { status: `Vision model ${visionModel} ready.` });
+        } catch (err) {
+          log('[ollama] Vision model pull failed:', err?.message || err);
+          sendToRenderer('splash:progress', { status: `Vision model unavailable: ${err?.message || 'pull failed'}` });
+        }
+      }
+    }
   }
 
-  // Wait for the Python sidecar to finish its health handshake (up to 20 s).
+  // Wait for the Python sidecar to finish its health handshake. Normal warm
+  // boots finish well under 20 s, but the first time the user launches Jarvis
+  // we may have to auto-install Python deps (sees pip output → extends
+  // budget). We extend the wait if the auto-installer is in flight.
   sendToRenderer('splash:progress', { pyPercent: 0, status: 'Starting Python AI runtime…' });
   const sidecarTimeoutMs = 20_000;
   const sidecarPollMs = 500;
+  const sidecarMaxWaitMs = 8 * 60_000; // hard ceiling even when installing deps
   const sidecarStart = Date.now();
-  while (!sidecarReady && !sidecarDead && (Date.now() - sidecarStart) < sidecarTimeoutMs) {
+  while (!sidecarReady && !sidecarDead && (Date.now() - sidecarStart) < sidecarMaxWaitMs) {
     await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
     const elapsed = Date.now() - sidecarStart;
+    const budget = sidecarDepInstallInFlight ? sidecarMaxWaitMs : sidecarTimeoutMs;
+    if (!sidecarDepInstallInFlight && !sidecarDepInstallAttempted && elapsed >= sidecarTimeoutMs) {
+      break; // normal-boot path: exit after 20 s if nothing happened
+    }
     sendToRenderer('splash:progress', {
-      pyPercent: Math.min(95, Math.round((elapsed / sidecarTimeoutMs) * 100)),
-      status: 'Waiting for AI runtime…',
+      pyPercent: Math.min(95, Math.round((elapsed / budget) * 100)),
+      status: sidecarDepInstallInFlight
+        ? 'Installing Python AI dependencies… (one-time first-run step)'
+        : 'Waiting for AI runtime…',
     });
   }
   if (sidecarDead) {
@@ -1978,6 +2149,10 @@ function restartSidecarNow() {
   // Cancel any pending auto-heal — user explicitly requested a restart.
   if (sidecarHealTimer) { clearTimeout(sidecarHealTimer); sidecarHealTimer = null; }
   sidecarHealRetryCount = 0;
+  // Allow the dep-auto-installer to try again on an explicit restart, e.g.
+  // after the user fixed a broken pip config or installed Python manually.
+  sidecarDepInstallAttempted = false;
+  sidecarMissingDepsDetected = false;
   setTimeout(() => startSidecar(), 500);
 }
 

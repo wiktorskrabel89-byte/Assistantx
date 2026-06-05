@@ -155,15 +155,18 @@ try {
   throw "Local AI bootstrap validation failed: $($_.Exception.Message)"
 }
 
-# Optional: Install vision models from manifest (non-critical)
+# Install vision models from manifest. Previously this ran with -SkipInstall
+# (list-only), which is why fresh installs would have a "Vision agent" picker
+# but no actual model to dispatch to. Pull them now — they are < 3GB each and
+# the script soft-fails if a pull errors.
 $visionManifestPath = Join-Path $PSScriptRoot "vision-model-manifest.json"
 $visionScriptPath = Join-Path $PSScriptRoot "ensure-vision-models.ps1"
 if ((Test-Path $visionManifestPath) -and (Test-Path $visionScriptPath)) {
-  Write-Host "Checking optional vision models…" -ForegroundColor Cyan
+  Write-Host "Installing vision models…" -ForegroundColor Cyan
   try {
-    & $visionScriptPath -ManifestPath $visionManifestPath -SkipInstall
+    & $visionScriptPath -ManifestPath $visionManifestPath
   } catch {
-    Write-Host "Vision model check skipped (non-critical): $_" -ForegroundColor DarkGray
+    Write-Host "Vision model install skipped (non-critical): $_" -ForegroundColor DarkGray
   }
 }
 
