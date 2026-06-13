@@ -133,10 +133,36 @@ def _should_escalate_to_32b(intent: str, prompt: str, context: Any) -> bool:
     return any(token in text for token in ("architecture", "refactor entire", "multi-file", "large codebase"))
 
 
+def _looks_like_deep_reasoning(intent: str, prompt: str) -> bool:
+    text = f"{intent} {prompt}".lower()
+    return any(token in text for token in (
+        "deep research", "research", "investigate", "in depth", "in-depth",
+        "step by step", "think through", "compare options", "pros and cons",
+        "comprehensive", "thorough analysis",
+    ))
+
+
 async def route_llm_request(intent: str, prompt: str, context: Any = None, model_mode: str = "fast") -> dict[str, Any]:
     normalized_intent = str(intent or "").strip().lower()
     mode = str(model_mode or "fast").strip().lower()
     escalate_to_32b = mode == "coding" and _should_escalate_to_32b(normalized_intent, prompt, context)
+
+    # Deep research / multi-step reasoning → dedicated reasoning model.
+    if normalized_intent in {"deep_research", "reasoning"} or (
+        normalized_intent in {"voice_chat", ""} and _looks_like_deep_reasoning(normalized_intent, prompt)
+    ):
+        try:
+            return call_openrouter_or_openai(
+                model="deepseek/deepseek-r1",
+                prompt=prompt,
+                context=context,
+            )
+        except Exception:
+            return call_google_ai_studio(
+                model="gemini-2.5-pro",
+                prompt=prompt,
+                context=context,
+            )
 
     if normalized_intent in {"voice_chat", "quick_command"}:
         return call_groq_or_openrouter(

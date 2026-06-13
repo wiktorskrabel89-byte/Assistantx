@@ -267,7 +267,12 @@ function buildSidecarApi() {
     connect: () => sidecarBridge.connect(),
     setConnection: (connection) => sidecarBridge.setConnection(connection),
     getCapabilities: () => sidecarBridge.getCapabilities(),
-    isCapturing: () => Boolean(sidecarBridge._capturing),
+    isCapturing: () => sidecarBridge.isCapturing(),
+    setPlaybackActive: (active) => sidecarBridge.setPlaybackActive(active),
+    setMicMuted: (muted) => sidecarBridge.setMicMuted(muted),
+    listAudioInputDevices: () => sidecarBridge.listAudioInputDevices(),
+    setInputDevice: (deviceId) => sidecarBridge.setInputDevice(deviceId),
+    getInputDevice: () => sidecarBridge.getInputDevice(),
   };
 }
 
@@ -285,6 +290,9 @@ function buildVoiceGatewayApi() {
     setListeningForCommand: (active) => voiceGateway.setListeningForCommand(active),
     synthesize: (text, options) => voiceGateway.synthesize(text, options),
     interrupt: (reason) => voiceGateway.interrupt(reason),
+    setPlaybackActive: (active) => voiceGateway.setPlaybackActive(active),
+    listAudioInputDevices: () => voiceGateway.listAudioInputDevices(),
+    setInputDevice: (deviceId) => voiceGateway.setInputDevice(deviceId),
   };
 }
 

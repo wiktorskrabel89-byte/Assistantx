@@ -37,6 +37,15 @@ const VALID_LOCAL_TTS_MODELS = ['kokoro', 'piper', 'auto'];
 //   - pro: full dual-GPU layout per the V2.0 spec — Qwen2.5-Coder 14B for
 //     reasoning/code, lightweight Qwen 1.5B for fast intent classification,
 //     and llava/moondream for vision
+// Slots (consumed by electron/ai/router/policy.js):
+//   chat       — general conversation / casual queries (general LLM)
+//   code       — standard coding tasks (coder model)
+//   code_heavy — complex/multi-file coding needing deeper reasoning
+//   reasoning  — deep research & multi-step thinking (reasoning model)
+//   router     — fast intent classification helper
+//   vision     — image/screen input
+// Missing/uninstalled slot models fall down the policy's SLOT_FALLBACK_CHAIN,
+// so declaring a bigger model here is safe even before it is pulled.
 const HARDWARE_PROFILE_MODELS = {
   eco: {
     llm: 'qwen2.5:1.5b',
@@ -45,6 +54,8 @@ const HARDWARE_PROFILE_MODELS = {
     dispatch: {
       chat: 'qwen2.5:1.5b',
       code: 'qwen2.5:1.5b',
+      code_heavy: 'qwen2.5:1.5b',
+      reasoning: 'qwen2.5:1.5b',
       router: 'qwen2.5:1.5b',
       vision: null,
     },
@@ -56,17 +67,23 @@ const HARDWARE_PROFILE_MODELS = {
     dispatch: {
       chat: 'gemma3:4b',
       code: 'qwen2.5-coder:7b',
+      code_heavy: 'qwen2.5-coder:14b',
+      reasoning: 'deepseek-r1:8b',
       router: 'qwen2.5:1.5b',
       vision: 'moondream2:1.4b',
     },
   },
   pro: {
-    llm: 'qwen2.5-coder:14b',
+    llm: 'qwen2.5:14b',
     stt: 'base',
     tts: 'kokoro',
     dispatch: {
-      chat: 'qwen2.5-coder:14b',
+      // General chat no longer rides the coder model — qwen2.5:14b is the
+      // conversational default, with the coder reserved for code intents.
+      chat: 'qwen2.5:14b',
       code: 'qwen2.5-coder:14b',
+      code_heavy: 'qwen2.5-coder:32b',
+      reasoning: 'deepseek-r1:14b',
       router: 'qwen2.5:3b',
       vision: 'llava-phi:2.7b',
     },
@@ -467,11 +484,15 @@ function getJarvisModelConfig() {
     // V2.0: tier-aware multi-model dispatch table consumed by the semantic
     // router. Always exposes a complete dispatch object even if the persisted
     // profile predates the V2.0 schema (defaults backfill missing slots).
+    // Wizard-selected models override the profile defaults where they apply:
+    // llm_model → chat slot, vision_model → vision slot.
     dispatch: {
-      chat: defaults.dispatch?.chat || defaults.llm,
+      chat: String(cfg.llm_model || '').trim() || defaults.dispatch?.chat || defaults.llm,
       code: defaults.dispatch?.code || defaults.llm,
+      code_heavy: defaults.dispatch?.code_heavy || defaults.dispatch?.code || defaults.llm,
+      reasoning: defaults.dispatch?.reasoning || defaults.dispatch?.code || defaults.llm,
       router: defaults.dispatch?.router || defaults.llm,
-      vision: defaults.dispatch?.vision || null,
+      vision: String(cfg.vision_model || '').trim() || defaults.dispatch?.vision || null,
     },
     local: cfg.local,
     cloud: cfg.cloud,
