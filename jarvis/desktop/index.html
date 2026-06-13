@@ -1150,6 +1150,103 @@
       gap: 10px;
     }
 
+    /* ── Settings scroll container ────────────────────────────────────────
+       The settings panel used to overflow the viewport silently — the tab
+       panel had no max-height and no overflow rule, so the bottom sections
+       (Cloud API Keys, Temporal) were unreachable. The scroll body now
+       holds a height-capped, scrollable column with a sticky header. */
+    .settings-scroll {
+      display: grid;
+      gap: 14px;
+      max-height: calc(100vh - 130px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 4px 14px 24px 4px;
+      scrollbar-gutter: stable;
+    }
+    .settings-scroll::-webkit-scrollbar { width: 10px; }
+    .settings-scroll::-webkit-scrollbar-thumb {
+      background: rgba(125, 211, 252, 0.18);
+      border-radius: 8px;
+    }
+    .settings-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(125, 211, 252, 0.32);
+    }
+    .settings-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 6px 0 8px;
+      background: linear-gradient(180deg, rgba(8,12,20,0.92) 70%, rgba(8,12,20,0.0) 100%);
+    }
+    .settings-card {
+      border: 1px solid rgba(125, 211, 252, 0.16);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.42);
+      padding: 12px 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .settings-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(165, 200, 240, 0.85);
+    }
+    .settings-card-header .settings-card-icon {
+      font-size: 16px;
+    }
+    .settings-card-subtitle {
+      font-size: 11px;
+      color: rgba(160, 180, 210, 0.55);
+      margin: -4px 0 4px;
+    }
+
+    /* Mic test live level meter */
+    .mic-test-meter {
+      position: relative;
+      height: 10px;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(125, 211, 252, 0.14);
+      overflow: hidden;
+    }
+    .mic-test-meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #22d3ee 0%, #38bdf8 60%, #f59e0b 90%, #ef4444 100%);
+      transition: width 80ms linear;
+    }
+    .mic-test-status {
+      font-size: 11px;
+      color: rgba(200, 216, 240, 0.7);
+      min-height: 14px;
+    }
+    .wake-sensitivity-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .wake-sensitivity-row input[type="range"] {
+      width: 100%;
+    }
+    .wake-sensitivity-value {
+      font-size: 12px;
+      color: rgba(200, 216, 240, 0.85);
+      font-variant-numeric: tabular-nums;
+      min-width: 36px;
+      text-align: right;
+    }
+
     .tab-content {
       min-width: 0;
     }
@@ -1302,11 +1399,14 @@
     .main-shell {
       grid-template-columns: 1fr;
     }
+    /* Tab rail: fully left-aligned (no center offset), shifted up to sit
+       under the top toggle button. Anchored to the top-left edge rather
+       than vertically centered. */
     .main-shell > .tab-switcher-side {
       position: fixed;
-      left: 12px;
-      top: 50%;
-      transform: translateY(-50%);
+      left: 10px;
+      top: 58px;
+      transform: none;
       z-index: 90;
       width: 56px;
       padding: 10px 6px;
@@ -1319,7 +1419,7 @@
       transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
     }
     body.tabs-collapsed .main-shell > .tab-switcher-side {
-      transform: translateY(-50%) translateX(calc(-100% - 24px));
+      transform: translateX(calc(-100% - 24px));
       opacity: 0;
       pointer-events: none;
     }
@@ -2031,287 +2131,356 @@
           </div>
   
           <div id="settings-tab-panel" class="tab-panel" role="tabpanel" aria-labelledby="settings-tab-button">
-            <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
-              <button id="open-setup-wizard" type="button" class="secondary sm">🧙 Setup wizard</button>
-              <button id="open-settings-modal" type="button" class="secondary sm">🔐 Accounts settings</button>
-            </div>
-            <div class="stack">
-              <div class="section-label">Servers</div>
-              <div class="settings-grid">
-                <label class="field field-full">
-                  <span>Server URL</span>
-                  <input id="jarvis-server-url" type="url" placeholder="https://your-assistantx-server.example.com" />
-                </label>
-                <button id="save-server-url" type="button" class="secondary field-full">Save server URL</button>
+            <div class="settings-scroll">
+              <div class="settings-toolbar">
+                <button id="open-setup-wizard" type="button" class="secondary sm">🧙 Setup wizard</button>
+                <button id="open-settings-modal" type="button" class="secondary sm">🔐 Accounts &amp; integrations</button>
+                <button id="save-voice-settings" type="button" class="secondary sm">💾 Save all voice/audio settings</button>
               </div>
-              <div class="section-label">System Core / Linux Runtime</div>
-              <div class="settings-grid">
-                <label class="field">
-                  <span>Runtime mode</span>
-                  <select id="runtime-mode">
-                    <option value="local-desktop">Local desktop runtime</option>
-                    <option value="remote-linux-runtime">Remote Linux runtime</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Permission level</span>
-                  <select id="runtime-permission-level">
-                    <option value="default">Default (manual approvals)</option>
-                    <option value="auto">Auto-Accept (low risk)</option>
-                    <option value="full">Full Control</option>
-                  </select>
-                </label>
-                <label class="field field-full">
-                  <span>Remote runtime API URL</span>
-                  <input id="remote-runtime-api-url" type="url" placeholder="http://192.168.1.20:9001" />
-                </label>
-                <label class="field field-full">
-                  <span>Remote runtime WS URL</span>
-                  <input id="remote-runtime-ws-url" type="url" placeholder="ws://192.168.1.20:9000" />
-                </label>
-                <button id="save-runtime-config" type="button" class="secondary field-full">Save runtime config</button>
-                <label class="field field-full">
-                  <span>Sync key</span>
-                  <input id="runtime-sync-key" type="password" placeholder="Enter Linux runtime sync key" />
-                </label>
-                <button id="runtime-pair" type="button" class="secondary">Pair runtime</button>
-                <button id="runtime-refresh-status" type="button" class="secondary">Refresh status</button>
-                <button id="runtime-apply-permission" type="button" class="secondary">Apply permission</button>
-                <button id="runtime-kill-switch" type="button" class="danger">Emergency disconnect</button>
-                <div id="runtime-status" class="field field-full" style="font-size:12px;color:#64748b;line-height:1.6;">
-                  Runtime not connected.
-                </div>
-              </div>
-              <div class="section-label">Local Servers</div>
-              <div class="settings-grid">
-                <label class="field">
-                  <span>Server label</span>
-                  <input id="local-server-label" type="text" placeholder="My local server" />
-                </label>
-                <label class="field">
-                  <span>Base URL</span>
-                  <input id="local-server-base-url" type="url" placeholder="http://127.0.0.1:11434" />
-                </label>
-                <label class="field">
-                  <span>API type</span>
-                  <select id="local-server-api-type">
-                    <option value="ollama">Ollama</option>
-                    <option value="lmstudio">LM Studio</option>
-                    <option value="openai-compat">OpenAI-compatible</option>
-                  </select>
-                </label>
-                <button id="local-server-add" type="button" class="secondary">Add server</button>
-                <div id="local-server-list" class="field field-full" style="font-size:12px;line-height:1.5;color:#cbd5e1;">
-                  No local servers configured.
-                </div>
-              </div>
-              <div class="settings-grid">
-                <label class="field">
-                  <span>Chat local model</span>
-                  <select id="local-chat-model">
-                    <option value="">Use cloud auto-router</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Code local model</span>
-                  <select id="local-code-model">
-                    <option value="">Use cloud auto-router</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>External local model</span>
-                  <select id="local-external-model">
-                    <option value="">Use cloud auto-router</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Vision local model</span>
-                  <select id="local-vision-model">
-                    <option value="">Use cloud auto-router</option>
-                  </select>
-                </label>
-                <label class="toggle" for="local-prefer-enabled">
-                  <input id="local-prefer-enabled" type="checkbox" />
-                  Prefer local when available
-                </label>
-                <button id="local-server-save-assignment" type="button" class="secondary">Save local routing</button>
-              </div>
-            </div>
 
-            <div class="stack">
-              <div class="section-label">AI Models</div>
-              <div class="model-grid">
-                <div id="engine-profile-summary" class="field-note" style="grid-column:1 / -1;">
-                  Loading current engine profile…
+              <!-- ── Audio & Voice ──────────────────────────────────────────── -->
+              <section class="settings-card" aria-labelledby="settings-audio-heading">
+                <div class="settings-card-header" id="settings-audio-heading">
+                  <span class="settings-card-icon">🎙️</span>
+                  Audio &amp; voice
                 </div>
-                <label class="field" id="chat-model-field">
-                  <span>Chat model</span>
-                  <select id="chat-model">
-                    <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
-                    <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
-                    <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
-                    <option value="meta-llama/llama-4-scout">meta-llama/llama-4-scout</option>
-                    <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
-                  </select>
-                </label>
-                <label class="field" id="stt-model-field">
-                  <span>Speech-to-text model</span>
-                  <select id="stt-model">
-                    <option value="large">whisper-large-v3</option>
-                    <option value="medium">whisper-medium</option>
-                    <option value="base">whisper-base</option>
-                    <option value="tiny">whisper-tiny</option>
-                  </select>
-                </label>
-                <label class="field" id="tts-backend-field">
-                  <span>TTS backend</span>
-                  <select id="tts-backend">
-                    <optgroup label="Free plan (local)">
-                      <option value="kokoro-local">Kokoro-82M (local, fast, free)</option>
-                      <option value="piper-local">Piper (local fallback)</option>
-                      <option value="auto-local">Auto local (Kokoro → Piper)</option>
-                    </optgroup>
-                    <optgroup label="Pro / Pro+ (cloud)">
-                      <option value="groq-cloud">Groq TTS (cloud)</option>
-                      <option value="openai-cloud">OpenAI TTS (BYOK)</option>
-                      <option value="elevenlabs-cloud">ElevenLabs (BYOK)</option>
-                    </optgroup>
-                  </select>
-                </label>
-                <label class="field" id="tts-model-field">
-                  <span>Text-to-speech model</span>
-                  <select id="tts-model">
-                    <option value="kokoro">kokoro-82m (local voice runtime)</option>
-                    <option value="piper">piper local voice pack</option>
-                    <option value="playai-tts">playai-tts (Groq default)</option>
-                    <option value="gpt-4o-mini-tts">gpt-4o-mini-tts (OpenAI)</option>
-                    <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Jarvis voice profile</span>
-                  <select id="tts-voice-profile">
-                    <option value="jarvis">JARVIS</option>
-                    <option value="default">Default</option>
-                    <option value="nova">Nova</option>
-                    <option value="echo">Echo</option>
-                    <option value="aria">Aria</option>
-                    <option value="silent">Silent (say nothing)</option>
-                  </select>
-                </label>
-                <label class="field" id="voice-provider-mode-field">
-                  <span>Voice provider mode</span>
-                  <select id="voice-provider-mode">
-                    <option value="assistantx-server">AssistantX API gateway (default)</option>
-                  </select>
-                </label>
-                <label class="field" id="voice-language-field">
-                  <span>Voice language</span>
-                  <select id="voice-language">
-                    <option value="en-US">English (US)</option>
-                    <option value="en-GB">English (UK)</option>
-                    <option value="pl-PL">Polski</option>
-                    <option value="de-DE">Deutsch</option>
-                    <option value="es-ES">Español</option>
-                    <option value="fr-FR">Français</option>
-                  </select>
-                </label>
-                <div id="model-settings-note" class="field-note" style="grid-column:1 / -1;">
-                  Local engine settings are loading…
+                <p class="settings-card-subtitle">
+                  Microphone, wake word, noise suppression, and TTS playback live here.
+                </p>
+                <div class="settings-grid">
+                  <label class="field field-full">
+                    <span>Microphone device</span>
+                    <select id="mic-device-select">
+                      <option value="">System default microphone</option>
+                    </select>
+                  </label>
+                  <label class="toggle field-full" for="noise-suppression-enabled">
+                    <input id="noise-suppression-enabled" type="checkbox" checked />
+                    Noise suppression (high-pass + spectral gating before VAD/wake-word)
+                  </label>
+                  <label class="toggle field-full" for="wake-word-enabled">
+                    <input id="wake-word-enabled" type="checkbox" checked />
+                    Enable wake-phrase detection ("Hey Jarvis")
+                  </label>
+                  <label class="field field-full">
+                    <span>Wake phrase</span>
+                    <input id="wake-word-phrase" type="text" value="Hey Jarvis" placeholder="Hey Jarvis" />
+                  </label>
+                  <label class="field field-full">
+                    <span>Wake-word sensitivity</span>
+                    <div class="wake-sensitivity-row">
+                      <input id="wake-word-sensitivity" type="range" min="0" max="100" step="1" value="50" />
+                      <span id="wake-word-sensitivity-value" class="wake-sensitivity-value">50%</span>
+                    </div>
+                  </label>
+                  <label class="toggle field-full" for="allow-background-wake">
+                    <input id="allow-background-wake" type="checkbox" checked />
+                    Keep wake listener active while app is hidden/minimized
+                  </label>
+                  <label class="toggle field-full" for="stt-enabled">
+                    <input id="stt-enabled" type="checkbox" checked />
+                    Speech-to-text enabled
+                  </label>
+                  <label class="toggle field-full" for="auto-tts">
+                    <input id="auto-tts" type="checkbox" checked />
+                    Auto text-to-speech playback (replies are spoken aloud)
+                  </label>
+                  <div class="field field-full" style="display:grid;gap:6px;">
+                    <span>Microphone test</span>
+                    <button id="mic-test-button" type="button" class="secondary">🎙 Test microphone</button>
+                    <div class="mic-test-meter" aria-hidden="true">
+                      <div id="mic-test-meter-fill" class="mic-test-meter-fill"></div>
+                    </div>
+                    <div id="mic-test-status" class="mic-test-status">
+                      Click "Test microphone" and speak — the meter shows live input level.
+                    </div>
+                  </div>
                 </div>
-                <label class="toggle field-full" for="stt-enabled">
-                  <input id="stt-enabled" type="checkbox" checked />
-                  Speech-to-text enabled
-                </label>
-                <label class="toggle field-full" for="auto-tts">
-                  <input id="auto-tts" type="checkbox" checked />
-                  Auto text-to-speech playback
-                </label>
-              </div>
-            </div>
+              </section>
 
-            <div class="stack">
-              <div class="section-label">Cloud API Keys (BYOK)</div>
-              <div class="field-note" style="font-size:11px;color:rgba(200,216,240,0.55);margin-bottom:8px;">
-                Keys are stored in your OS keychain (never plain text on disk).
-                Required for Tier 3 (Cloud / BYOK) routing.
-              </div>
-              <div class="settings-grid byok-grid">
-                <label class="field"><span>OpenAI</span>
-                  <input id="byok-openai" type="password" placeholder="sk-…" autocomplete="off" data-byok-provider="openai" />
-                </label>
-                <label class="field"><span>Anthropic</span>
-                  <input id="byok-anthropic" type="password" placeholder="sk-ant-…" autocomplete="off" data-byok-provider="anthropic" />
-                </label>
-                <label class="field"><span>Groq</span>
-                  <input id="byok-groq" type="password" placeholder="gsk_…" autocomplete="off" data-byok-provider="groq" />
-                </label>
-                <label class="field"><span>OpenRouter</span>
-                  <input id="byok-openrouter" type="password" placeholder="sk-or-…" autocomplete="off" data-byok-provider="openrouter" />
-                </label>
-                <label class="field"><span>Google AI Studio</span>
-                  <input id="byok-google" type="password" placeholder="AIza…" autocomplete="off" data-byok-provider="google" />
-                </label>
-                <label class="field"><span>DeepSeek</span>
-                  <input id="byok-deepseek" type="password" placeholder="sk-…" autocomplete="off" data-byok-provider="deepseek" />
-                </label>
-                <label class="field"><span>ElevenLabs (TTS)</span>
-                  <input id="byok-elevenlabs" type="password" placeholder="…" autocomplete="off" data-byok-provider="elevenlabs" />
-                </label>
-                <div id="byok-status" class="field-note" style="grid-column:1 / -1;font-size:11px;color:rgba(200,216,240,0.5);">
-                  Tip: paste a key and tab away — it'll auto-save to your keychain.
+              <!-- ── Models ─────────────────────────────────────────────────── -->
+              <section class="settings-card" aria-labelledby="settings-models-heading">
+                <div class="settings-card-header" id="settings-models-heading">
+                  <span class="settings-card-icon">🧠</span>
+                  Models
                 </div>
-              </div>
-            </div>
+                <p class="settings-card-subtitle">
+                  Chat, code, STT, TTS and voice model selection. Hardware tier and dispatch table are wired from the setup wizard.
+                </p>
+                <div class="model-grid">
+                  <div id="engine-profile-summary" class="field-note" style="grid-column:1 / -1;">
+                    Loading current engine profile…
+                  </div>
+                  <label class="field" id="chat-model-field">
+                    <span>Chat model</span>
+                    <select id="chat-model">
+                      <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
+                      <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
+                      <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
+                      <option value="meta-llama/llama-4-scout">meta-llama/llama-4-scout</option>
+                      <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
+                    </select>
+                  </label>
+                  <label class="field" id="stt-model-field">
+                    <span>Speech-to-text model</span>
+                    <select id="stt-model">
+                      <option value="large">whisper-large-v3</option>
+                      <option value="medium">whisper-medium</option>
+                      <option value="base">whisper-base</option>
+                      <option value="tiny">whisper-tiny</option>
+                    </select>
+                  </label>
+                  <label class="field" id="tts-backend-field">
+                    <span>TTS backend</span>
+                    <select id="tts-backend">
+                      <optgroup label="Free plan (local)">
+                        <option value="kokoro-local">Kokoro-82M (local, fast, free)</option>
+                        <option value="piper-local">Piper (local fallback)</option>
+                        <option value="auto-local">Auto local (Kokoro → Piper)</option>
+                      </optgroup>
+                      <optgroup label="Pro / Pro+ (cloud)">
+                        <option value="groq-cloud">Groq TTS (cloud)</option>
+                        <option value="openai-cloud">OpenAI TTS (BYOK)</option>
+                        <option value="elevenlabs-cloud">ElevenLabs (BYOK)</option>
+                      </optgroup>
+                    </select>
+                  </label>
+                  <label class="field" id="tts-model-field">
+                    <span>Text-to-speech model</span>
+                    <select id="tts-model">
+                      <option value="kokoro">kokoro-82m (local voice runtime)</option>
+                      <option value="piper">piper local voice pack</option>
+                      <option value="playai-tts">playai-tts (Groq default)</option>
+                      <option value="gpt-4o-mini-tts">gpt-4o-mini-tts (OpenAI)</option>
+                      <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Jarvis voice profile</span>
+                    <select id="tts-voice-profile">
+                      <option value="jarvis">JARVIS</option>
+                      <option value="default">Default</option>
+                      <option value="nova">Nova</option>
+                      <option value="echo">Echo</option>
+                      <option value="aria">Aria</option>
+                      <option value="silent">Silent (say nothing)</option>
+                    </select>
+                  </label>
+                  <label class="field" id="voice-provider-mode-field">
+                    <span>Voice provider mode</span>
+                    <select id="voice-provider-mode">
+                      <option value="assistantx-server">AssistantX API gateway (default)</option>
+                    </select>
+                  </label>
+                  <label class="field" id="voice-language-field">
+                    <span>Voice language</span>
+                    <select id="voice-language">
+                      <option value="en-US">English (US)</option>
+                      <option value="en-GB">English (UK)</option>
+                      <option value="pl-PL">Polski</option>
+                      <option value="de-DE">Deutsch</option>
+                      <option value="es-ES">Español</option>
+                      <option value="fr-FR">Français</option>
+                    </select>
+                  </label>
+                  <div id="model-settings-note" class="field-note" style="grid-column:1 / -1;">
+                    Local engine settings are loading…
+                  </div>
+                </div>
+              </section>
 
-            <div class="stack">
-              <div class="section-label">Jarvis Voice Settings</div>
-              <div class="settings-grid">
-                <label class="toggle field-full" for="wake-word-enabled">
-                  <input id="wake-word-enabled" type="checkbox" checked />
-                  Enable wake phrase detection
-                </label>
-                <label class="field field-full">
-                  <span>Wake phrase</span>
-                  <input id="wake-word-phrase" type="text" value="Hey Jarvis" placeholder="Hey Jarvis" />
-                </label>
-                <label class="toggle field-full" for="allow-background-wake">
-                  <input id="allow-background-wake" type="checkbox" checked />
-                  Keep wake listener active while app is hidden/minimized
-                </label>
-                <button id="save-voice-settings" type="button" class="secondary field-full">Save voice settings</button>
-              </div>
-            </div>
+              <!-- ── Local servers & per-role routing ──────────────────────── -->
+              <section class="settings-card" aria-labelledby="settings-local-heading">
+                <div class="settings-card-header" id="settings-local-heading">
+                  <span class="settings-card-icon">🖥️</span>
+                  Local model servers
+                </div>
+                <p class="settings-card-subtitle">
+                  Attach extra Ollama / LM Studio / OpenAI-compatible endpoints and override which model handles each lane.
+                </p>
+                <div class="settings-grid">
+                  <label class="field">
+                    <span>Server label</span>
+                    <input id="local-server-label" type="text" placeholder="My local server" />
+                  </label>
+                  <label class="field">
+                    <span>Base URL</span>
+                    <input id="local-server-base-url" type="url" placeholder="http://127.0.0.1:11434" />
+                  </label>
+                  <label class="field">
+                    <span>API type</span>
+                    <select id="local-server-api-type">
+                      <option value="ollama">Ollama</option>
+                      <option value="lmstudio">LM Studio</option>
+                      <option value="openai-compat">OpenAI-compatible</option>
+                    </select>
+                  </label>
+                  <button id="local-server-add" type="button" class="secondary">Add server</button>
+                  <div id="local-server-list" class="field field-full" style="font-size:12px;line-height:1.5;color:#cbd5e1;">
+                    No local servers configured.
+                  </div>
+                  <label class="field">
+                    <span>Chat local model</span>
+                    <select id="local-chat-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Code local model</span>
+                    <select id="local-code-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>External local model</span>
+                    <select id="local-external-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Vision local model</span>
+                    <select id="local-vision-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="toggle" for="local-prefer-enabled">
+                    <input id="local-prefer-enabled" type="checkbox" />
+                    Prefer local when available
+                  </label>
+                  <button id="local-server-save-assignment" type="button" class="secondary">Save local routing</button>
+                </div>
+              </section>
 
-            <div class="stack">
-              <div class="section-label">Temporal Intelligence</div>
-              <div class="settings-grid">
-                <label class="toggle field-full" for="temporal-awareness">
-                  <input id="temporal-awareness" type="checkbox" checked />
-                  Temporal awareness in responses
-                </label>
-                <label class="toggle field-full" for="proactive-reminders">
-                  <input id="proactive-reminders" type="checkbox" checked />
-                  Proactive reminder announcements
-                </label>
-                <label class="toggle field-full" for="ambient-announcements">
-                  <input id="ambient-announcements" type="checkbox" />
-                  Ambient announcements (experimental)
-                </label>
-                <label class="toggle field-full" for="daily-summary">
-                  <input id="daily-summary" type="checkbox" />
-                  Daily summary on startup
-                </label>
-                <label class="field field-full">
-                  <span>Reminder voice style</span>
-                  <select id="reminder-voice-style">
-                    <option value="neutral">Neutral</option>
-                    <option value="jarvis">JARVIS</option>
-                    <option value="nova">Nova</option>
-                    <option value="minimal">Minimal</option>
-                  </select>
-                </label>
-              </div>
+              <!-- ── Cloud API keys (BYOK) ─────────────────────────────────── -->
+              <section class="settings-card" aria-labelledby="settings-byok-heading">
+                <div class="settings-card-header" id="settings-byok-heading">
+                  <span class="settings-card-icon">🔑</span>
+                  Cloud API keys (BYOK)
+                </div>
+                <p class="settings-card-subtitle">
+                  Keys are stored in your OS keychain (never plain text on disk). Required for Tier 3 (Cloud / BYOK) routing.
+                </p>
+                <div class="settings-grid byok-grid">
+                  <label class="field"><span>OpenAI</span>
+                    <input id="byok-openai" type="password" placeholder="sk-…" autocomplete="off" data-byok-provider="openai" />
+                  </label>
+                  <label class="field"><span>Anthropic</span>
+                    <input id="byok-anthropic" type="password" placeholder="sk-ant-…" autocomplete="off" data-byok-provider="anthropic" />
+                  </label>
+                  <label class="field"><span>Groq</span>
+                    <input id="byok-groq" type="password" placeholder="gsk_…" autocomplete="off" data-byok-provider="groq" />
+                  </label>
+                  <label class="field"><span>OpenRouter</span>
+                    <input id="byok-openrouter" type="password" placeholder="sk-or-…" autocomplete="off" data-byok-provider="openrouter" />
+                  </label>
+                  <label class="field"><span>Google AI Studio</span>
+                    <input id="byok-google" type="password" placeholder="AIza…" autocomplete="off" data-byok-provider="google" />
+                  </label>
+                  <label class="field"><span>DeepSeek</span>
+                    <input id="byok-deepseek" type="password" placeholder="sk-…" autocomplete="off" data-byok-provider="deepseek" />
+                  </label>
+                  <label class="field"><span>ElevenLabs (TTS)</span>
+                    <input id="byok-elevenlabs" type="password" placeholder="…" autocomplete="off" data-byok-provider="elevenlabs" />
+                  </label>
+                  <div id="byok-status" class="field-note" style="grid-column:1 / -1;font-size:11px;color:rgba(200,216,240,0.5);">
+                    Tip: paste a key and tab away — it'll auto-save to your keychain.
+                  </div>
+                </div>
+              </section>
+
+              <!-- ── Runtime & sync ────────────────────────────────────────── -->
+              <section class="settings-card" aria-labelledby="settings-runtime-heading">
+                <div class="settings-card-header" id="settings-runtime-heading">
+                  <span class="settings-card-icon">⚙️</span>
+                  Runtime &amp; sync
+                </div>
+                <p class="settings-card-subtitle">
+                  AssistantX server URL, local-vs-remote runtime, and Linux pairing.
+                </p>
+                <div class="settings-grid">
+                  <label class="field field-full">
+                    <span>AssistantX server URL</span>
+                    <input id="jarvis-server-url" type="url" placeholder="https://your-assistantx-server.example.com" />
+                  </label>
+                  <button id="save-server-url" type="button" class="secondary field-full">Save server URL</button>
+                </div>
+                <div class="section-label" style="margin-top:6px;">Linux runtime</div>
+                <div class="settings-grid">
+                  <label class="field">
+                    <span>Runtime mode</span>
+                    <select id="runtime-mode">
+                      <option value="local-desktop">Local desktop runtime</option>
+                      <option value="remote-linux-runtime">Remote Linux runtime</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Permission level</span>
+                    <select id="runtime-permission-level">
+                      <option value="default">Default (manual approvals)</option>
+                      <option value="auto">Auto-Accept (low risk)</option>
+                      <option value="full">Full Control</option>
+                    </select>
+                  </label>
+                  <label class="field field-full">
+                    <span>Remote runtime API URL</span>
+                    <input id="remote-runtime-api-url" type="url" placeholder="http://192.168.1.20:9001" />
+                  </label>
+                  <label class="field field-full">
+                    <span>Remote runtime WS URL</span>
+                    <input id="remote-runtime-ws-url" type="url" placeholder="ws://192.168.1.20:9000" />
+                  </label>
+                  <button id="save-runtime-config" type="button" class="secondary field-full">Save runtime config</button>
+                  <label class="field field-full">
+                    <span>Sync key</span>
+                    <input id="runtime-sync-key" type="password" placeholder="Enter Linux runtime sync key" />
+                  </label>
+                  <button id="runtime-pair" type="button" class="secondary">Pair runtime</button>
+                  <button id="runtime-refresh-status" type="button" class="secondary">Refresh status</button>
+                  <button id="runtime-apply-permission" type="button" class="secondary">Apply permission</button>
+                  <button id="runtime-kill-switch" type="button" class="danger">Emergency disconnect</button>
+                  <div id="runtime-status" class="field field-full" style="font-size:12px;color:#64748b;line-height:1.6;">
+                    Runtime not connected.
+                  </div>
+                </div>
+              </section>
+
+              <!-- ── Temporal intelligence ─────────────────────────────────── -->
+              <section class="settings-card" aria-labelledby="settings-temporal-heading">
+                <div class="settings-card-header" id="settings-temporal-heading">
+                  <span class="settings-card-icon">⏱️</span>
+                  Temporal intelligence
+                </div>
+                <p class="settings-card-subtitle">
+                  Reminder announcements, ambient context, and daily summaries.
+                </p>
+                <div class="settings-grid">
+                  <label class="toggle field-full" for="temporal-awareness">
+                    <input id="temporal-awareness" type="checkbox" checked />
+                    Temporal awareness in responses
+                  </label>
+                  <label class="toggle field-full" for="proactive-reminders">
+                    <input id="proactive-reminders" type="checkbox" checked />
+                    Proactive reminder announcements
+                  </label>
+                  <label class="toggle field-full" for="ambient-announcements">
+                    <input id="ambient-announcements" type="checkbox" />
+                    Ambient announcements (experimental)
+                  </label>
+                  <label class="toggle field-full" for="daily-summary">
+                    <input id="daily-summary" type="checkbox" />
+                    Daily summary on startup
+                  </label>
+                  <label class="field field-full">
+                    <span>Reminder voice style</span>
+                    <select id="reminder-voice-style">
+                      <option value="neutral">Neutral</option>
+                      <option value="jarvis">JARVIS</option>
+                      <option value="nova">Nova</option>
+                      <option value="minimal">Minimal</option>
+                    </select>
+                  </label>
+                </div>
+              </section>
             </div>
           </div>
         </div>

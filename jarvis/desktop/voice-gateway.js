@@ -31,6 +31,8 @@ class VoiceGateway extends EventEmitter {
       ttsModel: DEFAULT_TTS_MODEL,
       autoSubmit: true,
       fallbackToBrowserSpeech: true,
+      noiseSuppressionEnabled: true,
+      wakeWordSensitivity: 0.5,
     };
     this._backend = createVoiceBackendAbstraction({
       sidecar: this._sidecar,
@@ -86,9 +88,33 @@ class VoiceGateway extends EventEmitter {
         ttsBackend: toSidecarTtsBackend(this._settings.ttsBackend),
         nlpEnabled: false,
         vadEnabled: true,
+        noiseSuppressionEnabled: this._settings.noiseSuppressionEnabled !== false,
+        wakeWordSensitivity: Number.isFinite(Number(this._settings.wakeWordSensitivity))
+          ? Number(this._settings.wakeWordSensitivity)
+          : 0.5,
         listeningForCommand: false,
       });
     }
+  }
+
+  setPlaybackActive(active) {
+    if (this._sidecar && typeof this._sidecar.setPlaybackActive === 'function') {
+      this._sidecar.setPlaybackActive(Boolean(active));
+    }
+  }
+
+  listAudioInputDevices() {
+    if (this._sidecar && typeof this._sidecar.listAudioInputDevices === 'function') {
+      return this._sidecar.listAudioInputDevices();
+    }
+    return Promise.resolve([]);
+  }
+
+  setInputDevice(deviceId) {
+    if (this._sidecar && typeof this._sidecar.setInputDevice === 'function') {
+      return this._sidecar.setInputDevice(deviceId);
+    }
+    return Promise.resolve();
   }
 
   connect() {

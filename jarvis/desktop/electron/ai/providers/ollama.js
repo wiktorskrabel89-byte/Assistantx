@@ -156,13 +156,27 @@ function sanitizeOptions(options = {}) {
 
 function normalizeMessages(request = {}) {
   const messages = Array.isArray(request.messages) ? request.messages : null;
+  // Base64 images ride on the final user message per the Ollama chat API.
+  const images = Array.isArray(request.images)
+    ? request.images.map((item) => String(item || '')).filter(Boolean)
+    : [];
+  let normalized;
   if (messages && messages.length > 0) {
-    return messages.map((entry) => ({
+    normalized = messages.map((entry) => ({
       role: String(entry?.role || 'user'),
       content: String(entry?.content || ''),
+      ...(Array.isArray(entry?.images) && entry.images.length > 0 ? { images: entry.images } : {}),
     }));
+  } else {
+    normalized = [{ role: 'user', content: String(request.message || '') }];
   }
-  return [{ role: 'user', content: String(request.message || '') }];
+  if (images.length > 0 && normalized.length > 0) {
+    const last = normalized[normalized.length - 1];
+    if (!Array.isArray(last.images) || last.images.length === 0) {
+      last.images = images;
+    }
+  }
+  return normalized;
 }
 
 module.exports = {

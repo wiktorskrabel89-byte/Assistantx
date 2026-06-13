@@ -12,16 +12,19 @@ const {
 } = require('../free-model-catalog');
 
 // ── Hardware profile → Ollama model matrix ────────────────────────────────────
-// Mirrors HARDWARE_PROFILE_MODELS in runtime-config.js.
+// Mirrors HARDWARE_PROFILE_MODELS in runtime-config.js. Chat profiles map to
+// *general* LLMs — the coder model is reserved for code intents (the old
+// matrix pinned chat to qwen2.5-coder:14b, which made the coding model handle
+// every conversation).
 const HARDWARE_PROFILE_CHAT_MODEL = {
   eco:      'qwen2.5:1.5b',
-  standard: 'qwen2.5-coder:14b',
-  pro:      'qwen2.5-coder:14b',
+  standard: 'gemma3:4b',
+  pro:      'qwen2.5:14b',
 };
 
 const ROUTING_PROFILES = {
   chat: {
-    local: 'qwen2.5-coder:14b',
+    local: 'gemma3:4b',
   },
   coding: {
     local: 'qwen2.5-coder:14b',
@@ -108,12 +111,17 @@ class AIRouter {
     const engineMode = this._engineMode();
     const modelConfig = this._modelConfig();
     const profile = normalizeProfile(request?.profile || inferProfile(request));
+    const images = Array.isArray(request?.images)
+      ? request.images.map((item) => String(item || '')).filter(Boolean)
+      : [];
     const analysis = analyzeRequest({
       message: request?.message || extractLastMessage(request?.messages),
       contextSize: request?.contextSize,
       codingDepth: request?.contextType === 'code' ? 'architecture' : request?.codingDepth,
       retryCount: request?.retryCount || 0,
       confidence: request?.confidence,
+      source: request?.source,
+      images,
     });
     const availability = await this.getAvailability();
     const localConfig = this.getLocalServerConfig ? this.getLocalServerConfig() : null;
@@ -176,6 +184,7 @@ class AIRouter {
     const resolvedRequest = {
       ...request,
       messages: normalizeMessages(request),
+      images,
       model: effectiveRoute.model,
       provider: effectiveRoute.provider,
       options: {
@@ -187,6 +196,51 @@ class AIRouter {
 
     if (effectiveRoute.provider === 'ollama' && availability.ollama_available) {
       const provider = localRoute?.server ? createLocalProvider(localRoute.server) : this.ollama;
+
+      // Vision → LLM relay: the vision model describes the image, then the
+      // text model (chat or coder, per secondary intent) produces the actual
+      // answer with that description as grounded context.
+      if (effectiveRoute.relay && images.length > 0) {
+        const description = await provider.generate({
+          model: effectiveRoute.model,
+          messages: [{
+            role: 'user',
+            content: 'Describe this image precisely for another assistant: '
+              + 'layout, visible text, UI elements, code, and anything unusual. '
+              + `The user's request about it is: "${request?.message || extractLastMessage(request?.messages)}"`,
+          }],
+          images,
+          options: { temperature: 0.2 },
+        });
+        const relayRequest = {
+          ...resolvedRequest,
+          images: [],
+          model: effectiveRoute.relay.model,
+          messages: [
+            ...normalizeMessages(request).slice(0, -1),
+            {
+              role: 'user',
+              content: `${request?.message || extractLastMessage(request?.messages)}\n\n`
+                + `[Vision model's description of the attached image]\n${String(description?.text || '').trim()}`,
+            },
+          ],
+        };
+        const relayResponse = await provider.stream(relayRequest, onChunkWithMetrics);
+        return {
+          ...relayResponse,
+          route: {
+            ...effectiveRoute,
+            model: effectiveRoute.relay.model,
+            lane: effectiveRoute.relay.slot,
+            reason: `${effectiveRoute.reason}-relay-vision-to-${effectiveRoute.relay.intent}`,
+            visionModel: effectiveRoute.model,
+          },
+          profile,
+          availability,
+          metrics: buildRouteMetrics({ requestStartedAt, firstTokenAt, request }),
+        };
+      }
+
       const response = await provider.stream(resolvedRequest, onChunkWithMetrics);
       return {
         ...response,

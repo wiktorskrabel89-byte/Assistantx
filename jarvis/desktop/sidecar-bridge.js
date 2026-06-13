@@ -18,6 +18,12 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const AUDIO_SAMPLE_RATE = 16000;
 const AUDIO_CHUNK_MS = 100;
 const AUDIO_CHUNK_SIZE = (AUDIO_SAMPLE_RATE * AUDIO_CHUNK_MS) / 1000;
+// ScriptProcessorNode buffer sizes MUST be 0 or a power of two in
+// [256, 16384] — createScriptProcessor(1600) throws IndexSizeError, which
+// previously killed audio capture at startup *and* leaked the live mic
+// stream (the catch block never stopped the acquired tracks). We capture
+// with a valid power-of-two buffer and re-chunk to exact 100 ms frames.
+const AUDIO_PROCESSOR_BUFFER_SIZE = 2048;
 
 class WebSocketTransport {
   constructor({ url, onOpen, onClose, onMessage, onUnavailable }) {
@@ -205,6 +211,10 @@ class SidecarBridge extends EventEmitter {
     this._scriptProcessor = null;
     this._mediaStream = null;
     this._capturing = false;
+    this._micMuted = false;
+    this._playbackActive = false;
+    this._inputDeviceId = '';
+    this._chunkBuffer = new Float32Array(0);
     this._pendingSettings = null;
     this._transport = null;
     this._ws = null;
@@ -517,52 +527,143 @@ class SidecarBridge extends EventEmitter {
     this._send({ type: 'configure', listeningForCommand: listening });
   }
 
+  isCapturing() {
+    return this._capturing;
+  }
+
+  /**
+   * Half-duplex gate: while TTS audio is playing through the speakers the
+   * mic tracks are disabled (hard mute at the WebRTC level) AND the sidecar
+   * is told to drop anything that still arrives, so Jarvis can never hear
+   * and re-answer its own voice. Echo cancellation (requested in the
+   * getUserMedia constraints) stays as the first line of defence; this gate
+   * is the guarantee.
+   */
+  setPlaybackActive(active) {
+    const next = Boolean(active);
+    if (next === this._playbackActive) return;
+    this._playbackActive = next;
+    this._applyTrackEnabled();
+    this._send({ type: 'playback_state', active: next });
+  }
+
+  setMicMuted(muted) {
+    this._micMuted = Boolean(muted);
+    this._applyTrackEnabled();
+  }
+
+  _applyTrackEnabled() {
+    if (!this._mediaStream) return;
+    const enabled = !this._micMuted && !this._playbackActive;
+    for (const track of this._mediaStream.getAudioTracks()) {
+      track.enabled = enabled;
+    }
+  }
+
+  async listAudioInputDevices() {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return [];
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices
+        .filter((device) => device.kind === 'audioinput')
+        .map((device, index) => ({
+          deviceId: device.deviceId || '',
+          label: device.label || `Microphone ${index + 1}`,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  async setInputDevice(deviceId) {
+    const next = String(deviceId || '');
+    if (next === this._inputDeviceId) return;
+    this._inputDeviceId = next;
+    if (this._capturing) {
+      this.stopAudioCapture();
+      await this.startAudioCapture();
+    }
+  }
+
+  getInputDevice() {
+    return this._inputDeviceId;
+  }
+
   async startAudioCapture() {
     if (this._capturing) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) return;
 
     try {
+      const audioConstraints = {
+        channelCount: 1,
+        sampleRate: AUDIO_SAMPLE_RATE,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+      if (this._inputDeviceId) {
+        audioConstraints.deviceId = { exact: this._inputDeviceId };
+      }
       this._mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: AUDIO_SAMPLE_RATE,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: audioConstraints,
         video: false,
       });
 
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) {
-        this._mediaStream.getTracks().forEach((track) => track.stop());
-        this._mediaStream = null;
+        this._releaseCaptureResources();
         return;
       }
 
       this._audioContext = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
       this._audioSource = this._audioContext.createMediaStreamSource(this._mediaStream);
-      const bufferSize = AUDIO_CHUNK_SIZE;
-      this._scriptProcessor = this._audioContext.createScriptProcessor(bufferSize, 1, 1);
+      this._chunkBuffer = new Float32Array(0);
+      this._scriptProcessor = this._audioContext.createScriptProcessor(AUDIO_PROCESSOR_BUFFER_SIZE, 1, 1);
 
       this._scriptProcessor.onaudioprocess = (event) => {
-        if (!this._connected) return;
         const float32 = event.inputBuffer.getChannelData(0);
-        const pcmInt16 = this._float32ToPcmInt16(float32);
-        const b64 = this._arrayBufferToBase64(pcmInt16.buffer);
-        this._send({ type: 'audio_chunk', data: b64 });
+        this._emitMicLevel(float32);
+        if (!this._connected || this._micMuted || this._playbackActive) return;
+        this._pushSamples(float32);
       };
 
       this._audioSource.connect(this._scriptProcessor);
       this._scriptProcessor.connect(this._audioContext.destination);
+      this._applyTrackEnabled();
       this._capturing = true;
       this.emit('audio_capture_started');
     } catch (err) {
-      this.emit('error', err);
+      // Release anything acquired before the failure — leaving live tracks
+      // behind kept the OS mic indicator on forever ("always listening").
+      this._releaseCaptureResources();
+      throw err;
     }
   }
 
-  stopAudioCapture() {
-    if (!this._capturing) return;
+  _pushSamples(float32) {
+    const merged = new Float32Array(this._chunkBuffer.length + float32.length);
+    merged.set(this._chunkBuffer, 0);
+    merged.set(float32, this._chunkBuffer.length);
+    let offset = 0;
+    while (merged.length - offset >= AUDIO_CHUNK_SIZE) {
+      const frame = merged.subarray(offset, offset + AUDIO_CHUNK_SIZE);
+      const pcmInt16 = this._float32ToPcmInt16(frame);
+      const b64 = this._arrayBufferToBase64(pcmInt16.buffer);
+      this._send({ type: 'audio_chunk', data: b64 });
+      offset += AUDIO_CHUNK_SIZE;
+    }
+    this._chunkBuffer = merged.slice(offset);
+  }
+
+  _emitMicLevel(float32) {
+    if (this.listenerCount('mic_level') === 0) return;
+    let sum = 0;
+    for (let i = 0; i < float32.length; i += 1) sum += float32[i] * float32[i];
+    const rms = Math.sqrt(sum / Math.max(1, float32.length));
+    this.emit('mic_level', { rms, muted: this._micMuted || this._playbackActive });
+  }
+
+  _releaseCaptureResources() {
     try {
       if (this._scriptProcessor) {
         this._scriptProcessor.disconnect();
@@ -583,6 +684,12 @@ class SidecarBridge extends EventEmitter {
     } catch {
       // ignore cleanup errors
     }
+    this._chunkBuffer = new Float32Array(0);
+  }
+
+  stopAudioCapture() {
+    if (!this._capturing) return;
+    this._releaseCaptureResources();
     this._capturing = false;
     this.emit('audio_capture_stopped');
   }

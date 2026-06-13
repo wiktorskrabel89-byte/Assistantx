@@ -384,6 +384,14 @@ window.addEventListener('DOMContentLoaded', () => {
 	const wakeWordEnabledToggle = document.getElementById('wake-word-enabled');
 	const wakeWordPhraseInput = document.getElementById('wake-word-phrase');
 	const allowBackgroundWakeToggle = document.getElementById('allow-background-wake');
+	// Settings → Audio (consolidated mic controls)
+	const micDeviceSelect = document.getElementById('mic-device-select');
+	const noiseSuppressionToggle = document.getElementById('noise-suppression-enabled');
+	const wakeSensitivitySlider = document.getElementById('wake-word-sensitivity');
+	const wakeSensitivityValueNode = document.getElementById('wake-word-sensitivity-value');
+	const micTestButton = document.getElementById('mic-test-button');
+	const micTestMeterFill = document.getElementById('mic-test-meter-fill');
+	const micTestStatusNode = document.getElementById('mic-test-status');
 	const saveVoiceSettingsButton = document.getElementById('save-voice-settings');
 	const temporalAwarenessToggle = document.getElementById('temporal-awareness');
 	const proactiveRemindersToggle = document.getElementById('proactive-reminders');
@@ -1053,6 +1061,9 @@ window.addEventListener('DOMContentLoaded', () => {
 		ambientAnnouncements: false,
 		dailySummary: false,
 		reminderVoiceStyle: 'neutral',
+		noiseSuppressionEnabled: true,
+		wakeWordSensitivity: 0.5,
+		micInputDeviceId: '',
 	};
 
 	function readVoiceSettings() {
@@ -1121,6 +1132,17 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (wakeWordEnabledToggle) wakeWordEnabledToggle.checked = !!voiceSettings.wakeWordEnabled;
 		if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
 		if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
+		if (noiseSuppressionToggle) noiseSuppressionToggle.checked = voiceSettings.noiseSuppressionEnabled !== false;
+		if (wakeSensitivitySlider) {
+			const sensitivity = Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
+				? Number(voiceSettings.wakeWordSensitivity)
+				: 0.5;
+			wakeSensitivitySlider.value = String(Math.round(sensitivity * 100));
+			if (wakeSensitivityValueNode) wakeSensitivityValueNode.textContent = `${Math.round(sensitivity * 100)}%`;
+		}
+		if (micDeviceSelect && voiceSettings.micInputDeviceId !== undefined) {
+			micDeviceSelect.value = voiceSettings.micInputDeviceId || '';
+		}
 		if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
 		// 'desktop-direct' is not implemented in voice-gateway.js — silently migrate to the working default.
 		if (voiceSettings.providerMode === 'desktop-direct') voiceSettings.providerMode = 'assistantx-server';
@@ -1237,9 +1259,23 @@ window.addEventListener('DOMContentLoaded', () => {
 		return 'groq';
 	}
 
+	// Half-duplex voice loop: while any TTS audio is audible, the mic is
+	// hard-muted (track.enabled=false) and the sidecar drops residual chunks,
+	// so Jarvis can never wake on / transcribe its own speech. AEC from the
+	// getUserMedia constraints remains the first line of defence; this gate
+	// is the guarantee.
+	function setTtsPlaybackGate(active) {
+		try {
+			(voiceGateway || sidecar)?.setPlaybackActive?.(Boolean(active));
+		} catch {
+			// bridge unavailable — browser-only mode has no sidecar mic to gate
+		}
+	}
+
 	function clearTtsAudioQueue() {
 		ttsAudioChunkQueue.length = 0;
 		ttsAudioChunkPlaying = false;
+		setTtsPlaybackGate(false);
 	}
 
 	function playNextTtsChunk() {
@@ -1262,11 +1298,15 @@ window.addEventListener('DOMContentLoaded', () => {
 				source.buffer = decoded;
 				source.connect(actx.destination);
 				speechPlaybackActive = true;
+				setTtsPlaybackGate(true);
 				setVoiceVisualizer('speaking');
 				source.onended = () => {
 					ttsAudioChunkPlaying = false;
 					speechPlaybackActive = false;
-					setVoiceVisualizer('idle');
+					if (ttsAudioChunkQueue.length === 0) {
+						setVoiceVisualizer('idle');
+						setTtsPlaybackGate(false);
+					}
 					actx.close().catch(() => null);
 					playNextTtsChunk();
 				};
@@ -1274,12 +1314,14 @@ window.addEventListener('DOMContentLoaded', () => {
 			}, () => {
 				ttsAudioChunkPlaying = false;
 				speechPlaybackActive = false;
+				if (ttsAudioChunkQueue.length === 0) setTtsPlaybackGate(false);
 				actx.close().catch(() => null);
 				playNextTtsChunk();
 			});
 		} catch {
 			ttsAudioChunkPlaying = false;
 			speechPlaybackActive = false;
+			if (ttsAudioChunkQueue.length === 0) setTtsPlaybackGate(false);
 			playNextTtsChunk();
 		}
 	}
@@ -1674,13 +1716,16 @@ window.addEventListener('DOMContentLoaded', () => {
 			const matchedVoice = resolveSpeechVoice(availableVoices, voiceSettings.ttsVoiceId, utterance.lang);
 			if (matchedVoice) utterance.voice = matchedVoice;
 			speechPlaybackActive = true;
+			setTtsPlaybackGate(true);
 			setVoiceVisualizer('speaking');
 			utterance.onend = () => {
 				speechPlaybackActive = false;
+				setTtsPlaybackGate(false);
 				setVoiceVisualizer('idle');
 			};
 			utterance.onerror = (errorEvent) => {
 				speechPlaybackActive = false;
+				setTtsPlaybackGate(false);
 				setVoiceVisualizer('idle');
 				if (isBenignSpeechError(errorEvent)) return;
 				appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
@@ -1688,6 +1733,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			window.speechSynthesis.speak(utterance);
 		} catch {
 			speechPlaybackActive = false;
+			setTtsPlaybackGate(false);
 			setVoiceVisualizer('idle');
 			appendMessage(log, 'Text-to-speech', 'Speech playback failed.', 'error');
 		}
@@ -2205,6 +2251,11 @@ window.addEventListener('DOMContentLoaded', () => {
 				wakeWordEnabled: Boolean(wakeWordEnabledToggle?.checked),
 				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
 				allowBackgroundWake: Boolean(allowBackgroundWakeToggle?.checked),
+				noiseSuppressionEnabled: noiseSuppressionToggle ? Boolean(noiseSuppressionToggle.checked) : voiceSettings.noiseSuppressionEnabled !== false,
+				wakeWordSensitivity: wakeSensitivitySlider
+					? Math.min(1, Math.max(0, Number(wakeSensitivitySlider.value) / 100))
+					: (Number.isFinite(Number(voiceSettings.wakeWordSensitivity)) ? Number(voiceSettings.wakeWordSensitivity) : 0.5),
+				micInputDeviceId: micDeviceSelect ? String(micDeviceSelect.value || '') : (voiceSettings.micInputDeviceId || ''),
 				voiceLanguage: getVoiceLanguage(),
 				autoTts: Boolean(autoTtsToggle?.checked),
 				providerMode: voiceProviderModeSelect?.value || 'assistantx-server',
@@ -2214,7 +2265,119 @@ window.addEventListener('DOMContentLoaded', () => {
 				dailySummary: Boolean(dailySummaryToggle?.checked),
 				reminderVoiceStyle: reminderVoiceStyleSelect?.value || 'neutral',
 			});
+			// Push the saved values to the live pipeline immediately — saving
+			// previously only persisted to localStorage, so nothing changed
+			// until an app restart (part of the "settings do nothing" bug).
+			syncSidecarVoiceSettings();
 			appendMessage(log, 'Settings', 'Voice settings saved.');
+		});
+	}
+
+	// ── Settings → Audio: mic device picker + wake sensitivity + mic test ────
+	async function populateMicDeviceSelect() {
+		if (!micDeviceSelect) return;
+		const bridge = voiceGateway || sidecar;
+		const devices = bridge?.listAudioInputDevices ? await bridge.listAudioInputDevices() : [];
+		const current = voiceSettings.micInputDeviceId || '';
+		const options = ['<option value="">System default microphone</option>'];
+		for (const device of devices) {
+			const value = escapeHtml(device.deviceId);
+			const label = escapeHtml(device.label);
+			options.push(`<option value="${value}"${device.deviceId === current ? ' selected' : ''}>${label}</option>`);
+		}
+		micDeviceSelect.innerHTML = options.join('');
+	}
+
+	if (micDeviceSelect) {
+		populateMicDeviceSelect().catch(() => null);
+		if (navigator?.mediaDevices?.addEventListener) {
+			navigator.mediaDevices.addEventListener('devicechange', () => {
+				populateMicDeviceSelect().catch(() => null);
+			});
+		}
+		micDeviceSelect.addEventListener('change', () => {
+			const deviceId = String(micDeviceSelect.value || '');
+			applyVoiceSettings({ ...voiceSettings, micInputDeviceId: deviceId });
+			(voiceGateway || sidecar)?.setInputDevice?.(deviceId);
+		});
+	}
+
+	if (wakeSensitivitySlider) {
+		wakeSensitivitySlider.addEventListener('input', () => {
+			if (wakeSensitivityValueNode) {
+				wakeSensitivityValueNode.textContent = `${Math.round(Number(wakeSensitivitySlider.value) || 0)}%`;
+			}
+		});
+		wakeSensitivitySlider.addEventListener('change', () => {
+			const sensitivity = Math.min(1, Math.max(0, Number(wakeSensitivitySlider.value) / 100));
+			applyVoiceSettings({ ...voiceSettings, wakeWordSensitivity: sensitivity });
+			syncSidecarVoiceSettings();
+		});
+	}
+
+	if (noiseSuppressionToggle) {
+		noiseSuppressionToggle.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, noiseSuppressionEnabled: Boolean(noiseSuppressionToggle.checked) });
+			syncSidecarVoiceSettings();
+		});
+	}
+
+	// Mic test: 5-second live level meter fed by local capture RMS — works
+	// even when the sidecar is down because levels are computed renderer-side.
+	let micTestActive = false;
+	let micTestStopTimer = null;
+	let micTestUnsubscribe = null;
+	let micTestStartedCapture = false;
+	function stopMicTest(message) {
+		micTestActive = false;
+		clearTimeout(micTestStopTimer);
+		micTestStopTimer = null;
+		if (micTestUnsubscribe) {
+			try { micTestUnsubscribe(); } catch { /* listener already gone */ }
+			micTestUnsubscribe = null;
+		}
+		if (micTestStartedCapture) {
+			micTestStartedCapture = false;
+			try { sidecar?.stopAudioCapture?.(); } catch { /* already stopped */ }
+		}
+		if (micTestButton) micTestButton.textContent = '🎙 Test microphone';
+		if (micTestMeterFill) micTestMeterFill.style.width = '0%';
+		if (micTestStatusNode && message) micTestStatusNode.textContent = message;
+	}
+	if (micTestButton) {
+		micTestButton.addEventListener('click', async () => {
+			if (micTestActive) {
+				stopMicTest('Mic test stopped.');
+				return;
+			}
+			const bridge = sidecar;
+			if (!bridge?.on || !bridge?.startAudioCapture) {
+				if (micTestStatusNode) micTestStatusNode.textContent = 'Mic test requires the local voice runtime.';
+				return;
+			}
+			micTestActive = true;
+			micTestButton.textContent = '⏹ Stop test';
+			if (micTestStatusNode) micTestStatusNode.textContent = 'Listening… speak into the microphone.';
+			let peak = 0;
+			micTestUnsubscribe = bridge.on('mic_level', ({ rms }) => {
+				const level = Math.min(1, Math.max(0, Number(rms || 0) * 6));
+				if (level > peak) peak = level;
+				if (micTestMeterFill) micTestMeterFill.style.width = `${Math.round(level * 100)}%`;
+			});
+			try {
+				const wasCapturing = Boolean(bridge.isCapturing?.());
+				await bridge.startAudioCapture();
+				micTestStartedCapture = !wasCapturing;
+			} catch (error) {
+				stopMicTest(formatVoiceCaptureError(error));
+				return;
+			}
+			micTestStopTimer = setTimeout(() => {
+				const verdict = peak > 0.04
+					? `Microphone works — peak level ${Math.round(peak * 100)}%.`
+					: 'No signal detected — check the selected device and system permissions.';
+				stopMicTest(verdict);
+			}, 5000);
 		});
 	}
 
@@ -2305,18 +2468,44 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 	}
 
+	// ── Browser wake-word FALLBACK ────────────────────────────────────────────
+	// Previously this SpeechRecognition listener started unconditionally at
+	// boot and restarted itself forever in onend — even while the Python
+	// sidecar ran its own wake-word capture. That meant two competing mic
+	// consumers, and (since Electron has no Google speech backend) an
+	// error→restart hot loop that kept the OS mic indicator permanently on.
+	// It is now started only when the sidecar pipeline is unavailable, and
+	// backs off permanently after repeated errors.
 	let wakeRecognition = null;
-	function setupWakeWordListener() {
+	let browserWakeWanted = false;
+	let browserWakeErrorCount = 0;
+	const BROWSER_WAKE_MAX_ERRORS = 3;
+
+	function stopBrowserWakeFallback() {
+		browserWakeWanted = false;
+		if (wakeRecognition) {
+			const recognitionToStop = wakeRecognition;
+			wakeRecognition = null;
+			try { recognitionToStop.stop(); } catch { /* already stopped */ }
+		}
+	}
+
+	function startBrowserWakeFallback() {
+		if (browserWakeWanted || !voiceSettings.wakeWordEnabled) return;
 		if (!supportsSpeechRecognition()) return;
 		const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
 		if (!SpeechRecognitionCtor) return;
+		browserWakeWanted = true;
+		browserWakeErrorCount = 0;
 		wakeRecognition = new SpeechRecognitionCtor();
 		wakeRecognition.lang = getVoiceLanguage();
 		wakeRecognition.continuous = true;
 		wakeRecognition.interimResults = true;
 		wakeRecognition.onresult = (event) => {
+			browserWakeErrorCount = 0;
 			if (!voiceSettings.wakeWordEnabled) return;
 			if (!voiceSettings.allowBackgroundWake && !document.hasFocus()) return;
+			if (speechPlaybackActive) return; // don't wake on our own TTS audio
 			const phrase = String(voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE).toLowerCase();
 			let transcript = '';
 			for (let i = event.resultIndex; i < event.results.length; i += 1) {
@@ -2327,20 +2516,32 @@ window.addEventListener('DOMContentLoaded', () => {
 				startSpeechToText({ autoSubmit: true });
 			}
 		};
-		wakeRecognition.onend = () => {
-			try {
-				wakeRecognition.start();
-			} catch {
-				// no-op
+		wakeRecognition.onerror = () => {
+			browserWakeErrorCount += 1;
+			if (browserWakeErrorCount >= BROWSER_WAKE_MAX_ERRORS) {
+				appendMessage(log, 'Wake word', 'Browser wake listener unavailable — giving up after repeated errors.', 'system');
+				stopBrowserWakeFallback();
 			}
+		};
+		wakeRecognition.onend = () => {
+			if (!browserWakeWanted || !wakeRecognition) return;
+			if (browserWakeErrorCount >= BROWSER_WAKE_MAX_ERRORS) return;
+			// Restart with a delay instead of the old synchronous hot loop.
+			setTimeout(() => {
+				if (!browserWakeWanted || !wakeRecognition) return;
+				try { wakeRecognition.start(); } catch { /* retried on next onend */ }
+			}, 1000);
 		};
 		try {
 			wakeRecognition.start();
 		} catch (error) {
 			appendMessage(log, 'Wake word', `Wake listener failed to start: ${error?.message || 'unknown error'}`, 'error');
+			stopBrowserWakeFallback();
 		}
 	}
-	setupWakeWordListener();
+	// Started from sidecar 'unavailable'/'disconnected' handlers below — the
+	// sidecar's OpenWakeWord path owns wake detection whenever it is alive.
+	if (!sidecar) startBrowserWakeFallback();
 
 	// ── Python sidecar voice pipeline ─────────────────────────────────────────
 	// Connects to the local AI-Agent WebSocket sidecar (ws://127.0.0.1:8765).
@@ -2352,6 +2553,9 @@ window.addEventListener('DOMContentLoaded', () => {
 		sidecar.on('connected', () => {
 			pushTaskStep('SIDECAR', 'Connected to AI runtime', 'done');
 			try { (window.jarvisContext = window.jarvisContext || {}).sidecarStatus = 'connected'; } catch { /* noop */ }
+			// Sidecar owns wake-word detection — shut down the browser fallback
+			// so only one pipeline consumes the microphone.
+			stopBrowserWakeFallback();
 			sidecarConnected = true;
 			sidecarCapabilities = sidecar.getCapabilities ? sidecar.getCapabilities() || sidecarCapabilities : sidecarCapabilities;
 			appendMessage(log, 'AI Sidecar', '🤖 Python voice sidecar connected (offline mode active).', 'system');
@@ -2364,9 +2568,16 @@ window.addEventListener('DOMContentLoaded', () => {
 				ttsBackend: resolveLocalTtsBackend(voiceSettings.ttsBackend),
 				nlpEnabled: false,
 				vadEnabled: true,
+				noiseSuppressionEnabled: voiceSettings.noiseSuppressionEnabled !== false,
+				wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
+					? Number(voiceSettings.wakeWordSensitivity)
+					: 0.5,
 				sampleRate: 16000,
 			};
 			sidecar.configure(configuration);
+			if (voiceSettings.micInputDeviceId) {
+				sidecar.setInputDevice?.(voiceSettings.micInputDeviceId);
+			}
 			voiceGateway?.configure({
 				...configuration,
 				providerMode: voiceSettings.providerMode || 'assistantx-server',
@@ -2410,6 +2621,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			resetActiveAiStream();
 			setVoiceToTextUiActive(false);
 			appendMessage(log, 'AI Sidecar', 'Python voice sidecar disconnected — using browser fallback.', 'system');
+			startBrowserWakeFallback();
 		});
 
 		sidecar.on('unavailable', () => {
@@ -2418,6 +2630,24 @@ window.addEventListener('DOMContentLoaded', () => {
 			sidecarConnected = false;
 			resetActiveAiStream();
 			appendMessage(log, 'AI Sidecar', 'Python voice sidecar is not available — voice will use browser speech APIs, and text AI chat will still work.', 'system');
+			startBrowserWakeFallback();
+		});
+
+		sidecar.on('vad_event', ({ phase }) => {
+			if (phase === 'listen_timeout') {
+				// Wake word armed the mic but no speech arrived — return to idle
+				// instead of hanging in "Listening — speak now" forever.
+				setVoiceVisualizer('idle');
+				if (sidecarManualListening) {
+					sidecarManualListening = false;
+					setVoiceToTextUiActive(false);
+				}
+				pushTaskStep('VOICE', 'No speech detected — listening ended', 'done');
+				return;
+			}
+			if (phase === 'speech_end') {
+				setVoiceVisualizer('thinking');
+			}
 		});
 
 		sidecar.on('error', (error) => {
@@ -2480,16 +2710,15 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 		});
 
-		sidecar.on('rms_level', ({ source, rms }) => {
+		sidecar.on('rms_level', ({ rms }) => {
+			// Energy only. The old handler flipped the whole agent state to
+			// LISTENING whenever ambient mic RMS crossed ~0.004 (and to
+			// SPEAKING on TTS RMS), which spammed "Listening to microphone…"
+			// into the activity feed on any background noise and made the app
+			// look permanently hot-mic'd. State transitions are owned by the
+			// wake-word/VAD/TTS events, not by raw level telemetry.
 			const scaled = Math.min(1, Math.max(0, Number(rms || 0) * 5.25));
 			applyVisualizerEnergy(scaled);
-			if (source === 'mic' && currentAgentState === AGENT_STATE.IDLE && scaled > 0.02) {
-				setVoiceVisualizer('listening');
-				return;
-			}
-			if (source === 'tts' && currentAgentState !== AGENT_STATE.SPEAKING && scaled > 0.02) {
-				setVoiceVisualizer('speaking');
-			}
 			if (scaled > 0.01) touchAgentActivity();
 		});
 
@@ -2690,7 +2919,14 @@ window.addEventListener('DOMContentLoaded', () => {
 			ttsBackend: resolveLocalTtsBackend(voiceSettings.ttsBackend),
 			nlpEnabled: false,
 			vadEnabled: true,
+			noiseSuppressionEnabled: voiceSettings.noiseSuppressionEnabled !== false,
+			wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
+				? Number(voiceSettings.wakeWordSensitivity)
+				: 0.5,
 		});
+		if (voiceSettings.micInputDeviceId) {
+			sidecar.setInputDevice?.(voiceSettings.micInputDeviceId);
+		}
 		voiceGateway?.configure({
 			providerMode: voiceSettings.providerMode || 'assistantx-server',
 			wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
@@ -2764,14 +3000,17 @@ window.addEventListener('DOMContentLoaded', () => {
 							source.buffer = decoded;
 							source.connect(actx.destination);
 							speechPlaybackActive = true;
+							setTtsPlaybackGate(true);
 							setVoiceVisualizer('speaking');
 							source.onended = () => {
 								speechPlaybackActive = false;
+								setTtsPlaybackGate(false);
 								setVoiceVisualizer('idle');
 								actx.close().catch(() => null);
 							};
 							source.start(0);
 						}, () => {
+							setTtsPlaybackGate(false);
 							actx.close().catch(() => null);
 						});
 						return;

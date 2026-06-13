@@ -25,6 +25,9 @@ silero-vad>=5.1.2
 webrtcvad>=2.0.10
 rapidfuzz>=3.14.5
 
+# Input noise suppression (spectral gating before STT; high-pass before VAD)
+noisereduce>=3.0.0
+
 # Local memory / retrieval
 lancedb>=0.11.0
 sentence-transformers>=3.0.0

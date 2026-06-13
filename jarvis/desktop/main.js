@@ -816,10 +816,12 @@ async function routeAiRequest(payload = {}, options = {}) {
   const response = await aiRouter.routeRequest({
     message: request.message || '',
     messages: Array.isArray(request.messages) ? request.messages : undefined,
+    images: Array.isArray(request.images) ? request.images : undefined,
     profile: request.profile,
     contextType: request.contextType,
     contextSize: request.contextSize,
     retryCount: request.retryCount,
+    source: request.source,
     options: request.options,
   }, onChunk);
   return {

@@ -1,0 +1,62 @@
+name: Voice pipeline tests
+
+# Locks in the 2026-06 voice-pipeline fixes so the wake-word/VAD/mic regression
+# cannot silently return. Runs on every push and PR that touches the audio
+# pipeline files, plus all main-branch updates.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ai-agent/**'
+      - 'jarvis/desktop/**'
+      - '__tests__/jarvis/**'
+      - 'jest.jarvis.config.js'
+      - '.github/workflows/voice-pipeline-tests.yml'
+
+jobs:
+  python-pipeline:
+    name: Python sidecar (VAD / wake-word / denoise / integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install minimal sidecar deps
+        run: |
+          python -m pip install --upgrade pip
+          # Only the deps the pipeline tests touch — heavier ML models are
+          # injected via the score_fn / fake-model hooks.
+          pip install numpy
+
+      - name: Run pipeline unit + integration tests
+        working-directory: ai-agent
+        run: |
+          python -m unittest discover -s tests -p 'test_vad.py' -v
+          python -m unittest discover -s tests -p 'test_wakeword_detector.py' -v
+          python -m unittest discover -s tests -p 'test_denoise.py' -v
+          python -m unittest discover -s tests -p 'test_audio_pipeline_integration.py' -v
+
+  desktop-bridge:
+    name: Desktop sidecar bridge + router policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install root deps (jest + jsdom)
+        run: npm ci --no-audit --no-fund
+
+      - name: Run Jarvis JS unit tests (capture, bridge, router policy, …)
+        run: npx jest -c jest.jarvis.config.js

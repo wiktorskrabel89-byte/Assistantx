@@ -7,8 +7,10 @@ so the server starts quickly even when optional ML models are still being
 downloaded.
 
 Message protocol (JSON lines sent by client → handled here):
-  { "type": "configure",    ...settings, "ttsBackend": "kokoro|piper|auto" }
+  { "type": "configure",    ...settings, "ttsBackend": "kokoro|piper|auto",
+                            "noiseSuppressionEnabled": true, "wakeWordSensitivity": 0.5, "vadThreshold": 0.5 }
   { "type": "audio_chunk",  "data": "<base64 PCM int16 LE>" }
+  { "type": "playback_state", "active": true }   # client TTS playback gate (half-duplex)
   { "type": "tts_speak",    "text": "...", "requestId": "..." }
   { "type": "tts_stream_start", "requestId": "..." }
   { "type": "tts_stream_chunk", "requestId": "...", "chunkIndex": 0, "text": "...", "isFinal": false }
@@ -83,6 +85,7 @@ _stt_engine: Any = None
 _tts_engine: Any = None
 _nlp_engine: Any = None
 _vad_engine: Any = None
+_noise_suppressor: Any = None
 _memory_store: Any = None
 _stt_backend_name = "none"
 _tts_backend_name = "none"
@@ -241,6 +244,14 @@ def _get_vad_engine():
     return _vad_engine
 
 
+def _get_noise_suppressor():
+    global _noise_suppressor
+    if _noise_suppressor is None:
+        from speech.denoise import NoiseSuppressor
+        _noise_suppressor = NoiseSuppressor()
+    return _noise_suppressor
+
+
 def _get_memory_store():
     global _memory_store
     if _memory_store is None:
@@ -267,6 +278,15 @@ def _health_snapshot() -> dict[str, Any]:
 
 
 # ── Per-connection audio pipeline state ──────────────────────────────────────
+
+# End-of-utterance: this much trailing silence closes the command segment.
+END_OF_UTTERANCE_SILENCE_SECONDS = 0.45
+# Wake word armed but no speech started within this window → give up listening.
+LISTEN_TIMEOUT_SECONDS = 10.0
+# Hard cap on a single command utterance.
+MAX_UTTERANCE_SECONDS = 30.0
+
+
 class ConnectionState:
     def __init__(self) -> None:
         self.wake_word_phrase: str = "hey jarvis"
@@ -276,18 +296,34 @@ class ConnectionState:
         self.tts_enabled: bool = True
         self.nlp_enabled: bool = False
         self.vad_enabled: bool = True
+        self.noise_suppression_enabled: bool = True
         self.runtime_state: str = "idle"
         self.model_mode: str = "fast"
         self.listening_for_command: bool = False
+        self.listen_started_at: float = 0.0
+        self.speech_started_at: float = 0.0
+        # True while the desktop client is playing TTS audio out loud. The
+        # mic keeps streaming, but wake-word/VAD processing is suspended so
+        # Jarvis cannot hear (and answer) itself — half-duplex gating.
+        self.playback_active: bool = False
         self.audio_buffer: list[bytes] = []
         self.command_audio_buffer: list[bytes] = []
         self.speech_active: bool = False
-        self.trailing_silence_frames: int = 0
+        self.trailing_silence_seconds: float = 0.0
         self.sample_rate: int = 16000
         self.outbound_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=256)
         self.last_rms_sent_at: float = 0.0
         self.tts_stream_request_id: str = ""
         self.tts_stream_chunk_index: int = 0
+
+    def reset_command_capture(self) -> None:
+        self.command_audio_buffer.clear()
+        self.speech_active = False
+        self.trailing_silence_seconds = 0.0
+        self.listening_for_command = False
+        self.listen_started_at = 0.0
+        self.speech_started_at = 0.0
+        self.runtime_state = "idle"
 
 
 async def _warmup_tts_if_needed() -> None:
@@ -376,8 +412,31 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         state.sample_rate = int(msg["sampleRate"])
     if "vadEnabled" in msg:
         state.vad_enabled = bool(msg["vadEnabled"])
+    if "noiseSuppressionEnabled" in msg:
+        state.noise_suppression_enabled = bool(msg["noiseSuppressionEnabled"])
+        try:
+            _get_noise_suppressor().configure(enabled=state.noise_suppression_enabled)
+        except Exception as exc:
+            logger.debug("Noise suppressor configure failed: %s", exc)
+    if "wakeWordSensitivity" in msg:
+        try:
+            _get_wake_detector().set_sensitivity(float(msg["wakeWordSensitivity"]))
+        except Exception as exc:
+            logger.debug("Wake sensitivity configure failed: %s", exc)
+    if "vadThreshold" in msg:
+        try:
+            _get_vad_engine().set_threshold(float(msg["vadThreshold"]))
+        except Exception as exc:
+            logger.debug("VAD threshold configure failed: %s", exc)
     if "listeningForCommand" in msg:
         state.listening_for_command = bool(msg["listeningForCommand"])
+        now = time.monotonic()
+        state.listen_started_at = now if state.listening_for_command else 0.0
+        state.speech_started_at = 0.0
+        if not state.listening_for_command:
+            state.command_audio_buffer.clear()
+            state.speech_active = False
+            state.trailing_silence_seconds = 0.0
     runtime_state = str(msg.get("runtimeState", state.runtime_state)).strip().lower()
     model_mode = str(msg.get("modelMode", state.model_mode)).strip().lower()
     if runtime_state in RUNTIME_STATES:
@@ -404,6 +463,51 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         asyncio.create_task(_warmup_tts_if_needed())
 
 
+async def _handle_playback_state(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
+    """
+    Half-duplex gate: the desktop client reports when it starts/stops playing
+    TTS audio out loud. While playback is active, mic chunks are dropped
+    before the wake-word/VAD stages so the assistant cannot wake or capture a
+    "command" from its own voice (echo feedback loop).
+    """
+    active = bool(msg.get("active"))
+    if active == state.playback_active:
+        return
+    state.playback_active = active
+    if active:
+        # Drop any partial capture — it may already contain speaker bleed.
+        state.audio_buffer.clear()
+        state.command_audio_buffer.clear()
+        state.speech_active = False
+        state.trailing_silence_seconds = 0.0
+        try:
+            _get_vad_engine().reset()
+        except Exception:
+            pass
+        try:
+            _get_wake_detector().reset()
+        except Exception:
+            pass
+    await _send(ws, {
+        "type": "status",
+        "phase": "playback_gate",
+        "message": "muted" if active else "unmuted",
+    }, state)
+
+
+async def _end_command_listening(ws: WebSocketServerProtocol, state: ConnectionState, reason: str) -> None:
+    await _send(ws, {
+        "type": "vad_event",
+        "phase": reason,
+        "sampleRate": state.sample_rate,
+    }, state)
+    state.reset_command_capture()
+    try:
+        _get_vad_engine().reset()
+    except Exception:
+        pass
+
+
 async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
     raw_b64 = msg.get("data", "")
     if not raw_b64:
@@ -415,6 +519,24 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
         return
 
     _emit_rms(state, pcm_bytes, source="mic", sample_rate=state.sample_rate)
+
+    # Half-duplex gate: ignore mic input entirely while TTS audio is playing.
+    if state.playback_active:
+        return
+
+    chunk_seconds = (len(pcm_bytes) / 2.0) / float(state.sample_rate or 16000)
+    now = time.monotonic()
+    loop = asyncio.get_event_loop()
+
+    # Noise suppression (high-pass) ahead of the wake-word/VAD stages.
+    if state.noise_suppression_enabled:
+        try:
+            suppressor = _get_noise_suppressor()
+            suppressor.configure(enabled=True, sample_rate=state.sample_rate)
+            pcm_bytes = await loop.run_in_executor(None, suppressor.process_chunk, pcm_bytes)
+        except Exception as exc:
+            logger.debug("Noise suppression error: %s", exc)
+
     state.audio_buffer.append(pcm_bytes)
 
     # Keep a rolling buffer of ~3 seconds worth of audio
@@ -423,8 +545,6 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
     while total > max_frames and state.audio_buffer:
         removed = state.audio_buffer.pop(0)
         total -= len(removed)
-
-    loop = asyncio.get_event_loop()
 
     # Wake word detection path
     if state.wake_word_enabled and not state.listening_for_command:
@@ -435,8 +555,14 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
             )
             if detected:
                 state.listening_for_command = True
+                state.listen_started_at = now
+                state.speech_started_at = 0.0
                 state.runtime_state = "listening"
                 state.audio_buffer.clear()
+                try:
+                    _get_vad_engine().reset()
+                except Exception:
+                    pass
                 await _send(ws, {"type": "wake_word", "phrase": state.wake_word_phrase}, state)
                 return
         except Exception as exc:
@@ -445,15 +571,26 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
     # VAD-gated command audio path (primary architecture path)
     if state.vad_enabled and state.listening_for_command:
         try:
+            # Armed but silent too long → stop listening instead of hanging in
+            # "listening" forever (previously possible when VAD errored out).
+            if (
+                not state.speech_active
+                and state.listen_started_at
+                and now - state.listen_started_at > LISTEN_TIMEOUT_SECONDS
+            ):
+                await _end_command_listening(ws, state, "listen_timeout")
+                return
+
             vad = _get_vad_engine()
             speech = await loop.run_in_executor(
                 None, vad.is_speech, pcm_bytes, state.sample_rate
             )
             if speech:
                 state.command_audio_buffer.append(pcm_bytes)
-                state.trailing_silence_frames = 0
+                state.trailing_silence_seconds = 0.0
                 if not state.speech_active:
                     state.speech_active = True
+                    state.speech_started_at = now
                     await _send(ws, {
                         "type": "vad_event",
                         "phase": "speech_start",
@@ -462,31 +599,50 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
             else:
                 if state.speech_active:
                     state.command_audio_buffer.append(pcm_bytes)
-                state.trailing_silence_frames += 1
-                # ~0.4 s silence threshold for end-of-utterance with 100 ms chunks.
-                # (Comment + check live inside the silence branch — only firing
-                # on silence frames is correct; was previously misindented so the
-                # comment looked sibling-level even though the `if` was nested.)
-                if state.speech_active and state.trailing_silence_frames >= 4:
-                    segment = b"".join(state.command_audio_buffer).strip()
+                state.trailing_silence_seconds += chunk_seconds
+
+            utterance_too_long = (
+                state.speech_active
+                and state.speech_started_at
+                and now - state.speech_started_at > MAX_UTTERANCE_SECONDS
+            )
+            end_of_utterance = (
+                state.speech_active
+                and state.trailing_silence_seconds >= END_OF_UTTERANCE_SILENCE_SECONDS
+            )
+            if end_of_utterance or utterance_too_long:
+                # NOTE: never bytes.strip() PCM data — it eats leading/trailing
+                # bytes that happen to be ASCII whitespace and can break int16
+                # frame alignment.
+                segment = b"".join(state.command_audio_buffer)
+                await _send(ws, {
+                    "type": "vad_event",
+                    "phase": "speech_end",
+                    "sampleRate": state.sample_rate,
+                }, state)
+                if segment:
+                    if state.noise_suppression_enabled:
+                        try:
+                            segment = await loop.run_in_executor(
+                                None,
+                                _get_noise_suppressor().process_segment,
+                                segment,
+                                state.sample_rate,
+                            )
+                        except Exception as exc:
+                            logger.debug("Segment denoise error: %s", exc)
+                    encoded = base64.b64encode(segment).decode("ascii")
                     await _send(ws, {
-                        "type": "vad_event",
-                        "phase": "speech_end",
+                        "type": "audio_segment",
+                        "data": encoded,
+                        "format": "audio/raw",
                         "sampleRate": state.sample_rate,
                     }, state)
-                    if segment:
-                        encoded = base64.b64encode(segment).decode("ascii")
-                        await _send(ws, {
-                            "type": "audio_segment",
-                            "data": encoded,
-                            "format": "audio/raw",
-                            "sampleRate": state.sample_rate,
-                        }, state)
-                    state.command_audio_buffer.clear()
-                    state.speech_active = False
-                    state.trailing_silence_frames = 0
-                    state.listening_for_command = False
-                    state.runtime_state = "idle"
+                state.reset_command_capture()
+                try:
+                    _get_vad_engine().reset()
+                except Exception:
+                    pass
         except Exception as exc:
             logger.debug("VAD processing error: %s", exc)
 
@@ -508,11 +664,8 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                         "isFinal": is_final,
                     }, state)
                 if is_final:
-                    state.listening_for_command = False
                     state.audio_buffer.clear()
-                    state.command_audio_buffer.clear()
-                    state.speech_active = False
-                    state.trailing_silence_frames = 0
+                    state.reset_command_capture()
         except Exception as exc:
             logger.debug("STT processing error: %s", exc)
 
@@ -884,6 +1037,7 @@ async def _handle_llm_route(ws: WebSocketServerProtocol, _state: ConnectionState
 HANDLERS = {
     "configure": _handle_configure,
     "audio_chunk": _handle_audio_chunk,
+    "playback_state": _handle_playback_state,
     "tts_speak": _handle_tts_speak,
     "tts_stream_start": _handle_tts_stream_start,
     "tts_stream_chunk": _handle_tts_stream_chunk,
