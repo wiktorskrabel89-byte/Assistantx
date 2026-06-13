@@ -174,9 +174,17 @@
       margin: 8px auto 14px;
       flex-wrap: wrap;
     }
+    .chat-permission-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: -4px auto 14px;
+      width: min(420px, 100%);
+    }
     .orb-action {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
       padding: 6px 12px;
       border-radius: 999px;
@@ -188,6 +196,17 @@
       letter-spacing: 0.04em;
       cursor: pointer;
       transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+    }
+    .orb-action.permission {
+      border-radius: 8px;
+      min-height: 34px;
+      font-size: 10.5px;
+      letter-spacing: 0.03em;
+    }
+    .orb-action.permission.active {
+      background: rgba(34, 197, 94, 0.16);
+      border-color: rgba(34, 197, 94, 0.55);
+      color: #d1fae5;
     }
     .orb-action:hover {
       background: rgba(125, 211, 252, 0.14);
@@ -844,6 +863,15 @@
       display: grid;
       gap: 8px;
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .settings-group {
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(2, 6, 23, 0.18);
+    }
+    .settings-group + .settings-group {
+      margin-top: 10px;
     }
 
     .settings-grid .field-full {
@@ -1978,7 +2006,13 @@
                 <div id="orb-quick-actions" class="orb-quick-actions" role="toolbar" aria-label="Quick actions">
                   <button type="button" class="orb-action" id="action-new-conv" title="Start a fresh conversation">↻ New</button>
                   <button type="button" class="orb-action" id="action-copy-last" title="Copy last response">📋 Copy</button>
+                  <button type="button" class="orb-action" id="voice-input" title="Start or stop microphone dictation">🎙 Mic</button>
                   <button type="button" class="orb-action" id="action-capture-screen" title="Capture screen for vision model (Ctrl+Shift+V)">📸 Vision</button>
+                </div>
+                <div class="chat-permission-actions" role="toolbar" aria-label="Runtime permissions">
+                  <button type="button" class="orb-action permission active" data-permission-level="default" title="Ask before risky actions">Domyślnie</button>
+                  <button type="button" class="orb-action permission" data-permission-level="auto" title="Allow low-risk actions automatically">Auto dostęp</button>
+                  <button type="button" class="orb-action permission" data-permission-level="full" title="Allow full remote runtime control">Pełny dostęp</button>
                 </div>
 
                 <div id="model-activity-display" class="model-activity-display" style="display:none;">
@@ -2035,7 +2069,7 @@
               <button id="open-setup-wizard" type="button" class="secondary sm">🧙 Setup wizard</button>
               <button id="open-settings-modal" type="button" class="secondary sm">🔐 Accounts settings</button>
             </div>
-            <div class="stack">
+            <div class="stack settings-group">
               <div class="section-label">Servers</div>
               <div class="settings-grid">
                 <label class="field field-full">
@@ -2044,6 +2078,8 @@
                 </label>
                 <button id="save-server-url" type="button" class="secondary field-full">Save server URL</button>
               </div>
+            </div>
+            <div class="stack settings-group">
               <div class="section-label">System Core / Linux Runtime</div>
               <div class="settings-grid">
                 <label class="field">

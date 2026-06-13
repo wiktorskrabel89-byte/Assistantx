@@ -406,6 +406,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	const runtimeApplyPermissionButton = document.getElementById('runtime-apply-permission');
 	const runtimeKillSwitchButton = document.getElementById('runtime-kill-switch');
 	const runtimeStatusNode = document.getElementById('runtime-status');
+	const permissionQuickButtons = Array.from(document.querySelectorAll('[data-permission-level]'));
 	const openSetupWizardButton = document.getElementById('open-setup-wizard');
 	const workspaceApp = document.querySelector('.app');
 	const viewportWelcome = document.getElementById('welcome-screen');
@@ -619,7 +620,11 @@ window.addEventListener('DOMContentLoaded', () => {
 	// ─── Idea #3 — Screen capture → vision model ───────────────────────────────
 	// Hands the active screen to the vision dispatch slot (llava-phi / moondream2
 	// on Pro tier). Falls back to a friendly error if vision isn't configured.
-	async function captureScreenForVision() {
+	function isScreenVisionPrompt(text) {
+		return /(?:what(?:'s| is)? on (?:my |the )?screen|what can you see|look at (?:my |the )?screen|describe (?:my |the )?screen|co (?:jest|mam) na ekranie|poka[zż].*(?:ekran|widzisz)|sprawd[zź].*(?:ekran|widzisz))/i.test(String(text || ''));
+	}
+
+	async function captureScreenForVision({ prompt = 'Describe what is on my screen right now', autoSubmit = false } = {}) {
 		try {
 			pushTaskStep('VISION', 'Capturing screen…', 'active');
 			const result = await window.jarvisIpc?.invoke?.('vision:capture-screen');
@@ -632,10 +637,16 @@ window.addEventListener('DOMContentLoaded', () => {
 			// to the 'vision' dispatch slot when intent is 'vision'.
 			const input = document.getElementById('input');
 			if (input) {
-				input.value = 'Describe what is on my screen right now';
+				input.value = prompt;
 				input.focus();
 			}
-			pushTaskStep('VISION', 'Screen captured — type a question or press Enter', 'done');
+			if (autoSubmit) {
+				pushTaskStep('VISION', 'Screen captured — asking vision model', 'done');
+				queuePromptExecution(prompt, { source: 'local', origin: 'desktop', routeHint: 'vision' });
+				appendMessage(log, 'Vision queued', prompt, 'system');
+			} else {
+				pushTaskStep('VISION', 'Screen captured — type a question or press Enter', 'done');
+			}
 		} catch (err) {
 			pushTaskStep('VISION', `Capture error: ${err?.message || err}`, 'error');
 		}
@@ -1653,7 +1664,8 @@ window.addEventListener('DOMContentLoaded', () => {
 	function setSpeechToTextActive(active) {
 		speechToTextActive = active;
 		if (voiceInputButton) {
-			voiceInputButton.textContent = active ? '⏹ Stop' : (voiceSettings.sttEnabled ? '🎙 Talk' : '🎙 STT off');
+			voiceInputButton.textContent = active ? '⏹ Stop' : (voiceSettings.sttEnabled ? '🎙 Mic' : '🎙 STT off');
+			voiceInputButton.classList.toggle('active', Boolean(active));
 		}
 	}
 
@@ -2063,6 +2075,12 @@ window.addEventListener('DOMContentLoaded', () => {
 			const hasImage = false; // TODO: detect if user attached image
 			const classification = classify(text, hasImage);
 			updateTaskClassificationDisplay(classification);
+		}
+
+		if (isScreenVisionPrompt(text)) {
+			await captureScreenForVision({ prompt: text, autoSubmit: true });
+			input.value = '';
+			return;
 		}
 
 		const handled = await handleIntegratedCommands(text);
@@ -3334,6 +3352,32 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (runtimeStatusNode) runtimeStatusNode.textContent = text;
 	}
 
+	function updatePermissionQuickButtons(level = 'default') {
+		const normalized = ['default', 'auto', 'full'].includes(String(level)) ? String(level) : 'default';
+		for (const button of permissionQuickButtons) {
+			button.classList.toggle('active', button.dataset.permissionLevel === normalized);
+		}
+		if (runtimePermissionLevelSelect) runtimePermissionLevelSelect.value = normalized;
+	}
+
+	async function applyRuntimePermissionLevel(level, { source = 'settings' } = {}) {
+		const normalized = ['default', 'auto', 'full'].includes(String(level)) ? String(level) : 'default';
+		if (!serverApi) {
+			appendMessage(log, 'System Core', 'Runtime bridge unavailable in this environment.', 'error');
+			updatePermissionQuickButtons(normalized);
+			return null;
+		}
+		updatePermissionQuickButtons(normalized);
+		const result = await serverApi.setPermissionLevel(normalized, normalized === 'full');
+		if (!result?.ok) {
+			appendMessage(log, 'System Core', `Failed to set permission: ${result?.error || 'unknown'}`, 'error');
+			return result;
+		}
+		appendMessage(log, 'System Core', `Permission level set to ${normalized}${source === 'chat' ? ' from chat controls' : ''}.`);
+		await refreshRuntimeStatus();
+		return result;
+	}
+
 	async function refreshRuntimeUiFromConfig() {
 		if (!serverApi) return;
 		try {
@@ -3342,7 +3386,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (remoteRuntimeApiUrlInput) remoteRuntimeApiUrlInput.value = config.remoteRuntimeApiUrl || '';
 			if (remoteRuntimeWsUrlInput) remoteRuntimeWsUrlInput.value = config.remoteRuntimeWsUrl || '';
 			const auth = await serverApi.getAuthStatus();
-			if (runtimePermissionLevelSelect) runtimePermissionLevelSelect.value = auth.permissionLevel || 'default';
+			updatePermissionQuickButtons(auth.permissionLevel || 'default');
 			setRuntimeStatusText(auth.paired
 				? `Synchronized (${auth.permissionLevel || 'default'})`
 				: 'Runtime not connected.');
@@ -3422,17 +3466,16 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 	}
 
+	for (const button of permissionQuickButtons) {
+		button.addEventListener('click', () => {
+			void applyRuntimePermissionLevel(button.dataset.permissionLevel || 'default', { source: 'chat' });
+		});
+	}
+
 	if (runtimeApplyPermissionButton && serverApi) {
 		runtimeApplyPermissionButton.addEventListener('click', async () => {
 			const level = runtimePermissionLevelSelect?.value || 'default';
-			const fullControlConsent = level === 'full';
-			const result = await serverApi.setPermissionLevel(level, fullControlConsent);
-			if (!result?.ok) {
-				appendMessage(log, 'System Core', `Failed to set permission: ${result?.error || 'unknown'}`, 'error');
-				return;
-			}
-			appendMessage(log, 'System Core', `Permission level set to ${level}.`);
-			await refreshRuntimeStatus();
+			await applyRuntimePermissionLevel(level, { source: 'settings' });
 		});
 	}
 

@@ -66,7 +66,7 @@ const BACKEND_URL = EXPLICIT_BACKEND_URL || DEFAULT_BACKEND_URL;
 const BACKEND_IS_OPTIONAL = !EXPLICIT_BACKEND_URL;
 const REALTIME_EDGE_URL = process.env.JARVIS_REALTIME_URL || '';
 const HEARTBEAT_INTERVAL_MS = Number(process.env.JARVIS_HEARTBEAT_INTERVAL_MS || 5000);
-const TTS_STREAMING_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.JARVIS_TTS_STREAMING || 'false'));
+const TTS_STREAMING_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.JARVIS_TTS_STREAMING || 'true'));
 const USER_HOME = process.env.USERPROFILE || os.homedir();
 const DEFAULT_FILE_ROOT = path.join(USER_HOME, 'Desktop');
 const SAFE_ROOTS = [
@@ -611,6 +611,9 @@ function buildRouteHint(message) {
 
 function deriveAiProfile(message) {
   const normalized = String(message || '').toLowerCase();
+  if (/(?:screenshot|screen shot|what(?:'s| is)? on (?:my |the )?screen|describe (?:my |the )?screen|look at (?:my |the )?screen|co (?:jest|mam) na ekranie|poka[zż].*(?:ekran|widzisz))/i.test(normalized)) {
+    return 'vision';
+  }
   if (/(code|refactor|debug|typescript|javascript|python|sql|architecture|bug|compile|test)/i.test(normalized)) {
     return 'coding';
   }

@@ -128,13 +128,18 @@ class AIRouter {
       const candidate = pickBestFreeModel(profile === 'coding' ? 'coding' : 'chat', plan)
         || (profile === 'coding' ? DEFAULT_FREE_CODING_MODEL : DEFAULT_FREE_CHAT_MODEL);
       const cloudProvider = modelConfig?.provider || registryChoice.primary.provider || candidate.provider;
-      const cloudModel = modelConfig?.llm_model || registryChoice.primary.model || candidate.model;
+      const cloudModel = profile === 'vision'
+        ? (modelConfig?.vision_model || registryChoice.primary.model || candidate.model)
+        : (modelConfig?.llm_model || registryChoice.primary.model || candidate.model);
       const resolvedRequest = {
         ...request,
         messages: normalizeMessages(request),
         model: cloudModel,
         provider: cloudProvider,
-        options: { temperature: 0.7, ...(request.options || {}) },
+        options: {
+          ...(request.options || {}),
+          temperature: request.options?.temperature ?? inferAutoTemperature({ request, profile, analysis, difficulty }),
+        },
       };
       let response;
       try {
@@ -179,8 +184,13 @@ class AIRouter {
       model: effectiveRoute.model,
       provider: effectiveRoute.provider,
       options: {
-        temperature: effectiveRoute.reason === 'escalation' ? 0.2 : 0.7,
         ...(request.options || {}),
+        temperature: request.options?.temperature ?? inferAutoTemperature({
+          request,
+          profile,
+          analysis,
+          route: effectiveRoute,
+        }),
       },
       keepAlive: effectiveRoute.keepAlive,
     };
@@ -243,11 +253,25 @@ function normalizeMessages(request = {}) {
 function inferProfile(request = {}) {
   const explicitContext = String(request?.contextType || '').toLowerCase();
   if (explicitContext === 'code') return 'coding';
+  if (explicitContext === 'vision') return 'vision';
   if (explicitContext === 'tool') return 'tool';
   const content = `${request?.message || ''} ${extractLastMessage(request?.messages)}`.toLowerCase();
+  if (/(screenshot|screen shot|what(?:'s| is)? on (?:my |the )?screen|describe (?:my |the )?screen|look at (?:my |the )?screen|image|picture|photo|ocr)/i.test(content)) return 'vision';
   if (/(code|refactor|debug|architecture|typescript|python|javascript|sql)/i.test(content)) return 'coding';
   if (/(search|tool|web|browser|retrieve|memory)/i.test(content)) return 'tool';
   return 'chat';
+}
+
+function inferAutoTemperature({ request = {}, profile = 'chat', analysis = {}, difficulty = null, route = null } = {}) {
+  const text = `${request?.message || ''} ${extractLastMessage(request?.messages)}`.toLowerCase();
+  if (profile === 'coding' || analysis.intent === 'code') return 0.22;
+  if (profile === 'vision' || analysis.intent === 'vision') return 0.35;
+  if (route?.reason && /escalated|escalation/i.test(route.reason)) return 0.25;
+  if (Number(difficulty || 0) >= 4 || analysis.complexity === 'hard') return 0.3;
+  if (/(brainstorm|creative|ideas|story|name|marketing|write a fun|warianty|pomys[lł])/i.test(text)) return 0.82;
+  if (/(summarize|extract|classify|compare|translate|polish|fix grammar|podsumuj|przet[lł]umacz)/i.test(text)) return 0.38;
+  if (analysis.intent === 'tool') return 0.2;
+  return 0.62;
 }
 
 function detectTaskDifficulty(request = {}) {

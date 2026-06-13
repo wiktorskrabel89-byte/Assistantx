@@ -76,8 +76,8 @@ function planSegment(segment, options = {}) {
   match = favoriteAwareText.match(/(?:search(?: for)?|find|google|wyszukaj|znajd[zź]|szukaj)\s+(.+)/i);
   if (match) return createStep('searchWeb', { query: match[1].trim() }, `Search the web for ${match[1].trim()}`);
 
-  if (/(?:screenshot|screen shot|zrzut ekranu|poka[zż] ekran)/i.test(favoriteAwareText)) {
-    return createStep('screenshot', {}, 'Capture screenshot');
+  if (/(?:screenshot|screen shot|zrzut ekranu|poka[zż] ekran|what(?:'s| is)? on (?:my |the )?screen|describe (?:my |the )?screen|look at (?:my |the )?screen|co (?:jest|mam) na ekranie|sprawd[zź].*(?:ekran|widzisz))/i.test(favoriteAwareText)) {
+    return createStep('screenshot', {}, 'Capture and describe screen');
   }
 
   if (/(?:system info|sysinfo|informacje o komputerze|info o systemie)/i.test(favoriteAwareText)) {
