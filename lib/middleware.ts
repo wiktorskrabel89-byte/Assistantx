@@ -26,8 +26,9 @@ const PUBLIC_UPDATER_PATH_PREFIXES = [
   '/beta/mac/',
   '/beta/android/',
 ]
-const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support', '/demo']
-const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/support', '/demo']
+const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support', '/demo', '/waitlist']
+const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/support', '/demo', '/waitlist']
+const WAITLIST_SUBDOMAIN_PREFIX = 'assistantx-waitlist.'
 const PUBLIC_UPDATER_FILE_PATTERN =
   /(?:^|\/)(?:latest(?:-[^/]+)?\.yml(?:\.sig)?|release-notes\.json|[^/]+\.(?:exe|nupkg|dmg|appimage|apk|blockmap))$/i
 
@@ -40,6 +41,13 @@ function hasSupabaseConfig() {
 
 function isAuthOptionalPath(pathname: string): boolean {
   return pathname === '/' || AUTH_OPTIONAL_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
+/** True if the request's Host header points at the waitlist landing page subdomain. */
+function isWaitlistSubdomainHost(host: string | null): boolean {
+  if (!host) return false
+  const hostname = host.split(':')[0].toLowerCase()
+  return hostname.startsWith(WAITLIST_SUBDOMAIN_PREFIX)
 }
 
 function isPublicUpdaterPath(pathname: string): boolean {
@@ -102,6 +110,9 @@ export async function updateSession(request: NextRequest) {
   const nonce = btoa(String.fromCharCode(...nonceBytes))
   const csp = buildCsp(nonce)
   const pathname = request.nextUrl.pathname
+  // Visiting the waitlist subdomain's root serves the dedicated /waitlist
+  // landing page instead of the main PublicHome/WorkspaceHome.
+  const isWaitlistSubdomainRoot = pathname === '/' && isWaitlistSubdomainHost(request.headers.get('host'))
   const existingLangCookie = request.cookies.get(UI_LANGUAGE_COOKIE_NAME)?.value ?? null
   const detectedUiLanguage = detectPreferredPublicLanguage({
     existingCookie: existingLangCookie,
@@ -114,15 +125,20 @@ export async function updateSession(request: NextRequest) {
   requestHeaders.set('x-nonce', nonce)
   requestHeaders.set('x-assistantx-ui-language', detectedUiLanguage)
 
-  let supabaseResponse = NextResponse.next({
-    request: { headers: requestHeaders },
-  })
+  let supabaseResponse = isWaitlistSubdomainRoot
+    ? NextResponse.rewrite(new URL('/waitlist', request.url), {
+        request: { headers: requestHeaders },
+      })
+    : NextResponse.next({
+        request: { headers: requestHeaders },
+      })
 
   if (
     PUBLIC_METADATA_PATHS.has(pathname)
     || isPublicUpdaterPath(pathname)
     || !hasSupabaseConfig()
     || isAuthOptionalPath(pathname)
+    || isWaitlistSubdomainRoot
   ) {
     if (!existingLangCookie) {
       supabaseResponse.cookies.set(UI_LANGUAGE_COOKIE_NAME, detectedUiLanguage, {
