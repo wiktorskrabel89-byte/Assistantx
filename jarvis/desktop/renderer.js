@@ -1900,6 +1900,21 @@ window.addEventListener('DOMContentLoaded', () => {
 	function setVoiceVisualizer(state, options = {}) {
 		if (!voiceVisualizer) return;
 		voiceVisualizer.classList.remove('listening', 'speaking', 'thinking');
+		// Round-2: orb markup is now the VEGA star — flip data-vega-state on
+		// EVERY orb in the DOM (#voice-visualizer + Activity Panel + hero)
+		// so the cyan/purple/green/wake animations stay in sync everywhere.
+		try {
+			const vegaMap = {
+				listening: 'listening',
+				speaking: 'speaking',
+				thinking: 'processing',
+				idle: 'idle',
+			};
+			const vegaState = vegaMap[state] || 'idle';
+			document.querySelectorAll('.vega-orb').forEach((el) => {
+				el.setAttribute('data-vega-state', vegaState);
+			});
+		} catch { /* DOM unavailable */ }
 		const statusEl = document.getElementById('voice-orb-status');
 		const setStatus = (text) => { if (statusEl) statusEl.textContent = text; };
 		// Mirror state into the palette context signals so predictive

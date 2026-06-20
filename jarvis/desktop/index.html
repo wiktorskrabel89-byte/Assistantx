@@ -2159,8 +2159,17 @@
     body.ox-shell-on .main-shell > .tab-switcher-side { display: none; }
     body.ox-shell-on .main-shell { grid-template-columns: 1fr; }
     body.ox-shell-on #tab-rail-toggle { display: none; }
-    body.ox-shell-on #task-list-toggle { top: 54px; }
-    body.ox-shell-on #task-list-panel { top: 96px; }
+    /* Round-2: kill the legacy floating UI clutter the user flagged.
+       - #task-list-panel + #task-list-toggle: duplicate of the right Activity
+         Panel (design rule 8 — no standalone Agent Activity panel).
+       - #orb-quick-actions: Mic + Vision + Copy + New buttons (design rule 6
+         — no mic/vision button in chat UI). Permission row stays — it's not
+         a voice control, it's a runtime-trust selector.
+       - #voice-waveform: superseded by the VEGA orb's own bar animations.    */
+    body.ox-shell-on #task-list-panel,
+    body.ox-shell-on #task-list-toggle,
+    body.ox-shell-on #orb-quick-actions,
+    body.ox-shell-on #voice-waveform { display: none !important; }
 
     .ox-topbar {
       position: fixed;
@@ -3230,10 +3239,19 @@
                   </span>
                   <button id="send" type="button">Send</button>
                 </div>
-                <div id="voice-visualizer" class="voice-visualizer" aria-hidden="true">
-                  <div class="orb-halo"></div>
-                  <div class="orb-ring"></div>
-                  <div class="orb-core"></div>
+                <!-- Round-2: replaced glassy blue orb with the VEGA design.
+                     Same #voice-visualizer id so renderer.js setVoiceVisualizer
+                     keeps working (it toggles the class), but the inner markup
+                     is now the VEGA star + ring driven by data-vega-state. -->
+                <div id="voice-visualizer" class="vega-orb voice-visualizer"
+                     data-vega-state="idle" aria-hidden="true"
+                     style="width:104px;height:104px;margin:8px auto 0;">
+                  <span class="vega-orb-ring" aria-hidden="true"></span>
+                  <svg class="vega-orb-star" viewBox="0 0 32 32" aria-hidden="true">
+                    <path d="M 16 5.5 L 18.4 13.6 L 31 16 L 18.4 18.4 L 16 26.5 L 13.6 18.4 L 1 16 L 13.6 13.6 Z"
+                          fill="currentColor" opacity="0.95"/>
+                    <circle cx="16" cy="16" r="1.6" fill="#ffffff" opacity="0.92"/>
+                  </svg>
                 </div>
                 <div id="voice-orb-status" class="voice-orb-status" aria-live="polite"></div>
 
