@@ -2891,7 +2891,9 @@
       filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.4));
     }
 
-    /* ── idle ── subtle pulse on the star, NO rings, dim DOTS instead of bars */
+    /* ── idle ── subtle pulse on the star + STATIC faint outer ring + dim
+       dots below. Per reference: every orb keeps its outer ring visible,
+       idle just makes it dimmer. */
     #voice-visualizer.vega-orb[data-vega-state="idle"] {
       background: transparent;
     }
@@ -2900,7 +2902,12 @@
       filter: drop-shadow(0 0 6px rgba(0, 140, 158, 0.35));
       animation: vega-idle-pulse 3s var(--ox-ease, ease) infinite;
     }
-    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-1 {
+      inset: 6%;
+      border-color: var(--ox-cyan-dim, #008c9e);
+      opacity: 0.18;
+      animation: none;
+    }
     #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-2 {
       opacity: 0;
     }
@@ -2916,22 +2923,23 @@
       filter: drop-shadow(0 0 16px rgba(0, 240, 255, 0.6));
       animation: vega-idle-pulse 1.6s var(--ox-ease, ease) infinite;
     }
-    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-1,
-    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-2,
-    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-1,
-    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-2 {
-      border-color: var(--ox-cyan, var(--accent, #00f0ff));
-      opacity: 0;
-    }
+    /* Reference shows a permanently visible double-ring (one tight, one a
+       little further out) — NOT a ring that pops from nothing. Both rings
+       sit at a fixed, always-visible opacity; the expand animation rides
+       on TOP of that base visibility rather than starting from opacity 0. */
     #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-1,
     #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-1 {
-      inset: 14%;
-      animation: vega-ring-expand 2.4s var(--ox-ease, ease) infinite;
+      inset: 18%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.9;
+      animation: none;
     }
     #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-2,
     #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-2 {
-      inset: 4%;
-      animation: vega-ring-expand 2.4s var(--ox-ease, ease) 1.2s infinite;
+      inset: 6%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.4;
+      animation: none;
     }
 
     /* ── processing ── purple star + 3 SPINNING purple rings + dim purple dots */
@@ -2943,17 +2951,17 @@
       filter: drop-shadow(0 0 14px rgba(120, 80, 220, 0.55));
       animation: vega-idle-pulse 2s var(--ox-ease, ease) infinite;
     }
-    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-1,
-    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-1 {
+      inset: 18%;
       border-color: var(--ox-purple, #7850dc);
-      opacity: 0.55;
-      inset: 10%;
-      animation: vega-spin 2.4s linear infinite;
+      opacity: 0.85;
+      animation: none;
     }
     #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
-      inset: 22%;
-      animation: vega-spin 3.6s linear reverse infinite;
+      inset: 6%;
+      border-color: var(--ox-purple, #7850dc);
       opacity: 0.35;
+      animation: none;
     }
 
     /* ── speaking ── green star + green expanding rings + green TTS wave bars */
@@ -2965,18 +2973,17 @@
       filter: drop-shadow(0 0 16px rgba(80, 220, 120, 0.55));
       animation: vega-idle-pulse 1.4s var(--ox-ease, ease) infinite;
     }
-    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-1,
-    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-2 {
-      border-color: var(--ox-green, #50dc78);
-      opacity: 0;
-    }
     #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-1 {
-      inset: 14%;
-      animation: vega-ring-expand 1.6s var(--ox-ease, ease) infinite;
+      inset: 18%;
+      border-color: var(--ox-green, #50dc78);
+      opacity: 0.9;
+      animation: none;
     }
     #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-2 {
-      inset: 4%;
-      animation: vega-ring-expand 1.6s var(--ox-ease, ease) 0.8s infinite;
+      inset: 6%;
+      border-color: var(--ox-green, #50dc78);
+      opacity: 0.4;
+      animation: none;
     }
 
     /* ── FFT bars under the orb (24 thin bars) ── */
@@ -2991,54 +2998,68 @@
     .vega-bars span {
       display: block;
       width: 3px;
-      height: 20%;
+      height: var(--bar-h-idle, 16%);
       border-radius: 1.5px;
       background: var(--ox-cyan-dim, #008c9e);
       transform-origin: bottom center;
       opacity: 0.35;
       transition: background var(--ox-duration-base, 200ms) var(--ox-ease, ease),
-                  opacity var(--ox-duration-base, 200ms) var(--ox-ease, ease);
+                  opacity var(--ox-duration-base, 200ms) var(--ox-ease, ease),
+                  height var(--ox-duration-base, 200ms) var(--ox-ease, ease);
     }
-    .vega-bars span:nth-child(1)  { animation-delay: 0.00s; }
-    .vega-bars span:nth-child(2)  { animation-delay: 0.07s; }
-    .vega-bars span:nth-child(3)  { animation-delay: 0.14s; }
-    .vega-bars span:nth-child(4)  { animation-delay: 0.21s; }
-    .vega-bars span:nth-child(5)  { animation-delay: 0.28s; }
-    .vega-bars span:nth-child(6)  { animation-delay: 0.35s; }
-    .vega-bars span:nth-child(7)  { animation-delay: 0.42s; }
-    .vega-bars span:nth-child(8)  { animation-delay: 0.49s; }
-    .vega-bars span:nth-child(9)  { animation-delay: 0.05s; }
-    .vega-bars span:nth-child(10) { animation-delay: 0.18s; }
-    .vega-bars span:nth-child(11) { animation-delay: 0.32s; }
-    .vega-bars span:nth-child(12) { animation-delay: 0.45s; }
-    .vega-bars span:nth-child(13) { animation-delay: 0.10s; }
-    .vega-bars span:nth-child(14) { animation-delay: 0.25s; }
-    .vega-bars span:nth-child(15) { animation-delay: 0.40s; }
-    .vega-bars span:nth-child(16) { animation-delay: 0.03s; }
-    .vega-bars span:nth-child(17) { animation-delay: 0.16s; }
-    .vega-bars span:nth-child(18) { animation-delay: 0.29s; }
-    .vega-bars span:nth-child(19) { animation-delay: 0.42s; }
-    .vega-bars span:nth-child(20) { animation-delay: 0.55s; }
-    .vega-bars span:nth-child(21) { animation-delay: 0.08s; }
-    .vega-bars span:nth-child(22) { animation-delay: 0.22s; }
-    .vega-bars span:nth-child(23) { animation-delay: 0.36s; }
-    .vega-bars span:nth-child(24) { animation-delay: 0.50s; }
-    /* Bars ONLY animate during wake/listening/speaking. Idle + processing
-       leave them as dim, static dots (matches reference IDLE behaviour). */
+    /* Frozen EQ silhouette — a fixed, varied bar-height profile per
+       position so the active states LOOK like a real-time spectrum, the
+       way the reference screenshot freezes it, without relying on a
+       running keyframe animation. --bar-h is read by the active-state
+       rules below; idle/processing ignore it and use a flat short height. */
+    .vega-bars span:nth-child(1)  { --bar-h: 35%; }
+    .vega-bars span:nth-child(2)  { --bar-h: 60%; }
+    .vega-bars span:nth-child(3)  { --bar-h: 80%; }
+    .vega-bars span:nth-child(4)  { --bar-h: 45%; }
+    .vega-bars span:nth-child(5)  { --bar-h: 65%; }
+    .vega-bars span:nth-child(6)  { --bar-h: 90%; }
+    .vega-bars span:nth-child(7)  { --bar-h: 50%; }
+    .vega-bars span:nth-child(8)  { --bar-h: 70%; }
+    .vega-bars span:nth-child(9)  { --bar-h: 38%; }
+    .vega-bars span:nth-child(10) { --bar-h: 55%; }
+    .vega-bars span:nth-child(11) { --bar-h: 75%; }
+    .vega-bars span:nth-child(12) { --bar-h: 42%; }
+    .vega-bars span:nth-child(13) { --bar-h: 85%; }
+    .vega-bars span:nth-child(14) { --bar-h: 32%; }
+    .vega-bars span:nth-child(15) { --bar-h: 62%; }
+    .vega-bars span:nth-child(16) { --bar-h: 95%; }
+    .vega-bars span:nth-child(17) { --bar-h: 42%; }
+    .vega-bars span:nth-child(18) { --bar-h: 58%; }
+    .vega-bars span:nth-child(19) { --bar-h: 38%; }
+    .vega-bars span:nth-child(20) { --bar-h: 68%; }
+    .vega-bars span:nth-child(21) { --bar-h: 48%; }
+    .vega-bars span:nth-child(22) { --bar-h: 78%; }
+    .vega-bars span:nth-child(23) { --bar-h: 33%; }
+    .vega-bars span:nth-child(24) { --bar-h: 53%; }
+
+    /* idle — uniform short dim dots (no variation, no colour, no glow). */
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="idle"]) .vega-bars span {
+      height: 14%;
+      opacity: 0.3;
+    }
+    /* wake / listening — frozen cyan EQ silhouette using --bar-h. */
     .vega-orb-wrap:has(#voice-visualizer[data-vega-state="wake"]) .vega-bars span,
     .vega-orb-wrap:has(#voice-visualizer[data-vega-state="listening"]) .vega-bars span {
+      height: var(--bar-h);
       background: var(--ox-cyan, var(--accent, #00f0ff));
       opacity: 1;
       box-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
-      animation: vega-bar-dance 0.9s var(--ox-ease, ease) infinite;
     }
+    /* speaking — frozen green EQ silhouette using the same profile. */
     .vega-orb-wrap:has(#voice-visualizer[data-vega-state="speaking"]) .vega-bars span {
+      height: var(--bar-h);
       background: var(--ox-green, #50dc78);
       opacity: 1;
       box-shadow: 0 0 6px rgba(80, 220, 120, 0.5);
-      animation: vega-bar-wave 0.9s var(--ox-ease, ease) infinite;
     }
+    /* processing — no bars, just dim purple dots (reference shows none). */
     .vega-orb-wrap:has(#voice-visualizer[data-vega-state="processing"]) .vega-bars span {
+      height: 14%;
       background: var(--ox-purple-dim, #4a3290);
       opacity: 0.55;
     }
