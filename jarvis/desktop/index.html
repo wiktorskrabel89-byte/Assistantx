@@ -2159,17 +2159,22 @@
     body.ox-shell-on .main-shell > .tab-switcher-side { display: none; }
     body.ox-shell-on .main-shell { grid-template-columns: 1fr; }
     body.ox-shell-on #tab-rail-toggle { display: none; }
-    /* Round-2: kill the legacy floating UI clutter the user flagged.
-       - #task-list-panel + #task-list-toggle: duplicate of the right Activity
-         Panel (design rule 8 — no standalone Agent Activity panel).
+    /* Round-2: kill the legacy UI clutter the user flagged on the preview.
+       Hard-hide (no body.ox-shell-on gate) so these stay gone even before
+       renderer.js applies the shell class:
+       - #task-list-panel + #task-list-toggle: duplicate of the right
+         Activity Panel (design rule 8 — no standalone Agent Activity panel).
        - #orb-quick-actions: Mic + Vision + Copy + New buttons (design rule 6
-         — no mic/vision button in chat UI). Permission row stays — it's not
-         a voice control, it's a runtime-trust selector.
-       - #voice-waveform: superseded by the VEGA orb's own bar animations.    */
-    body.ox-shell-on #task-list-panel,
-    body.ox-shell-on #task-list-toggle,
-    body.ox-shell-on #orb-quick-actions,
-    body.ox-shell-on #voice-waveform { display: none !important; }
+         — no mic/vision button in chat UI). Permission row stays — it's
+         not a voice control, it's a runtime-trust selector.
+       - #voice-waveform: superseded by the new VEGA orb bars below.
+       - .tab-switcher-side: the legacy floating notebook+cog column on
+         the left (replaced by the Meridian top bar's 3 tabs).               */
+    #task-list-panel,
+    #task-list-toggle,
+    #orb-quick-actions,
+    #voice-waveform,
+    .tab-switcher-side { display: none !important; }
 
     .ox-topbar {
       position: fixed;
@@ -2864,6 +2869,123 @@
       opacity: 0;
       pointer-events: none;
     }
+
+    /* Round-2: large prominent orb composition for the chat composer.
+       Matches the reference design — big orb + expanding rings + FFT bars. */
+    .vega-orb-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin: 14px auto 4px;
+    }
+    #voice-visualizer.vega-orb {
+      width: 184px;
+      height: 184px;
+      background: radial-gradient(circle, rgba(0, 240, 255, 0.10) 0%, transparent 65%);
+    }
+    #voice-visualizer.vega-orb .vega-orb-star {
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      filter: drop-shadow(0 0 14px rgba(0, 240, 255, 0.55));
+      animation: vega-idle-pulse 2.6s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb .vega-orb-ring-1 {
+      inset: 14%;
+      border-color: var(--ox-cyan-dim, #008c9e);
+      opacity: 0.45;
+      animation: vega-ring-expand 3.2s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb .vega-orb-ring-2 {
+      inset: 4%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.25;
+      animation: vega-ring-expand 3.2s var(--ox-ease, ease) 1.6s infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-star,
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
+      color: var(--ox-purple, #7850dc);
+      border-color: var(--ox-purple, #7850dc);
+      filter: drop-shadow(0 0 14px rgba(120, 80, 220, 0.55));
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
+      animation: vega-spin 2s linear infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-star,
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-2 {
+      color: var(--ox-green, #50dc78);
+      border-color: var(--ox-green, #50dc78);
+      filter: drop-shadow(0 0 14px rgba(80, 220, 120, 0.55));
+    }
+
+    /* FFT bars under the orb. 24 bars; each gets a staggered animation-delay
+       inline via :nth-child so they dance rather than move in unison. */
+    .vega-bars {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 3px;
+      height: 36px;
+      width: 240px;
+    }
+    .vega-bars span {
+      display: block;
+      width: 3px;
+      height: 20%;
+      border-radius: 1.5px;
+      background: var(--ox-cyan, var(--accent, #00f0ff));
+      box-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
+      transform-origin: bottom center;
+      animation: vega-bar-dance 0.9s var(--ox-ease, ease) infinite;
+    }
+    .vega-bars span:nth-child(1)  { animation-delay: 0.00s; }
+    .vega-bars span:nth-child(2)  { animation-delay: 0.07s; }
+    .vega-bars span:nth-child(3)  { animation-delay: 0.14s; }
+    .vega-bars span:nth-child(4)  { animation-delay: 0.21s; }
+    .vega-bars span:nth-child(5)  { animation-delay: 0.28s; }
+    .vega-bars span:nth-child(6)  { animation-delay: 0.35s; }
+    .vega-bars span:nth-child(7)  { animation-delay: 0.42s; }
+    .vega-bars span:nth-child(8)  { animation-delay: 0.49s; }
+    .vega-bars span:nth-child(9)  { animation-delay: 0.05s; }
+    .vega-bars span:nth-child(10) { animation-delay: 0.18s; }
+    .vega-bars span:nth-child(11) { animation-delay: 0.32s; }
+    .vega-bars span:nth-child(12) { animation-delay: 0.45s; }
+    .vega-bars span:nth-child(13) { animation-delay: 0.10s; }
+    .vega-bars span:nth-child(14) { animation-delay: 0.25s; }
+    .vega-bars span:nth-child(15) { animation-delay: 0.40s; }
+    .vega-bars span:nth-child(16) { animation-delay: 0.03s; }
+    .vega-bars span:nth-child(17) { animation-delay: 0.16s; }
+    .vega-bars span:nth-child(18) { animation-delay: 0.29s; }
+    .vega-bars span:nth-child(19) { animation-delay: 0.42s; }
+    .vega-bars span:nth-child(20) { animation-delay: 0.55s; }
+    .vega-bars span:nth-child(21) { animation-delay: 0.08s; }
+    .vega-bars span:nth-child(22) { animation-delay: 0.22s; }
+    .vega-bars span:nth-child(23) { animation-delay: 0.36s; }
+    .vega-bars span:nth-child(24) { animation-delay: 0.50s; }
+
+    /* Idle = bars dim + shorter. Processing = purple bars. Speaking = green TTS wave. */
+    #voice-visualizer.vega-orb[data-vega-state="idle"] ~ .vega-bars span {
+      background: var(--ox-cyan-dim, #008c9e);
+      box-shadow: none;
+      opacity: 0.45;
+      animation-duration: 1.8s;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] ~ .vega-bars span {
+      background: var(--ox-purple, #7850dc);
+      box-shadow: 0 0 6px rgba(120, 80, 220, 0.5);
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] ~ .vega-bars span {
+      background: var(--ox-green, #50dc78);
+      box-shadow: 0 0 6px rgba(80, 220, 120, 0.5);
+      animation-name: vega-bar-wave;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .vega-bars span,
+      #voice-visualizer.vega-orb .vega-orb-star,
+      #voice-visualizer.vega-orb .vega-orb-ring { animation: none !important; }
+    }
     .vega-orb[data-vega-state="idle"] .vega-orb-star {
       animation: vega-idle-pulse 3s var(--ox-ease, ease) infinite;
     }
@@ -3239,19 +3361,28 @@
                   </span>
                   <button id="send" type="button">Send</button>
                 </div>
-                <!-- Round-2: replaced glassy blue orb with the VEGA design.
-                     Same #voice-visualizer id so renderer.js setVoiceVisualizer
-                     keeps working (it toggles the class), but the inner markup
-                     is now the VEGA star + ring driven by data-vega-state. -->
-                <div id="voice-visualizer" class="vega-orb voice-visualizer"
-                     data-vega-state="idle" aria-hidden="true"
-                     style="width:104px;height:104px;margin:8px auto 0;">
-                  <span class="vega-orb-ring" aria-hidden="true"></span>
-                  <svg class="vega-orb-star" viewBox="0 0 32 32" aria-hidden="true">
-                    <path d="M 16 5.5 L 18.4 13.6 L 31 16 L 18.4 18.4 L 16 26.5 L 13.6 18.4 L 1 16 L 13.6 13.6 Z"
-                          fill="currentColor" opacity="0.95"/>
-                    <circle cx="16" cy="16" r="1.6" fill="#ffffff" opacity="0.92"/>
-                  </svg>
+                <!-- Round-2: VEGA orb composition — large prominent orb +
+                     FFT-style bars below, matching the reference design.
+                     Same #voice-visualizer id so renderer.js's existing
+                     setVoiceVisualizer wiring drives the data-vega-state. -->
+                <div class="vega-orb-wrap" aria-hidden="true">
+                  <div id="voice-visualizer" class="vega-orb voice-visualizer"
+                       data-vega-state="idle">
+                    <span class="vega-orb-ring vega-orb-ring-1" aria-hidden="true"></span>
+                    <span class="vega-orb-ring vega-orb-ring-2" aria-hidden="true"></span>
+                    <svg class="vega-orb-star" viewBox="0 0 32 32" aria-hidden="true">
+                      <path d="M 16 5.5 L 18.4 13.6 L 31 16 L 18.4 18.4 L 16 26.5 L 13.6 18.4 L 1 16 L 13.6 13.6 Z"
+                            fill="currentColor" opacity="0.95"/>
+                      <circle cx="16" cy="16" r="1.6" fill="#ffffff" opacity="0.92"/>
+                    </svg>
+                  </div>
+                  <div class="vega-bars" aria-hidden="true">
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span>
+                  </div>
                 </div>
                 <div id="voice-orb-status" class="voice-orb-status" aria-live="polite"></div>
 
