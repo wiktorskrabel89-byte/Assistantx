@@ -141,6 +141,14 @@ const startupDiagnostics = createStartupDiagnostics();
 const localServerStore = createLocalServerStore();
 const aiRouter = new AIRouter({
   getLocalServerConfig: () => localServerStore.getRouterConfig(),
+  onRouteDecided: (decision) => {
+    // M5-followup: forward every routing decision into the Diagnostics
+    // terminal (Settings → Zaawansowane) and the Activity Panel's "Log
+    // wykonania" segment via the existing health:pulse-style fan-out.
+    // The renderer subscribes to 'router:decision' (added to preload
+    // ALLOWED_RECEIVE for this round).
+    sendToRenderer('router:decision', decision);
+  },
 });
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
@@ -1713,6 +1721,46 @@ function registerWindowControlHandlers() {
     } catch (err) {
       return { ok: false, error: String(err?.message || err), entries: [] };
     }
+  });
+
+  // ─── M7/M8 — Memory + Knowledge stores backing the Workspace tab. ───
+  // Lazy singletons so the JSON files aren't created until first read.
+  const { createMemoryStore } = require('./electron/memory/store/memory-store');
+  const { createKnowledgeStore } = require('./electron/memory/store/knowledge-store');
+  const { hybridSearch } = require('./electron/memory/retrieval/hybrid-search');
+  const workspaceMemoryStore = createMemoryStore({ baseDir: app.getPath('userData') });
+  const workspaceKnowledgeStore = createKnowledgeStore({ baseDir: app.getPath('userData') });
+
+  ipcMain.handle('workspace:memory-snapshot', () => {
+    try { return { ok: true, snapshot: workspaceMemoryStore.snapshot() }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:knowledge-snapshot', () => {
+    try { return { ok: true, snapshot: workspaceKnowledgeStore.snapshot() }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:search', (_event, payload) => {
+    try {
+      const query = String(payload?.query || '').trim();
+      if (!query) return { ok: true, results: [] };
+      const results = hybridSearch({
+        query,
+        sources: Array.isArray(payload?.sources) ? payload.sources : [],
+        memoryStore: workspaceMemoryStore,
+        knowledgeStore: workspaceKnowledgeStore,
+      }).slice(0, Math.max(1, Math.min(50, Number(payload?.limit) || 25)));
+      return { ok: true, results };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err), results: [] };
+    }
+  });
+  ipcMain.handle('workspace:memory-remember', (_event, payload) => {
+    try { return { ok: true, entry: workspaceMemoryStore.rememberLongTerm(payload || {}) }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:knowledge-upsert', (_event, payload) => {
+    try { return { ok: true, entity: workspaceKnowledgeStore.upsertEntity(payload || {}) }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
   });
 
   // ─── Idea #3 — Screen capture for the vision dispatch slot ───────────────

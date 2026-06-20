@@ -29,6 +29,7 @@
     "dist:win:all": "node scripts/dist-win-all.js",
     "smoke:runtime": "node scripts/verify-python-runtime.js",
     "smoke:installer": "node scripts/verify-packaged-installer.js",
+    "test": "node --test test/**/*.test.js",
     "setup:local-ai": "powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1",
     "bootstrap:windows": "powershell -ExecutionPolicy Bypass -File scripts/JarvisSystemSetup.ps1",
     "publish:download": "node scripts/publish-installer.js",

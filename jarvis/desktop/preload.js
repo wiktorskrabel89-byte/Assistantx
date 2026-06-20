@@ -111,6 +111,11 @@ const ALLOWED_INVOKE = new Set([
   'vision:capture-screen',
   'memory:list-recent',
   'memory:save',
+  'workspace:memory-snapshot',
+  'workspace:knowledge-snapshot',
+  'workspace:search',
+  'workspace:memory-remember',
+  'workspace:knowledge-upsert',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -132,6 +137,9 @@ const ALLOWED_RECEIVE = new Set([
   'health:pulse',
   'health:heal-attempted',
   'health:heal-outcome',
+  'router:decision',
+  'context:compressed',
+  'wake_word',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────

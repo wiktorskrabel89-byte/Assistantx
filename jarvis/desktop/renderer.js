@@ -349,6 +349,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const localCodeModelSelect = document.getElementById('local-code-model');
 	const localExternalModelSelect = document.getElementById('local-external-model');
 	const localVisionModelSelect = document.getElementById('local-vision-model');
+	// M5 — full 6-lane router selects.
+	const localCodeHeavyModelSelect = document.getElementById('local-code-heavy-model');
+	const localReasoningModelSelect = document.getElementById('local-reasoning-model');
+	const localRouterModelSelect = document.getElementById('local-router-model');
 	const localPreferEnabledToggle = document.getElementById('local-prefer-enabled');
 	const localServerSaveAssignmentButton = document.getElementById('local-server-save-assignment');
 	const sttModelSelect = document.getElementById('stt-model');
@@ -460,19 +464,166 @@ window.addEventListener('DOMContentLoaded', () => {
 	let currentRepoContext = null;
 	let googleDevicePollTimer = null;
 
+	// Meridian shell — 3 tabs. `chat` (alias for legacy `command`),
+	// `workspace`, `settings`. Legacy two-button side switcher continues to
+	// work but is hidden visually when body has .ox-shell-on.
+	const workspaceTabPanel = document.getElementById('workspace-tab-panel');
+	const oxTabChat = document.getElementById('ox-tab-chat');
+	const oxTabWorkspace = document.getElementById('ox-tab-workspace');
+	const oxTabSettings = document.getElementById('ox-tab-settings');
+	const OX_TAB_BUTTONS = { chat: oxTabChat, workspace: oxTabWorkspace, settings: oxTabSettings };
+
 	function setMainPanelTab(tab) {
-		const settingsActive = tab === 'settings';
-		commandTabButton?.classList.toggle('active', !settingsActive);
-		settingsTabButton?.classList.toggle('active', settingsActive);
-		commandTabButton?.setAttribute('aria-selected', settingsActive ? 'false' : 'true');
-		settingsTabButton?.setAttribute('aria-selected', settingsActive ? 'true' : 'false');
-		commandTabPanel?.classList.toggle('active', !settingsActive);
-		settingsTabPanel?.classList.toggle('active', settingsActive);
+		// Normalise legacy 'command' alias.
+		const target = tab === 'command' ? 'chat' : tab;
+		const isChat = target === 'chat';
+		const isWorkspace = target === 'workspace';
+		const isSettings = target === 'settings';
+		commandTabPanel?.classList.toggle('active', isChat);
+		workspaceTabPanel?.classList.toggle('active', isWorkspace);
+		settingsTabPanel?.classList.toggle('active', isSettings);
+		// Sync legacy 2-tab side switcher (still wired to listeners elsewhere).
+		commandTabButton?.classList.toggle('active', isChat);
+		settingsTabButton?.classList.toggle('active', isSettings);
+		commandTabButton?.setAttribute('aria-selected', isChat ? 'true' : 'false');
+		settingsTabButton?.setAttribute('aria-selected', isSettings ? 'true' : 'false');
+		// Sync Meridian top-bar tabs.
+		Object.entries(OX_TAB_BUTTONS).forEach(([key, btn]) => {
+			if (!btn) return;
+			const active = key === target;
+			btn.classList.toggle('active', active);
+			btn.setAttribute('aria-selected', active ? 'true' : 'false');
+		});
+		// Sync rail highlights (workspace/settings rail buttons mirror tabs).
+		document.querySelectorAll('.ox-rail-btn[data-ox-rail]').forEach((btn) => {
+			const key = btn.getAttribute('data-ox-rail');
+			let match = false;
+			if (target === 'chat' && key === 'chat') match = true;
+			if (target === 'workspace' && key === 'workspace-tab') match = true;
+			if (target === 'settings' && key === 'settings-tab') match = true;
+			btn.classList.toggle('active', match);
+		});
 	}
 
-	commandTabButton?.addEventListener('click', () => setMainPanelTab('command'));
+	commandTabButton?.addEventListener('click', () => setMainPanelTab('chat'));
 	settingsTabButton?.addEventListener('click', () => setMainPanelTab('settings'));
-	setMainPanelTab('command');
+	oxTabChat?.addEventListener('click', () => setMainPanelTab('chat'));
+	oxTabWorkspace?.addEventListener('click', () => setMainPanelTab('workspace'));
+	oxTabSettings?.addEventListener('click', () => setMainPanelTab('settings'));
+
+	// Rail shortcuts — top-bar tabs + Activity Panel segments + command palette.
+	document.getElementById('ox-rail')?.querySelectorAll('.ox-rail-btn[data-ox-rail]').forEach((btn) => {
+		const key = btn.getAttribute('data-ox-rail');
+		if (key === 'workspace-tab') btn.addEventListener('click', () => setMainPanelTab('workspace'));
+		else if (key === 'settings-tab') btn.addEventListener('click', () => setMainPanelTab('settings'));
+		else if (key === 'chat') btn.addEventListener('click', () => setMainPanelTab('chat'));
+		else if (key === 'files') btn.addEventListener('click', () => { setMainPanelTab('chat'); setActivitySegment('files'); });
+		else if (key === 'activity') btn.addEventListener('click', () => { setMainPanelTab('chat'); setActivitySegment('activity'); });
+		else if (key === 'search') btn.addEventListener('click', () => {
+			document.getElementById('command-palette-overlay')?.classList.add('open');
+			document.getElementById('command-palette-input')?.focus();
+		});
+	});
+
+	// Keyboard shortcuts 1/2/3 jump to Czat/Workspace/Ustawienia (when no
+	// input is focused — guard against typing collisions).
+	window.addEventListener('keydown', (e) => {
+		if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+		const tag = (e.target?.tagName || '').toLowerCase();
+		if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+		if (e.key === '1') { setMainPanelTab('chat'); e.preventDefault(); }
+		else if (e.key === '2') { setMainPanelTab('workspace'); e.preventDefault(); }
+		else if (e.key === '3') { setMainPanelTab('settings'); e.preventDefault(); }
+	});
+
+	// Activate the Meridian shell. Set on <body> so the additive CSS
+	// (padding/topbar/rail visibility, legacy header hidden) kicks in.
+	document.body.classList.add('ox-shell-on');
+	setMainPanelTab('chat');
+
+	// Round-2 — VEGA orb state setter. Drives the data-vega-state attribute
+	// on the orb in the Activity Panel (and any other vega-orb in the DOM).
+	// Defined at module scope so the wake_word / route / health subscribers
+	// above can call it without prop-drilling.
+	function setVegaOrbState(state) {
+		const valid = ['idle', 'wake', 'listening', 'processing', 'speaking'];
+		const next = valid.includes(state) ? state : 'idle';
+		document.querySelectorAll('.vega-orb').forEach((el) => {
+			el.setAttribute('data-vega-state', next);
+		});
+	}
+	// Expose globally so other modules + subscribers above can call it
+	// (renderer.js is one big closure; this lifts the function up).
+	window.__jarvisSetVegaOrbState = setVegaOrbState;
+
+	// ── Round-2 — Language wizard (first-run) ───────────────────────────
+	// Show the modal when the user has never picked a locale. Subsequent
+	// launches skip it. Reachable later from Settings → Ogólne via the same
+	// reset() pattern (clears the chosen flag).
+	(function initLanguageWizard() {
+		const overlay = document.getElementById('ox-language-wizard');
+		if (!overlay) return;
+		let chosenAlready = false;
+		try { chosenAlready = window.localStorage.getItem('jarvis.locale.chosen') === '1'; }
+		catch { /* storage blocked */ }
+		if (chosenAlready) { overlay.hidden = true; return; }
+		overlay.hidden = false;
+
+		const options = overlay.querySelectorAll('.ox-wizard-option[data-locale]');
+		let pickedLocale = 'pl';
+		try {
+			const stored = window.localStorage.getItem('jarvis.locale');
+			if (stored === 'pl' || stored === 'en') pickedLocale = stored;
+		} catch { /* ignore */ }
+
+		function paintSelection() {
+			options.forEach((btn) => {
+				const isActive = btn.getAttribute('data-locale') === pickedLocale;
+				btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+				const radio = btn.querySelector('.ox-wizard-radio');
+				if (radio) radio.textContent = isActive ? '✓' : '';
+			});
+		}
+
+		options.forEach((btn) => {
+			btn.addEventListener('click', () => {
+				if (btn.disabled) return;
+				const locale = btn.getAttribute('data-locale');
+				if (!locale) return;
+				pickedLocale = locale;
+				paintSelection();
+			});
+		});
+		paintSelection();
+
+		const confirmBtn = document.getElementById('ox-wizard-confirm');
+		confirmBtn?.addEventListener('click', () => {
+			try {
+				window.localStorage.setItem('jarvis.locale', pickedLocale);
+				window.localStorage.setItem('jarvis.locale.chosen', '1');
+			} catch { /* storage blocked — choice still applies in-session */ }
+			overlay.hidden = true;
+			// Reflect the choice in the Settings → Ogólne language picker.
+			const langSelect = document.getElementById('ox-settings-language');
+			if (langSelect) langSelect.value = pickedLocale === 'en' ? 'en-US' : 'pl-PL';
+		});
+
+		// Settings → Ogólne button to re-open the wizard (clears chosen flag).
+		const reopenBtn = document.getElementById('ox-settings-open-wizard');
+		reopenBtn?.addEventListener('click', () => {
+			try { window.localStorage.removeItem('jarvis.locale.chosen'); } catch { /* ignore */ }
+			overlay.hidden = false;
+		});
+
+		// Settings → Ogólne language <select> persists straight to localStorage
+		// so the wizard's next opening shows the user's last choice highlighted.
+		const langSelect = document.getElementById('ox-settings-language');
+		langSelect?.addEventListener('change', (e) => {
+			const v = String(e.target?.value || '');
+			const locale = v.startsWith('en') ? 'en' : 'pl';
+			try { window.localStorage.setItem('jarvis.locale', locale); } catch { /* ignore */ }
+		});
+	})();
 
 	// Left tab rail — Claude-style toggle. Persist the collapsed preference so
 	// the rail stays in the user's preferred state across launches.
@@ -713,13 +864,163 @@ window.addEventListener('DOMContentLoaded', () => {
 	winMaximize?.addEventListener('click', () => invokeWindow('window:toggle-maximize'));
 	winClose?.addEventListener('click', () => invokeWindow('window:close'));
 
+	// M2 — chat stays visible at all times. Switching a viewport (map/repo/
+	// hardware) just toggles which pane inside the Activity Panel's "Pliki"
+	// segment is active, and brings that segment to the front. The legacy
+	// .viewport-active body class was dead (no CSS consumer); removed.
 	function switchViewport(mode) {
 		viewportWelcome?.classList.toggle('active', mode === 'welcome');
 		viewportMap?.classList.toggle('active', mode === 'map');
 		viewportRepo?.classList.toggle('active', mode === 'repo');
 		viewportHardware?.classList.toggle('active', mode === 'hardware');
-		workspaceApp?.classList.toggle('viewport-active', mode !== 'welcome');
+		// When a tool opens, surface the Pliki segment in the Activity Panel
+		// so the user doesn't have to switch tabs to see what they asked for.
+		if (mode && mode !== 'welcome') setActivitySegment('files');
 	}
+
+	// Meridian Activity Panel — segment switcher (Aktywność / Agenci / Log / Pliki).
+	function setActivitySegment(segment) {
+		document.querySelectorAll('.ox-activity-tab[data-ox-segment]').forEach((btn) => {
+			const active = btn.getAttribute('data-ox-segment') === segment;
+			btn.classList.toggle('active', active);
+			btn.setAttribute('aria-selected', active ? 'true' : 'false');
+		});
+		document.querySelectorAll('.ox-activity-segment[data-ox-segment]').forEach((sec) => {
+			sec.classList.toggle('active', sec.getAttribute('data-ox-segment') === segment);
+		});
+	}
+	document.querySelectorAll('.ox-activity-tab[data-ox-segment]').forEach((btn) => {
+		btn.addEventListener('click', () => setActivitySegment(btn.getAttribute('data-ox-segment')));
+	});
+
+	// ── M3: Settings shell — 9-section sub-nav (Ogólne / Modele / …) ─────
+	const SETTINGS_SCROLL_ROOT = document.getElementById('settings-scroll-root');
+	function setSettingsSection(section) {
+		if (!SETTINGS_SCROLL_ROOT) return;
+		SETTINGS_SCROLL_ROOT.setAttribute('data-active-section', section);
+		document.querySelectorAll('.ox-settings-nav-btn[data-ox-section]').forEach((btn) => {
+			btn.classList.toggle('active', btn.getAttribute('data-ox-section') === section);
+		});
+		// Sections may declare multiple owners via space-separated list (e.g.
+		// the global .settings-toolbar lives in every section). A naïve
+		// equality check would hide it on every click.
+		SETTINGS_SCROLL_ROOT.querySelectorAll('[data-ox-section]').forEach((node) => {
+			if (node.classList?.contains('ox-settings-nav-btn')) return; // skip the nav itself
+			const owners = (node.getAttribute('data-ox-section') || '').split(/\s+/).filter(Boolean);
+			const visible = owners.includes(section);
+			node.style.display = visible ? '' : 'none';
+		});
+		try { localStorage.setItem('jarvis.settingsSection', section); } catch { /* no storage */ }
+	}
+	document.querySelectorAll('.ox-settings-nav-btn[data-ox-section]').forEach((btn) => {
+		btn.addEventListener('click', () => setSettingsSection(btn.getAttribute('data-ox-section')));
+	});
+	try {
+		const remembered = localStorage.getItem('jarvis.settingsSection');
+		setSettingsSection(remembered || 'general');
+	} catch { setSettingsSection('general'); }
+
+	// ── M8: Workspace sub-nav (Szukaj / Projekty / Umiejętności / …) ────
+	const WORKSPACE_ROOT = document.querySelector('.ox-workspace');
+	function setWorkspaceSection(section) {
+		if (!WORKSPACE_ROOT) return;
+		WORKSPACE_ROOT.setAttribute('data-active-workspace', section);
+		document.querySelectorAll('#ox-workspace-nav .ox-settings-nav-btn').forEach((btn) => {
+			btn.classList.toggle('active', btn.getAttribute('data-ox-workspace') === section);
+		});
+		try { localStorage.setItem('jarvis.workspaceSection', section); } catch { /* no storage */ }
+	}
+	document.querySelectorAll('#ox-workspace-nav .ox-settings-nav-btn').forEach((btn) => {
+		btn.addEventListener('click', () => setWorkspaceSection(btn.getAttribute('data-ox-workspace')));
+	});
+	try {
+		const remembered = localStorage.getItem('jarvis.workspaceSection');
+		setWorkspaceSection(remembered || 'search');
+	} catch { setWorkspaceSection('search'); }
+
+	// Szukaj — runs the cross-store hybrid search via main-process IPC.
+	const workspaceSearchInput = document.getElementById('ox-workspace-search-input');
+	const workspaceSearchGo = document.getElementById('ox-workspace-search-go');
+	const workspaceSearchResults = document.getElementById('ox-workspace-search-results');
+	async function runWorkspaceSearch() {
+		if (!workspaceSearchResults || !ipcRenderer) return;
+		const query = workspaceSearchInput?.value?.trim() || '';
+		if (!query) {
+			workspaceSearchResults.innerHTML = '<div class="ox-activity-empty"><svg class="ox-icon" aria-hidden="true"><use href="#ox-i-sparkles"/></svg><div>Wpisz frazę, aby przeszukać pamięć i wiedzę.</div></div>';
+			return;
+		}
+		workspaceSearchResults.innerHTML = '<div class="ox-activity-empty"><svg class="ox-icon" aria-hidden="true"><use href="#ox-i-clock"/></svg><div>Szukam…</div></div>';
+		try {
+			const r = await ipcRenderer.invoke('workspace:search', { query, limit: 25 });
+			if (!r?.ok) throw new Error(r?.error || 'search-failed');
+			const results = Array.isArray(r.results) ? r.results : [];
+			if (results.length === 0) {
+				workspaceSearchResults.innerHTML = '<div class="ox-activity-empty"><svg class="ox-icon" aria-hidden="true"><use href="#ox-i-search"/></svg><div>Nic nie pasuje do frazy „' + query.replace(/[<>&]/g, '') + '".</div></div>';
+				return;
+			}
+			workspaceSearchResults.innerHTML = '';
+			results.forEach((row) => {
+				const card = document.createElement('div');
+				card.className = 'ox-search-result';
+				const src = document.createElement('div');
+				src.className = 'ox-search-result-source';
+				src.textContent = row.source || 'unknown';
+				const text = document.createElement('div');
+				text.className = 'ox-search-result-text';
+				text.textContent = row.text || row.summary || '(empty)';
+				const meta = document.createElement('div');
+				meta.className = 'ox-search-result-meta';
+				meta.textContent = `score=${row.retrievalScore?.toFixed?.(2) ?? row.retrievalScore} · id=${row.id || '-'}`;
+				card.appendChild(src);
+				card.appendChild(text);
+				card.appendChild(meta);
+				workspaceSearchResults.appendChild(card);
+			});
+		} catch (err) {
+			workspaceSearchResults.innerHTML = '<div class="ox-activity-empty ox-status-dot bad" style="border-color: var(--ox-danger);"><div>Błąd: ' + String(err?.message || err) + '</div></div>';
+		}
+	}
+	workspaceSearchGo?.addEventListener('click', runWorkspaceSearch);
+	workspaceSearchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') runWorkspaceSearch(); });
+
+	// Pamięć / Wiedza refresh buttons.
+	async function refreshWorkspaceMemory() {
+		const node = document.getElementById('ox-memory-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:memory-snapshot');
+			const snap = r?.snapshot;
+			if (!snap) return;
+			const ltm = snap.longTermMemory || [];
+			const conv = snap.conversationMemory || [];
+			const cards = [];
+			cards.push(`<div class="ox-workspace-card"><h4>Long-term memory</h4><p>${ltm.length} rekord(ów)</p></div>`);
+			cards.push(`<div class="ox-workspace-card"><h4>Conversation memory</h4><p>${conv.length} rekord(ów)</p></div>`);
+			cards.push(`<div class="ox-workspace-card"><h4>Project knowledge</h4><p>${Object.keys(snap.projectKnowledge || {}).length} projekt(y)</p></div>`);
+			cards.push(`<div class="ox-workspace-card"><h4>Custom instructions</h4><p>${snap.customInstructions?.systemPrompt ? '✓ ustawiony' : '— brak'}</p></div>`);
+			node.innerHTML = cards.join('');
+		} catch { /* keep empty state */ }
+	}
+	async function refreshWorkspaceKnowledge() {
+		const node = document.getElementById('ox-knowledge-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:knowledge-snapshot');
+			const snap = r?.snapshot;
+			if (!snap) return;
+			const ents = snap.entities || [];
+			const rels = snap.relations || [];
+			if (ents.length === 0) return;
+			const byType = ents.reduce((acc, e) => ({ ...acc, [e.type]: (acc[e.type] || 0) + 1 }), {});
+			node.innerHTML = Object.entries(byType).map(([type, count]) =>
+				`<div class="ox-workspace-card"><h4>${type}</h4><p>${count} encji</p></div>`
+			).join('') + `<div class="ox-workspace-card"><h4>Relacje</h4><p>${rels.length} krawędzi</p></div>`;
+		} catch { /* keep empty state */ }
+	}
+	document.getElementById('ox-workspace-memory-refresh')?.addEventListener('click', refreshWorkspaceMemory);
+	document.getElementById('ox-workspace-knowledge-refresh')?.addEventListener('click', refreshWorkspaceKnowledge);
+	refreshWorkspaceMemory();
+	refreshWorkspaceKnowledge();
 
 	async function ensureMapWidget() {
 		if (!viewportMapCanvas) return null;
@@ -1428,6 +1729,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		fillLocalModelSelect(localCodeModelSelect, localAssignmentValue('codeModelId'));
 		fillLocalModelSelect(localExternalModelSelect, localAssignmentValue('externalApiModelId'));
 		fillLocalModelSelect(localVisionModelSelect, localAssignmentValue('visionModelId'));
+		// M5 — full 6-lane router selects.
+		fillLocalModelSelect(localCodeHeavyModelSelect, localAssignmentValue('codeHeavyModelId'));
+		fillLocalModelSelect(localReasoningModelSelect, localAssignmentValue('reasoningModelId'));
+		fillLocalModelSelect(localRouterModelSelect, localAssignmentValue('routerModelId'));
 		if (localPreferEnabledToggle) {
 			localPreferEnabledToggle.checked = Boolean(desktopLocalAssignment.preferLocalWhenAvailable);
 		}
@@ -1516,12 +1821,20 @@ window.addEventListener('DOMContentLoaded', () => {
 		const code = parseSelection(localCodeModelSelect?.value);
 		const external = parseSelection(localExternalModelSelect?.value);
 		const vision = parseSelection(localVisionModelSelect?.value);
-		const resolvedServerId = chat.serverId || code.serverId || external.serverId || vision.serverId || null;
+		// M5 — full 6-lane router selections.
+		const codeHeavy = parseSelection(localCodeHeavyModelSelect?.value);
+		const reasoning = parseSelection(localReasoningModelSelect?.value);
+		const router = parseSelection(localRouterModelSelect?.value);
+		const resolvedServerId = chat.serverId || code.serverId || external.serverId || vision.serverId
+			|| codeHeavy.serverId || reasoning.serverId || router.serverId || null;
 		const result = await localServerApi.setModelAssignment({
 			localModelAssignment: {
 				serverId: resolvedServerId,
 				chatModelId: chat.modelId,
 				codeModelId: code.modelId,
+				codeHeavyModelId: codeHeavy.modelId,
+				reasoningModelId: reasoning.modelId,
+				routerModelId: router.modelId,
 				externalApiModelId: external.modelId,
 				visionModelId: vision.modelId,
 			},
@@ -2898,6 +3211,29 @@ window.addEventListener('DOMContentLoaded', () => {
 				setVoiceVisualizer('listening');
 			}
 		});
+
+		// Round-2: wake_word from the sidecar flips the orb into "listening"
+		// so the user gets visual feedback the instant "Hey Jarvis" is heard.
+		// The audio capture flow (configure → startAudioCapture) is already
+		// wired separately; this handler is purely the UI state transition.
+		voiceGateway?.on('wake_word', (payload) => {
+			setAgentState(AGENT_STATE.LISTENING);
+			setVoiceVisualizer('listening');
+			// Round-2: flip the VEGA orb (Activity Panel) into "wake" briefly,
+			// then "listening" once STT actually starts streaming.
+			setVegaOrbState('wake');
+			setTimeout(() => setVegaOrbState('listening'), 350);
+			try {
+				if (typeof ipcRenderer !== 'undefined' && ipcRenderer?.send) {
+					// echo into diagnostics terminal via the same path as router/compression
+					const line = `[wake   ] phrase="${payload?.phrase || 'hey jarvis'}"`;
+					if (typeof appendDiagLine === 'function') {
+						appendDiagLine(diagTerminal, Date.now(), line, 'ok');
+						appendDiagLine(activityLogNode, Date.now(), line, 'ok');
+					}
+				}
+			} catch { /* diagnostics terminal not mounted yet */ }
+		});
 		voiceGateway?.on('route', ({ mode }) => {
 			if (mode) appendMessage(log, 'Voice route', `Routing via ${mode}`, 'system');
 		});
@@ -3160,6 +3496,128 @@ window.addEventListener('DOMContentLoaded', () => {
 				? `Auto-heal: ${payload.subsystem} recovered`
 				: `Auto-heal: ${payload.subsystem} failed — ${payload.error || 'unknown'}`;
 			pushTaskStep('HEAL', msg, status);
+		});
+
+		// M6 — Diagnostics terminal stream. Subscribers below fan health
+		// events into (a) the Settings → Zaawansowane terminal panel and
+		// (b) the Activity Panel's "Log wykonania" segment. The status
+		// cards in Diagnostyka track each subsystem's most recent state.
+		const diagTerminal = document.getElementById('ox-diag-terminal');
+		const activityLogNode = document.getElementById('ox-activity-log');
+		const DIAG_LINE_CAP = 300;
+		function fmtTime(ts) {
+			const d = ts ? new Date(ts) : new Date();
+			const pad = (n) => String(n).padStart(2, '0');
+			return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+		}
+		function appendDiagLine(target, ts, message, level) {
+			if (!target) return;
+			// Drop the "brak wpisów" empty state on first real entry.
+			target.querySelectorAll('.ox-activity-empty').forEach((node) => node.remove());
+			const row = document.createElement('div');
+			row.className = `ox-log-line${level ? ` ${level}` : ''}`;
+			const time = document.createElement('span');
+			time.className = 'ox-log-time';
+			time.textContent = fmtTime(ts);
+			const text = document.createElement('span');
+			text.textContent = message;
+			row.appendChild(time);
+			row.appendChild(text);
+			target.appendChild(row);
+			while (target.children.length > DIAG_LINE_CAP) target.removeChild(target.firstChild);
+			target.scrollTop = target.scrollHeight;
+		}
+		function paintDiagCard(subsystem, status, detail) {
+			const card = document.querySelector(`.ox-diag-card[data-ox-subsystem="${subsystem}"]`);
+			if (!card) return;
+			const dot = card.querySelector('[data-ox-status-dot]');
+			const detailNode = card.querySelector('[data-ox-status-detail]');
+			if (dot) {
+				dot.classList.remove('ok', 'warn', 'bad', 'pulse');
+				if (status === 'healthy') dot.classList.add('ok');
+				else if (status === 'degraded') dot.classList.add('warn');
+				else if (status === 'unavailable') dot.classList.add('bad', 'pulse');
+			}
+			if (detailNode) detailNode.textContent = detail || status || 'unknown';
+		}
+		function diagEmit(payload, level) {
+			const sub = payload?.subsystem || '?';
+			const status = payload?.status || '?';
+			const detail = payload?.detail ? ` — ${payload.detail}` : '';
+			const line = `[${sub.padEnd(7)}] ${status}${detail}`;
+			appendDiagLine(diagTerminal, payload?.timestamp, line, level);
+			appendDiagLine(activityLogNode, payload?.timestamp, line, level);
+			if (payload?.subsystem) paintDiagCard(payload.subsystem, status, payload?.detail);
+		}
+		ipcRenderer.on('health:pulse', (payload) => {
+			const level = payload?.status === 'unavailable' ? 'bad'
+				: payload?.status === 'degraded' ? 'warn'
+				: payload?.status === 'healthy' ? 'ok'
+				: null;
+			diagEmit(payload, level);
+		});
+		ipcRenderer.on('health:heal-attempted', (payload) => {
+			const line = `[heal   ] start ${payload?.subsystem} (was ${payload?.status})`;
+			appendDiagLine(diagTerminal, payload?.timestamp, line, 'warn');
+			appendDiagLine(activityLogNode, payload?.timestamp, line, 'warn');
+		});
+		ipcRenderer.on('health:heal-outcome', (payload) => {
+			const ok = Boolean(payload?.ok);
+			const line = ok
+				? `[heal   ] ok    ${payload?.subsystem}`
+				: `[heal   ] fail  ${payload?.subsystem} — ${payload?.error || 'unknown'}`;
+			appendDiagLine(diagTerminal, payload?.timestamp, line, ok ? 'ok' : 'bad');
+			appendDiagLine(activityLogNode, payload?.timestamp, line, ok ? 'ok' : 'bad');
+		});
+		// Round-2: route decisions + context compression events. Every router
+		// dispatch + every context-compression run prints one line here so the
+		// user can see "what model handled this" and "how much we compressed."
+		ipcRenderer.on('router:decision', (payload) => {
+			const intent = String(payload?.intent || '?');
+			const lane = String(payload?.lane || '?');
+			const model = String(payload?.model || '?');
+			const via = String(payload?.via || '?');
+			const confidence = payload?.confidence != null ? ` conf=${Number(payload.confidence).toFixed(2)}` : '';
+			const line = `[route  ] intent=${intent} lane=${lane} model=${model} via=${via}${confidence}`;
+			appendDiagLine(diagTerminal, payload?.ts || Date.now(), line, 'ok');
+			appendDiagLine(activityLogNode, payload?.ts || Date.now(), line);
+		});
+		ipcRenderer.on('context:compressed', (payload) => {
+			const tin = Number(payload?.tokensIn || 0);
+			const tout = Number(payload?.tokensOut || 0);
+			const dropped = Number(payload?.droppedMessages || 0);
+			const line = `[compress] ${tin} → ${tout} tokens (dropped ${dropped} msgs in ${payload?.runtimeMs || 0}ms)`;
+			appendDiagLine(diagTerminal, Date.now(), line, 'warn');
+			appendDiagLine(activityLogNode, Date.now(), line, 'warn');
+		});
+
+		// Hydrate the diagnostics cards on first paint with whatever the
+		// observer already has (in case the user lands on the panel after
+		// pulses have already fired).
+		ipcRenderer.invoke('health:snapshot').then((snap) => {
+			Object.entries(snap?.subsystems || {}).forEach(([sub, state]) => paintDiagCard(sub, state.status));
+		}).catch(() => null);
+
+		document.getElementById('ox-diag-restart-sidecar')?.addEventListener('click', async () => {
+			appendDiagLine(diagTerminal, Date.now(), '[user   ] restart-sidecar requested', 'warn');
+			try {
+				const r = await ipcRenderer.invoke('restart-sidecar');
+				appendDiagLine(diagTerminal, Date.now(), `[user   ] restart-sidecar → ${JSON.stringify(r || { ok: true })}`, 'ok');
+			} catch (err) {
+				appendDiagLine(diagTerminal, Date.now(), `[user   ] restart-sidecar failed: ${err?.message || err}`, 'bad');
+			}
+		});
+		document.getElementById('ox-diag-snapshot')?.addEventListener('click', async () => {
+			try {
+				const snap = await ipcRenderer.invoke('health:snapshot');
+				appendDiagLine(diagTerminal, Date.now(), `[snap   ] ${JSON.stringify(snap?.subsystems || {})}`, 'ok');
+			} catch (err) {
+				appendDiagLine(diagTerminal, Date.now(), `[snap   ] failed: ${err?.message || err}`, 'bad');
+			}
+		});
+		document.getElementById('ox-diag-clear')?.addEventListener('click', () => {
+			if (diagTerminal) diagTerminal.innerHTML = '';
+			appendDiagLine(diagTerminal, Date.now(), '[user   ] terminal cleared');
 		});
 	}
 

@@ -22,6 +22,11 @@ function createLocalServerStore() {
       localModelAssignment: {
         chatModelId: null,
         codeModelId: null,
+        // M5 — full 6-lane router schema. externalApiModelId is kept as a
+        // legacy alias for the "tool" profile so older settings still work.
+        codeHeavyModelId: null,
+        reasoningModelId: null,
+        routerModelId: null,
         externalApiModelId: null,
         visionModelId: null,
         serverId: null,
@@ -60,6 +65,9 @@ function createLocalServerStore() {
       localModelAssignment: {
         chatModelId: assignment.chatModelId ? String(assignment.chatModelId) : null,
         codeModelId: assignment.codeModelId ? String(assignment.codeModelId) : null,
+        codeHeavyModelId: assignment.codeHeavyModelId ? String(assignment.codeHeavyModelId) : null,
+        reasoningModelId: assignment.reasoningModelId ? String(assignment.reasoningModelId) : null,
+        routerModelId: assignment.routerModelId ? String(assignment.routerModelId) : null,
         externalApiModelId: assignment.externalApiModelId ? String(assignment.externalApiModelId) : null,
         visionModelId: assignment.visionModelId ? String(assignment.visionModelId) : null,
         serverId: assignment.serverId ? String(assignment.serverId) : null,
@@ -159,6 +167,9 @@ function createLocalServerStore() {
         ? {
           chatModelId: null,
           codeModelId: null,
+          codeHeavyModelId: null,
+          reasoningModelId: null,
+          routerModelId: null,
           externalApiModelId: null,
           visionModelId: null,
           serverId: null,
