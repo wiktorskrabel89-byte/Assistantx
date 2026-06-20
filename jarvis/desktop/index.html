@@ -2870,58 +2870,116 @@
       pointer-events: none;
     }
 
-    /* Round-2: large prominent orb composition for the chat composer.
-       Matches the reference design — big orb + expanding rings + FFT bars. */
+    /* Round-2-fix3: VEGA orb composition — 1:1 with the reference state cards.
+       Animations are STATE-GATED via data-vega-state. In idle, rings + bars
+       sit quiet (no animation, dim opacity) — matches the reference's IDLE
+       card: "rings: none · orb: subtle pulse (3s ease)". Active states light
+       up rings + bars per their reference behaviour. */
     .vega-orb-wrap {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       margin: 14px auto 4px;
     }
     #voice-visualizer.vega-orb {
       width: 184px;
       height: 184px;
-      background: radial-gradient(circle, rgba(0, 240, 255, 0.10) 0%, transparent 65%);
     }
     #voice-visualizer.vega-orb .vega-orb-star {
       color: var(--ox-cyan, var(--accent, #00f0ff));
-      filter: drop-shadow(0 0 14px rgba(0, 240, 255, 0.55));
-      animation: vega-idle-pulse 2.6s var(--ox-ease, ease) infinite;
-    }
-    #voice-visualizer.vega-orb .vega-orb-ring-1 {
-      inset: 14%;
-      border-color: var(--ox-cyan-dim, #008c9e);
-      opacity: 0.45;
-      animation: vega-ring-expand 3.2s var(--ox-ease, ease) infinite;
-    }
-    #voice-visualizer.vega-orb .vega-orb-ring-2 {
-      inset: 4%;
-      border-color: var(--ox-cyan, var(--accent, #00f0ff));
-      opacity: 0.25;
-      animation: vega-ring-expand 3.2s var(--ox-ease, ease) 1.6s infinite;
-    }
-    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-star,
-    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-1,
-    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
-      color: var(--ox-purple, #7850dc);
-      border-color: var(--ox-purple, #7850dc);
-      filter: drop-shadow(0 0 14px rgba(120, 80, 220, 0.55));
-    }
-    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-1,
-    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
-      animation: vega-spin 2s linear infinite;
-    }
-    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-star,
-    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-1,
-    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-2 {
-      color: var(--ox-green, #50dc78);
-      border-color: var(--ox-green, #50dc78);
-      filter: drop-shadow(0 0 14px rgba(80, 220, 120, 0.55));
+      filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.4));
     }
 
-    /* FFT bars under the orb. 24 bars; each gets a staggered animation-delay
-       inline via :nth-child so they dance rather than move in unison. */
+    /* ── idle ── subtle pulse on the star, NO rings, dim DOTS instead of bars */
+    #voice-visualizer.vega-orb[data-vega-state="idle"] {
+      background: transparent;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-star {
+      color: var(--ox-cyan-dim, #008c9e);
+      filter: drop-shadow(0 0 6px rgba(0, 140, 158, 0.35));
+      animation: vega-idle-pulse 3s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-2 {
+      opacity: 0;
+    }
+
+    /* ── wake ── bright cyan star + 2 EXPANDING cyan rings + cyan bars */
+    #voice-visualizer.vega-orb[data-vega-state="wake"],
+    #voice-visualizer.vega-orb[data-vega-state="listening"] {
+      background: radial-gradient(circle, rgba(0, 240, 255, 0.12) 0%, transparent 65%);
+    }
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-star,
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-star {
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      filter: drop-shadow(0 0 16px rgba(0, 240, 255, 0.6));
+      animation: vega-idle-pulse 1.6s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-2,
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-2 {
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-1 {
+      inset: 14%;
+      animation: vega-ring-expand 2.4s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-2,
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-2 {
+      inset: 4%;
+      animation: vega-ring-expand 2.4s var(--ox-ease, ease) 1.2s infinite;
+    }
+
+    /* ── processing ── purple star + 3 SPINNING purple rings + dim purple dots */
+    #voice-visualizer.vega-orb[data-vega-state="processing"] {
+      background: radial-gradient(circle, rgba(120, 80, 220, 0.16) 0%, transparent 65%);
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-star {
+      color: var(--ox-purple, #7850dc);
+      filter: drop-shadow(0 0 14px rgba(120, 80, 220, 0.55));
+      animation: vega-idle-pulse 2s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
+      border-color: var(--ox-purple, #7850dc);
+      opacity: 0.55;
+      inset: 10%;
+      animation: vega-spin 2.4s linear infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
+      inset: 22%;
+      animation: vega-spin 3.6s linear reverse infinite;
+      opacity: 0.35;
+    }
+
+    /* ── speaking ── green star + green expanding rings + green TTS wave bars */
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] {
+      background: radial-gradient(circle, rgba(80, 220, 120, 0.16) 0%, transparent 65%);
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-star {
+      color: var(--ox-green, #50dc78);
+      filter: drop-shadow(0 0 16px rgba(80, 220, 120, 0.55));
+      animation: vega-idle-pulse 1.4s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-2 {
+      border-color: var(--ox-green, #50dc78);
+      opacity: 0;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-1 {
+      inset: 14%;
+      animation: vega-ring-expand 1.6s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-2 {
+      inset: 4%;
+      animation: vega-ring-expand 1.6s var(--ox-ease, ease) 0.8s infinite;
+    }
+
+    /* ── FFT bars under the orb (24 thin bars) ── */
     .vega-bars {
       display: flex;
       align-items: flex-end;
@@ -2935,10 +2993,11 @@
       width: 3px;
       height: 20%;
       border-radius: 1.5px;
-      background: var(--ox-cyan, var(--accent, #00f0ff));
-      box-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
+      background: var(--ox-cyan-dim, #008c9e);
       transform-origin: bottom center;
-      animation: vega-bar-dance 0.9s var(--ox-ease, ease) infinite;
+      opacity: 0.35;
+      transition: background var(--ox-duration-base, 200ms) var(--ox-ease, ease),
+                  opacity var(--ox-duration-base, 200ms) var(--ox-ease, ease);
     }
     .vega-bars span:nth-child(1)  { animation-delay: 0.00s; }
     .vega-bars span:nth-child(2)  { animation-delay: 0.07s; }
@@ -2964,27 +3023,93 @@
     .vega-bars span:nth-child(22) { animation-delay: 0.22s; }
     .vega-bars span:nth-child(23) { animation-delay: 0.36s; }
     .vega-bars span:nth-child(24) { animation-delay: 0.50s; }
-
-    /* Idle = bars dim + shorter. Processing = purple bars. Speaking = green TTS wave. */
-    #voice-visualizer.vega-orb[data-vega-state="idle"] ~ .vega-bars span {
-      background: var(--ox-cyan-dim, #008c9e);
-      box-shadow: none;
-      opacity: 0.45;
-      animation-duration: 1.8s;
+    /* Bars ONLY animate during wake/listening/speaking. Idle + processing
+       leave them as dim, static dots (matches reference IDLE behaviour). */
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="wake"]) .vega-bars span,
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="listening"]) .vega-bars span {
+      background: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 1;
+      box-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
+      animation: vega-bar-dance 0.9s var(--ox-ease, ease) infinite;
     }
-    #voice-visualizer.vega-orb[data-vega-state="processing"] ~ .vega-bars span {
-      background: var(--ox-purple, #7850dc);
-      box-shadow: 0 0 6px rgba(120, 80, 220, 0.5);
-    }
-    #voice-visualizer.vega-orb[data-vega-state="speaking"] ~ .vega-bars span {
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="speaking"]) .vega-bars span {
       background: var(--ox-green, #50dc78);
+      opacity: 1;
       box-shadow: 0 0 6px rgba(80, 220, 120, 0.5);
-      animation-name: vega-bar-wave;
+      animation: vega-bar-wave 0.9s var(--ox-ease, ease) infinite;
     }
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="processing"]) .vega-bars span {
+      background: var(--ox-purple-dim, #4a3290);
+      opacity: 0.55;
+    }
+
+    /* State label next to / under the orb. KEEP (user explicitly asked to
+       leave the napis), styled to match the reference's "LISTENING /
+       Hey AssistantX…" treatment. */
+    #voice-orb-status {
+      min-height: 14px;
+      margin-top: 4px;
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      font-family: var(--ox-font-mono, monospace);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .vega-bars span,
       #voice-visualizer.vega-orb .vega-orb-star,
       #voice-visualizer.vega-orb .vega-orb-ring { animation: none !important; }
+    }
+
+    /* ── Round-2-fix3: Activity Panel toggle (collapsible right column) ── */
+    body.ox-activity-collapsed .ox-activity {
+      display: none !important;
+    }
+    body.ox-activity-collapsed .command-workspace {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+    /* Edge re-open button — sticks to the right side of the viewport when
+       the activity panel is collapsed. Cyan chevron, glassy bg. */
+    .ox-activity-edge-toggle {
+      position: fixed;
+      right: 8px;
+      top: 72px;
+      z-index: 40;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 56px;
+      border-radius: 8px 0 0 8px;
+      border: 1px solid var(--ox-cyan-dim, #008c9e);
+      background: var(--ox-bg2, var(--panel));
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      cursor: pointer;
+      box-shadow: 0 0 18px rgba(0, 240, 255, 0.15);
+      transition: background var(--ox-duration-fast, 120ms) var(--ox-ease, ease);
+    }
+    .ox-activity-edge-toggle:hover { background: var(--ox-bg3, var(--panel-soft)); }
+    /* Internal toggle — small chevron inside the Activity Panel header. */
+    .ox-activity-collapse-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      margin-left: auto;
+      border-radius: 4px;
+      border: 1px solid var(--ox-border, var(--panel-border));
+      background: transparent;
+      color: var(--ox-text-mid, var(--muted));
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .ox-activity-collapse-btn:hover {
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      border-color: var(--ox-cyan-dim, #008c9e);
     }
     .vega-orb[data-vega-state="idle"] .vega-orb-star {
       animation: vega-idle-pulse 3s var(--ox-ease, ease) infinite;
@@ -3455,7 +3580,11 @@
                    now open inside the Pliki segment of this panel instead of
                    taking over the entire workspace. ────────────────────── -->
               <aside class="ox-activity" id="ox-activity" aria-label="Panel aktywności">
-                <div class="ox-activity-tabs" role="tablist" aria-label="Segmenty panelu aktywności">
+                <div class="ox-activity-tabs" role="tablist" aria-label="Segmenty panelu aktywności"
+                     style="display:flex;align-items:center;">
+                  <button type="button" class="ox-activity-collapse-btn"
+                          id="ox-activity-collapse" title="Ukryj panel" aria-label="Ukryj panel aktywności"
+                          style="margin-left:auto;order:99;">›</button>
                   <button class="ox-activity-tab active" type="button" role="tab" data-ox-segment="activity" aria-selected="true">
                     <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-list-todo"/></svg>
                     <span>Aktywność</span>
@@ -4507,6 +4636,12 @@
       </footer>
     </div>
   </div>
+
+  <!-- Round-2-fix3: edge re-open button — only visible when the Activity Panel
+       is collapsed (gated via body.ox-activity-collapsed in renderer.js). -->
+  <button type="button" id="ox-activity-edge-toggle" class="ox-activity-edge-toggle"
+          title="Pokaż panel aktywności" aria-label="Pokaż panel aktywności"
+          style="display:none;">‹</button>
 
   <script src="map-widget.js"></script>
   <script src="electron/ai/task-classifier.js"></script>

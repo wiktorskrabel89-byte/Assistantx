@@ -541,6 +541,30 @@ window.addEventListener('DOMContentLoaded', () => {
 	document.body.classList.add('ox-shell-on');
 	setMainPanelTab('chat');
 
+	// Round-2-fix3: collapsible Activity Panel — toggle + persist + restore.
+	(function initActivityToggle() {
+		const STORAGE_KEY = 'jarvis.activity.collapsed';
+		const collapseBtn = document.getElementById('ox-activity-collapse');
+		const edgeBtn = document.getElementById('ox-activity-edge-toggle');
+		if (!collapseBtn && !edgeBtn) return;
+
+		function applyState(collapsed) {
+			document.body.classList.toggle('ox-activity-collapsed', collapsed);
+			if (edgeBtn) edgeBtn.style.display = collapsed ? 'inline-flex' : 'none';
+			try { window.localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); }
+			catch { /* storage blocked */ }
+		}
+
+		// Restore prior state on launch — default expanded.
+		let initial = false;
+		try { initial = window.localStorage.getItem(STORAGE_KEY) === '1'; }
+		catch { /* ignore */ }
+		applyState(initial);
+
+		collapseBtn?.addEventListener('click', () => applyState(true));
+		edgeBtn?.addEventListener('click', () => applyState(false));
+	})();
+
 	// Round-2 — VEGA orb state setter. Drives the data-vega-state attribute
 	// on the orb in the Activity Panel (and any other vega-orb in the DOM).
 	// Defined at module scope so the wake_word / route / health subscribers
@@ -1932,7 +1956,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (state === 'listening') {
 			voiceVisualizer.classList.add('listening');
 			setAgentState(AGENT_STATE.LISTENING);
-			setStatus('Listening…');
+			setStatus('LISTENING · Słucham…');
 			setWakeChipState('listening', 'Listening — speak now');
 			pushTaskStep('VOICE', 'Listening to microphone…', 'active');
 			touchAgentActivity();
@@ -1941,7 +1965,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (state === 'speaking') {
 			voiceVisualizer.classList.add('speaking');
 			setAgentState(AGENT_STATE.SPEAKING);
-			setStatus('Speaking…');
+			setStatus('SPEAKING · Odpowiadam…');
 			pushTaskStep('TTS', 'Synthesizing audio…', 'active');
 			touchAgentActivity();
 			return;
@@ -1949,13 +1973,13 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (state === 'thinking') {
 			voiceVisualizer.classList.add('thinking');
 			setAgentState(AGENT_STATE.THINKING);
-			setStatus('Thinking…');
+			setStatus('PROCESSING · Myślę…');
 			pushTaskStep('REASON', 'Reasoning over context…', 'active');
 			touchAgentActivity();
 			return;
 		}
 		setAgentState(AGENT_STATE.IDLE);
-		setStatus('');
+		setStatus('IDLE · Wake word');
 		// Restore wake-listening label when the orb returns to idle.
 		if (voiceSettings?.sttEnabled && voiceSettings?.wakeWordEnabled) {
 			setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
