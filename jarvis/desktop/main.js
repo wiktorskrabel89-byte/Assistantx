@@ -267,9 +267,27 @@ function resolvePythonExecutable() {
     'python3',
   ];
   const candidates = app.isPackaged ? packagedCandidates : devCandidates;
+  // Root-cause fix (2026-06): bare commands like 'python3'/'python' used to
+  // get exists=null and were accepted unconditionally — so 'python3' always
+  // "won" by array order even on machines (e.g. this Windows box) that only
+  // have 'python' on PATH, producing a silent `spawn python3 ENOENT` and the
+  // sidecar staying "offline" with no diagnostic. We now actually resolve
+  // bare commands via `where`/`which` (sync, short timeout, no shell) so the
+  // first REAL match wins regardless of array position — correct on every
+  // platform instead of just the one we happened to test on.
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+  function resolveBareCommand(name) {
+    try {
+      const { execFileSync } = require('child_process');
+      const out = execFileSync(whichCmd, [name], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 });
+      return out.toString('utf8').trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
   const candidateDetails = candidates.map((candidate) => {
     const isPath = candidate.includes(path.sep);
-    const exists = isPath ? fs.existsSync(candidate) : null;
+    const exists = isPath ? fs.existsSync(candidate) : resolveBareCommand(candidate);
     return { candidate, exists };
   });
   for (const entry of candidateDetails) {
