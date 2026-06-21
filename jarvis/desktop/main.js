@@ -28,6 +28,7 @@ const { buildSecureWebPreferences } = require('./electron/main/window-security')
 const { createMainIpcHandlers } = require('./electron/ipc/register-main-handlers');
 const { createUpdateCoordinator } = require('./electron/updater/coordinator');
 const { createPermissionPolicy } = require('./electron/permissions/policy');
+const { ensurePythonDependencies } = require('./electron/sidecar/ensure-python-deps');
 const { assertNoDynamicCodeExecution, sanitizeAuditValue } = require('./electron/security/guardrails');
 const { emitSessionChanged } = require('./electron/auth/events');
 const { redactUrl } = require('./electron/auth/redaction');
@@ -476,7 +477,7 @@ function sendSidecarMessage(payload) {
   }
 }
 
-function startSidecar() {
+async function startSidecar() {
   const mainPy = getSidecarMainPath();
   setLauncherPhase('validating-runtime', 'Validating AI runtime paths.');
   if (!fs.existsSync(mainPy)) {
@@ -526,6 +527,29 @@ function startSidecar() {
   }
 
   setLauncherPhase('creating-venv', 'Detecting Python runtime environment.', { python });
+
+  // Auto-heal a missing/incomplete sidecar Python environment instead of
+  // crash-looping forever (the embeddable Python bundled with packaged
+  // builds ships with no dependencies pre-installed — see ai-agent's
+  // requirements.txt). Installs into a per-user, no-admin-required
+  // directory via `pip install --target` rather than the interpreter's own
+  // (possibly admin-only, e.g. Program Files) site-packages.
+  const pythonDepsDir = path.join(app.getPath('userData'), 'python-deps');
+  const requirementsPath = path.join(path.dirname(mainPy), 'requirements.txt');
+  setLauncherPhase('loading-models', 'Checking AI runtime Python dependencies.');
+  const depsResult = await ensurePythonDependencies({
+    pythonPath: python,
+    requirementsPath,
+    targetDir: pythonDepsDir,
+    onProgress: ({ status }) => setLauncherPhase('loading-models', status),
+  });
+  if (!depsResult.skipped) {
+    log('[sidecar] Python dependency install:', depsResult.ok ? 'ok' : 'incomplete', depsResult);
+    startupDiagnostics.pushEvent('sidecar', depsResult.ok ? 'info' : 'warn',
+      depsResult.ok ? 'Installed missing Python dependencies.' : 'Python dependency install incomplete.',
+      depsResult);
+  }
+
   setLauncherPhase('loading-models', 'Loading AI runtime models.');
   telemetryBus.publish('sidecar.started');
   startupDiagnostics.setComponent('sidecar', 'starting', {
@@ -549,6 +573,7 @@ function startSidecar() {
     cwd: path.dirname(mainPy),
     env: {
       ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH ? `${pythonDepsDir}${path.delimiter}${process.env.PYTHONPATH}` : pythonDepsDir,
       JARVIS_ENGINE_MODE: normalizeSidecarEngineMode(modelConfig.engine_mode),
       JARVIS_STT_MODEL: normalizeSidecarSttModel(modelConfig.stt_model),
       JARVIS_WHISPER_MODEL: normalizeSidecarSttModel(modelConfig.stt_model),
