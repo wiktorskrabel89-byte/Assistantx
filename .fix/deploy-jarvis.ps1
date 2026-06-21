@@ -61,6 +61,7 @@ $DesktopFiles = @(
     'main.js',
     'preload.js',
     'renderer.js',
+    'backend.js',
     'sidecar-bridge.js',
     'voice-gateway.js',
     'runtime-config.js',
