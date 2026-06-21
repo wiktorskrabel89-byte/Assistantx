@@ -13,7 +13,26 @@ const { spawn, spawnSync } = require('child_process');
 // main.py will too; if pip partially fails on an optional/lazy-imported
 // package (e.g. a native build with no wheel for this Python), the probe
 // still passes and the sidecar starts in its existing degraded mode.
-const PROBE_MODULES = ['websockets', 'numpy', 'sounddevice', 'onnxruntime', 'openai'];
+//
+// `kokoro` and `silero_vad` are included even though main.py only imports
+// them lazily inside _get_tts_engine()/_get_vad_engine() — verified live
+// that `kokoro` (and its `torch` dependency) can be entirely missing from
+// THIS interpreter's own site-packages while still importing successfully
+// during the probe, because pip silently treats an unrelated system
+// Python install's per-version user-site packages (`%APPDATA%\Python\
+// PythonXY\site-packages`) as "already satisfied" and skips installing a
+// real copy. Probing them here is what actually catches that gap.
+const PROBE_MODULES = ['websockets', 'numpy', 'sounddevice', 'onnxruntime', 'openai', 'kokoro', 'silero_vad'];
+
+// `kokoro` pulls in `torch`, which alone takes ~45s to import cold on a
+// CPU-only Windows box (verified live: 46.6s real time) — a 10s timeout
+// tuned for the original lightweight-only probe set would kill the probe
+// mid-import and misreport a successfully-importable-but-slow package as
+// "missing", triggering a full reinstall of every requirement on every
+// single launch. 90s gives torch's import room to finish even on a slow
+// machine, while still being a one-time-per-launch cost paid only once
+// before the sidecar's own (also multi-second) model loading begins.
+const PROBE_TIMEOUT_MS = 90_000;
 
 function probeImports(pythonPath, modules = PROBE_MODULES) {
   const code = [
@@ -29,7 +48,7 @@ function probeImports(pythonPath, modules = PROBE_MODULES) {
     'sys.exit(1 if missing else 0)',
   ].join('\n');
   try {
-    const result = spawnSync(pythonPath, ['-c', code], { timeout: 10_000 });
+    const result = spawnSync(pythonPath, ['-c', code], { timeout: PROBE_TIMEOUT_MS });
     return {
       ok: result.status === 0,
       missing: (result.stdout || '').toString('utf8').trim(),
@@ -69,9 +88,22 @@ function parseRequirements(requirementsPath) {
     .filter((line) => line && !line.startsWith('#'));
 }
 
+// --ignore-installed forces pip to install a real copy into THIS
+// interpreter's own site-packages even when the package already appears
+// "satisfied" via some other location on sys.path (most commonly an
+// unrelated system Python install's version-matched per-user site-packages
+// at `%APPDATA%\Python\PythonXY\site-packages` — Windows pip user-site
+// resolution is keyed only by Python version, not by which interpreter is
+// running). Without this flag, a transitive dependency like `torch` (pulled
+// in by `kokoro`) can silently end up missing from the embeddable Python's
+// own site-packages forever, working only by coincidence on whichever
+// machine happens to have a matching-version Python with that package
+// already pip-installed for the current user.
+const PIP_INSTALL_FLAGS = ['--disable-pip-version-check', '--no-warn-script-location', '--ignore-installed'];
+
 function runPipInstallOne(pythonPath, requirement, onProgress, progressBase) {
   return new Promise((resolve) => {
-    const args = ['-m', 'pip', 'install', requirement, '--disable-pip-version-check', '--no-warn-script-location'];
+    const args = ['-m', 'pip', 'install', requirement, ...PIP_INSTALL_FLAGS];
     let child;
     try {
       child = spawn(pythonPath, args, { windowsHide: true });
@@ -124,7 +156,7 @@ function runPipInstallElevated(pythonPath, requirements, onProgress) {
       `$reqs = @(${requirements.map((r) => JSON.stringify(r)).join(', ')})`,
       'foreach ($req in $reqs) {',
       '  "=== $req ===" | Out-File -FilePath $log -Append -Encoding utf8',
-      '  & $python -m pip install $req --disable-pip-version-check --no-warn-script-location *>> $log',
+      `  & $python -m pip install $req ${PIP_INSTALL_FLAGS.join(' ')} *>> $log`,
       '}',
       'exit 0',
     ];
