@@ -33,6 +33,19 @@ test('knowledge-store: rejects unknown entity types', () => {
   assert.throws(() => store.upsertEntity({ type: 'galaxy', label: 'Andromeda' }));
 });
 
+test('knowledge-store: accepts blueprint entities (Intelligent Requirements output)', () => {
+  const dir = mkTempDir('jarvis-know');
+  const store = createKnowledgeStore({ baseDir: dir });
+  store.upsertEntity({
+    type: 'blueprint',
+    label: 'Build a SaaS',
+    payload: { requirements: ['Auth'], timeline: '6 weeks' },
+  });
+  const blueprints = store.listEntities({ type: 'blueprint' });
+  assert.equal(blueprints.length, 1);
+  assert.equal(blueprints[0].payload.timeline, '6 weeks');
+});
+
 test('knowledge-store: link + neighbors traversal', () => {
   const dir = mkTempDir('jarvis-know');
   const store = createKnowledgeStore({ baseDir: dir });

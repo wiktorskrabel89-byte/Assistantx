@@ -113,9 +113,12 @@ const ALLOWED_INVOKE = new Set([
   'memory:save',
   'workspace:memory-snapshot',
   'workspace:knowledge-snapshot',
+  'workspace:skills-snapshot',
   'workspace:search',
   'workspace:memory-remember',
   'workspace:knowledge-upsert',
+  'workspace:knowledge-remove',
+  'workspace:blueprint-generate',
 ]);
 
 const ALLOWED_RECEIVE = new Set([

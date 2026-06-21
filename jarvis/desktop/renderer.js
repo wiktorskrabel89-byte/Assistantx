@@ -1041,10 +1041,92 @@ window.addEventListener('DOMContentLoaded', () => {
 			).join('') + `<div class="ox-workspace-card"><h4>Relacje</h4><p>${rels.length} krawędzi</p></div>`;
 		} catch { /* keep empty state */ }
 	}
+	async function refreshWorkspaceProjects() {
+		const node = document.getElementById('ox-projects-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:knowledge-snapshot');
+			const projects = (r?.snapshot?.entities || []).filter((e) => e.type === 'project');
+			if (projects.length === 0) return;
+			node.innerHTML = projects.map((p) => {
+				const progress = Number.isFinite(p.payload?.progress) ? p.payload.progress : 0;
+				const fileCount = Array.isArray(p.payload?.files) ? p.payload.files.length : 0;
+				return `<div class="ox-workspace-card" data-project-id="${escapeHtml(p.id)}"><h4>${escapeHtml(p.label)}</h4><p>Postęp ${progress}% · ${fileCount} plik(ów)</p><button type="button" class="secondary sm" data-remove-project="${escapeHtml(p.id)}">Usuń</button></div>`;
+			}).join('');
+			node.querySelectorAll('[data-remove-project]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					await ipcRenderer.invoke('workspace:knowledge-remove', { id: btn.getAttribute('data-remove-project') });
+					refreshWorkspaceProjects();
+				});
+			});
+		} catch { /* keep empty state */ }
+	}
+	document.getElementById('ox-workspace-add-project')?.addEventListener('click', async () => {
+		const name = window.prompt('Nazwa projektu:');
+		if (!name || !name.trim() || !ipcRenderer) return;
+		await ipcRenderer.invoke('workspace:knowledge-upsert', {
+			type: 'project',
+			label: name.trim(),
+			payload: { files: [], progress: 0, dependencies: [] },
+		});
+		refreshWorkspaceProjects();
+	});
+
+	async function refreshWorkspaceBlueprints() {
+		const node = document.getElementById('ox-blueprints-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:knowledge-snapshot');
+			const blueprints = (r?.snapshot?.entities || []).filter((e) => e.type === 'blueprint');
+			if (blueprints.length === 0) return;
+			node.innerHTML = blueprints.map((b) => {
+				const p = b.payload || {};
+				const reqCount = Array.isArray(p.requirements) ? p.requirements.length : 0;
+				const featCount = Array.isArray(p.features) ? p.features.length : 0;
+				return `<div class="ox-workspace-card" data-blueprint-id="${escapeHtml(b.id)}"><h4>${escapeHtml(b.label)}</h4><p>${reqCount} wymagań · ${featCount} funkcji · ${escapeHtml(p.timeline || '—')}</p><button type="button" class="secondary sm" data-remove-blueprint="${escapeHtml(b.id)}">Usuń</button></div>`;
+			}).join('');
+			node.querySelectorAll('[data-remove-blueprint]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					await ipcRenderer.invoke('workspace:knowledge-remove', { id: btn.getAttribute('data-remove-blueprint') });
+					refreshWorkspaceBlueprints();
+				});
+			});
+		} catch { /* keep empty state */ }
+	}
+	document.getElementById('ox-workspace-add-blueprint')?.addEventListener('click', async () => {
+		const goal = window.prompt('Cel projektu (Intelligent Requirements wygeneruje blueprint):');
+		if (!goal || !goal.trim() || !ipcRenderer) return;
+		const node = document.getElementById('ox-blueprints-list');
+		if (node) node.innerHTML = '<div class="ox-activity-empty"><svg class="ox-icon" aria-hidden="true"><use href="#ox-i-file-text"/></svg><div>Generowanie blueprintu…</div></div>';
+		const r = await ipcRenderer.invoke('workspace:blueprint-generate', { goal: goal.trim() });
+		if (!r?.ok && node) {
+			node.innerHTML = `<div class="ox-activity-empty ox-status-dot bad" style="border-color: var(--ox-danger);"><div>Błąd: ${escapeHtml(String(r?.error || 'nieznany'))}</div></div>`;
+			return;
+		}
+		refreshWorkspaceBlueprints();
+	});
+
+	async function refreshWorkspaceSkills() {
+		const node = document.getElementById('ox-skills-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:skills-snapshot');
+			const skills = Array.isArray(r?.skills) ? r.skills : [];
+			if (skills.length === 0) return;
+			node.innerHTML = skills.map(({ id, stats, confidence }) => {
+				const total = (stats.successCount || 0) + (stats.failureCount || 0);
+				const successRate = total > 0 ? Math.round((stats.successCount / total) * 100) : 0;
+				return `<div class="ox-workspace-card"><h4>${id}</h4><p>Sukces ${successRate}% · Pewność ${Math.round(confidence * 100)}% · Użycia ${stats.usageCount}</p></div>`;
+			}).join('');
+		} catch { /* keep empty state */ }
+	}
 	document.getElementById('ox-workspace-memory-refresh')?.addEventListener('click', refreshWorkspaceMemory);
 	document.getElementById('ox-workspace-knowledge-refresh')?.addEventListener('click', refreshWorkspaceKnowledge);
 	refreshWorkspaceMemory();
 	refreshWorkspaceKnowledge();
+	refreshWorkspaceSkills();
+	refreshWorkspaceProjects();
+	refreshWorkspaceBlueprints();
 
 	async function ensureMapWidget() {
 		if (!viewportMapCanvas) return null;

@@ -12,7 +12,9 @@
  *   entities  : [ { id, type, label, payload, createdAt, updatedAt } ]
  *   relations : [ { id, type, from, to, weight, createdAt } ]
  *
- * Entity types: project | skill | lesson | user | integration | agent.
+ * Entity types: project | skill | lesson | user | integration | agent | blueprint.
+ * `blueprint` payloads carry the Intelligent Requirements System's output:
+ * { goal, requirements[], features[], techStack[], risks[], timeline, costEstimate, projectId }.
  * Relations are directed edges; type is open string (e.g. "uses",
  * "depends_on", "learned_from", "owns").
  *
@@ -25,7 +27,7 @@ const path = require('path');
 
 const DEFAULT_BASE_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'JarvisDesktop');
 const DEFAULT_FILE = 'knowledge-store.json';
-const VALID_ENTITY_TYPES = new Set(['project', 'skill', 'lesson', 'user', 'integration', 'agent']);
+const VALID_ENTITY_TYPES = new Set(['project', 'skill', 'lesson', 'user', 'integration', 'agent', 'blueprint']);
 
 function defaultState() {
   return {

@@ -1853,9 +1853,11 @@ function registerWindowControlHandlers() {
   // Lazy singletons so the JSON files aren't created until first read.
   const { createMemoryStore } = require('./electron/memory/store/memory-store');
   const { createKnowledgeStore } = require('./electron/memory/store/knowledge-store');
+  const { createSkillConfidenceStore } = require('./electron/memory/store/skill-confidence-store');
   const { hybridSearch } = require('./electron/memory/retrieval/hybrid-search');
   const workspaceMemoryStore = createMemoryStore({ baseDir: app.getPath('userData') });
   const workspaceKnowledgeStore = createKnowledgeStore({ baseDir: app.getPath('userData') });
+  const workspaceSkillStore = createSkillConfidenceStore({ baseDir: app.getPath('userData') });
 
   ipcMain.handle('workspace:memory-snapshot', () => {
     try { return { ok: true, snapshot: workspaceMemoryStore.snapshot() }; }
@@ -1864,6 +1866,10 @@ function registerWindowControlHandlers() {
   ipcMain.handle('workspace:knowledge-snapshot', () => {
     try { return { ok: true, snapshot: workspaceKnowledgeStore.snapshot() }; }
     catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:skills-snapshot', () => {
+    try { return { ok: true, skills: workspaceSkillStore.rankSkills() }; }
+    catch (err) { return { ok: false, error: String(err?.message || err), skills: [] }; }
   });
   ipcMain.handle('workspace:search', (_event, payload) => {
     try {
@@ -1887,6 +1893,39 @@ function registerWindowControlHandlers() {
   ipcMain.handle('workspace:knowledge-upsert', (_event, payload) => {
     try { return { ok: true, entity: workspaceKnowledgeStore.upsertEntity(payload || {}) }; }
     catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:knowledge-remove', (_event, payload) => {
+    try { return { ok: true, removed: workspaceKnowledgeStore.removeEntity(String(payload?.id || '')) }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+
+  // ─── Intelligent Requirements System — Blueprinty generation ────────────
+  // Routes the goal through the same chat dispatch path as ordinary chat
+  // (routeAiRequest -> promptRegistry composer), so generated blueprints
+  // carry the AI Constitution and routing/persona prompts like any other
+  // model call. Result is stored as a `blueprint` knowledge entity.
+  const { generateBlueprint } = require('./electron/ai/requirements-engine');
+  ipcMain.handle('workspace:blueprint-generate', async (_event, payload) => {
+    try {
+      const goal = String(payload?.goal || '').trim();
+      if (!goal) return { ok: false, error: 'goal-required' };
+      const blueprint = await generateBlueprint({
+        goal,
+        dispatch: async (prompt) => {
+          const result = await routeAiRequest({ message: prompt });
+          if (!result?.ok) throw new Error(result?.error || 'blueprint-dispatch-failed');
+          return result.text;
+        },
+      });
+      const entity = workspaceKnowledgeStore.upsertEntity({
+        type: 'blueprint',
+        label: goal,
+        payload: { ...blueprint, projectId: payload?.projectId || null },
+      });
+      return { ok: true, entity };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
   });
 
   // ─── Idea #3 — Screen capture for the vision dispatch slot ───────────────
