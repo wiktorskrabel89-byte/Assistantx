@@ -349,7 +349,11 @@ class SidecarBridge extends EventEmitter {
         });
         break;
       case 'stt_result':
-        this.emit('stt_result', { text: rest.text || '', isFinal: Boolean(rest.isFinal) });
+        this.emit('stt_result', {
+          text: rest.text || '',
+          isFinal: Boolean(rest.isFinal),
+          confidence: Number.isFinite(rest.confidence) ? Number(rest.confidence) : null,
+        });
         break;
       case 'vad_event':
         this.emit('vad_event', {
@@ -609,6 +613,20 @@ class SidecarBridge extends EventEmitter {
         video: false,
       });
 
+      // Fix (e) — detect the device disappearing mid-recording (unplugged,
+      // disabled in OS settings, etc.) instead of silently going quiet. The
+      // browser fires 'ended' on the track itself, not on the stream.
+      for (const track of this._mediaStream.getAudioTracks()) {
+        track.onended = () => {
+          if (!this._capturing) return;
+          this.stopAudioCapture();
+          this.emit('error', Object.assign(
+            new Error('Microphone device was disconnected during recording.'),
+            { code: 'device-disconnected' },
+          ));
+        };
+      }
+
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) {
         this._releaseCaptureResources();
@@ -636,7 +654,22 @@ class SidecarBridge extends EventEmitter {
       // Release anything acquired before the failure — leaving live tracks
       // behind kept the OS mic indicator on forever ("always listening").
       this._releaseCaptureResources();
-      throw err;
+      throw Object.assign(err, { code: this._classifyCaptureError(err) });
+    }
+  }
+
+  // Fix (e) — turns getUserMedia's DOMException.name into one of three
+  // explicit, UI-distinguishable states instead of one generic failure.
+  _classifyCaptureError(err) {
+    switch (err?.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'permission-denied';
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        return 'no-device';
+      default:
+        return 'mic-unavailable';
     }
   }
 

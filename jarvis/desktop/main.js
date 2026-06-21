@@ -45,6 +45,16 @@ const { createMCPServerManager } = require('./electron/mcp/server-manager');
 const { createMCPToolRouter } = require('./electron/mcp/tool-router');
 const { AIRouter } = require('./electron/ai/router');
 const { createLocalServerStore } = require('./electron/ai/local-server-store');
+const { createCompressionEngine } = require('./electron/memory/context/compression-engine');
+const { createVerificationEngine } = require('./electron/ai/verification/engine');
+const { preflight: adaptiveThinkingPreflight, postflight: adaptiveThinkingPostflight } = require('./electron/ai/core/adaptive-thinking');
+const { runRealityCheck } = require('./electron/ai/core/reality-check');
+const { createDecisionMemory } = require('./electron/ai/core/decision-memory');
+const { recordFailureLesson, recordSuccessAnalysis } = require('./electron/ai/core/learning-hierarchy');
+const { createTrustEngine } = require('./electron/ai/core/trust-engine');
+const { createSelfDiagnosticEngine } = require('./electron/ai/core/self-diagnostic');
+const { scanForRisk, annotateResponse: annotateRiskyResponse } = require('./electron/ai/core/devils-advocate');
+const { buildDecisionContext, executiveDecide } = require('./electron/ai/core/decision-context');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
 // Ensures the launcher SQLite database is initialised before any IPC handler
@@ -158,6 +168,36 @@ const aiRouter = new AIRouter({
     // ALLOWED_RECEIVE for this round).
     sendToRenderer('router:decision', decision);
   },
+});
+// Phase 1 LOCK LIST — Context Compression Engine. Stores are assigned once
+// registerWindowControlHandlers() runs (module load, before any chat can
+// fire); routeAiRequest only reads them later, on an actual IPC call.
+let workspaceMemoryStore = null;
+let workspaceKnowledgeStore = null;
+const compressionEngine = createCompressionEngine();
+compressionEngine.on('context-compressed', (stats) => {
+  sendToRenderer('context:compressed', stats);
+});
+// Phase 1 LOCK LIST — Basic Review Pipeline. Reuses the same verification
+// engine the Runtime V2 orchestrator uses (electron/ai/verification), but
+// invoked directly from the live chat path so it doesn't require opting
+// into the full multi-agent orchestrator (explicitly out of scope).
+const reviewEngine = createVerificationEngine();
+// Jarvis Core systems #10/#12/#13 — Decision Memory, Trust Engine and the
+// Self Diagnostic Engine are JSON-on-disk / timer-driven singletons with no
+// dependency on `app` being ready, so they're created here at module scope
+// (same as compressionEngine/reviewEngine above). healthObserverRef is
+// hoisted and assigned once registerWindowControlHandlers() creates the
+// real health observer, mirroring the workspace-store hoisting pattern.
+const decisionMemory = createDecisionMemory();
+const trustEngine = createTrustEngine();
+let healthObserverRef = null;
+const selfDiagnosticEngine = createSelfDiagnosticEngine({
+  getHealthSnapshot: () => (healthObserverRef ? healthObserverRef.snapshot() : null),
+  getTrustModels: () => trustEngine.rankModels(),
+});
+selfDiagnosticEngine.on('report', (report) => {
+  sendToRenderer('self-diagnostic:report', report);
 });
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
@@ -938,9 +978,35 @@ async function routeAiRequest(payload = {}, options = {}) {
       }
     }
     : () => {};
+  const rawMessages = Array.isArray(request.messages) ? request.messages : [];
+  const { messages: compressedMessages } = compressionEngine.compress(rawMessages, {
+    query: request.message || '',
+    memoryStore: workspaceMemoryStore,
+    knowledgeStore: workspaceKnowledgeStore,
+  });
+
+  // ── Jarvis Core preflight (systems #8, #9) ───────────────────────────────
+  // Execution Modes sets the ceiling/floor Adaptive Thinking operates
+  // within; Reality Check + Contradiction Detector + Simulation Engine run
+  // as a pre-execution pipeline. Warnings are surfaced to diagnostics but
+  // never block dispatch — Basic scope per the Phase 1 LOCK LIST.
+  const executionMode = adaptiveThinkingPreflight({
+    message: request.message || '',
+    contextType: request.contextType,
+    retryCount: request.retryCount,
+  });
+  const realityCheck = runRealityCheck({
+    message: request.message || '',
+    knowledgeStore: workspaceKnowledgeStore,
+    memoryStore: workspaceMemoryStore,
+  });
+  if (!realityCheck.ok) {
+    sendToRenderer('reality-check:result', { ...realityCheck, streamId });
+  }
+
   const response = await aiRouter.routeRequest({
     message: request.message || '',
-    messages: Array.isArray(request.messages) ? request.messages : undefined,
+    messages: compressedMessages.length ? compressedMessages : undefined,
     images: Array.isArray(request.images) ? request.images : undefined,
     profile: request.profile,
     contextType: request.contextType,
@@ -949,15 +1015,53 @@ async function routeAiRequest(payload = {}, options = {}) {
     source: request.source,
     options: request.options,
   }, onChunk);
+
+  // ── Jarvis Core postflight (systems #8, #9, #11-#15) ─────────────────────
+  const taskType = request.contextType === 'code' ? 'coding' : 'general';
+  const review = await reviewEngine.verify(response, { taskType }).catch((err) => ({ ok: false, reason: String(err?.message || err) }));
+  sendToRenderer('review:result', { ...review, taskType, streamId });
+
+  const { confidence } = adaptiveThinkingPostflight({ response, route: response?.route, mode: executionMode.mode });
+  const advocate = scanForRisk(response?.text);
+  const modelId = response?.model || response?.route?.model || 'unknown';
+  const trustScoreVal = trustEngine.trustScore(modelId);
+
+  const decisionContext = buildDecisionContext({
+    mode: executionMode.mode,
+    confidence,
+    realityCheck,
+    review,
+    trustScore: trustScoreVal,
+    advocate,
+  });
+  const action = executiveDecide(decisionContext);
+
+  trustEngine.recordOutcome(modelId, { ok: review.ok, confidence });
+  selfDiagnosticEngine.recordReviewOutcome(review.ok);
+  decisionMemory.recordDecision({
+    mode: executionMode.mode,
+    confidence,
+    route: response?.route || null,
+    reviewOk: review.ok,
+    advocateFlags: advocate.flags,
+    action,
+  });
+  sendToRenderer('decision-context:result', { ...decisionContext, action, streamId });
+
+  const finalText = advocate.risky
+    ? annotateRiskyResponse(String(response?.text || ''), advocate.flags)
+    : String(response?.text || '');
+
   return {
     ok: true,
-    text: String(response?.text || ''),
+    text: finalText,
     provider: response?.provider || response?.route?.provider || 'unknown',
-    model: response?.model || response?.route?.model || 'unknown',
+    model: modelId,
     route: response?.route || null,
     profile: response?.profile || null,
     availability: response?.availability || null,
     streamId,
+    decision: { mode: executionMode.mode, confidence, action },
   };
 }
 
@@ -1724,6 +1828,7 @@ function registerWindowControlHandlers() {
     probeTimeoutMs: 4_000,
     log: (...args) => log('[health]', ...args),
   });
+  healthObserverRef = healthObserver;
   healthObserver.registerProbe('sidecar', () => {
     if (!sidecarProcess) return { status: 'unavailable', detail: 'no-process' };
     if (sidecarReady) return { status: 'healthy', detail: 'stdio-handshake-ok' };
@@ -1766,6 +1871,15 @@ function registerWindowControlHandlers() {
     catch (err) { log('[health] observer failed to start:', err?.message || err); }
   }, 6_000);
   ipcMain.handle('health:snapshot', () => healthObserver.snapshot());
+
+  // Jarvis Core #13 — Self Diagnostic Engine. Starts on the same delay as
+  // the health observer it consumes, so its first report isn't computed
+  // off an empty/uninitialized snapshot.
+  setTimeout(() => {
+    try { selfDiagnosticEngine.start(); }
+    catch (err) { log('[self-diagnostic] failed to start:', err?.message || err); }
+  }, 7_000);
+  ipcMain.handle('self-diagnostic:snapshot', () => selfDiagnosticEngine.runOnce());
 
   // Local Execution Bridge — sandboxed CLI runner per V2.0 Section 4.
   // Off by default; user must flip dev_mode_exec in settings.
@@ -1855,8 +1969,8 @@ function registerWindowControlHandlers() {
   const { createKnowledgeStore } = require('./electron/memory/store/knowledge-store');
   const { createSkillConfidenceStore } = require('./electron/memory/store/skill-confidence-store');
   const { hybridSearch } = require('./electron/memory/retrieval/hybrid-search');
-  const workspaceMemoryStore = createMemoryStore({ baseDir: app.getPath('userData') });
-  const workspaceKnowledgeStore = createKnowledgeStore({ baseDir: app.getPath('userData') });
+  workspaceMemoryStore = createMemoryStore({ baseDir: app.getPath('userData') });
+  workspaceKnowledgeStore = createKnowledgeStore({ baseDir: app.getPath('userData') });
   const workspaceSkillStore = createSkillConfidenceStore({ baseDir: app.getPath('userData') });
 
   ipcMain.handle('workspace:memory-snapshot', () => {
@@ -1870,6 +1984,33 @@ function registerWindowControlHandlers() {
   ipcMain.handle('workspace:skills-snapshot', () => {
     try { return { ok: true, skills: workspaceSkillStore.rankSkills() }; }
     catch (err) { return { ok: false, error: String(err?.message || err), skills: [] }; }
+  });
+  // Voice Input gap-fix (fix d) — lets voice-gateway.js collapse STT
+  // confidence onto the same success/failure ledger used by the router's
+  // skill-confidence system, instead of a separate ad-hoc tracking scheme.
+  ipcMain.handle('workspace:skill-track', (_event, payload) => {
+    try {
+      const id = String(payload?.skillId || payload?.id || '').trim();
+      if (!id) return { ok: false, error: 'missing-skill-id' };
+      const runtimeMs = Number(payload?.runtimeMs) || 0;
+      const isFailure = payload?.outcome === 'failure';
+      const stats = isFailure
+        ? workspaceSkillStore.trackFailure(id, runtimeMs)
+        : workspaceSkillStore.trackSuccess(id, runtimeMs);
+      // Jarvis Core #11 — Learning Hierarchy / Failure Analysis & Learning
+      // Validation / Success Analysis Engine. Every tracked outcome feeds
+      // the knowledge graph so failures become reviewable lessons and
+      // success streaks get a symmetrical "what worked" record.
+      let lesson = null;
+      try {
+        lesson = isFailure
+          ? recordFailureLesson({ skillId: id, cause: String(payload?.cause || 'unspecified'), knowledgeStore: workspaceKnowledgeStore })
+          : recordSuccessAnalysis({ skillId: id, stats, knowledgeStore: workspaceKnowledgeStore });
+      } catch { /* learning-hierarchy is best-effort, never blocks skill tracking */ }
+      return { ok: true, stats, lesson };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
   });
   ipcMain.handle('workspace:search', (_event, payload) => {
     try {
@@ -1897,6 +2038,57 @@ function registerWindowControlHandlers() {
   ipcMain.handle('workspace:knowledge-remove', (_event, payload) => {
     try { return { ok: true, removed: workspaceKnowledgeStore.removeEntity(String(payload?.id || '')) }; }
     catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+
+  // Phase 1 LOCK LIST — Project Files Panel. Opens a native file picker and
+  // appends the chosen paths to the project entity's payload.files array
+  // (previously always initialized empty and never written to afterward).
+  ipcMain.handle('workspace:project-attach-file', async (_event, payload) => {
+    try {
+      const projectId = String(payload?.projectId || '').trim();
+      if (!projectId) return { ok: false, error: 'missing-project-id' };
+      const entity = workspaceKnowledgeStore.getEntity(projectId);
+      if (!entity || entity.type !== 'project') return { ok: false, error: 'project-not-found' };
+
+      const win = BrowserWindow.fromWebContents(_event.sender);
+      const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+        title: 'Dodaj plik do projektu',
+        properties: ['openFile', 'multiSelections'],
+      });
+      if (canceled || !filePaths.length) return { ok: false, error: 'canceled' };
+
+      const existingFiles = Array.isArray(entity.payload?.files) ? entity.payload.files : [];
+      const newFiles = filePaths.map((filePath) => ({
+        path: filePath,
+        name: path.basename(filePath),
+        addedAt: Date.now(),
+      }));
+      const updated = workspaceKnowledgeStore.upsertEntity({
+        ...entity,
+        payload: { ...entity.payload, files: [...existingFiles, ...newFiles] },
+      });
+      return { ok: true, entity: updated };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('workspace:project-remove-file', (_event, payload) => {
+    try {
+      const projectId = String(payload?.projectId || '').trim();
+      const filePath = String(payload?.path || '').trim();
+      if (!projectId || !filePath) return { ok: false, error: 'missing-arguments' };
+      const entity = workspaceKnowledgeStore.getEntity(projectId);
+      if (!entity || entity.type !== 'project') return { ok: false, error: 'project-not-found' };
+
+      const existingFiles = Array.isArray(entity.payload?.files) ? entity.payload.files : [];
+      const updated = workspaceKnowledgeStore.upsertEntity({
+        ...entity,
+        payload: { ...entity.payload, files: existingFiles.filter((f) => f.path !== filePath) },
+      });
+      return { ok: true, entity: updated };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
   });
 
   // ─── Intelligent Requirements System — Blueprinty generation ────────────

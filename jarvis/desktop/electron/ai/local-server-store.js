@@ -29,6 +29,10 @@ function createLocalServerStore() {
         routerModelId: null,
         externalApiModelId: null,
         visionModelId: null,
+        // Voice Input gap-fix (Phase 1 Step 2a) — STT lane, resolved through
+        // the same router/assignment mechanism as the text lanes so no STT
+        // vendor/model is ever hardcoded in the voice pipeline.
+        sttModelId: null,
         serverId: null,
       },
       preferLocalWhenAvailable: true,
@@ -70,6 +74,7 @@ function createLocalServerStore() {
         routerModelId: assignment.routerModelId ? String(assignment.routerModelId) : null,
         externalApiModelId: assignment.externalApiModelId ? String(assignment.externalApiModelId) : null,
         visionModelId: assignment.visionModelId ? String(assignment.visionModelId) : null,
+        sttModelId: assignment.sttModelId ? String(assignment.sttModelId) : null,
         serverId: assignment.serverId ? String(assignment.serverId) : null,
       },
       preferLocalWhenAvailable: Boolean(source.preferLocalWhenAvailable),

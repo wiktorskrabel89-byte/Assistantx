@@ -27,7 +27,7 @@ Events emitted to client:
   { "type": "wake_word",        "phrase": "..." }
   { "type": "vad_event",        "phase": "speech_start|speech_end", "sampleRate": 16000 }
   { "type": "audio_segment",    "data": "<base64 PCM int16 LE>", "format": "audio/raw", "sampleRate": 16000 }
-  { "type": "stt_result",       "text": "...", "isFinal": bool }
+  { "type": "stt_result",       "text": "...", "isFinal": bool, "confidence": float|None }
   { "type": "tts_audio",        "requestId": "...", "data": "<base64 WAV>", "format": "wav" }
   { "type": "tts_audio_chunk",  "requestId": "...", "chunkIndex": 0, "data": "<base64 WAV>", "format": "wav", "isFinal": bool }
   { "type": "tts_stream_done",  "requestId": "...", "chunks": 3, "backend": "kokoro-cpu" }
@@ -187,6 +187,19 @@ def _get_stt_engine():
         _stt_engine = ParakeetSTT()
         _stt_backend_name = "parakeet-onnx"
     return _stt_engine
+
+
+def _get_stt_capabilities() -> dict:
+    """Reports whether *some* STT engine is actually usable right now, so the
+    desktop client can decide whether to rely on the sidecar's own local/cloud
+    STT pipeline or fall back to a different route, instead of assuming the
+    sidecar always handles transcription."""
+    try:
+        engine = _get_stt_engine()
+        return {"sttAvailable": bool(getattr(engine, "available", False)), "sttBackend": _stt_backend_name}
+    except Exception as exc:
+        logger.debug("STT engine unavailable: %s", exc)
+        return {"sttAvailable": False, "sttBackend": "none"}
 
 
 def _get_tts_engine():
@@ -672,6 +685,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                         "type": "stt_result",
                         "text": text,
                         "isFinal": is_final,
+                        "confidence": result.get("confidence"),
                     }, state)
                 if is_final:
                     state.audio_buffer.clear()
@@ -1075,6 +1089,7 @@ async def handle_connection(ws: WebSocketServerProtocol) -> None:
             "ttsStreamingSupported": bool(TTS_STREAMING_ENABLED),
             "ttsBackend": _tts_backend_name,
             "ttsPreferredBackend": _tts_preferred_backend,
+            **_get_stt_capabilities(),
         },
     }, state)
     if TTS_STREAMING_ENABLED:

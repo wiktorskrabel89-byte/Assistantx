@@ -1050,12 +1050,30 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (projects.length === 0) return;
 			node.innerHTML = projects.map((p) => {
 				const progress = Number.isFinite(p.payload?.progress) ? p.payload.progress : 0;
-				const fileCount = Array.isArray(p.payload?.files) ? p.payload.files.length : 0;
-				return `<div class="ox-workspace-card" data-project-id="${escapeHtml(p.id)}"><h4>${escapeHtml(p.label)}</h4><p>Postęp ${progress}% · ${fileCount} plik(ów)</p><button type="button" class="secondary sm" data-remove-project="${escapeHtml(p.id)}">Usuń</button></div>`;
+				const files = Array.isArray(p.payload?.files) ? p.payload.files : [];
+				const fileList = files.length
+					? `<ul class="ox-project-files">${files.map((f) => `<li><span>${escapeHtml(f.name || f.path)}</span><button type="button" class="secondary sm" data-remove-file="${escapeHtml(p.id)}" data-file-path="${escapeHtml(f.path)}">×</button></li>`).join('')}</ul>`
+					: '<p class="ox-project-files-empty">Brak plików</p>';
+				return `<div class="ox-workspace-card" data-project-id="${escapeHtml(p.id)}"><h4>${escapeHtml(p.label)}</h4><p>Postęp ${progress}% · ${files.length} plik(ów)</p>${fileList}<button type="button" class="secondary sm" data-attach-file="${escapeHtml(p.id)}">Dodaj plik</button> <button type="button" class="secondary sm" data-remove-project="${escapeHtml(p.id)}">Usuń</button></div>`;
 			}).join('');
 			node.querySelectorAll('[data-remove-project]').forEach((btn) => {
 				btn.addEventListener('click', async () => {
 					await ipcRenderer.invoke('workspace:knowledge-remove', { id: btn.getAttribute('data-remove-project') });
+					refreshWorkspaceProjects();
+				});
+			});
+			node.querySelectorAll('[data-attach-file]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					await ipcRenderer.invoke('workspace:project-attach-file', { projectId: btn.getAttribute('data-attach-file') });
+					refreshWorkspaceProjects();
+				});
+			});
+			node.querySelectorAll('[data-remove-file]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					await ipcRenderer.invoke('workspace:project-remove-file', {
+						projectId: btn.getAttribute('data-remove-file'),
+						path: btn.getAttribute('data-file-path'),
+					});
 					refreshWorkspaceProjects();
 				});
 			});
@@ -3057,7 +3075,12 @@ window.addEventListener('DOMContentLoaded', () => {
 					})
 					.catch((err) => {
 						const msg = String(err?.message || err || 'unknown');
-						setWakeChipState('error', /permission|notallowed/i.test(msg) ? 'Mic permission denied' : 'Mic unavailable');
+						const chipLabel = err?.code === 'permission-denied'
+							? 'Mic permission denied'
+							: err?.code === 'no-device'
+								? 'No microphone found'
+								: 'Mic unavailable';
+						setWakeChipState('error', chipLabel);
 						pushTaskStep('MIC', `Always-on listening failed: ${msg}`, 'error');
 						document.body.classList.remove('mic-active');
 					});
@@ -3110,6 +3133,19 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (sidecarManualListening) {
 				sidecarManualListening = false;
 				setVoiceToTextUiActive(false);
+			}
+			// Fix (e) — mic capture errors that land here mid-session (most
+			// notably device-disconnected, fired by sidecar-bridge.js's
+			// track.onended handler) leave the wake chip's "Say Hey Jarvis"
+			// label stuck and active even though capture already stopped.
+			if (['permission-denied', 'no-device', 'device-disconnected'].includes(error?.code)) {
+				const chipLabel = error.code === 'permission-denied'
+					? 'Mic permission denied'
+					: error.code === 'no-device'
+						? 'No microphone found'
+						: 'Microphone disconnected';
+				setWakeChipState('error', chipLabel);
+				document.body.classList.remove('mic-active');
 			}
 		});
 
@@ -3367,7 +3403,14 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (scaled > 0.01) touchAgentActivity();
 		});
 		voiceGateway?.on('fallback_required', () => {
+			// Fix (b) — this used to only log; the browser-speech fallback it
+			// announced never actually started, so STT silently went dark
+			// whenever the sidecar route failed. startBrowserWakeFallback()
+			// is the same function the sidecar 'disconnected'/'unavailable'
+			// handlers already use, so this and those paths converge on one
+			// fallback implementation instead of duplicating it.
 			appendMessage(log, 'Voice gateway', 'Falling back to browser speech APIs.', 'system');
+			startBrowserWakeFallback();
 		});
 		// VoiceGateway extends EventEmitter — Node throws an unhandled exception
 		// for any 'error' emission with zero listeners. _handleAudioSegment's
@@ -3441,6 +3484,19 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	function formatVoiceCaptureError(error) {
+		// Fix (e) — prefer the structured code (set by sidecar-bridge.js /
+		// voice-gateway.js) over message-sniffing, which broke whenever an
+		// error's wording didn't match the keywords below.
+		switch (error?.code) {
+			case 'permission-denied':
+				return 'Microphone permission is blocked. Enable microphone access for Jarvis Desktop in system privacy settings.';
+			case 'no-device':
+				return 'No microphone device was found. Connect a microphone and try again.';
+			case 'device-disconnected':
+				return 'Microphone was disconnected during recording. Reconnect it and try again.';
+			default:
+				break;
+		}
 		const message = String(error?.message || '').toLowerCase();
 		if (message.includes('notallowed') || message.includes('permission') || message.includes('denied')) {
 			return 'Microphone permission is blocked. Enable microphone access for Jarvis Desktop in system privacy settings.';
@@ -3721,6 +3777,45 @@ window.addEventListener('DOMContentLoaded', () => {
 			const line = `[compress] ${tin} → ${tout} tokens (dropped ${dropped} msgs in ${payload?.runtimeMs || 0}ms)`;
 			appendDiagLine(diagTerminal, Date.now(), line, 'warn');
 			appendDiagLine(activityLogNode, Date.now(), line, 'warn');
+		});
+		// Phase 1 LOCK LIST — Basic Review Pipeline. Every chat response runs
+		// through a lightweight verification pass (output-sanity + syntax/
+		// patch/import checks where applicable); failures surface here instead
+		// of silently passing through, without requiring the full Runtime V2
+		// multi-agent orchestrator (explicitly out of scope for Phase 1).
+		ipcRenderer.on('review:result', (payload) => {
+			const ok = Boolean(payload?.ok);
+			const line = ok
+				? `[review ] ok    checks=${(payload?.outcomes || []).length}`
+				: `[review ] fail  ${payload?.failedCheck || '?'} — ${payload?.reason || 'unknown'}`;
+			appendDiagLine(diagTerminal, Date.now(), line, ok ? 'ok' : 'bad');
+			appendDiagLine(activityLogNode, Date.now(), line, ok ? 'ok' : 'bad');
+		});
+		// Jarvis Core #9 — Reality Check Engine / Contradiction Detector /
+		// Simulation Engine preflight warnings.
+		ipcRenderer.on('reality-check:result', (payload) => {
+			const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+			warnings.forEach((w) => {
+				appendDiagLine(diagTerminal, Date.now(), `[reality] ${w.type} — ${w.message}`, 'warn');
+				appendDiagLine(activityLogNode, Date.now(), `[reality] ${w.message}`, 'warn');
+			});
+		});
+		// Jarvis Core #15 — Decision Context Layer + Executive Decision
+		// Engine final verdict for this turn.
+		ipcRenderer.on('decision-context:result', (payload) => {
+			const action = String(payload?.action || 'proceed');
+			const level = action === 'flag-for-review' ? 'bad' : action === 'proceed-with-warning' ? 'warn' : 'ok';
+			const conf = payload?.confidence != null ? Number(payload.confidence).toFixed(2) : '?';
+			const line = `[decide ] mode=${payload?.mode || '?'} conf=${conf} action=${action}`;
+			appendDiagLine(diagTerminal, Date.now(), line, level);
+			appendDiagLine(activityLogNode, Date.now(), line, level);
+		});
+		// Jarvis Core #13 — Self Diagnostic Engine periodic aggregated report.
+		ipcRenderer.on('self-diagnostic:report', (payload) => {
+			const status = String(payload?.status || 'healthy');
+			const level = status === 'unhealthy' ? 'bad' : status === 'degraded' ? 'warn' : 'ok';
+			const line = `[self   ] status=${status} score=${payload?.score ?? '?'} reviewFailRate=${payload?.reviewFailRate ?? '?'}`;
+			appendDiagLine(diagTerminal, Date.now(), line, level);
 		});
 
 		// Hydrate the diagnostics cards on first paint with whatever the

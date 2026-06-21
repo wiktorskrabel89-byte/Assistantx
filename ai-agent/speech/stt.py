@@ -7,6 +7,7 @@ Falls back gracefully when faster-whisper is not installed.
 from __future__ import annotations
 
 import logging
+import math
 import struct
 from typing import Optional
 
@@ -114,7 +115,15 @@ class WhisperSTT:
                 beam_size=5,
                 vad_filter=True,
             )
-            texts = [seg.text for seg in segments]
+            # segments is a one-shot generator — capture text and
+            # avg_logprob in the same pass, it can't be re-iterated to
+            # compute confidence afterwards.
+            texts = []
+            logprobs = []
+            for seg in segments:
+                texts.append(seg.text)
+                if seg.avg_logprob is not None:
+                    logprobs.append(seg.avg_logprob)
             full_text = " ".join(texts).strip()
 
             if not full_text:
@@ -124,7 +133,12 @@ class WhisperSTT:
             tail = audio[-int(0.5 * sample_rate):]
             is_final = self._is_silent(tail)
 
-            return {"text": full_text, "is_final": is_final}
+            # faster-whisper's avg_logprob is a per-segment log-probability
+            # (typically in roughly [-1, 0]); exp() maps it onto a [0, 1]
+            # confidence score the desktop client can threshold against.
+            confidence = math.exp(sum(logprobs) / len(logprobs)) if logprobs else None
+
+            return {"text": full_text, "is_final": is_final, "confidence": confidence}
         except Exception as exc:
             logger.debug("Whisper transcription error: %s", exc)
             return None
