@@ -1,6 +1,9 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 
 // Cheap presence probe — a handful of representative top-level imports
@@ -12,7 +15,7 @@ const { spawn, spawnSync } = require('child_process');
 // still passes and the sidecar starts in its existing degraded mode.
 const PROBE_MODULES = ['websockets', 'numpy', 'sounddevice', 'onnxruntime', 'openai'];
 
-function probeImports(pythonPath, extraPythonPath, modules = PROBE_MODULES) {
+function probeImports(pythonPath, modules = PROBE_MODULES) {
   const code = [
     'import sys',
     `mods = ${JSON.stringify(modules)}`,
@@ -25,12 +28,8 @@ function probeImports(pythonPath, extraPythonPath, modules = PROBE_MODULES) {
     "print(','.join(missing))",
     'sys.exit(1 if missing else 0)',
   ].join('\n');
-  const env = { ...process.env };
-  if (extraPythonPath) {
-    env.PYTHONPATH = env.PYTHONPATH ? `${extraPythonPath}${require('path').delimiter}${env.PYTHONPATH}` : extraPythonPath;
-  }
   try {
-    const result = spawnSync(pythonPath, ['-c', code], { env, timeout: 10_000 });
+    const result = spawnSync(pythonPath, ['-c', code], { timeout: 10_000 });
     return {
       ok: result.status === 0,
       missing: (result.stdout || '').toString('utf8').trim(),
@@ -40,94 +39,141 @@ function probeImports(pythonPath, extraPythonPath, modules = PROBE_MODULES) {
   }
 }
 
-/**
- * Ensures the sidecar's Python dependencies are importable before it's
- * spawned. Installs into `targetDir` (expected to be a user-writable path,
- * e.g. under Electron's userData) via `pip install --target` so this never
- * needs Administrator elevation, even for a packaged build's embeddable
- * Python under Program Files. Returns { ok, skipped, pythonPath: targetDir
- * for PYTHONPATH }.
- */
-// Guards against concurrent installs into the same targetDir. Without
-// this, every sidecar auto-restart attempt during a still-running
-// first-time install (which can take several minutes for ~100 packages
-// like torch/spacy/sentence-transformers) spawned ANOTHER `pip install`
-// into the same directory, racing on the same files on disk.
-const inFlightByTarget = new Map();
-
-function ensurePythonDependencies({ pythonPath, requirementsPath, targetDir, onProgress }) {
-  const existing = inFlightByTarget.get(targetDir);
-  if (existing) return existing;
-  const promise = ensurePythonDependenciesUncached({ pythonPath, requirementsPath, targetDir, onProgress })
-    .finally(() => {
-      if (inFlightByTarget.get(targetDir) === promise) inFlightByTarget.delete(targetDir);
-    });
-  inFlightByTarget.set(targetDir, promise);
-  return promise;
-}
-
-function ensurePythonDependenciesUncached({ pythonPath, requirementsPath, targetDir, onProgress }) {
+function runPipInstall(pythonPath, requirementsPath, onProgress) {
   return new Promise((resolve) => {
-    if (!fs.existsSync(requirementsPath)) {
-      resolve({ ok: true, skipped: true, reason: 'no-requirements-file' });
-      return;
-    }
-    try {
-      fs.mkdirSync(targetDir, { recursive: true });
-    } catch (error) {
-      resolve({ ok: false, error: error?.message || String(error) });
-      return;
-    }
-
-    const initialProbe = probeImports(pythonPath, targetDir);
-    if (initialProbe.ok) {
-      resolve({ ok: true, skipped: true, reason: 'already-satisfied' });
-      return;
-    }
-
-    onProgress?.({
-      phase: 'installing_deps',
-      status: `Installing missing Python packages (${initialProbe.missing || 'unknown'})…`,
-    });
-
     const args = [
       '-m', 'pip', 'install',
-      '--target', targetDir,
       '-r', requirementsPath,
       '--disable-pip-version-check',
       '--no-warn-script-location',
     ];
     let child;
     try {
-      child = spawn(pythonPath, args, { env: process.env, windowsHide: true });
+      child = spawn(pythonPath, args, { windowsHide: true });
+    } catch (error) {
+      resolve({ ok: false, error: error?.message || String(error) });
+      return;
+    }
+    const onChunk = (chunk) => {
+      const text = chunk.toString('utf8').trim();
+      if (!text) return;
+      const lastLine = text.split(/\r?\n/).pop();
+      if (lastLine) onProgress?.({ phase: 'installing_deps', status: lastLine });
+    };
+    child.stdout?.on('data', onChunk);
+    child.stderr?.on('data', onChunk);
+    child.on('error', (error) => resolve({ ok: false, error: error?.message || String(error) }));
+    child.on('close', (pipExitCode) => resolve({ ok: pipExitCode === 0, pipExitCode }));
+  });
+}
+
+// Windows-only: the embeddable Python distribution this app ships under
+// Program Files needs Administrator rights to write its own site-packages.
+// Self-elevates via a UAC prompt to run the SAME pip install one time —
+// after that, the packages are on disk permanently and every future
+// launch's initial probe succeeds without ever elevating again.
+function runPipInstallElevated(pythonPath, requirementsPath, onProgress) {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      resolve({ ok: false, error: 'elevation-only-supported-on-windows' });
+      return;
+    }
+    const scriptPath = path.join(os.tmpdir(), `jarvis-pip-elevated-${crypto.randomUUID()}.ps1`);
+    const logPath = path.join(os.tmpdir(), `jarvis-pip-elevated-${crypto.randomUUID()}.log`);
+    const script = [
+      `& ${JSON.stringify(pythonPath)} -m pip install -r ${JSON.stringify(requirementsPath)} --disable-pip-version-check --no-warn-script-location *> ${JSON.stringify(logPath)}`,
+      'exit $LASTEXITCODE',
+    ].join('\n');
+    try {
+      fs.writeFileSync(scriptPath, script, 'utf8');
     } catch (error) {
       resolve({ ok: false, error: error?.message || String(error) });
       return;
     }
 
-    let lastLine = '';
-    const onChunk = (chunk) => {
-      const text = chunk.toString('utf8').trim();
-      if (!text) return;
-      lastLine = text.split(/\r?\n/).pop() || lastLine;
-      onProgress?.({ phase: 'installing_deps', status: lastLine });
-    };
-    child.stdout?.on('data', onChunk);
-    child.stderr?.on('data', onChunk);
+    onProgress?.({ phase: 'installing_deps', status: 'Requesting administrator permission to install AI runtime dependencies…' });
 
-    child.on('error', (error) => {
+    const psArgs = [
+      '-NoProfile', '-Command',
+      `Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"' -Verb RunAs -Wait`,
+    ];
+    let child;
+    try {
+      child = spawn('powershell.exe', psArgs, { windowsHide: true });
+    } catch (error) {
       resolve({ ok: false, error: error?.message || String(error) });
-    });
-    child.on('close', (pipExitCode) => {
-      // Re-probe the CORE modules only — an individual optional package
-      // (e.g. a native build with no prebuilt wheel) can make pip's
-      // overall exit code non-zero without the sidecar actually needing
-      // it (most such packages are lazy-imported fallbacks). Trust the
-      // probe over the raw pip exit code.
-      const recheck = probeImports(pythonPath, targetDir);
-      resolve({ ok: recheck.ok, pipExitCode, missing: recheck.missing });
+      return;
+    }
+    child.on('error', (error) => resolve({ ok: false, error: error?.message || String(error) }));
+    child.on('close', (exitCode) => {
+      let tail = '';
+      try { tail = fs.readFileSync(logPath, 'utf8').split(/\r?\n/).filter(Boolean).slice(-1)[0] || ''; } catch { /* log may not exist if UAC was declined */ }
+      try { fs.unlinkSync(scriptPath); } catch { /* best effort */ }
+      try { fs.unlinkSync(logPath); } catch { /* best effort */ }
+      resolve({ ok: exitCode === 0, exitCode, lastLine: tail });
     });
   });
+}
+
+// Guards against concurrent installs for the same interpreter. Without
+// this, every sidecar auto-restart attempt during a still-running
+// first-time install (which can take several minutes for ~100 packages
+// like torch/spacy/sentence-transformers) spawned ANOTHER `pip install`,
+// racing on the same site-packages files on disk.
+const inFlightByPython = new Map();
+
+/**
+ * Ensures the sidecar's Python dependencies are importable before it's
+ * spawned. Installs directly into the interpreter's own site-packages
+ * (the only location an embeddable Python distribution with a `._pth`
+ * file will actually search — `PYTHONPATH` and `--target` are both
+ * silently ignored in that mode, regardless of what they point at). Tries
+ * a normal install first; if that fails (e.g. no write access under
+ * Program Files), retries once via a UAC-elevated child process.
+ */
+function ensurePythonDependencies({ pythonPath, requirementsPath, onProgress }) {
+  const existing = inFlightByPython.get(pythonPath);
+  if (existing) return existing;
+  const promise = ensurePythonDependenciesUncached({ pythonPath, requirementsPath, onProgress })
+    .finally(() => {
+      if (inFlightByPython.get(pythonPath) === promise) inFlightByPython.delete(pythonPath);
+    });
+  inFlightByPython.set(pythonPath, promise);
+  return promise;
+}
+
+async function ensurePythonDependenciesUncached({ pythonPath, requirementsPath, onProgress }) {
+  if (!fs.existsSync(requirementsPath)) {
+    return { ok: true, skipped: true, reason: 'no-requirements-file' };
+  }
+
+  const initialProbe = probeImports(pythonPath);
+  if (initialProbe.ok) {
+    return { ok: true, skipped: true, reason: 'already-satisfied' };
+  }
+
+  onProgress?.({
+    phase: 'installing_deps',
+    status: `Installing missing Python packages (${initialProbe.missing || 'unknown'})…`,
+  });
+
+  const firstAttempt = await runPipInstall(pythonPath, requirementsPath, onProgress);
+  let recheck = probeImports(pythonPath);
+  if (recheck.ok) {
+    return { ok: true, pipExitCode: firstAttempt.pipExitCode, attempt: 'direct' };
+  }
+
+  // Direct install didn't satisfy the probe — most likely a permissions
+  // failure writing into Program Files. Retry once, elevated.
+  const elevatedAttempt = await runPipInstallElevated(pythonPath, requirementsPath, onProgress);
+  recheck = probeImports(pythonPath);
+  return {
+    ok: recheck.ok,
+    missing: recheck.missing,
+    pipExitCode: firstAttempt.pipExitCode,
+    elevated: elevatedAttempt,
+    attempt: 'elevated',
+  };
 }
 
 module.exports = { ensurePythonDependencies, probeImports, PROBE_MODULES };

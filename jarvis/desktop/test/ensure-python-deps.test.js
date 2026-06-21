@@ -4,6 +4,12 @@
 // the real system Python (always present in this dev environment) using
 // stdlib modules, so the test is deterministic regardless of what's
 // pip-installed on the host — no network access needed.
+//
+// NOTE: the full ensurePythonDependencies() install path is NOT exercised
+// here — it spawns real pip processes (and, on a permission failure, a
+// UAC-elevated retry), which is unsuitable for an automated test run. The
+// no-requirements-file short-circuit is the one branch that's safe to
+// exercise without touching pip at all.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -30,43 +36,25 @@ function resolveSystemPython() {
 const systemPython = resolveSystemPython();
 
 test('probeImports: stdlib modules report present, fake module reports missing', { skip: !systemPython }, () => {
-  const ok = probeImports(systemPython, null, ['os', 'sys', 'json']);
+  const ok = probeImports(systemPython, ['os', 'sys', 'json']);
   assert.equal(ok.ok, true);
   assert.equal(ok.missing, '');
 
-  const missing = probeImports(systemPython, null, ['definitely_not_a_real_module_xyz']);
+  const missing = probeImports(systemPython, ['definitely_not_a_real_module_xyz']);
   assert.equal(missing.ok, false);
   assert.equal(missing.missing, 'definitely_not_a_real_module_xyz');
 });
 
-test('ensurePythonDependencies: skips install when already-satisfied (stdlib-only requirements)', async (t) => {
+test('ensurePythonDependencies: skips install when no requirements.txt exists', async (t) => {
   if (!systemPython) { t.skip('no system python on PATH'); return; }
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-pydeps-'));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
-  // No requirements.txt at all — should short-circuit without touching pip.
   const result = await ensurePythonDependencies({
     pythonPath: systemPython,
     requirementsPath: path.join(tmpDir, 'requirements.txt'),
-    targetDir: path.join(tmpDir, 'deps'),
   });
   assert.equal(result.ok, true);
   assert.equal(result.skipped, true);
   assert.equal(result.reason, 'no-requirements-file');
-});
-
-test('ensurePythonDependencies: creates targetDir even when skipped', async (t) => {
-  if (!systemPython) { t.skip('no system python on PATH'); return; }
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-pydeps-'));
-  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
-  const targetDir = path.join(tmpDir, 'deps');
-
-  await ensurePythonDependencies({
-    pythonPath: systemPython,
-    requirementsPath: path.join(tmpDir, 'missing-requirements.txt'),
-    targetDir,
-  });
-  // Short-circuits on missing requirements.txt before mkdir — directory
-  // should NOT exist in that case (nothing to install).
-  assert.equal(fs.existsSync(targetDir), false);
 });

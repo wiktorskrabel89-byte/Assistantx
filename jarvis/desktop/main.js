@@ -549,16 +549,17 @@ async function startSidecarImpl() {
   // Auto-heal a missing/incomplete sidecar Python environment instead of
   // crash-looping forever (the embeddable Python bundled with packaged
   // builds ships with no dependencies pre-installed — see ai-agent's
-  // requirements.txt). Installs into a per-user, no-admin-required
-  // directory via `pip install --target` rather than the interpreter's own
-  // (possibly admin-only, e.g. Program Files) site-packages.
-  const pythonDepsDir = path.join(app.getPath('userData'), 'python-deps');
+  // requirements.txt). Installs directly into the interpreter's own
+  // site-packages — an embeddable Python with a `._pth` file file ignores
+  // PYTHONPATH entirely, so a --target/PYTHONPATH approach can't work
+  // here. Falls back to a UAC-elevated retry if the direct install can't
+  // write into Program Files (one-time; every later launch's probe finds
+  // the packages already on disk and skips straight past this).
   const requirementsPath = path.join(path.dirname(mainPy), 'requirements.txt');
   setLauncherPhase('loading-models', 'Checking AI runtime Python dependencies.');
   const depsResult = await ensurePythonDependencies({
     pythonPath: python,
     requirementsPath,
-    targetDir: pythonDepsDir,
     onProgress: ({ status }) => setLauncherPhase('loading-models', status),
   });
   if (!depsResult.skipped) {
@@ -591,7 +592,6 @@ async function startSidecarImpl() {
     cwd: path.dirname(mainPy),
     env: {
       ...process.env,
-      PYTHONPATH: process.env.PYTHONPATH ? `${pythonDepsDir}${path.delimiter}${process.env.PYTHONPATH}` : pythonDepsDir,
       JARVIS_ENGINE_MODE: normalizeSidecarEngineMode(modelConfig.engine_mode),
       JARVIS_STT_MODEL: normalizeSidecarSttModel(modelConfig.stt_model),
       JARVIS_WHISPER_MODEL: normalizeSidecarSttModel(modelConfig.stt_model),
