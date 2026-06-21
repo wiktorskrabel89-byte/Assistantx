@@ -39,40 +39,76 @@ function probeImports(pythonPath, modules = PROBE_MODULES) {
   }
 }
 
-function runPipInstall(pythonPath, requirementsPath, onProgress) {
+function getSitePackagesDir(pythonPath) {
+  return path.join(path.dirname(pythonPath), 'Lib', 'site-packages');
+}
+
+function canWriteDir(dir) {
+  try {
+    const probe = path.join(dir, `.jarvis-write-test-${crypto.randomUUID()}`);
+    fs.writeFileSync(probe, '');
+    fs.unlinkSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// `pip install -r requirements.txt` resolves and builds ALL listed
+// packages before installing ANY of them — verified live: one package
+// with no prebuilt wheel for this Python (webrtcvad, which needs to
+// compile from source and fails on this minimal embeddable distribution
+// with no dev headers) made the whole batch install NOTHING, even though
+// every other package would have built fine on its own. Installing one
+// requirement per pip invocation means a single bad apple can't block
+// the rest — each one either lands on disk or doesn't, independently.
+function parseRequirements(requirementsPath) {
+  return fs.readFileSync(requirementsPath, 'utf8')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
+}
+
+function runPipInstallOne(pythonPath, requirement, onProgress) {
   return new Promise((resolve) => {
-    const args = [
-      '-m', 'pip', 'install',
-      '-r', requirementsPath,
-      '--disable-pip-version-check',
-      '--no-warn-script-location',
-    ];
+    const args = ['-m', 'pip', 'install', requirement, '--disable-pip-version-check', '--no-warn-script-location'];
     let child;
     try {
       child = spawn(pythonPath, args, { windowsHide: true });
     } catch (error) {
-      resolve({ ok: false, error: error?.message || String(error) });
+      resolve({ requirement, ok: false, error: error?.message || String(error) });
       return;
     }
     const onChunk = (chunk) => {
       const text = chunk.toString('utf8').trim();
       if (!text) return;
       const lastLine = text.split(/\r?\n/).pop();
-      if (lastLine) onProgress?.({ phase: 'installing_deps', status: lastLine });
+      if (lastLine) onProgress?.({ phase: 'installing_deps', status: `${requirement}: ${lastLine}` });
     };
     child.stdout?.on('data', onChunk);
     child.stderr?.on('data', onChunk);
-    child.on('error', (error) => resolve({ ok: false, error: error?.message || String(error) }));
-    child.on('close', (pipExitCode) => resolve({ ok: pipExitCode === 0, pipExitCode }));
+    child.on('error', (error) => resolve({ requirement, ok: false, error: error?.message || String(error) }));
+    child.on('close', (pipExitCode) => resolve({ requirement, ok: pipExitCode === 0, pipExitCode }));
   });
+}
+
+async function runPipInstall(pythonPath, requirements, onProgress) {
+  const results = [];
+  for (const requirement of requirements) {
+    onProgress?.({ phase: 'installing_deps', status: `Installing ${requirement}…` });
+    // eslint-disable-next-line no-await-in-loop -- intentionally sequential, one bad package must not race/clobber the next
+    results.push(await runPipInstallOne(pythonPath, requirement, onProgress));
+  }
+  return results;
 }
 
 // Windows-only: the embeddable Python distribution this app ships under
 // Program Files needs Administrator rights to write its own site-packages.
-// Self-elevates via a UAC prompt to run the SAME pip install one time —
-// after that, the packages are on disk permanently and every future
-// launch's initial probe succeeds without ever elevating again.
-function runPipInstallElevated(pythonPath, requirementsPath, onProgress) {
+// Self-elevates via a UAC prompt to run the SAME per-requirement install
+// loop one time — after that, the packages are on disk permanently and
+// every future launch's initial probe succeeds without ever elevating
+// again.
+function runPipInstallElevated(pythonPath, requirements, onProgress) {
   return new Promise((resolve) => {
     if (process.platform !== 'win32') {
       resolve({ ok: false, error: 'elevation-only-supported-on-windows' });
@@ -80,12 +116,18 @@ function runPipInstallElevated(pythonPath, requirementsPath, onProgress) {
     }
     const scriptPath = path.join(os.tmpdir(), `jarvis-pip-elevated-${crypto.randomUUID()}.ps1`);
     const logPath = path.join(os.tmpdir(), `jarvis-pip-elevated-${crypto.randomUUID()}.log`);
-    const script = [
-      `& ${JSON.stringify(pythonPath)} -m pip install -r ${JSON.stringify(requirementsPath)} --disable-pip-version-check --no-warn-script-location *> ${JSON.stringify(logPath)}`,
-      'exit $LASTEXITCODE',
-    ].join('\n');
+    const lines = [
+      `$log = ${JSON.stringify(logPath)}`,
+      `$python = ${JSON.stringify(pythonPath)}`,
+      `$reqs = @(${requirements.map((r) => JSON.stringify(r)).join(', ')})`,
+      'foreach ($req in $reqs) {',
+      '  "=== $req ===" | Out-File -FilePath $log -Append -Encoding utf8',
+      '  & $python -m pip install $req --disable-pip-version-check --no-warn-script-location *>> $log',
+      '}',
+      'exit 0',
+    ];
     try {
-      fs.writeFileSync(scriptPath, script, 'utf8');
+      fs.writeFileSync(scriptPath, lines.join('\n'), 'utf8');
     } catch (error) {
       resolve({ ok: false, error: error?.message || String(error) });
       return;
@@ -127,9 +169,10 @@ const inFlightByPython = new Map();
  * spawned. Installs directly into the interpreter's own site-packages
  * (the only location an embeddable Python distribution with a `._pth`
  * file will actually search — `PYTHONPATH` and `--target` are both
- * silently ignored in that mode, regardless of what they point at). Tries
- * a normal install first; if that fails (e.g. no write access under
- * Program Files), retries once via a UAC-elevated child process.
+ * silently ignored in that mode, regardless of what they point at), one
+ * requirement at a time (see parseRequirements/runPipInstall comment).
+ * Tries a normal install first; if that fails (e.g. no write access
+ * under Program Files), retries once via a UAC-elevated child process.
  */
 function ensurePythonDependencies({ pythonPath, requirementsPath, onProgress }) {
   const existing = inFlightByPython.get(pythonPath);
@@ -152,28 +195,41 @@ async function ensurePythonDependenciesUncached({ pythonPath, requirementsPath, 
     return { ok: true, skipped: true, reason: 'already-satisfied' };
   }
 
+  const requirements = parseRequirements(requirementsPath);
   onProgress?.({
     phase: 'installing_deps',
     status: `Installing missing Python packages (${initialProbe.missing || 'unknown'})…`,
   });
 
-  const firstAttempt = await runPipInstall(pythonPath, requirementsPath, onProgress);
-  let recheck = probeImports(pythonPath);
-  if (recheck.ok) {
-    return { ok: true, pipExitCode: firstAttempt.pipExitCode, attempt: 'direct' };
+  // Skip the direct attempt entirely when site-packages clearly isn't
+  // writable (e.g. the embeddable Python under Program Files) — verified
+  // live that without this check, EVERY one of ~19 requirements would
+  // fully download+build before failing at the final permission-denied
+  // copy step, burning minutes on a doomed attempt before ever reaching
+  // the elevated retry that actually works.
+  const sitePackagesWritable = process.platform !== 'win32' || canWriteDir(getSitePackagesDir(pythonPath));
+
+  let firstAttempt = null;
+  if (sitePackagesWritable) {
+    firstAttempt = await runPipInstall(pythonPath, requirements, onProgress);
+    const recheckDirect = probeImports(pythonPath);
+    if (recheckDirect.ok) {
+      return { ok: true, results: firstAttempt, attempt: 'direct' };
+    }
   }
 
-  // Direct install didn't satisfy the probe — most likely a permissions
-  // failure writing into Program Files. Retry once, elevated.
-  const elevatedAttempt = await runPipInstallElevated(pythonPath, requirementsPath, onProgress);
+  // Direct install was skipped or didn't satisfy the probe — most likely
+  // a permissions failure writing into Program Files. Retry once, elevated.
+  const elevatedAttempt = await runPipInstallElevated(pythonPath, requirements, onProgress);
+  let recheck;
   recheck = probeImports(pythonPath);
   return {
     ok: recheck.ok,
     missing: recheck.missing,
-    pipExitCode: firstAttempt.pipExitCode,
+    results: firstAttempt,
     elevated: elevatedAttempt,
     attempt: 'elevated',
   };
 }
 
-module.exports = { ensurePythonDependencies, probeImports, PROBE_MODULES };
+module.exports = { ensurePythonDependencies, probeImports, parseRequirements, PROBE_MODULES };
