@@ -200,6 +200,14 @@
       line-height: 1.5;
     }
 
+    .elapsed-note {
+      color: var(--text-dim);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      display: none;
+    }
+    .elapsed-note.visible { display: block; }
+
     /* ── error card ──────────────────────────────────────────────────────────── */
     #error-card {
       display: none;
@@ -269,6 +277,7 @@
           <span class="status-pill" id="voice-status-pill">Initializing</span>
         </div>
         <div class="status-note" id="status-line">Initializing…</div>
+        <div class="elapsed-note" id="elapsed-line">Elapsed: 0:00</div>
       </div>
 
       <!-- LOCAL mode: two download bars ────────────────────────────────────── -->
@@ -358,6 +367,39 @@
       if (wrap && p > 0) wrap.style.display = 'block';
       document.getElementById('deps-bar').style.width = p + '%';
       document.getElementById('deps-pct').textContent = Math.round(p) + '%';
+    }
+
+    // ── Elapsed timer ──────────────────────────────────────────────────────
+    // The per-package percent bar can sit at the same number for a long
+    // stretch (a single `pip install` of one large package, e.g. torch via
+    // kokoro, has no sub-progress to report) — this ticking clock is the
+    // one thing on screen that visibly keeps moving, so a long wait reads
+    // as "still working" instead of "looks frozen, did it crash?".
+    let elapsedTimerHandle = null;
+    let elapsedStartedAt = 0;
+    function formatElapsed(ms) {
+      const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    }
+    function startElapsedTimer() {
+      if (elapsedTimerHandle) return;
+      elapsedStartedAt = Date.now();
+      const el = document.getElementById('elapsed-line');
+      if (el) el.classList.add('visible');
+      elapsedTimerHandle = setInterval(() => {
+        const el2 = document.getElementById('elapsed-line');
+        if (el2) el2.textContent = `Elapsed: ${formatElapsed(Date.now() - elapsedStartedAt)} (one-time install — this only happens once)`;
+      }, 1000);
+    }
+    function stopElapsedTimer() {
+      if (elapsedTimerHandle) {
+        clearInterval(elapsedTimerHandle);
+        elapsedTimerHandle = null;
+      }
+      const el = document.getElementById('elapsed-line');
+      if (el) el.classList.remove('visible');
     }
 
     function showError(msg) {
@@ -456,7 +498,11 @@
         if (!data) return;
         if (data.llmPercent !== undefined) setLlmProgress(data.llmPercent);
         if (data.pyPercent  !== undefined) setPyProgress(data.pyPercent);
-        if (data.depsPercent !== undefined) setDepsProgress(data.depsPercent);
+        if (data.depsPercent !== undefined) {
+          setDepsProgress(data.depsPercent);
+          if (data.depsPercent < 100) startElapsedTimer();
+          else stopElapsedTimer();
+        }
         if (data.status)   setStatus(data.status);
         if (data.error)    {
           showError(data.error);

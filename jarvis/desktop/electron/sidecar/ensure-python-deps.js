@@ -104,7 +104,23 @@ function parseRequirements(requirementsPath) {
 // own site-packages forever, working only by coincidence on whichever
 // machine happens to have a matching-version Python with that package
 // already pip-installed for the current user.
-const PIP_INSTALL_FLAGS = ['--disable-pip-version-check', '--no-warn-script-location', '--ignore-installed'];
+// kokoro pulls in `torch` transitively. Plain `pip install torch` from
+// PyPI resolves the default CUDA-capable Windows wheel (1.5-2.5GB,
+// bundles CUDA runtime DLLs) even though Kokoro only ever runs CPU
+// inference here — there is no GPU acceleration path in this app at all.
+// PyTorch publishes a CPU-only build (~150-250MB) under its own index
+// with a `+cpu` local version suffix, which PEP 440 sorts as *higher*
+// than the bare CUDA version string — so adding this as an extra index
+// (not replacing the default one, which every other requirement still
+// needs) is enough for pip's resolver to prefer it automatically,
+// cutting the single biggest chunk of this one-time download dramatically.
+const TORCH_CPU_INDEX_URL = 'https://download.pytorch.org/whl/cpu';
+const PIP_INSTALL_FLAGS = [
+  '--disable-pip-version-check',
+  '--no-warn-script-location',
+  '--ignore-installed',
+  '--extra-index-url', TORCH_CPU_INDEX_URL,
+];
 
 function runPipInstallOne(pythonPath, requirement, onProgress, progressBase) {
   return new Promise((resolve) => {
