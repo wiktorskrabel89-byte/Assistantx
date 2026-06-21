@@ -11,7 +11,16 @@ function createPromptComposer({ loader }) {
       temporalContext = null,
     } = {}) {
       const segments = [];
+
+      // The Constitution is always the first segment and is not gated by
+      // `include` — callers cannot omit or reorder it.
+      const constitution = loader.load('constitution');
+      if (constitution?.text) {
+        segments.push(`[CONSTITUTION v${constitution.version}]\n${constitution.text}`);
+      }
+
       for (const key of include) {
+        if (key === 'constitution') continue;
         const item = loader.load(key);
         if (!item?.text) continue;
         segments.push(`[${key.toUpperCase()} v${item.version}]\n${item.text}`);
