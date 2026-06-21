@@ -3287,6 +3287,14 @@ window.addEventListener('DOMContentLoaded', () => {
 		voiceGateway?.on('fallback_required', () => {
 			appendMessage(log, 'Voice gateway', 'Falling back to browser speech APIs.', 'system');
 		});
+		// VoiceGateway extends EventEmitter — Node throws an unhandled exception
+		// for any 'error' emission with zero listeners. _handleAudioSegment's
+		// catch block emits 'error' before 'fallback_required', so without this
+		// listener the throw happens first and the browser-speech fallback
+		// above never even runs.
+		voiceGateway?.on('error', (error) => {
+			appendMessage(log, 'Voice gateway', formatVoiceCaptureError(error), 'error');
+		});
 		if (ipcRenderer?.invoke) {
 			ipcRenderer.invoke('get-sidecar-status')
 				.then((payload) => {

@@ -637,6 +637,12 @@ function createMainIpcHandlers(deps) {
     },
     'server:get-runtime-status': () => serverGetRuntimeStatus(),
     'server:set-permission-level': async (_event, payload) => {
+      // Clicking Domyślnie/Auto dostęp/Pełny dostęp in the UI IS the user's
+      // explicit, in-the-moment consent for this action — grant() was never
+      // called anywhere in the codebase, so this 'high'-risk gate permanently
+      // denied the one control that exists specifically to let the user make
+      // this choice. Grant before authorizing so the click actually works.
+      permissions.grant('server:set-permission-level');
       const auth = await permissions.authorize('server:set-permission-level');
       if (!auth.allowed) return denied('server:set-permission-level', auth.reason);
       const body = validatePlainObject(payload) || {};
