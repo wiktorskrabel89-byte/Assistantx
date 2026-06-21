@@ -147,6 +147,13 @@ let sidecarStartInFlight = false;
 const SIDECAR_HEAL_MAX_RETRIES = 5;
 const SIDECAR_HEAL_BASE_DELAY_MS = 1_500;
 let sidecarUserInitiatedStop = false;
+// Tracks the one-time Python dependency self-heal install (see
+// ensure-python-deps.js) so the splash screen's sidecar-wait loop knows to
+// keep showing real progress for as long as it's genuinely running,
+// instead of giving up after the normal 20s handshake window and silently
+// abandoning the UI while pip keeps installing torch/kokoro/faster-whisper
+// in the background for several more minutes.
+let pythonDepsInstallState = { active: false, percent: 0, status: '' };
 let localVoiceAssetsState = {
   started: false,
   complete: false,
@@ -597,6 +604,7 @@ async function startSidecarImpl() {
   // the packages already on disk and skips straight past this).
   const requirementsPath = path.join(path.dirname(mainPy), 'requirements.txt');
   setLauncherPhase('loading-models', 'Checking AI runtime Python dependencies.');
+  pythonDepsInstallState = { active: true, percent: 0, status: 'Checking AI runtime Python dependencies…' };
   const depsResult = await ensurePythonDependencies({
     pythonPath: python,
     requirementsPath,
@@ -604,10 +612,12 @@ async function startSidecarImpl() {
       setLauncherPhase('loading-models', status);
       const depsPercent = Number.isFinite(index) && Number.isFinite(total) && total > 0
         ? Math.round((index / total) * 100)
-        : undefined;
+        : pythonDepsInstallState.percent;
+      pythonDepsInstallState = { active: true, percent: depsPercent, status };
       sendToRenderer('splash:progress', { status, depsPercent });
     },
   });
+  pythonDepsInstallState = { active: false, percent: 100, status: pythonDepsInstallState.status };
   if (!depsResult.skipped) {
     log('[sidecar] Python dependency install:', depsResult.ok ? 'ok' : 'incomplete', depsResult);
     startupDiagnostics.pushEvent('sidecar', depsResult.ok ? 'info' : 'warn',
@@ -1593,18 +1603,34 @@ async function startSplashTransition(engineMode) {
     }
   }
 
-  // Wait for the Python sidecar to finish its health handshake (up to 20 s).
+  // Wait for the Python sidecar to finish its health handshake (up to 20 s
+  // normally). A first-time dependency install (downloading torch for
+  // Kokoro/faster-whisper) runs before the sidecar process even spawns and
+  // can legitimately take several minutes — without this, the loop would
+  // give up at the 20s mark, declare "AI runtime did not start", and
+  // transition away to index.html (which has no progress listener at all)
+  // while pip kept installing invisibly in the background.
   sendToRenderer('splash:progress', { pyPercent: 0, status: 'Starting Python AI runtime…' });
   const sidecarTimeoutMs = 20_000;
+  const depsInstallTimeoutMs = 600_000;
   const sidecarPollMs = 500;
   const sidecarStart = Date.now();
-  while (!sidecarReady && !sidecarDead && (Date.now() - sidecarStart) < sidecarTimeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
+  while (!sidecarReady && !sidecarDead) {
     const elapsed = Date.now() - sidecarStart;
-    sendToRenderer('splash:progress', {
-      pyPercent: Math.min(95, Math.round((elapsed / sidecarTimeoutMs) * 100)),
-      status: 'Waiting for AI runtime…',
-    });
+    const installingDeps = pythonDepsInstallState.active;
+    if (installingDeps ? elapsed >= depsInstallTimeoutMs : elapsed >= sidecarTimeoutMs) break;
+    await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
+    if (pythonDepsInstallState.active) {
+      sendToRenderer('splash:progress', {
+        depsPercent: pythonDepsInstallState.percent,
+        status: pythonDepsInstallState.status || 'Installing AI runtime dependencies… (one-time, may take a few minutes)',
+      });
+    } else {
+      sendToRenderer('splash:progress', {
+        pyPercent: Math.min(95, Math.round((Math.min(elapsed, sidecarTimeoutMs) / sidecarTimeoutMs) * 100)),
+        status: 'Waiting for AI runtime…',
+      });
+    }
   }
   if (sidecarDead) {
     sendToRenderer('splash:progress', {
