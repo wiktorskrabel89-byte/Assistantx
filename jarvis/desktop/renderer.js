@@ -1535,6 +1535,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const MAX_TTS_AUDIO_QUEUE = 24;
 	let ttsAudioChunkPlaying = false;
 	let ttsAudioActiveStreamId = '';
+	// Barge-in: the currently-playing chunk's nodes, so a barge_in event can
+	// stop audible playback immediately instead of waiting for source.onended.
+	let activeTtsSource = null;
+	let activeTtsContext = null;
 	let voiceSettings = readVoiceSettings();
 	let desktopLocalServers = [];
 	let desktopLocalAssignment = {
@@ -1714,6 +1718,22 @@ window.addEventListener('DOMContentLoaded', () => {
 		setTtsPlaybackGate(false);
 	}
 
+	// Barge-in: the sidecar detected the user talking over Jarvis. Cut the
+	// currently-audible chunk immediately (not just stop queuing new ones —
+	// source.onended would otherwise let the in-flight chunk finish playing
+	// out loud for up to several seconds) and drop everything still queued.
+	function stopTtsPlaybackForBargeIn() {
+		try { activeTtsSource?.stop(0); } catch { /* already stopped/ended */ }
+		try { activeTtsContext?.close(); } catch { /* already closed */ }
+		activeTtsSource = null;
+		activeTtsContext = null;
+		ttsAudioChunkQueue.length = 0;
+		ttsAudioChunkPlaying = false;
+		speechPlaybackActive = false;
+		setVoiceVisualizer('listening');
+		setTtsPlaybackGate(false);
+	}
+
 	function playNextTtsChunk() {
 		if (ttsAudioChunkPlaying) return;
 		const next = ttsAudioChunkQueue.shift();
@@ -1734,9 +1754,19 @@ window.addEventListener('DOMContentLoaded', () => {
 				source.buffer = decoded;
 				source.connect(actx.destination);
 				speechPlaybackActive = true;
+				activeTtsSource = source;
+				activeTtsContext = actx;
 				setTtsPlaybackGate(true);
 				setVoiceVisualizer('speaking');
 				source.onended = () => {
+					// stopTtsPlaybackForBargeIn() already nulled activeTtsSource and
+					// handled the queue/visualizer/gate before calling source.stop(0)
+					// — this 'ended' event is just that stop() landing. Without this
+					// guard it would immediately overwrite the 'listening' state
+					// barge-in just set back to 'idle'.
+					if (activeTtsSource !== source) return;
+					activeTtsSource = null;
+					activeTtsContext = null;
 					ttsAudioChunkPlaying = false;
 					speechPlaybackActive = false;
 					if (ttsAudioChunkQueue.length === 0) {
@@ -3173,6 +3203,18 @@ window.addEventListener('DOMContentLoaded', () => {
 			appendMessage(log, 'AI Sidecar', `Wake word detected — listening…`);
 			pushTaskStep('WAKE', 'Wake word "Hey Jarvis" detected', 'done');
 			setVoiceVisualizer('listening');
+			setWakeChipState('listening', 'Listening — speak now');
+			(voiceGateway || sidecar).setListeningForCommand(true);
+		});
+
+		// Barge-in: the sidecar detected the user talking over Jarvis (see
+		// ai-agent/main.py _check_barge_in) and already flipped its own
+		// playback_active/listening state — cut the audible TTS chunk on this
+		// side immediately and start capturing their command, same as a
+		// wake-word trigger, but without needing to repeat the wake word.
+		sidecar.on('barge_in', () => {
+			stopTtsPlaybackForBargeIn();
+			pushTaskStep('VOICE', 'Barge-in — interrupted Jarvis, listening…', 'done');
 			setWakeChipState('listening', 'Listening — speak now');
 			(voiceGateway || sidecar).setListeningForCommand(true);
 		});

@@ -213,6 +213,12 @@ class SidecarBridge extends EventEmitter {
     this._capturing = false;
     this._micMuted = false;
     this._playbackActive = false;
+    // Barge-in (default on): when true, mic capture stays live during TTS
+    // playback instead of being hard-gated, so the sidecar's RMS-threshold
+    // detector (ai-agent/main.py _check_barge_in) can actually see audio to
+    // decide whether the user is talking over Jarvis. When false, falls
+    // back to the original strict half-duplex mute.
+    this._bargeInEnabled = true;
     this._inputDeviceId = '';
     this._chunkBuffer = new Float32Array(0);
     this._pendingSettings = null;
@@ -337,6 +343,15 @@ class SidecarBridge extends EventEmitter {
         break;
       case 'wake_word':
         this.emit('wake_word', rest);
+        break;
+      case 'barge_in':
+        // Sidecar detected the user talking over Jarvis and already
+        // flipped its own playback_active/listening state server-side —
+        // mirror that locally so mic capture isn't still hard-gated by
+        // _playbackActive on the next audio frame.
+        this._playbackActive = false;
+        this._applyTrackEnabled();
+        this.emit('barge_in', rest);
         break;
       case 'task_step':
         // V2.0 — bridges the Python sidecar's reasoning steps into the
@@ -536,12 +551,13 @@ class SidecarBridge extends EventEmitter {
   }
 
   /**
-   * Half-duplex gate: while TTS audio is playing through the speakers the
-   * mic tracks are disabled (hard mute at the WebRTC level) AND the sidecar
-   * is told to drop anything that still arrives, so Jarvis can never hear
-   * and re-answer its own voice. Echo cancellation (requested in the
-   * getUserMedia constraints) stays as the first line of defence; this gate
-   * is the guarantee.
+   * Half-duplex gate: while TTS audio is playing through the speakers, mic
+   * input is either (a) left live so the sidecar's barge-in detector can
+   * decide whether the user is talking over Jarvis (default — see
+   * _bargeInEnabled), or (b) hard-muted at the WebRTC level AND told to the
+   * sidecar so it drops anything that still arrives, the original strict
+   * behavior, when barge-in is disabled. Echo cancellation (requested in
+   * the getUserMedia constraints) is the first line of defence either way.
    */
   setPlaybackActive(active) {
     const next = Boolean(active);
@@ -551,6 +567,12 @@ class SidecarBridge extends EventEmitter {
     this._send({ type: 'playback_state', active: next });
   }
 
+  setBargeInEnabled(enabled) {
+    this._bargeInEnabled = Boolean(enabled);
+    this._applyTrackEnabled();
+    this._send({ type: 'configure', bargeInEnabled: this._bargeInEnabled });
+  }
+
   setMicMuted(muted) {
     this._micMuted = Boolean(muted);
     this._applyTrackEnabled();
@@ -558,7 +580,7 @@ class SidecarBridge extends EventEmitter {
 
   _applyTrackEnabled() {
     if (!this._mediaStream) return;
-    const enabled = !this._micMuted && !this._playbackActive;
+    const enabled = !this._micMuted && (!this._playbackActive || this._bargeInEnabled);
     for (const track of this._mediaStream.getAudioTracks()) {
       track.enabled = enabled;
     }
@@ -641,7 +663,13 @@ class SidecarBridge extends EventEmitter {
       this._scriptProcessor.onaudioprocess = (event) => {
         const float32 = event.inputBuffer.getChannelData(0);
         this._emitMicLevel(float32);
-        if (!this._connected || this._micMuted || this._playbackActive) return;
+        if (!this._connected || this._micMuted) return;
+        // Barge-in: keep streaming to the sidecar during playback so its
+        // RMS-threshold detector can see real audio — without this the
+        // server-side barge-in check in main.py would never receive a
+        // single chunk to evaluate. When barge-in is off, fall back to the
+        // original drop-everything half-duplex behavior.
+        if (this._playbackActive && !this._bargeInEnabled) return;
         this._pushSamples(float32);
       };
 
@@ -693,7 +721,7 @@ class SidecarBridge extends EventEmitter {
     let sum = 0;
     for (let i = 0; i < float32.length; i += 1) sum += float32[i] * float32[i];
     const rms = Math.sqrt(sum / Math.max(1, float32.length));
-    this.emit('mic_level', { rms, muted: this._micMuted || this._playbackActive });
+    this.emit('mic_level', { rms, muted: this._micMuted || (this._playbackActive && !this._bargeInEnabled) });
   }
 
   _releaseCaptureResources() {

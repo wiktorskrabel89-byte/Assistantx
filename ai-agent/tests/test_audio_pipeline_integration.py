@@ -203,22 +203,28 @@ class PlaybackGateTests(unittest.TestCase):
         self.harness = PipelineHarness()
         self.addCleanup(self.harness.restore)
 
-    def test_mic_input_is_dropped_while_tts_plays(self):
+    def test_mic_input_is_dropped_while_tts_plays_when_barge_in_disabled(self):
         async def run():
+            self.harness.state.barge_in_enabled = False
             await main._handle_playback_state(self.harness.ws, self.harness.state, {"active": True})
-            # Loud "speech" arriving while Jarvis speaks — must be ignored.
+            # Loud "speech" arriving while Jarvis speaks — must be ignored
+            # entirely with barge-in off (the original strict half-duplex gate).
             await self.harness.push_many(tone_chunk(), 10)
 
         asyncio.run(run())
         events = drain_events(self.harness.state)
         self.assertEqual(events_of(events, "wake_word"), [])
+        self.assertEqual(events_of(events, "barge_in"), [])
         self.assertEqual(events_of(events, "audio_segment"), [])
         self.assertEqual(self.harness.wake.chunks_seen, 0)
+        self.assertTrue(self.harness.state.playback_active)
 
     def test_pipeline_resumes_after_playback_ends(self):
         async def run():
             await main._handle_playback_state(self.harness.ws, self.harness.state, {"active": True})
-            await self.harness.push_many(tone_chunk(), 3)
+            # Stay below BARGE_IN_MIN_CONSECUTIVE_CHUNKS so this exercises a
+            # normal (non-barge-in) playback-end resume, not an interrupt.
+            await self.harness.push_many(tone_chunk(), main.BARGE_IN_MIN_CONSECUTIVE_CHUNKS - 1)
             await main._handle_playback_state(self.harness.ws, self.harness.state, {"active": False})
             await self.harness.push(tone_chunk())
 
@@ -236,6 +242,66 @@ class PlaybackGateTests(unittest.TestCase):
         asyncio.run(run())
         self.assertEqual(self.harness.state.command_audio_buffer, [])
         self.assertFalse(self.harness.state.speech_active)
+
+
+class BargeInTests(unittest.TestCase):
+    """The user can interrupt Jarvis by talking over it instead of waiting
+    for it to finish or repeating the wake word — see _check_barge_in."""
+
+    def setUp(self):
+        self.harness = PipelineHarness()
+        self.addCleanup(self.harness.restore)
+
+    def test_loud_speech_during_playback_triggers_barge_in(self):
+        async def run():
+            await main._handle_playback_state(self.harness.ws, self.harness.state, {"active": True})
+            await self.harness.push_many(tone_chunk(), main.BARGE_IN_MIN_CONSECUTIVE_CHUNKS)
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        self.assertEqual(len(events_of(events, "barge_in")), 1)
+        self.assertFalse(self.harness.state.playback_active)
+        self.assertTrue(self.harness.state.listening_for_command)
+        self.assertEqual(self.harness.state.runtime_state, "listening")
+        # Barge-in bypasses the wake-word detector entirely.
+        self.assertEqual(self.harness.wake.chunks_seen, 0)
+
+    def test_quiet_speaker_bleed_does_not_trigger_barge_in(self):
+        async def run():
+            await main._handle_playback_state(self.harness.ws, self.harness.state, {"active": True})
+            # Amplitude well below BARGE_IN_RMS_THRESHOLD — simulates the
+            # assistant's own TTS leaking back into the mic, not real speech.
+            quiet = (300 * np.sin(2 * np.pi * 300.0 * np.arange(CHUNK_SAMPLES) / SAMPLE_RATE)).astype(np.int16).tobytes()
+            await self.harness.push_many(quiet, main.BARGE_IN_MIN_CONSECUTIVE_CHUNKS * 3)
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        self.assertEqual(events_of(events, "barge_in"), [])
+        self.assertTrue(self.harness.state.playback_active)
+        self.assertFalse(self.harness.state.listening_for_command)
+
+    def test_streak_resets_on_a_quiet_chunk_in_between(self):
+        async def run():
+            await main._handle_playback_state(self.harness.ws, self.harness.state, {"active": True})
+            await self.harness.push_many(tone_chunk(), main.BARGE_IN_MIN_CONSECUTIVE_CHUNKS - 1)
+            await self.harness.push(silence_chunk())  # breaks the streak
+            await self.harness.push_many(tone_chunk(), main.BARGE_IN_MIN_CONSECUTIVE_CHUNKS - 1)
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        self.assertEqual(events_of(events, "barge_in"), [])
+        self.assertTrue(self.harness.state.playback_active)
+
+    def test_barge_in_disabled_via_configure(self):
+        async def run():
+            await main._handle_configure(self.harness.ws, self.harness.state, {"bargeInEnabled": False})
+            await main._handle_playback_state(self.harness.ws, self.harness.state, {"active": True})
+            await self.harness.push_many(tone_chunk(), main.BARGE_IN_MIN_CONSECUTIVE_CHUNKS + 5)
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        self.assertEqual(events_of(events, "barge_in"), [])
+        self.assertTrue(self.harness.state.playback_active)
 
 
 class ListenTimeoutTests(unittest.TestCase):

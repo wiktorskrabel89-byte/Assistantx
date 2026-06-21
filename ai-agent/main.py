@@ -309,6 +309,16 @@ LISTEN_TIMEOUT_SECONDS = 10.0
 # Hard cap on a single command utterance.
 MAX_UTTERANCE_SECONDS = 30.0
 
+# Barge-in: let the user interrupt Jarvis by simply talking over it instead
+# of requiring the wake word again. No hardware acoustic echo cancellation
+# is available here, so this relies on an energy threshold well above
+# typical speaker-bleed level (the assistant's own TTS leaking back into the
+# mic), sustained for a few consecutive chunks, rather than a single
+# instantaneous spike — that combination is what keeps normal TTS playback
+# from constantly re-triggering itself.
+BARGE_IN_RMS_THRESHOLD = float(os.environ.get("JARVIS_BARGE_IN_RMS_THRESHOLD", "0.02"))
+BARGE_IN_MIN_CONSECUTIVE_CHUNKS = int(os.environ.get("JARVIS_BARGE_IN_MIN_CHUNKS", "3"))
+
 
 class ConnectionState:
     def __init__(self) -> None:
@@ -329,6 +339,10 @@ class ConnectionState:
         # mic keeps streaming, but wake-word/VAD processing is suspended so
         # Jarvis cannot hear (and answer) itself — half-duplex gating.
         self.playback_active: bool = False
+        # Barge-in: if true (default), sustained mic energy during playback
+        # interrupts Jarvis instead of being dropped — see BARGE_IN_* above.
+        self.barge_in_enabled: bool = True
+        self._barge_in_streak: int = 0
         self.audio_buffer: list[bytes] = []
         self.command_audio_buffer: list[bytes] = []
         self.speech_active: bool = False
@@ -435,6 +449,9 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         state.sample_rate = int(msg["sampleRate"])
     if "vadEnabled" in msg:
         state.vad_enabled = bool(msg["vadEnabled"])
+    if "bargeInEnabled" in msg:
+        state.barge_in_enabled = bool(msg["bargeInEnabled"])
+        state._barge_in_streak = 0
     if "noiseSuppressionEnabled" in msg:
         state.noise_suppression_enabled = bool(msg["noiseSuppressionEnabled"])
         try:
@@ -497,6 +514,7 @@ async def _handle_playback_state(ws: WebSocketServerProtocol, state: ConnectionS
     if active == state.playback_active:
         return
     state.playback_active = active
+    state._barge_in_streak = 0
     if active:
         # Drop any partial capture — it may already contain speaker bleed.
         state.audio_buffer.clear()
@@ -531,6 +549,40 @@ async def _end_command_listening(ws: WebSocketServerProtocol, state: ConnectionS
         pass
 
 
+async def _check_barge_in(ws: WebSocketServerProtocol, state: ConnectionState, pcm_bytes: bytes, now: float) -> None:
+    """
+    Called on every mic chunk while playback_active is True (instead of just
+    dropping it). If the user talks over Jarvis for BARGE_IN_MIN_CONSECUTIVE_
+    CHUNKS in a row above BARGE_IN_RMS_THRESHOLD, treat it exactly like a
+    wake-word trigger: lift the half-duplex gate, tell the client to cut TTS
+    playback (`barge_in` event), and start capturing their command right
+    away — no need to repeat the wake word.
+    """
+    rms = _pcm_int16_rms(pcm_bytes)
+    if rms < BARGE_IN_RMS_THRESHOLD:
+        state._barge_in_streak = 0
+        return
+    state._barge_in_streak += 1
+    if state._barge_in_streak < BARGE_IN_MIN_CONSECUTIVE_CHUNKS:
+        return
+
+    state._barge_in_streak = 0
+    state.playback_active = False
+    state.audio_buffer.clear()
+    state.command_audio_buffer.clear()
+    state.speech_active = False
+    state.trailing_silence_seconds = 0.0
+    state.listening_for_command = True
+    state.listen_started_at = now
+    state.speech_started_at = 0.0
+    state.runtime_state = "listening"
+    try:
+        _get_vad_engine().reset()
+    except Exception:
+        pass
+    await _send(ws, {"type": "barge_in"}, state)
+
+
 async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
     raw_b64 = msg.get("data", "")
     if not raw_b64:
@@ -543,12 +595,17 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
 
     _emit_rms(state, pcm_bytes, source="mic", sample_rate=state.sample_rate)
 
-    # Half-duplex gate: ignore mic input entirely while TTS audio is playing.
+    now = time.monotonic()
+
+    # Half-duplex gate while TTS audio is playing — but with barge-in: keep
+    # checking mic energy instead of dropping the chunk outright, so the
+    # user can interrupt Jarvis by talking over it (see _check_barge_in).
     if state.playback_active:
+        if state.barge_in_enabled:
+            await _check_barge_in(ws, state, pcm_bytes, now)
         return
 
     chunk_seconds = (len(pcm_bytes) / 2.0) / float(state.sample_rate or 16000)
-    now = time.monotonic()
     loop = asyncio.get_event_loop()
 
     # Noise suppression (high-pass) ahead of the wake-word/VAD stages.
