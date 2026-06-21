@@ -126,6 +126,14 @@ let sidecarFatalError = null;
 // after unexpected sidecar exits.
 let sidecarHealRetryCount = 0;
 let sidecarHealTimer = null;
+// startSidecar() now awaits a possibly multi-minute first-time Python
+// dependency install before spawning anything, leaving sidecarProcess
+// null the whole time. Without this guard, the health-observer's periodic
+// probe (every 12s) sees "no process" during that wait and keeps
+// triggering MORE concurrent startSidecar() calls, each of which would
+// eventually try to spawn its own duplicate sidecar once the (deduped)
+// install resolves.
+let sidecarStartInFlight = false;
 const SIDECAR_HEAL_MAX_RETRIES = 5;
 const SIDECAR_HEAL_BASE_DELAY_MS = 1_500;
 let sidecarUserInitiatedStop = false;
@@ -478,6 +486,16 @@ function sendSidecarMessage(payload) {
 }
 
 async function startSidecar() {
+  if (sidecarStartInFlight) return;
+  sidecarStartInFlight = true;
+  try {
+    await startSidecarImpl();
+  } finally {
+    sidecarStartInFlight = false;
+  }
+}
+
+async function startSidecarImpl() {
   const mainPy = getSidecarMainPath();
   setLauncherPhase('validating-runtime', 'Validating AI runtime paths.');
   if (!fs.existsSync(mainPy)) {
@@ -2079,6 +2097,12 @@ function restartSidecarNow() {
 // On successful sidecar handshake, retry count resets in markSidecarReady().
 function scheduleSidecarHeal(reason = 'unknown') {
   if (sidecarHealTimer) return; // already pending
+  // A start attempt (including a possibly multi-minute first-time Python
+  // dependency install) is already running — there's nothing to heal yet.
+  // Without this, the health-observer's periodic "no process" probe burns
+  // through the whole retry budget and gives up while the in-flight
+  // install is still working, even though it would have succeeded.
+  if (sidecarStartInFlight) return;
   if (sidecarHealRetryCount >= SIDECAR_HEAL_MAX_RETRIES) {
     log(`[sidecar:heal] max retries reached (${SIDECAR_HEAL_MAX_RETRIES}); giving up. reason=${reason}`);
     startupDiagnostics.pushEvent('sidecar', 'error', 'Auto-heal gave up after max retries.', {

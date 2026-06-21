@@ -48,7 +48,25 @@ function probeImports(pythonPath, extraPythonPath, modules = PROBE_MODULES) {
  * Python under Program Files. Returns { ok, skipped, pythonPath: targetDir
  * for PYTHONPATH }.
  */
+// Guards against concurrent installs into the same targetDir. Without
+// this, every sidecar auto-restart attempt during a still-running
+// first-time install (which can take several minutes for ~100 packages
+// like torch/spacy/sentence-transformers) spawned ANOTHER `pip install`
+// into the same directory, racing on the same files on disk.
+const inFlightByTarget = new Map();
+
 function ensurePythonDependencies({ pythonPath, requirementsPath, targetDir, onProgress }) {
+  const existing = inFlightByTarget.get(targetDir);
+  if (existing) return existing;
+  const promise = ensurePythonDependenciesUncached({ pythonPath, requirementsPath, targetDir, onProgress })
+    .finally(() => {
+      if (inFlightByTarget.get(targetDir) === promise) inFlightByTarget.delete(targetDir);
+    });
+  inFlightByTarget.set(targetDir, promise);
+  return promise;
+}
+
+function ensurePythonDependenciesUncached({ pythonPath, requirementsPath, targetDir, onProgress }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(requirementsPath)) {
       resolve({ ok: true, skipped: true, reason: 'no-requirements-file' });
