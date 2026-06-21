@@ -451,7 +451,7 @@ function respond(text, extra = {}) {
 
 function execFilePromise(file, args) {
   return new Promise((resolve, reject) => {
-    execFile(file, args, (error, stdout, stderr) => {
+    execFile(file, args, { windowsHide: true }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(stderr?.trim() || error.message));
         return;

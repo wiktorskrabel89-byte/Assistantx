@@ -93,6 +93,7 @@ function createMCPServerProcess({ serverId, command, args = [], env = {} }) {
     proc = spawn(command, args, {
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     });
 
     running = true;
