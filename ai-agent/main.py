@@ -1232,6 +1232,34 @@ def _start_model_download_background(endpoint=None, state=None) -> None:
         _emit({"phase": "model_download_complete", "percent": 100, "status": "All local models ready."})
         logger.info("Local engine: all model checks complete.")
 
+        # Warm-up — model weights being present on disk and being LOADED
+        # into memory are different things. Without this, the first real
+        # user request pays the full STT/TTS load time on top of inference
+        # (can be several seconds). One throwaway inference per engine,
+        # right after a successful download check, means that cost is
+        # already paid by the time the user actually speaks/asks for audio.
+        try:
+            import numpy as _np
+
+            logger.info("Local engine: warming up STT…")
+            stt = _get_stt_engine()
+            # Low-amplitude noise, not silence — a silent buffer is
+            # rejected before the model ever runs, which would skip the
+            # very load step this warm-up exists to force.
+            warm_pcm = (_np.random.randint(-200, 200, size=16000, dtype=_np.int16)).tobytes()
+            stt.transcribe_chunk(warm_pcm, language, 16000)
+            logger.info("Local engine: STT warm.")
+        except Exception as exc:
+            logger.debug("STT warm-up skipped: %s", exc)
+
+        try:
+            logger.info("Local engine: warming up TTS…")
+            tts = _get_tts_engine()
+            tts.synthesize("Hej.")
+            logger.info("Local engine: TTS warm.")
+        except Exception as exc:
+            logger.debug("TTS warm-up skipped: %s", exc)
+
     t = threading.Thread(target=_run, name="jarvis-model-downloader", daemon=True)
     t.start()
 

@@ -3946,6 +3946,49 @@
                     <input id="auto-tts" type="checkbox" checked />
                     Auto text-to-speech playback (replies are spoken aloud)
                   </label>
+                  <label class="field">
+                    <span>Jarvis voice profile</span>
+                    <select id="tts-voice-profile">
+                      <option value="jarvis">JARVIS</option>
+                      <option value="default">Default</option>
+                      <option value="nova">Nova</option>
+                      <option value="echo">Echo</option>
+                      <option value="aria">Aria</option>
+                      <option value="silent">Silent (say nothing)</option>
+                    </select>
+                  </label>
+                  <label class="field" id="tts-backend-field">
+                    <span>TTS backend</span>
+                    <select id="tts-backend">
+                      <optgroup label="Free plan (local)">
+                        <option value="kokoro-local">Kokoro-82M (local, fast, free)</option>
+                        <option value="piper-local">Piper (local fallback)</option>
+                        <option value="auto-local">Auto local (Kokoro → Piper)</option>
+                      </optgroup>
+                      <optgroup label="Pro / Pro+ (cloud)">
+                        <option value="groq-cloud">Groq TTS (cloud)</option>
+                        <option value="openai-cloud">OpenAI TTS (BYOK)</option>
+                        <option value="elevenlabs-cloud">ElevenLabs (BYOK)</option>
+                      </optgroup>
+                    </select>
+                  </label>
+                  <label class="field" id="voice-language-field">
+                    <span>Voice language</span>
+                    <select id="voice-language">
+                      <option value="en-US">English (US)</option>
+                      <option value="en-GB">English (UK)</option>
+                      <option value="pl-PL">Polski</option>
+                      <option value="de-DE">Deutsch</option>
+                      <option value="es-ES">Español</option>
+                      <option value="fr-FR">Français</option>
+                    </select>
+                  </label>
+                  <label class="field" id="voice-provider-mode-field">
+                    <span>Voice provider mode</span>
+                    <select id="voice-provider-mode">
+                      <option value="assistantx-server">AssistantX API gateway (default)</option>
+                    </select>
+                  </label>
                   <div class="field field-full" style="display:grid;gap:6px;">
                     <span>Microphone test</span>
                     <button id="mic-test-button" type="button" class="secondary">🎙 Test microphone</button>
@@ -3974,14 +4017,22 @@
                   <div id="engine-profile-summary" class="field-note" style="grid-column:1 / -1;">
                     Loading current engine profile…
                   </div>
-                  <label class="field" id="chat-model-field">
-                    <span>Chat model</span>
-                    <select id="chat-model">
-                      <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
-                      <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
-                      <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
-                      <option value="meta-llama/llama-4-scout">meta-llama/llama-4-scout</option>
-                      <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
+                  <label class="field">
+                    <span>LLM model (chat)</span>
+                    <select id="local-chat-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Coding model</span>
+                    <select id="local-code-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Multimodal / vision model</span>
+                    <select id="local-vision-model">
+                      <option value="">Use cloud auto-router</option>
                     </select>
                   </label>
                   <label class="field" id="stt-model-field">
@@ -3991,21 +4042,6 @@
                       <option value="medium">whisper-medium</option>
                       <option value="base">whisper-base</option>
                       <option value="tiny">whisper-tiny</option>
-                    </select>
-                  </label>
-                  <label class="field" id="tts-backend-field">
-                    <span>TTS backend</span>
-                    <select id="tts-backend">
-                      <optgroup label="Free plan (local)">
-                        <option value="kokoro-local">Kokoro-82M (local, fast, free)</option>
-                        <option value="piper-local">Piper (local fallback)</option>
-                        <option value="auto-local">Auto local (Kokoro → Piper)</option>
-                      </optgroup>
-                      <optgroup label="Pro / Pro+ (cloud)">
-                        <option value="groq-cloud">Groq TTS (cloud)</option>
-                        <option value="openai-cloud">OpenAI TTS (BYOK)</option>
-                        <option value="elevenlabs-cloud">ElevenLabs (BYOK)</option>
-                      </optgroup>
                     </select>
                   </label>
                   <label class="field" id="tts-model-field">
@@ -4018,50 +4054,23 @@
                       <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
                     </select>
                   </label>
-                  <label class="field">
-                    <span>Jarvis voice profile</span>
-                    <select id="tts-voice-profile">
-                      <option value="jarvis">JARVIS</option>
-                      <option value="default">Default</option>
-                      <option value="nova">Nova</option>
-                      <option value="echo">Echo</option>
-                      <option value="aria">Aria</option>
-                      <option value="silent">Silent (say nothing)</option>
-                    </select>
-                  </label>
-                  <label class="field" id="voice-provider-mode-field">
-                    <span>Voice provider mode</span>
-                    <select id="voice-provider-mode">
-                      <option value="assistantx-server">AssistantX API gateway (default)</option>
-                    </select>
-                  </label>
-                  <label class="field" id="voice-language-field">
-                    <span>Voice language</span>
-                    <select id="voice-language">
-                      <option value="en-US">English (US)</option>
-                      <option value="en-GB">English (UK)</option>
-                      <option value="pl-PL">Polski</option>
-                      <option value="de-DE">Deutsch</option>
-                      <option value="es-ES">Español</option>
-                      <option value="fr-FR">Français</option>
-                    </select>
-                  </label>
+                  <button id="local-server-save-assignment" type="button" class="secondary" style="grid-column:1 / -1;">Save model selection</button>
                   <div id="model-settings-note" class="field-note" style="grid-column:1 / -1;">
                     Local engine settings are loading…
                   </div>
                 </div>
               </section>
 
-              <!-- ── Local servers & per-role routing ──────────────────────── -->
+              <!-- ── Custom local servers (advanced — separate from model selection) ── -->
               <section class="settings-card" data-ox-section="models" aria-labelledby="settings-local-heading">
                 <div class="settings-card-header" id="settings-local-heading">
                   <span class="settings-card-icon">
                     <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-cpu"/></svg>
                   </span>
-                  Lokalne serwery modeli
+                  Niestandardowe serwery (zaawansowane)
                 </div>
                 <p class="settings-card-subtitle">
-                  Podłącz dodatkowe endpointy Ollama / LM Studio / OpenAI-compatible i nadpisz, który model obsługuje daną ścieżkę.
+                  Podłącz dodatkowe endpointy Ollama / LM Studio / OpenAI-compatible — pojawią się jako opcje powyżej.
                 </p>
                 <div class="settings-grid">
                   <label class="field">
@@ -4084,54 +4093,10 @@
                   <div id="local-server-list" class="field field-full" style="font-size:12px;line-height:1.5;color:#cbd5e1;">
                     No local servers configured.
                   </div>
-                  <label class="field">
-                    <span>Chat local model</span>
-                    <select id="local-chat-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Code local model</span>
-                    <select id="local-code-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>External local model</span>
-                    <select id="local-external-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Vision local model</span>
-                    <select id="local-vision-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <!-- M5 — full 6-lane router exposure -->
-                  <label class="field">
-                    <span>Coding · extended (code_heavy)</span>
-                    <select id="local-code-heavy-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Reasoning · deep-think</span>
-                    <select id="local-reasoning-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Supervisor · intent router</span>
-                    <select id="local-router-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
                   <label class="toggle" for="local-prefer-enabled">
                     <input id="local-prefer-enabled" type="checkbox" />
                     Prefer local when available
                   </label>
-                  <button id="local-server-save-assignment" type="button" class="secondary">Save local routing</button>
                 </div>
               </section>
 

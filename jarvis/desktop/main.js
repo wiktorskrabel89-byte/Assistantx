@@ -560,13 +560,23 @@ async function startSidecarImpl() {
   const depsResult = await ensurePythonDependencies({
     pythonPath: python,
     requirementsPath,
-    onProgress: ({ status }) => setLauncherPhase('loading-models', status),
+    onProgress: ({ status, index, total }) => {
+      setLauncherPhase('loading-models', status);
+      const depsPercent = Number.isFinite(index) && Number.isFinite(total) && total > 0
+        ? Math.round((index / total) * 100)
+        : undefined;
+      sendToRenderer('splash:progress', { status, depsPercent });
+    },
   });
   if (!depsResult.skipped) {
     log('[sidecar] Python dependency install:', depsResult.ok ? 'ok' : 'incomplete', depsResult);
     startupDiagnostics.pushEvent('sidecar', depsResult.ok ? 'info' : 'warn',
       depsResult.ok ? 'Installed missing Python dependencies.' : 'Python dependency install incomplete.',
       depsResult);
+    sendToRenderer('splash:progress', {
+      depsPercent: 100,
+      status: depsResult.ok ? 'AI runtime dependencies ready.' : 'Some AI runtime dependencies could not be installed.',
+    });
   }
 
   setLauncherPhase('loading-models', 'Loading AI runtime models.');
@@ -751,6 +761,42 @@ function emitDesktopHealth() {
   sendToRenderer('desktop-health', startupDiagnostics.snapshot());
 }
 
+// Model warm-up — Ollama unloads a model's weights from memory after it's
+// been idle, so the FIRST chat/code request after a cold start pays the
+// full load time on top of inference (can be many seconds for larger
+// models). Sending an empty-prompt /api/generate forces Ollama to load
+// the model into memory without generating anything, so by the time the
+// user actually sends a message it's already warm. keep_alive keeps it
+// resident for 30 minutes, matching normal idle-chat usage patterns.
+const ollamaWarmedModels = new Set();
+async function warmUpOllamaModel(modelName) {
+  const model = String(modelName || '').trim();
+  if (!model || ollamaWarmedModels.has(model)) return;
+  ollamaWarmedModels.add(model);
+  const url = String(process.env.JARVIS_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+  const startedAt = Date.now();
+  try {
+    await fetch(`${url}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt: '', keep_alive: '30m' }),
+    });
+    log(`[warmup] Ollama model "${model}" preloaded in ${Date.now() - startedAt}ms.`);
+  } catch (error) {
+    ollamaWarmedModels.delete(model); // allow retry on the next probe
+    log(`[warmup] Failed to preload Ollama model "${model}":`, error?.message || error);
+  }
+}
+
+function warmUpLocalModels() {
+  const modelConfig = getJarvisModelConfig();
+  const assignment = localServerStore.getAssignment() || {};
+  const candidates = new Set([modelConfig.llm_model, assignment.chatModelId, assignment.codeModelId].filter(Boolean));
+  for (const model of candidates) {
+    void warmUpOllamaModel(model);
+  }
+}
+
 async function probeOllamaAvailability(source = 'startup') {
   try {
     const availability = await aiRouter.getAvailability();
@@ -794,6 +840,11 @@ async function probeOllamaAvailability(source = 'startup') {
       },
     );
     emitDesktopHealth();
+    // Fire-and-forget — only on startup/post-install, not every manual
+    // Settings → Modele "check" click (those shouldn't re-warm on every poll).
+    if (availability.ollama_available && (source === 'startup' || source === 'post-install')) {
+      void warmUpLocalModels();
+    }
     return availability;
   } catch (error) {
     startupDiagnostics.setComponent('ollama', 'unavailable', {

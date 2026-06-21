@@ -69,7 +69,7 @@ function parseRequirements(requirementsPath) {
     .filter((line) => line && !line.startsWith('#'));
 }
 
-function runPipInstallOne(pythonPath, requirement, onProgress) {
+function runPipInstallOne(pythonPath, requirement, onProgress, progressBase) {
   return new Promise((resolve) => {
     const args = ['-m', 'pip', 'install', requirement, '--disable-pip-version-check', '--no-warn-script-location'];
     let child;
@@ -83,7 +83,7 @@ function runPipInstallOne(pythonPath, requirement, onProgress) {
       const text = chunk.toString('utf8').trim();
       if (!text) return;
       const lastLine = text.split(/\r?\n/).pop();
-      if (lastLine) onProgress?.({ phase: 'installing_deps', status: `${requirement}: ${lastLine}` });
+      if (lastLine) onProgress?.({ phase: 'installing_deps', status: `${requirement}: ${lastLine}`, ...progressBase });
     };
     child.stdout?.on('data', onChunk);
     child.stderr?.on('data', onChunk);
@@ -94,10 +94,12 @@ function runPipInstallOne(pythonPath, requirement, onProgress) {
 
 async function runPipInstall(pythonPath, requirements, onProgress) {
   const results = [];
-  for (const requirement of requirements) {
-    onProgress?.({ phase: 'installing_deps', status: `Installing ${requirement}…` });
+  for (let i = 0; i < requirements.length; i += 1) {
+    const requirement = requirements[i];
+    const progressBase = { index: i, total: requirements.length };
+    onProgress?.({ phase: 'installing_deps', status: `Installing ${requirement}…`, ...progressBase });
     // eslint-disable-next-line no-await-in-loop -- intentionally sequential, one bad package must not race/clobber the next
-    results.push(await runPipInstallOne(pythonPath, requirement, onProgress));
+    results.push(await runPipInstallOne(pythonPath, requirement, onProgress, progressBase));
   }
   return results;
 }
@@ -133,11 +135,17 @@ function runPipInstallElevated(pythonPath, requirements, onProgress) {
       return;
     }
 
-    onProgress?.({ phase: 'installing_deps', status: 'Requesting administrator permission to install AI runtime dependencies…' });
+    onProgress?.({ phase: 'installing_deps', status: 'Requesting administrator permission to install AI runtime dependencies…', index: 0, total: requirements.length });
 
+    // -WindowStyle Hidden: the elevated install itself runs invisibly —
+    // the only thing the user sees is the one unavoidable UAC consent
+    // dialog, not a raw scrolling PowerShell console. Progress still
+    // reaches the splash screen below by tailing the same log file the
+    // elevated script is writing to (it stamps a "=== package ===" marker
+    // before each install, which doubles as a free progress counter).
     const psArgs = [
       '-NoProfile', '-Command',
-      `Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"' -Verb RunAs -Wait`,
+      `Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"' -Verb RunAs -Wait`,
     ];
     let child;
     try {
@@ -146,8 +154,29 @@ function runPipInstallElevated(pythonPath, requirements, onProgress) {
       resolve({ ok: false, error: error?.message || String(error) });
       return;
     }
-    child.on('error', (error) => resolve({ ok: false, error: error?.message || String(error) }));
+
+    let lastReported = -1;
+    const tailTimer = setInterval(() => {
+      let text = '';
+      try { text = fs.readFileSync(logPath, 'utf8'); } catch { return; }
+      const markers = text.match(/^=== (.+) ===$/gm) || [];
+      if (markers.length === lastReported) return;
+      lastReported = markers.length;
+      const current = markers[markers.length - 1]?.replace(/^=== | ===$/g, '') || '';
+      onProgress?.({
+        phase: 'installing_deps',
+        status: current ? `Installing ${current}… (admin)` : 'Installing AI runtime dependencies… (admin)',
+        index: Math.max(0, markers.length - 1),
+        total: requirements.length,
+      });
+    }, 700);
+
+    child.on('error', (error) => {
+      clearInterval(tailTimer);
+      resolve({ ok: false, error: error?.message || String(error) });
+    });
     child.on('close', (exitCode) => {
+      clearInterval(tailTimer);
       let tail = '';
       try { tail = fs.readFileSync(logPath, 'utf8').split(/\r?\n/).filter(Boolean).slice(-1)[0] || ''; } catch { /* log may not exist if UAC was declined */ }
       try { fs.unlinkSync(scriptPath); } catch { /* best effort */ }
