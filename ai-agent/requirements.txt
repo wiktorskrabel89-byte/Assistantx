@@ -5,7 +5,13 @@ websockets>=12.0
 # Wake word detection
 openwakeword>=0.6.0
 
-# Speech-to-text (Parakeet ONNX local CPU path)
+# Speech-to-text — faster-whisper (CTranslate2) is the preferred local CPU
+# path; main.py's _get_stt_engine() already prefers it over the ONNX
+# Parakeet fallback below whenever it's importable, no code change needed.
+faster-whisper>=1.0.0
+
+# Speech-to-text (Parakeet ONNX local CPU path — fallback if faster-whisper
+# can't load on this machine)
 onnxruntime>=1.18.0
 huggingface_hub>=0.23.0
 

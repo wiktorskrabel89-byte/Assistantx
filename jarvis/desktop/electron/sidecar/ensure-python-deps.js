@@ -14,15 +14,20 @@ const { spawn, spawnSync } = require('child_process');
 // package (e.g. a native build with no wheel for this Python), the probe
 // still passes and the sidecar starts in its existing degraded mode.
 //
-// `kokoro` and `silero_vad` are included even though main.py only imports
-// them lazily inside _get_tts_engine()/_get_vad_engine() — verified live
-// that `kokoro` (and its `torch` dependency) can be entirely missing from
-// THIS interpreter's own site-packages while still importing successfully
-// during the probe, because pip silently treats an unrelated system
-// Python install's per-version user-site packages (`%APPDATA%\Python\
-// PythonXY\site-packages`) as "already satisfied" and skips installing a
-// real copy. Probing them here is what actually catches that gap.
-const PROBE_MODULES = ['websockets', 'numpy', 'sounddevice', 'onnxruntime', 'openai', 'kokoro', 'silero_vad'];
+// `kokoro`, `silero_vad` and `faster_whisper` are included even though
+// main.py only imports them lazily inside _get_tts_engine()/
+// _get_vad_engine()/_get_stt_engine() — verified live that a lazily-
+// imported package (and its heavy transitive deps, e.g. kokoro's `torch`)
+// can be entirely missing from THIS interpreter's own site-packages while
+// still importing successfully during the probe, because pip silently
+// treats an unrelated system Python install's per-version user-site
+// packages (`%APPDATA%\Python\PythonXY\site-packages`) as "already
+// satisfied" and skips installing a real copy. Probing them here is what
+// actually catches that gap. `faster_whisper` matters in particular: main.py's
+// _get_stt_engine() already prefers it over the ONNX Parakeet fallback
+// whenever it's importable — without it being probed/installed, STT
+// silently runs on Parakeet instead of real Whisper, with no error anywhere.
+const PROBE_MODULES = ['websockets', 'numpy', 'sounddevice', 'onnxruntime', 'openai', 'kokoro', 'silero_vad', 'faster_whisper'];
 
 // `kokoro` pulls in `torch`, which alone takes ~45s to import cold on a
 // CPU-only Windows box (verified live: 46.6s real time) — a 10s timeout
