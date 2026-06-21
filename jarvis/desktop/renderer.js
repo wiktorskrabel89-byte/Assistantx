@@ -1871,6 +1871,27 @@ window.addEventListener('DOMContentLoaded', () => {
 		appendMessage(log, 'Local servers', 'Local model assignment saved.', 'system');
 		await loadLocalServersState();
 	});
+
+	// Idea #1 — Live waveform bars. Twelve <span>s under the orb that scale
+	// from the rms_level stream. We keep a small ring buffer of recent
+	// energies so the bars dance rather than all jumping together.
+	// NOTE: must be declared before setVoiceVisualizer('idle') below, since
+	// that call synchronously reaches applyVisualizerEnergy -> updateWaveform.
+	const waveformBars = Array.from(document.querySelectorAll('#voice-waveform span'));
+	const waveformHistory = new Array(waveformBars.length).fill(0);
+	function updateWaveform(energy) {
+		if (waveformBars.length === 0) return;
+		waveformHistory.shift();
+		waveformHistory.push(energy);
+		const peak = Math.max(0.05, ...waveformHistory);
+		for (let i = 0; i < waveformBars.length; i++) {
+			const value = waveformHistory[i];
+			const normalized = value / peak;
+			const px = 4 + Math.round(normalized * 22); // 4–26 px
+			waveformBars[i].style.height = `${px}px`;
+		}
+	}
+
 	setVoiceVisualizer('idle');
 	['mousemove', 'keydown', 'click', 'focus'].forEach((eventName) => {
 		window.addEventListener(eventName, () => touchAgentActivity(), { passive: true });
@@ -1893,24 +1914,6 @@ window.addEventListener('DOMContentLoaded', () => {
 				voiceVisualizer.classList.add('dimmed');
 			}
 		}, 10_000);
-	}
-
-	// Idea #1 — Live waveform bars. Twelve <span>s under the orb that scale
-	// from the rms_level stream. We keep a small ring buffer of recent
-	// energies so the bars dance rather than all jumping together.
-	const waveformBars = Array.from(document.querySelectorAll('#voice-waveform span'));
-	const waveformHistory = new Array(waveformBars.length).fill(0);
-	function updateWaveform(energy) {
-		if (waveformBars.length === 0) return;
-		waveformHistory.shift();
-		waveformHistory.push(energy);
-		const peak = Math.max(0.05, ...waveformHistory);
-		for (let i = 0; i < waveformBars.length; i++) {
-			const value = waveformHistory[i];
-			const normalized = value / peak;
-			const px = 4 + Math.round(normalized * 22); // 4–26 px
-			waveformBars[i].style.height = `${px}px`;
-		}
 	}
 
 	function applyVisualizerEnergy(nextEnergy = 0) {
@@ -3978,7 +3981,11 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (accountLoginButton) accountLoginButton.textContent = '🔓 Sign out';
 			if (accountSyncButton) accountSyncButton.disabled = false;
 		} else {
-			if (accountStatusNode) accountStatusNode.textContent = 'Not signed in';
+			// Sign-in is optional — local engine mode (Ollama) runs fully signed
+			// out. Only cloud sync / cloud-routed models need an account, so say
+			// so here instead of leaving a bare "Not signed in" that reads as a
+			// hard requirement.
+			if (accountStatusNode) accountStatusNode.textContent = 'Not signed in (optional for local models)';
 			if (accountBadge) accountBadge.textContent = 'AssistantX AI Agent';
 			if (accountLoginButton) accountLoginButton.textContent = '🔑 Sign in';
 			if (accountSyncButton) accountSyncButton.disabled = true;

@@ -374,32 +374,31 @@ export function ChatComposer({
           </div>
         ) : null}
 
-        <div className="flex items-center justify-center py-1">
-          <button
-            type="button"
-            onClick={toggleVoiceOrb}
-            disabled={!hasSpeechRecognition || !sttEnabled}
-            className={cn(
-              "group relative flex h-16 w-16 items-center justify-center rounded-full border transition-all duration-300",
-              voiceOrbMode === "listening"
-                ? "border-cyan-300 bg-gradient-to-br from-cyan-500 to-blue-600 shadow-[0_0_30px_rgba(59,130,246,0.45)]"
-                : voiceOrbMode === "thinking"
-                  ? "border-blue-300 bg-gradient-to-br from-blue-500 to-indigo-600 shadow-[0_0_34px_rgba(99,102,241,0.4)]"
-                  : "border-blue-200 bg-gradient-to-br from-blue-400 to-sky-500 shadow-[0_0_22px_rgba(59,130,246,0.3)]",
-              (!hasSpeechRecognition || !sttEnabled) ? "cursor-not-allowed opacity-50" : "hover:scale-105"
-            )}
-            aria-label={micActive ? "Stop voice orb" : "Start voice orb"}
-            title={micActive ? "Stop voice mode" : "Start voice mode"}
-          >
-            <span className={cn("absolute inset-0 rounded-full", voiceOrbMode !== "idle" ? "motion-safe:animate-ping bg-blue-300/25" : "")} />
-            <span className="relative text-[10px] font-semibold uppercase tracking-wider text-white">
-              {voiceOrbMode === "listening" ? "Live" : voiceOrbMode === "thinking" ? "AI" : "Voice"}
+        {/*
+          Mic / voice-orb button removed per Meridian design rule 6 ("No mic
+          button or vision button in chat UI"). Voice activation lives on the
+          wake-word indicator instead — see MeridianChatHero for the visible
+          listening state. The underlying micActive/startMic/stopMic hooks
+          are retained so the wake-word pipeline still drives mic capture.
+        */}
+        {wakeWordEnabled && hasSpeechRecognition && sttEnabled ? (
+          <div className="flex items-center justify-center gap-2 py-1 text-[11px] text-muted-foreground">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                micActive ? "motion-safe:animate-pulse" : "",
+              )}
+              style={{
+                background: micActive ? "var(--ox-cyan, #00f0ff)" : "var(--ox-cyan-dim, #008c9e)",
+                boxShadow: micActive ? "0 0 6px rgba(0,240,255,0.6)" : undefined,
+              }}
+            />
+            <span>
+              {micActive ? "Słucham…" : `Powiedz „${wakeWordPhrase}"`}
             </span>
-          </button>
-        </div>
-        <p className="text-center text-[11px] text-muted-foreground">
-          Blue orb voice mode {wakeWordEnabled ? `• wake phrase: "${wakeWordPhrase}"` : ""}
-        </p>
+          </div>
+        ) : null}
 
         <input
           ref={fileInputRef}

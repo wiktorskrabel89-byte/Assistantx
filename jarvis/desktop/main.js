@@ -451,6 +451,11 @@ function handleSidecarStdoutLine(line) {
     log(`[sidecar] ${line}`);
     return;
   }
+  // Diagnostic instrumentation (temporary, per systematic-debugging Phase 1):
+  // log every successfully-parsed stdout payload so we can see in this
+  // terminal whether 'model_download_complete' actually crosses the
+  // Python→Electron boundary, instead of only seeing JSON-parse failures.
+  log(`[sidecar:json] type=${payload?.type} phase=${payload?.phase}`);
   markSidecarReady({ messageType: payload?.type || 'unknown' });
   handleSidecarStatusPayload(payload);
   sendToRenderer('sidecar-message', payload);
@@ -1547,6 +1552,15 @@ function createWindow() {
   });
 
   loadStartupScreen();
+
+  // Dev-only — auto-open DevTools so renderer console errors (e.g. a
+  // connection that hangs on "Starting…") are visible immediately without
+  // relying on a keyboard shortcut that may be intercepted by the global
+  // hotkey registration attempted before 'ready'. Never runs in a packaged
+  // build — packaged installs stay clean for end users.
+  if (!app.isPackaged) {
+    win.webContents.openDevTools({ mode: 'right' });
+  }
 
   win.webContents.on('did-finish-load', () => {
     sendToRenderer('app-meta', {

@@ -157,10 +157,16 @@ function getPathLabel(path) {
   return labels[path] || labels[EXECUTION_PATHS.UNKNOWN];
 }
 
-module.exports = {
-  classify,
-  detectCodeIntent,
-  getModelRequirements,
-  getPathLabel,
-  EXECUTION_PATHS,
-};
+// Loaded both via Node `require()` (none currently, kept for compatibility)
+// and as a plain <script src="electron/ai/task-classifier.js"> tag in
+// index.html — the renderer has no `module` global (nodeIntegration: false),
+// so this assignment must be guarded or it throws on every renderer load.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    classify,
+    detectCodeIntent,
+    getModelRequirements,
+    getPathLabel,
+    EXECUTION_PATHS,
+  };
+}

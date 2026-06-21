@@ -7,8 +7,11 @@ const config: Config = {
   coverageProvider: "v8",
   testEnvironment: "jest-environment-jsdom",
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
-  testMatch: ["<rootDir>/__tests__/**/*.[jt]s?(x)"],
-  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/e2e/"],
+  // Relative glob — keep this OFF <rootDir> because Windows worktree paths
+  // containing literal dots (e.g. ".claude") break the haste-map glob
+  // substitution and silently yield 0 matches even on existing tests.
+  testMatch: ["**/__tests__/**/*.test.[jt]s?(x)"],
+  testPathIgnorePatterns: ["/node_modules/", "/\\.next/", "/e2e/"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
     // Redirect ESM dist of react-syntax-highlighter to CJS equivalent

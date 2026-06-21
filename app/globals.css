@@ -306,3 +306,151 @@
 .animate-tab-enter {
   animation: tab-enter 0.25s ease-out both;
 }
+
+/* ── Obsidian Intelligence Design Tokens ──────────────────────────────── */
+/* Raw hex ONLY inside this block. Everywhere else in the codebase use    */
+/* var(--ox-*) — never a hardcoded hex. Lives in both :root and .dark so  */
+/* the tokens resolve regardless of which class wins (forced dark in      */
+/* app/layout.tsx). shadcn overrides at the bottom re-route shadcn's own  */
+/* tokens through the Obsidian palette.                                   */
+.dark,
+:root {
+  --ox-bg:          #050608;
+  --ox-bg1:         #0a0c10;
+  --ox-bg2:         #0e1117;
+  --ox-bg3:         #141823;
+  --ox-border:      #232a3a;
+  --ox-border-b:    #32425a;
+  --ox-cyan:        #00f0ff;
+  --ox-cyan-dim:    #008c9e;
+  --ox-purple:      #7850dc;
+  --ox-purple-dim:  #4a3290;
+  --ox-amber:       #ffb428;
+  --ox-green:       #50dc78;
+  --ox-red:         #dc5050;
+  --ox-text-hi:     #dce1eb;
+  --ox-text-mid:    #828ca0;
+  --ox-text-dim:    #464f5e;
+  --ox-text-code:   #a0c8f0;
+  --ox-font-mono:   "JetBrains Mono", "Geist Mono", monospace;
+  --ox-font-sans:   "Instrument Sans", "Inter", sans-serif;
+  --ox-font-ui:     "Jura", sans-serif;
+  --ox-ease:        cubic-bezier(0.16, 1, 0.3, 1);
+  --ox-duration-fast:   120ms;
+  --ox-duration-base:   200ms;
+  --ox-duration-slow:   350ms;
+}
+
+/* shadcn overrides — only active in the forced-dark shell. Scoping to    */
+/* .dark prevents bleed into legacy light-mode UI that still ships during */
+/* the migration (public-home, auth pages).                               */
+.dark {
+  --background:           var(--ox-bg);
+  --foreground:           var(--ox-text-hi);
+  --card:                 var(--ox-bg2);
+  --card-foreground:      var(--ox-text-hi);
+  --popover:              var(--ox-bg2);
+  --popover-foreground:   var(--ox-text-hi);
+  --border:               var(--ox-border);
+  --input:                var(--ox-bg3);
+  --muted:                var(--ox-bg3);
+  --muted-foreground:     var(--ox-text-dim);
+  --primary:              var(--ox-cyan);
+  --primary-foreground:   var(--ox-bg);
+  --secondary:            var(--ox-bg2);
+  --secondary-foreground: var(--ox-text-mid);
+  --ring:                 var(--ox-cyan-dim);
+}
+
+/* ── Obsidian utility classes ─────────────────────────────────────────── */
+.ox-glow-cyan {
+  box-shadow: 0 0 24px 0 rgba(0, 240, 255, 0.15);
+}
+.ox-glow-purple {
+  box-shadow: 0 0 24px 0 rgba(120, 80, 220, 0.15);
+}
+.ox-border-active {
+  border-color: var(--ox-cyan) !important;
+}
+.ox-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ox-mono {
+  font-family: var(--ox-font-mono);
+  font-size: 11px;
+}
+.ox-panel {
+  background: var(--ox-bg2);
+  border: 1px solid var(--ox-border);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.ox-glass {
+  background: color-mix(in srgb, var(--ox-bg2) 70%, transparent);
+  border: 1px solid var(--ox-border);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+.ox-terminal {
+  background: #030810;
+  border: 1px solid var(--ox-border);
+  border-radius: 6px;
+  font-family: var(--ox-font-mono);
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--ox-text-dim);
+  padding: 8px;
+  overflow-y: auto;
+}
+
+/* Reduced motion respect for Meridian transitions added by shell + tabs.  */
+@media (prefers-reduced-motion: reduce) {
+  .ox-anim-fade,
+  .ox-anim-rise,
+  [data-ox-anim],
+  [data-vega-state] *,
+  .vega-ring,
+  .vega-bar {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── VEGA voice-orb keyframes ─────────────────────────────────────────── */
+/* The 5 voice states (idle / wake / listening / processing / speaking)   */
+/* are driven by composing these animations on the orb's child layers.     */
+/* Naming is `vega-*` so it never collides with shadcn / tw-animate-css.   */
+
+@keyframes vega-idle-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.55; }
+  50%      { transform: scale(1.04); opacity: 0.85; }
+}
+
+@keyframes vega-ring-expand {
+  0%   { transform: scale(0.3); opacity: 0.85; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes vega-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Drives the FFT-style bars under the orb. Each bar gets a different     */
+/* animation-delay (set inline) so they dance rather than move in unison. */
+@keyframes vega-bar-dance {
+  0%, 100% { transform: scaleY(0.18); }
+  25%      { transform: scaleY(0.65); }
+  50%      { transform: scaleY(1);    }
+  75%      { transform: scaleY(0.4);  }
+}
+
+/* Speaking-state waveform: smoother sinusoidal, suggests TTS output. */
+@keyframes vega-bar-wave {
+  0%, 100% { transform: scaleY(0.25); }
+  50%      { transform: scaleY(0.95); }
+}
