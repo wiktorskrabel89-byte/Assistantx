@@ -56,6 +56,16 @@ import wave
 from io import BytesIO
 from typing import Any
 
+# The packaged build's embeddable Python ships a python311._pth file,
+# which puts the interpreter in isolated-path mode — verified live that
+# this ALSO suppresses the normal automatic insertion of the running
+# script's own directory into sys.path (not just PYTHONPATH, which it
+# ignores entirely). Without this, sibling local modules like action_hub
+# are never importable, regardless of the process's cwd.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+
 import websockets
 from websockets.server import WebSocketServerProtocol
 
