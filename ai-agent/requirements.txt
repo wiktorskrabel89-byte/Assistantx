@@ -44,3 +44,14 @@ GitPython>=3.1.43
 
 # Cloud AI providers (cloud engine mode: STT + TTS via OpenAI API)
 openai>=1.30.0
+
+# Each requirement above installs via its own separate `pip install` call
+# (see ensure-python-deps.js's comment on why), so pip never resolves one
+# consistent dependency graph across the whole file — installing
+# sentence-transformers independently bumps tokenizers past the version
+# transformers (pulled in by kokoro, above) actually allows. Verified live:
+# this breaks `import kokoro` with "tokenizers==0.23.1 is required
+# <=0.23.0" — Kokoro TTS silently dead with no error surfaced anywhere
+# except that exact ImportError. Keeping this pin LAST in the file means
+# it installs after everything else and wins regardless of install order.
+tokenizers<=0.23.0

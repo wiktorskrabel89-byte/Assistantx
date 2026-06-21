@@ -4138,6 +4138,20 @@ window.addEventListener('DOMContentLoaded', () => {
 				}
 				return;
 			}
+			if (parsed.type === 'ai_stream_token') {
+				// Per-token event from the live model stream (backend.js
+				// bindAiRouteStreamingEvents) — fires once per token, dozens of
+				// times per response. There's no live-typing UI consuming this
+				// yet, so without this early return it fell through to the
+				// generic fallback below, which has no `summary`/`text` field to
+				// read and JSON.stringify()'d the whole raw event into its own
+				// chat bubble for every single token (the reported "streaming
+				// isn't really working" JSON spam). The full response still
+				// arrives as one clean message via `command_result` below once
+				// it's complete; TTS audio streams progressively regardless via
+				// ai_stream_segment.
+				return;
+			}
 			if (parsed.type === 'ai_stream_segment') {
 				const streamId = String(parsed.streamId || '').trim();
 				const segment = String(parsed.segment || '').trim();
