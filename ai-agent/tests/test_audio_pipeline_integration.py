@@ -55,19 +55,60 @@ class FakeWakeDetector:
         self.trigger_amplitude = trigger_amplitude
         self.available = True
         self.chunks_seen = 0
+        # Decision-fusion (_evaluate_activation_decision) reads last_score
+        # and threshold off the detector. A flat 1.0/0.0 score keeps every
+        # existing amplitude-gated test on the rule-1 fast path (score >=
+        # FAST_PATH_WAKE_SCORE) exactly as before this fake gained scoring —
+        # tests targeting the rule table itself use ScoredFakeWakeDetector.
+        self.threshold = 0.5
+        self.last_score = 0.0
 
     def process_chunk(self, pcm_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> bool:
         self.chunks_seen += 1
         samples = np.frombuffer(pcm_bytes[: len(pcm_bytes) // 2 * 2], dtype=np.int16)
         if samples.size == 0:
+            self.last_score = 0.0
             return False
-        return int(np.abs(samples).max()) >= self.trigger_amplitude
+        detected = int(np.abs(samples).max()) >= self.trigger_amplitude
+        self.last_score = 1.0 if detected else 0.0
+        return detected
 
     def reset(self):
         pass
 
     def set_sensitivity(self, _value):
         pass
+
+    def set_sensitivity_preset(self, _name):
+        return True
+
+
+class ScoredFakeWakeDetector:
+    """Reports an exact, queued score/threshold pair on each call — used to
+    exercise the decision-fusion rule table directly (FakeWakeDetector above
+    only models a simple amplitude-gated bool, not graduated scores)."""
+
+    def __init__(self, threshold: float = 0.80):
+        self.available = True
+        self.threshold = threshold
+        self.last_score = 0.0
+        self._next_score = 0.0
+
+    def queue_score(self, score: float) -> None:
+        self._next_score = float(score)
+
+    def process_chunk(self, pcm_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> bool:
+        self.last_score = self._next_score
+        return self.last_score >= self.threshold
+
+    def reset(self):
+        pass
+
+    def set_sensitivity(self, _value):
+        pass
+
+    def set_sensitivity_preset(self, _name):
+        return True
 
 
 class FakeWs:
@@ -322,6 +363,90 @@ class ListenTimeoutTests(unittest.TestCase):
         self.assertIn("listen_timeout", phases)
         self.assertFalse(self.harness.state.listening_for_command)
         self.assertEqual(self.harness.state.runtime_state, "idle")
+
+
+class DecisionFusionTests(unittest.TestCase):
+    """Covers _evaluate_activation_decision's rule table as exercised through
+    the real _handle_audio_chunk wake-word block (not called directly), so
+    these also assert the wake_word/wake_word_rejected event contract."""
+
+    def setUp(self):
+        self.harness = PipelineHarness()
+        self.addCleanup(self.harness.restore)
+        self.scored = ScoredFakeWakeDetector(threshold=0.80)
+        main._wake_detector = self.scored
+
+    def test_fast_path_score_activates_with_rule_1(self):
+        self.scored.queue_score(0.95)
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        wake_events = events_of(events, "wake_word")
+        self.assertEqual(len(wake_events), 1)
+        self.assertEqual(wake_events[0]["breakdown"]["ruleFired"], 1)
+        self.assertEqual(wake_events[0]["breakdown"]["decision"], "activate")
+        self.assertTrue(self.harness.state.listening_for_command)
+
+    def test_above_threshold_below_fast_path_activates_with_rule_2(self):
+        self.scored.queue_score(0.85)
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        wake_events = events_of(events, "wake_word")
+        self.assertEqual(len(wake_events), 1)
+        self.assertEqual(wake_events[0]["breakdown"]["ruleFired"], 2)
+        self.assertEqual(wake_events[0]["breakdown"]["decision"], "activate")
+
+    def test_near_miss_emits_rejected_event_with_breakdown(self):
+        # threshold=0.80, NEAR_MISS_SCORE_MARGIN=0.10 -> [0.70, 0.80) is a near miss.
+        self.scored.queue_score(0.75)
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        self.assertEqual(events_of(events, "wake_word"), [])
+        rejected = events_of(events, "wake_word_rejected")
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0]["breakdown"]["ruleFired"], 4)
+        self.assertEqual(rejected[0]["breakdown"]["decision"], "reject")
+        self.assertFalse(self.harness.state.listening_for_command)
+
+    def test_far_below_threshold_emits_no_event_at_all(self):
+        # Nowhere near threshold=0.80 — not even worth a rejected-event log.
+        self.scored.queue_score(0.10)
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        self.assertEqual(events_of(events, "wake_word"), [])
+        self.assertEqual(events_of(events, "wake_word_rejected"), [])
+
+    def test_breakdown_shape_is_stable(self):
+        self.scored.queue_score(0.95)
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        breakdown = events_of(events, "wake_word")[0]["breakdown"]
+        self.assertEqual(
+            set(breakdown.keys()),
+            {
+                "wakeScore", "voiceMatchScore", "contextScore", "contextSources",
+                "whisperConfirmed", "whisperTranscript", "decision", "ruleFired",
+            },
+        )
 
 
 class NoiseSuppressionIntegrationTests(unittest.TestCase):

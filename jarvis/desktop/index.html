@@ -1343,6 +1343,21 @@
       min-width: 36px;
       text-align: right;
     }
+    .wake-sensitivity-advanced {
+      color: rgba(160, 180, 210, 0.85);
+      font-size: 12px;
+      border-top: 1px solid var(--ox-border);
+      padding-top: 10px;
+      margin-top: 4px;
+    }
+    .wake-sensitivity-advanced summary {
+      cursor: pointer;
+      color: rgba(200, 216, 240, 0.85);
+      font-size: 12px;
+    }
+    .wake-sensitivity-advanced .wake-sensitivity-row {
+      margin-top: 8px;
+    }
 
     .tab-content {
       min-width: 0;
@@ -3954,11 +3969,24 @@
                   </label>
                   <label class="field field-full">
                     <span>Wake-word sensitivity</span>
-                    <div class="wake-sensitivity-row">
-                      <input id="wake-word-sensitivity" type="range" min="0" max="100" step="1" value="50" />
-                      <span id="wake-word-sensitivity-value" class="wake-sensitivity-value">50%</span>
-                    </div>
+                    <select id="wake-word-sensitivity-preset">
+                      <option value="very_strict">Very strict — fewest false wakes, requires clear pronunciation</option>
+                      <option value="strict">Strict</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="relaxed" selected>Relaxed (default) — tolerates casual pronunciation</option>
+                      <option value="very_relaxed">Very relaxed — most forgiving, more false wakes possible</option>
+                    </select>
                   </label>
+                  <details class="field-full wake-sensitivity-advanced">
+                    <summary>Advanced: numeric sensitivity slider</summary>
+                    <p class="settings-card-subtitle">
+                      Overrides the preset above with a raw 0-100% value. Most people should leave this alone — use the preset instead.
+                    </p>
+                    <div class="wake-sensitivity-row">
+                      <input id="wake-word-sensitivity" type="range" min="0" max="100" step="1" value="65" />
+                      <span id="wake-word-sensitivity-value" class="wake-sensitivity-value">65%</span>
+                    </div>
+                  </details>
                   <label class="toggle field-full" for="allow-background-wake">
                     <input id="allow-background-wake" type="checkbox" checked />
                     Keep wake listener active while app is hidden/minimized

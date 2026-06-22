@@ -36,7 +36,12 @@ class VoiceGateway extends EventEmitter {
       autoSubmit: true,
       fallbackToBrowserSpeech: true,
       noiseSuppressionEnabled: true,
-      wakeWordSensitivity: 0.5,
+      // Legacy numeric slider, kept for backward compat — superseded by
+      // wakeWordSensitivityPreset below as the primary control (sidecar
+      // applies the preset after the numeric value, so the preset wins
+      // whenever both are present; see ai-agent/main.py _handle_configure).
+      wakeWordSensitivity: 0.65,
+      wakeWordSensitivityPreset: 'relaxed',
     };
     this._backend = createVoiceBackendAbstraction({
       sidecar: this._sidecar,
@@ -102,6 +107,7 @@ class VoiceGateway extends EventEmitter {
         wakeWordSensitivity: Number.isFinite(Number(this._settings.wakeWordSensitivity))
           ? Number(this._settings.wakeWordSensitivity)
           : 0.5,
+        wakeWordSensitivityPreset: String(this._settings.wakeWordSensitivityPreset || 'relaxed'),
         listeningForCommand: false,
       });
     }

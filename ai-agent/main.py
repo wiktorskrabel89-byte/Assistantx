@@ -8,7 +8,8 @@ downloaded.
 
 Message protocol (JSON lines sent by client → handled here):
   { "type": "configure",    ...settings, "ttsBackend": "kokoro|piper|auto",
-                            "noiseSuppressionEnabled": true, "wakeWordSensitivity": 0.5, "vadThreshold": 0.5 }
+                            "noiseSuppressionEnabled": true, "wakeWordSensitivity": 0.5, "vadThreshold": 0.5,
+                            "wakeWordSensitivityPreset": "very_strict|strict|balanced|relaxed|very_relaxed" }
   { "type": "audio_chunk",  "data": "<base64 PCM int16 LE>" }
   { "type": "playback_state", "active": true }   # client TTS playback gate (half-duplex)
   { "type": "tts_speak",    "text": "...", "requestId": "..." }
@@ -24,7 +25,8 @@ Message protocol (JSON lines sent by client → handled here):
 
 Events emitted to client:
   { "type": "status",           "phase": "...", "message": "..." }
-  { "type": "wake_word",        "phrase": "..." }
+  { "type": "wake_word",        "phrase": "...", "breakdown": {...} }
+  { "type": "wake_word_rejected", "phrase": "...", "breakdown": {...} }
   { "type": "vad_event",        "phase": "speech_start|speech_end", "sampleRate": 16000 }
   { "type": "audio_segment",    "data": "<base64 PCM int16 LE>", "format": "audio/raw", "sampleRate": 16000 }
   { "type": "stt_result",       "text": "...", "isFinal": bool, "confidence": float|None }
@@ -141,8 +143,9 @@ _set_tts_preferred_backend(DEFAULT_TTS_PREFERRED_BACKEND)
 def _get_wake_detector():
     global _wake_detector
     if _wake_detector is None:
-        from wakeword.detector import WakeWordDetector
+        from wakeword.detector import WakeWordDetector, DEFAULT_SENSITIVITY_PRESET
         _wake_detector = WakeWordDetector()
+        _wake_detector.set_sensitivity_preset(DEFAULT_SENSITIVITY_PRESET)
     return _wake_detector
 
 
@@ -319,12 +322,28 @@ MAX_UTTERANCE_SECONDS = 30.0
 BARGE_IN_RMS_THRESHOLD = float(os.environ.get("JARVIS_BARGE_IN_RMS_THRESHOLD", "0.02"))
 BARGE_IN_MIN_CONSECUTIVE_CHUNKS = int(os.environ.get("JARVIS_BARGE_IN_MIN_CHUNKS", "3"))
 
+# ── Wake-word decision fusion (2026-06 voice-activation upgrade) ────────────
+# A wake score at or above this short-circuits voice-match/context/Whisper
+# checks entirely — confidence this high is not worth spending the extra
+# latency to second-guess.
+FAST_PATH_WAKE_SCORE = 0.92
+# Voice-match score (Phase 5) at/above this counts as "this sounds like the
+# enrolled speaker" in rule 2. Until Phase 5 trains a profile, voice match is
+# treated as None ("not yet trained"), which also satisfies rule 2.
+VOICE_MATCH_ACCEPT_SCORE = 0.60
+# A rejected wake attempt within this margin below threshold is a "near
+# miss" worth surfacing to Transparency Mode (Phase 6), not just silently
+# dropped — see _handle_audio_chunk's wake-word block.
+NEAR_MISS_SCORE_MARGIN = 0.10
+
 
 class ConnectionState:
     def __init__(self) -> None:
         self.wake_word_phrase: str = "hey jarvis"
         self.language: str = "en"
         self.wake_word_enabled: bool = True
+        self.wake_sensitivity_preset: str = "relaxed"
+        self.last_decision_breakdown: dict = {}
         self.stt_enabled: bool = False
         self.tts_enabled: bool = True
         self.nlp_enabled: bool = False
@@ -463,6 +482,13 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
             _get_wake_detector().set_sensitivity(float(msg["wakeWordSensitivity"]))
         except Exception as exc:
             logger.debug("Wake sensitivity configure failed: %s", exc)
+    if "wakeWordSensitivityPreset" in msg:
+        preset = str(msg["wakeWordSensitivityPreset"]).strip().lower()
+        try:
+            if _get_wake_detector().set_sensitivity_preset(preset):
+                state.wake_sensitivity_preset = preset
+        except Exception as exc:
+            logger.debug("Wake sensitivity preset configure failed: %s", exc)
     if "vadThreshold" in msg:
         try:
             _get_vad_engine().set_threshold(float(msg["vadThreshold"]))
@@ -583,6 +609,78 @@ async def _check_barge_in(ws: WebSocketServerProtocol, state: ConnectionState, p
     await _send(ws, {"type": "barge_in"}, state)
 
 
+def _evaluate_activation_decision(state: ConnectionState, wake_score: float) -> dict:
+    """
+    Decision fusion for one wake-word candidate: combine the wake score with
+    voice-match (Phase 5), context-awareness (Phase 2), and Whisper
+    verification (Phase 3) signals — when those phases are enabled and have
+    something to say — into a single accept/reject decision.
+
+    An explainable rule table, not a weighted-sum formula, because
+    Transparency Mode (Phase 6) needs to show *which rule fired* for every
+    attempt, not just a blended score:
+      1. wake_score >= FAST_PATH_WAKE_SCORE -> activate, skip every other
+         check (latency fast-path for unambiguous wakes).
+      2. wake_score >= detector threshold, voice-match agrees (or hasn't
+         been trained yet), no suppressing context -> activate.
+      3. wake_score >= detector threshold but voice-match/context disagree
+         -> tie-break via Whisper verification (Phase 3 fills this branch
+         in; until then it rejects rather than activating without a
+         tie-breaker).
+      4. wake_score < detector threshold -> reject, always. A hard floor
+         that no other signal may override upward.
+
+    Returns a stable-shaped breakdown dict from Phase 1 onward — later
+    phases populate fields that start out None here, never change the shape
+    (Transparency Mode and the event log both depend on that stability):
+      {"wakeScore", "voiceMatchScore", "contextScore", "contextSources",
+       "whisperConfirmed", "whisperTranscript", "decision", "ruleFired"}
+    """
+    score = float(wake_score)
+    breakdown: dict[str, Any] = {
+        "wakeScore": round(score, 4),
+        "voiceMatchScore": None,
+        "contextScore": None,
+        "contextSources": None,
+        "whisperConfirmed": None,
+        "whisperTranscript": None,
+        "decision": "reject",
+        "ruleFired": 4,
+    }
+
+    threshold = _get_wake_detector().threshold
+
+    # Rule 4 (hard floor) — checked first, never overridden upward below.
+    if score < threshold:
+        return breakdown
+
+    # Rule 1 (fast path).
+    if score >= FAST_PATH_WAKE_SCORE:
+        breakdown["decision"] = "activate"
+        breakdown["ruleFired"] = 1
+        return breakdown
+
+    # Phase 5 (voice match) and Phase 2 (context) fill these in when
+    # enabled; until then they read as "not yet trained" / "no suppressing
+    # context", which is exactly rule 2's accept condition.
+    voice_match_score = None
+    context_suppressing = False
+    voice_match_agrees = voice_match_score is None or voice_match_score >= VOICE_MATCH_ACCEPT_SCORE
+
+    # Rule 2.
+    if voice_match_agrees and not context_suppressing:
+        breakdown["decision"] = "activate"
+        breakdown["ruleFired"] = 2
+        return breakdown
+
+    # Rule 3 (tie-break) — Phase 3 wires a real Whisper call into this
+    # branch. No tie-breaker exists yet, so disagreement rejects rather
+    # than activating unverified (spec favors low false-activation rate).
+    breakdown["decision"] = "reject"
+    breakdown["ruleFired"] = 3
+    return breakdown
+
+
 async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
     raw_b64 = msg.get("data", "")
     if not raw_b64:
@@ -633,18 +731,37 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
             detected = await loop.run_in_executor(
                 None, detector.process_chunk, pcm_bytes, state.sample_rate
             )
-            if detected:
-                state.listening_for_command = True
-                state.listen_started_at = now
-                state.speech_started_at = 0.0
-                state.runtime_state = "listening"
-                state.audio_buffer.clear()
-                try:
-                    _get_vad_engine().reset()
-                except Exception:
-                    pass
-                await _send(ws, {"type": "wake_word", "phrase": state.wake_word_phrase}, state)
-                return
+            wake_score = float(getattr(detector, "last_score", 0.0))
+            threshold = detector.threshold
+            # Near misses (rejected, but within NEAR_MISS_SCORE_MARGIN of the
+            # threshold) are worth a breakdown too — Transparency Mode (Phase
+            # 6) needs reject data, not just accepts.
+            near_miss = (not detected) and (threshold - NEAR_MISS_SCORE_MARGIN <= wake_score < threshold)
+            if detected or near_miss:
+                decision = _evaluate_activation_decision(state, wake_score)
+                state.last_decision_breakdown = decision
+                if decision["decision"] == "activate":
+                    state.listening_for_command = True
+                    state.listen_started_at = now
+                    state.speech_started_at = 0.0
+                    state.runtime_state = "listening"
+                    state.audio_buffer.clear()
+                    try:
+                        _get_vad_engine().reset()
+                    except Exception:
+                        pass
+                    await _send(ws, {
+                        "type": "wake_word",
+                        "phrase": state.wake_word_phrase,
+                        "breakdown": decision,
+                    }, state)
+                    return
+                else:
+                    await _send(ws, {
+                        "type": "wake_word_rejected",
+                        "phrase": state.wake_word_phrase,
+                        "breakdown": decision,
+                    }, state)
         except Exception as exc:
             logger.debug("Wake word processing error: %s", exc)
 

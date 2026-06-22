@@ -49,6 +49,15 @@ const voiceGateway = window.jarvisApi.voiceGateway || null;
 let sidecarConnected = false;
 
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
+// Legacy numeric slider default, kept only for the "Advanced" disclosure's
+// backward compat — superseded by DEFAULT_WAKE_WORD_SENSITIVITY_PRESET as
+// the primary control (the sidecar applies the preset after the numeric
+// value on every configure call, so the preset wins whenever both are sent).
+const DEFAULT_WAKE_WORD_SENSITIVITY = 0.65;
+// Tiered preset, mirrors ai-agent/wakeword/detector.py's SENSITIVITY_PRESETS.
+// "relaxed" (0.80 confidence threshold) is the spec-mandated default — never
+// ship below it, 0.60 and under produces too many false activations.
+const DEFAULT_WAKE_WORD_SENSITIVITY_PRESET = 'relaxed';
 const STT_MODEL_ALIASES = {
 	'whisper-tiny': 'tiny',
 	'whisper-base': 'base',
@@ -391,6 +400,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	// Settings → Audio (consolidated mic controls)
 	const micDeviceSelect = document.getElementById('mic-device-select');
 	const noiseSuppressionToggle = document.getElementById('noise-suppression-enabled');
+	const wakeSensitivityPresetSelect = document.getElementById('wake-word-sensitivity-preset');
 	const wakeSensitivitySlider = document.getElementById('wake-word-sensitivity');
 	const wakeSensitivityValueNode = document.getElementById('wake-word-sensitivity-value');
 	const micTestButton = document.getElementById('mic-test-button');
@@ -1498,7 +1508,8 @@ window.addEventListener('DOMContentLoaded', () => {
 		dailySummary: false,
 		reminderVoiceStyle: 'neutral',
 		noiseSuppressionEnabled: true,
-		wakeWordSensitivity: 0.5,
+		wakeWordSensitivity: DEFAULT_WAKE_WORD_SENSITIVITY,
+		wakeWordSensitivityPreset: DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 		micInputDeviceId: '',
 	};
 
@@ -1576,9 +1587,15 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (wakeSensitivitySlider) {
 			const sensitivity = Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 				? Number(voiceSettings.wakeWordSensitivity)
-				: 0.5;
+				: DEFAULT_WAKE_WORD_SENSITIVITY;
 			wakeSensitivitySlider.value = String(Math.round(sensitivity * 100));
 			if (wakeSensitivityValueNode) wakeSensitivityValueNode.textContent = `${Math.round(sensitivity * 100)}%`;
+		}
+		if (wakeSensitivityPresetSelect) {
+			// "custom" (set when the Advanced slider is touched directly) has no
+			// matching <option> by design — the select just shows no selection,
+			// a harmless signal that a non-preset value is active.
+			wakeSensitivityPresetSelect.value = voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET;
 		}
 		if (micDeviceSelect && voiceSettings.micInputDeviceId !== undefined) {
 			micDeviceSelect.value = voiceSettings.micInputDeviceId || '';
@@ -2758,6 +2775,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				wakeWordSensitivity: wakeSensitivitySlider
 					? Math.min(1, Math.max(0, Number(wakeSensitivitySlider.value) / 100))
 					: (Number.isFinite(Number(voiceSettings.wakeWordSensitivity)) ? Number(voiceSettings.wakeWordSensitivity) : 0.5),
+				wakeWordSensitivityPreset: wakeSensitivityPresetSelect?.value || voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 				micInputDeviceId: micDeviceSelect ? String(micDeviceSelect.value || '') : (voiceSettings.micInputDeviceId || ''),
 				voiceLanguage: getVoiceLanguage(),
 				autoTts: Boolean(autoTtsToggle?.checked),
@@ -2805,6 +2823,14 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 	}
 
+	if (wakeSensitivityPresetSelect) {
+		wakeSensitivityPresetSelect.addEventListener('change', () => {
+			const preset = wakeSensitivityPresetSelect.value || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET;
+			applyVoiceSettings({ ...voiceSettings, wakeWordSensitivityPreset: preset });
+			syncSidecarVoiceSettings();
+		});
+	}
+
 	if (wakeSensitivitySlider) {
 		wakeSensitivitySlider.addEventListener('input', () => {
 			if (wakeSensitivityValueNode) {
@@ -2813,7 +2839,12 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 		wakeSensitivitySlider.addEventListener('change', () => {
 			const sensitivity = Math.min(1, Math.max(0, Number(wakeSensitivitySlider.value) / 100));
-			applyVoiceSettings({ ...voiceSettings, wakeWordSensitivity: sensitivity });
+			// Touching the Advanced slider directly switches away from the
+			// preset system — 'custom' has no matching preset server-side, so
+			// the backend leaves the numeric threshold just set here in
+			// effect instead of immediately overriding it back (see
+			// SENSITIVITY_PRESETS / set_sensitivity_preset in detector.py).
+			applyVoiceSettings({ ...voiceSettings, wakeWordSensitivity: sensitivity, wakeWordSensitivityPreset: 'custom' });
 			syncSidecarVoiceSettings();
 		});
 	}
@@ -3074,7 +3105,8 @@ window.addEventListener('DOMContentLoaded', () => {
 				noiseSuppressionEnabled: voiceSettings.noiseSuppressionEnabled !== false,
 				wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 					? Number(voiceSettings.wakeWordSensitivity)
-					: 0.5,
+					: DEFAULT_WAKE_WORD_SENSITIVITY,
+				wakeWordSensitivityPreset: voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 				sampleRate: 16000,
 			};
 			sidecar.configure(configuration);
@@ -3494,6 +3526,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 				? Number(voiceSettings.wakeWordSensitivity)
 				: 0.5,
+			wakeWordSensitivityPreset: voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 		});
 		if (voiceSettings.micInputDeviceId) {
 			sidecar.setInputDevice?.(voiceSettings.micInputDeviceId);
@@ -3508,6 +3541,14 @@ window.addEventListener('DOMContentLoaded', () => {
 			ttsBackend: voiceSettings.ttsBackend || 'kokoro-local',
 			ttsModel: voiceSettings.ttsModel || (isLocalTtsBackend(voiceSettings.ttsBackend) ? DEFAULT_LOCAL_TTS_MODEL : DEFAULT_CLOUD_TTS_MODEL),
 			fallbackToBrowserSpeech: true,
+			// Must stay in sync with the sidecar.configure() call above — voiceGateway
+			// caches these in its own _settings and re-forwards them on every call,
+			// so omitting them here would resend a stale cached value and silently
+			// undo whatever was just set above.
+			wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
+				? Number(voiceSettings.wakeWordSensitivity)
+				: 0.5,
+			wakeWordSensitivityPreset: voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 		});
 		if (voiceSettings.wakeWordEnabled && !sidecar.isCapturing()) {
 			(voiceGateway || sidecar).startAudioCapture().catch(() => null);
