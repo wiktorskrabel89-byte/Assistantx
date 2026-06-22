@@ -459,6 +459,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	let speechVoicePromise = null;
 
 	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
+	const PROVIDER_MODE_MIGRATED_KEY = 'jarvis-desktop-provider-mode-migrated-v1';
 	const DEFAULT_LOCAL_TTS_MODEL = 'kokoro';
 	const DEFAULT_CLOUD_TTS_MODEL = 'playai-tts';
 	const AGENT_STATE = {
@@ -1502,7 +1503,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		allowBackgroundWake: true,
 		voiceLanguage: voiceLanguageSelect?.value || (typeof navigator !== 'undefined' ? navigator.language : 'en-US') || 'en-US',
 		autoTts: true,
-		providerMode: 'assistantx-server',
+		providerMode: 'desktop-direct',
 		temporalAwareness: true,
 		proactiveReminders: true,
 		ambientAnnouncements: false,
@@ -1519,7 +1520,19 @@ window.addEventListener('DOMContentLoaded', () => {
 		try {
 			const raw = localStorage.getItem(JARVIS_SETTINGS_KEY);
 			if (!raw) return { ...defaultVoiceSettings };
-			return { ...defaultVoiceSettings, ...JSON.parse(raw) };
+			const parsed = JSON.parse(raw);
+			// One-time migration: 'assistantx-server' used to be the only default,
+			// requiring sign-in for STT/TTS even though most users never sign in
+			// to the desktop app itself. Now that 'desktop-direct' is the real
+			// default, drop a never-explicitly-changed stale value exactly once so
+			// existing installs pick up local-only voice without re-saving
+			// Settings. A deliberate later choice of 'assistantx-server' persists
+			// normally since this migration never runs a second time.
+			if (parsed.providerMode === 'assistantx-server' && !localStorage.getItem(PROVIDER_MODE_MIGRATED_KEY)) {
+				delete parsed.providerMode;
+			}
+			localStorage.setItem(PROVIDER_MODE_MIGRATED_KEY, '1');
+			return { ...defaultVoiceSettings, ...parsed };
 		} catch {
 			return { ...defaultVoiceSettings };
 		}
@@ -1604,8 +1617,6 @@ window.addEventListener('DOMContentLoaded', () => {
 			micDeviceSelect.value = voiceSettings.micInputDeviceId || '';
 		}
 		if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
-		// 'desktop-direct' is not implemented in voice-gateway.js — silently migrate to the working default.
-		if (voiceSettings.providerMode === 'desktop-direct') voiceSettings.providerMode = 'assistantx-server';
 		if (voiceProviderModeSelect && voiceSettings.providerMode) voiceProviderModeSelect.value = voiceSettings.providerMode;
 		if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
 		if (temporalAwarenessToggle) temporalAwarenessToggle.checked = Boolean(voiceSettings.temporalAwareness);
@@ -2783,7 +2794,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				micInputDeviceId: micDeviceSelect ? String(micDeviceSelect.value || '') : (voiceSettings.micInputDeviceId || ''),
 				voiceLanguage: getVoiceLanguage(),
 				autoTts: Boolean(autoTtsToggle?.checked),
-				providerMode: voiceProviderModeSelect?.value || 'assistantx-server',
+				providerMode: voiceProviderModeSelect?.value || 'desktop-direct',
 				temporalAwareness: Boolean(temporalAwarenessToggle?.checked),
 				proactiveReminders: Boolean(proactiveRemindersToggle?.checked),
 				ambientAnnouncements: Boolean(ambientAnnouncementsToggle?.checked),
@@ -2979,7 +2990,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	if (voiceProviderModeSelect) {
 		voiceProviderModeSelect.addEventListener('change', () => {
-			applyVoiceSettings({ ...voiceSettings, providerMode: voiceProviderModeSelect.value || 'assistantx-server' });
+			applyVoiceSettings({ ...voiceSettings, providerMode: voiceProviderModeSelect.value || 'desktop-direct' });
 			syncSidecarVoiceSettings();
 		});
 	}
@@ -3127,7 +3138,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 			voiceGateway?.configure({
 				...configuration,
-				providerMode: voiceSettings.providerMode || 'assistantx-server',
+				providerMode: voiceSettings.providerMode || 'desktop-direct',
 				sttModel: voiceSettings.sttModel,
 				persona: voiceSettings.ttsVoiceId,
 				ttsBackend: voiceSettings.ttsBackend || 'kokoro-local',
@@ -3545,7 +3556,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			sidecar.setInputDevice?.(voiceSettings.micInputDeviceId);
 		}
 		voiceGateway?.configure({
-			providerMode: voiceSettings.providerMode || 'assistantx-server',
+			providerMode: voiceSettings.providerMode || 'desktop-direct',
 			wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
 			language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
 			wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),

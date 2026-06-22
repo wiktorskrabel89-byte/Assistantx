@@ -26,7 +26,7 @@ class VoiceGateway extends EventEmitter {
     this._queuePromptExecution = options.queuePromptExecution || null;
     this._executeStructuredCommand = options.executeStructuredCommand || null;
     this._settings = {
-      providerMode: PROVIDER_MODE_SERVER,
+      providerMode: PROVIDER_MODE_DIRECT,
       language: DEFAULT_LANGUAGE,
       wakeWordEnabled: true,
       wakeWordPhrase: 'Hey Jarvis',
