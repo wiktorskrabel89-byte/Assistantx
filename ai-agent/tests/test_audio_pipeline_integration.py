@@ -133,7 +133,7 @@ class PipelineHarness:
     """Wires fake/synthetic engines into main's lazy singletons."""
 
     def __init__(self):
-        self._saved = (main._wake_detector, main._vad_engine, main._noise_suppressor)
+        self._saved = (main._wake_detector, main._vad_engine, main._noise_suppressor, main._context_probe)
         self.wake = FakeWakeDetector()
         # Real VAD windowing/energy-gate logic with a synthetic scorer:
         # loud windows score 0.95, quiet windows 0.05.
@@ -141,12 +141,16 @@ class PipelineHarness:
         main._wake_detector = self.wake
         main._vad_engine = self.vad
         main._noise_suppressor = None  # lazily built only if a test enables it
+        main._context_probe = None  # lazily built only if a test enables it
         self.ws = FakeWs()
         self.state = main.ConnectionState()
         self.state.noise_suppression_enabled = False
+        # Opt-in per test (ContextAwarenessIntegrationTests below) so existing
+        # tests that don't care about Phase 2 never touch the context probe.
+        self.state.context_awareness_enabled = False
 
     def restore(self):
-        main._wake_detector, main._vad_engine, main._noise_suppressor = self._saved
+        main._wake_detector, main._vad_engine, main._noise_suppressor, main._context_probe = self._saved
 
     async def push(self, pcm: bytes):
         await main._handle_audio_chunk(self.ws, self.state, {"data": encode(pcm)})
@@ -444,9 +448,149 @@ class DecisionFusionTests(unittest.TestCase):
             set(breakdown.keys()),
             {
                 "wakeScore", "voiceMatchScore", "contextScore", "contextSources",
-                "whisperConfirmed", "whisperTranscript", "decision", "ruleFired",
+                "noiseFloor", "whisperConfirmed", "whisperTranscript", "decision",
+                "ruleFired",
             },
         )
+
+
+class FakeContextProbe:
+    """Stands in directly for main._context_probe — bypasses AudioSessionProbe
+    (and its own TTL cache) entirely, mirroring how FakeWakeDetector replaces
+    WakeWordDetector above."""
+
+    def __init__(self, sources=None, available=True):
+        self.available = available
+        self._sources = list(sources or [])
+        self.call_count = 0
+
+    def get_active_media_sources(self):
+        self.call_count += 1
+        return list(self._sources)
+
+
+class ContextAwarenessIntegrationTests(unittest.TestCase):
+    """Phase 2: a known media process actively playing audio suppresses a
+    mid-band wake candidate (rule 3) instead of activating it (rule 2)."""
+
+    def setUp(self):
+        self.harness = PipelineHarness()
+        self.addCleanup(self.harness.restore)
+        self.scored = ScoredFakeWakeDetector(threshold=0.80)
+        main._wake_detector = self.scored
+
+    def test_active_media_source_forces_reject_with_rule_3(self):
+        self.harness.state.context_awareness_enabled = True
+        probe = FakeContextProbe(sources=["browser"])
+        main._context_probe = probe
+        self.scored.queue_score(0.85)  # mid-band: above threshold, below fast path
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        self.assertEqual(events_of(events, "wake_word"), [])
+        rejected = events_of(events, "wake_word_rejected")
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0]["breakdown"]["ruleFired"], 3)
+        self.assertEqual(rejected[0]["breakdown"]["decision"], "reject")
+        self.assertEqual(rejected[0]["breakdown"]["contextSources"], ["browser"])
+        self.assertEqual(probe.call_count, 1)
+
+    def test_no_active_media_source_activates_with_rule_2(self):
+        self.harness.state.context_awareness_enabled = True
+        probe = FakeContextProbe(sources=[])
+        main._context_probe = probe
+        self.scored.queue_score(0.85)
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        wake_events = events_of(events, "wake_word")
+        self.assertEqual(len(wake_events), 1)
+        self.assertEqual(wake_events[0]["breakdown"]["ruleFired"], 2)
+        self.assertIsNone(wake_events[0]["breakdown"]["contextSources"])
+
+    def test_disabled_context_awareness_never_queries_the_probe(self):
+        self.harness.state.context_awareness_enabled = False
+        probe = FakeContextProbe(sources=["discord"])
+        main._context_probe = probe
+        self.scored.queue_score(0.85)
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        # Disabled means the (still-active-media) probe is never even
+        # consulted, so the candidate activates via rule 2 regardless.
+        wake_events = events_of(events, "wake_word")
+        self.assertEqual(len(wake_events), 1)
+        self.assertEqual(wake_events[0]["breakdown"]["ruleFired"], 2)
+        self.assertEqual(probe.call_count, 0)
+
+    def test_unavailable_probe_does_not_suppress(self):
+        self.harness.state.context_awareness_enabled = True
+        probe = FakeContextProbe(sources=["discord"], available=False)
+        main._context_probe = probe
+        self.scored.queue_score(0.85)
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        wake_events = events_of(events, "wake_word")
+        self.assertEqual(len(wake_events), 1)
+        self.assertEqual(probe.call_count, 0)
+
+    def test_fast_path_score_never_consults_the_probe(self):
+        self.harness.state.context_awareness_enabled = True
+        probe = FakeContextProbe(sources=["discord"])
+        main._context_probe = probe
+        self.scored.queue_score(0.95)  # >= FAST_PATH_WAKE_SCORE
+
+        async def run():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run())
+        events = drain_events(self.harness.state)
+        wake_events = events_of(events, "wake_word")
+        self.assertEqual(len(wake_events), 1)
+        self.assertEqual(wake_events[0]["breakdown"]["ruleFired"], 1)
+        self.assertIsNone(wake_events[0]["breakdown"]["contextSources"])
+        self.assertEqual(probe.call_count, 0)
+
+    def test_noise_floor_is_populated_in_mid_band_only(self):
+        self.harness.state.context_awareness_enabled = True
+        main._context_probe = FakeContextProbe(sources=[])
+
+        self.scored.queue_score(0.95)  # rule 1: noiseFloor stays None
+
+        async def run_fast_path():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run_fast_path())
+        events = drain_events(self.harness.state)
+        self.assertIsNone(events_of(events, "wake_word")[0]["breakdown"]["noiseFloor"])
+
+        # The fast-path activation above armed command-listening mode, which
+        # gates the wake-word block off entirely — reset to a fresh wake
+        # attempt rather than a continued command-capture session.
+        self.harness.state.listening_for_command = False
+        self.scored.queue_score(0.85)  # rule 2/3 mid-band: noiseFloor populated
+
+        async def run_mid_band():
+            await self.harness.push(tone_chunk())
+
+        asyncio.run(run_mid_band())
+        events = drain_events(self.harness.state)
+        noise_floor = events_of(events, "wake_word")[0]["breakdown"]["noiseFloor"]
+        self.assertIsInstance(noise_floor, float)
+        self.assertGreater(noise_floor, 0.0)
 
 
 class NoiseSuppressionIntegrationTests(unittest.TestCase):

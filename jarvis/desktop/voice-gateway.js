@@ -36,6 +36,7 @@ class VoiceGateway extends EventEmitter {
       autoSubmit: true,
       fallbackToBrowserSpeech: true,
       noiseSuppressionEnabled: true,
+      contextAwarenessEnabled: true,
       // Legacy numeric slider, kept for backward compat — superseded by
       // wakeWordSensitivityPreset below as the primary control (sidecar
       // applies the preset after the numeric value, so the preset wins
@@ -104,6 +105,7 @@ class VoiceGateway extends EventEmitter {
         nlpEnabled: false,
         vadEnabled: true,
         noiseSuppressionEnabled: this._settings.noiseSuppressionEnabled !== false,
+        contextAwarenessEnabled: this._settings.contextAwarenessEnabled !== false,
         wakeWordSensitivity: Number.isFinite(Number(this._settings.wakeWordSensitivity))
           ? Number(this._settings.wakeWordSensitivity)
           : 0.5,

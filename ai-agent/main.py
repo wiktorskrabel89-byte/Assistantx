@@ -99,6 +99,7 @@ _nlp_engine: Any = None
 _vad_engine: Any = None
 _noise_suppressor: Any = None
 _memory_store: Any = None
+_context_probe: Any = None
 _stt_backend_name = "none"
 _tts_backend_name = "none"
 
@@ -286,6 +287,14 @@ def _get_memory_store():
     return _memory_store
 
 
+def _get_context_probe():
+    global _context_probe
+    if _context_probe is None:
+        from context.audio_session_probe import AudioSessionProbe
+        _context_probe = AudioSessionProbe()
+    return _context_probe
+
+
 def _health_snapshot() -> dict[str, Any]:
     stt_ready = _stt_engine is not None
     tts_ready = _tts_engine is not None
@@ -349,6 +358,9 @@ class ConnectionState:
         self.nlp_enabled: bool = False
         self.vad_enabled: bool = True
         self.noise_suppression_enabled: bool = True
+        # Phase 2: suppress likely-false wake candidates while a known media
+        # process (browser/Spotify/Discord) is actively playing audio.
+        self.context_awareness_enabled: bool = True
         self.runtime_state: str = "idle"
         self.model_mode: str = "fast"
         self.listening_for_command: bool = False
@@ -369,6 +381,11 @@ class ConnectionState:
         self.sample_rate: int = 16000
         self.outbound_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=256)
         self.last_rms_sent_at: float = 0.0
+        # Most recent mic-input RMS (0..1), updated every chunk regardless of
+        # the rms_level WS-emit throttle below — _evaluate_activation_decision
+        # reads this for breakdown["noiseFloor"] since it only receives
+        # (state, wake_score), never the raw chunk. See _emit_rms.
+        self.last_rms: float = 0.0
         self.tts_stream_request_id: str = ""
         self.tts_stream_chunk_index: int = 0
 
@@ -489,6 +506,8 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
                 state.wake_sensitivity_preset = preset
         except Exception as exc:
             logger.debug("Wake sensitivity preset configure failed: %s", exc)
+    if "contextAwarenessEnabled" in msg:
+        state.context_awareness_enabled = bool(msg["contextAwarenessEnabled"])
     if "vadThreshold" in msg:
         try:
             _get_vad_engine().set_threshold(float(msg["vadThreshold"]))
@@ -622,7 +641,8 @@ def _evaluate_activation_decision(state: ConnectionState, wake_score: float) -> 
       1. wake_score >= FAST_PATH_WAKE_SCORE -> activate, skip every other
          check (latency fast-path for unambiguous wakes).
       2. wake_score >= detector threshold, voice-match agrees (or hasn't
-         been trained yet), no suppressing context -> activate.
+         been trained yet), no suppressing context (Phase 2: no known media
+         process actively playing audio) -> activate.
       3. wake_score >= detector threshold but voice-match/context disagree
          -> tie-break via Whisper verification (Phase 3 fills this branch
          in; until then it rejects rather than activating without a
@@ -634,7 +654,8 @@ def _evaluate_activation_decision(state: ConnectionState, wake_score: float) -> 
     phases populate fields that start out None here, never change the shape
     (Transparency Mode and the event log both depend on that stability):
       {"wakeScore", "voiceMatchScore", "contextScore", "contextSources",
-       "whisperConfirmed", "whisperTranscript", "decision", "ruleFired"}
+       "noiseFloor", "whisperConfirmed", "whisperTranscript", "decision",
+       "ruleFired"}
     """
     score = float(wake_score)
     breakdown: dict[str, Any] = {
@@ -642,6 +663,7 @@ def _evaluate_activation_decision(state: ConnectionState, wake_score: float) -> 
         "voiceMatchScore": None,
         "contextScore": None,
         "contextSources": None,
+        "noiseFloor": None,
         "whisperConfirmed": None,
         "whisperTranscript": None,
         "decision": "reject",
@@ -660,11 +682,28 @@ def _evaluate_activation_decision(state: ConnectionState, wake_score: float) -> 
         breakdown["ruleFired"] = 1
         return breakdown
 
-    # Phase 5 (voice match) and Phase 2 (context) fill these in when
-    # enabled; until then they read as "not yet trained" / "no suppressing
-    # context", which is exactly rule 2's accept condition.
+    # Mid-band: candidate clears the floor but isn't an unambiguous fast-path
+    # wake, so the extra signals are worth consulting. Noise floor is always
+    # cheap to report (already computed per-chunk in _emit_rms). The context
+    # probe is a COM call (TTL-cached inside AudioSessionProbe) and is only
+    # consulted here — never on every audio chunk — and only when Phase 2 is
+    # enabled and pycaw is actually available on this platform.
+    breakdown["noiseFloor"] = round(float(state.last_rms), 6)
+
+    context_sources: list[str] = []
+    if state.context_awareness_enabled:
+        try:
+            probe = _get_context_probe()
+            if probe.available:
+                context_sources = probe.get_active_media_sources()
+        except Exception as exc:
+            logger.debug("Context probe error: %s", exc)
+    breakdown["contextSources"] = context_sources or None
+
+    # Phase 5 (voice match) fills this in when enabled; until then it reads
+    # as "not yet trained", which is exactly rule 2's accept condition.
     voice_match_score = None
-    context_suppressing = False
+    context_suppressing = bool(context_sources)
     voice_match_agrees = voice_match_score is None or voice_match_score >= VOICE_MATCH_ACCEPT_SCORE
 
     # Rule 2.
@@ -1311,11 +1350,18 @@ async def _dispatch_message(endpoint: Any, state: ConnectionState, msg: dict) ->
 def _emit_rms(state: ConnectionState, pcm_bytes: bytes, source: str, sample_rate: int) -> None:
     if not pcm_bytes:
         return
+    rms = _pcm_int16_rms(pcm_bytes)
+    if source == "mic":
+        # Tracked every chunk, independent of the WS-emit throttle below —
+        # _evaluate_activation_decision reads this as the room noise floor.
+        # Mic-only: a "tts" source here is the assistant's own playback
+        # level (see _emit_rms_from_wav callers), not room noise, and must
+        # never overwrite it.
+        state.last_rms = rms
     now = time.monotonic()
     if now - state.last_rms_sent_at < 0.06:
         return
     state.last_rms_sent_at = now
-    rms = _pcm_int16_rms(pcm_bytes)
     payload = {
         "type": "rms_level",
         "source": source,

@@ -400,6 +400,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	// Settings → Audio (consolidated mic controls)
 	const micDeviceSelect = document.getElementById('mic-device-select');
 	const noiseSuppressionToggle = document.getElementById('noise-suppression-enabled');
+	const contextAwarenessToggle = document.getElementById('context-awareness-enabled');
 	const wakeSensitivityPresetSelect = document.getElementById('wake-word-sensitivity-preset');
 	const wakeSensitivitySlider = document.getElementById('wake-word-sensitivity');
 	const wakeSensitivityValueNode = document.getElementById('wake-word-sensitivity-value');
@@ -1508,6 +1509,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		dailySummary: false,
 		reminderVoiceStyle: 'neutral',
 		noiseSuppressionEnabled: true,
+		contextAwarenessEnabled: true,
 		wakeWordSensitivity: DEFAULT_WAKE_WORD_SENSITIVITY,
 		wakeWordSensitivityPreset: DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 		micInputDeviceId: '',
@@ -1584,6 +1586,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
 		if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
 		if (noiseSuppressionToggle) noiseSuppressionToggle.checked = voiceSettings.noiseSuppressionEnabled !== false;
+		if (contextAwarenessToggle) contextAwarenessToggle.checked = voiceSettings.contextAwarenessEnabled !== false;
 		if (wakeSensitivitySlider) {
 			const sensitivity = Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 				? Number(voiceSettings.wakeWordSensitivity)
@@ -2772,6 +2775,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
 				allowBackgroundWake: Boolean(allowBackgroundWakeToggle?.checked),
 				noiseSuppressionEnabled: noiseSuppressionToggle ? Boolean(noiseSuppressionToggle.checked) : voiceSettings.noiseSuppressionEnabled !== false,
+				contextAwarenessEnabled: contextAwarenessToggle ? Boolean(contextAwarenessToggle.checked) : voiceSettings.contextAwarenessEnabled !== false,
 				wakeWordSensitivity: wakeSensitivitySlider
 					? Math.min(1, Math.max(0, Number(wakeSensitivitySlider.value) / 100))
 					: (Number.isFinite(Number(voiceSettings.wakeWordSensitivity)) ? Number(voiceSettings.wakeWordSensitivity) : 0.5),
@@ -2852,6 +2856,13 @@ window.addEventListener('DOMContentLoaded', () => {
 	if (noiseSuppressionToggle) {
 		noiseSuppressionToggle.addEventListener('change', () => {
 			applyVoiceSettings({ ...voiceSettings, noiseSuppressionEnabled: Boolean(noiseSuppressionToggle.checked) });
+			syncSidecarVoiceSettings();
+		});
+	}
+
+	if (contextAwarenessToggle) {
+		contextAwarenessToggle.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, contextAwarenessEnabled: Boolean(contextAwarenessToggle.checked) });
 			syncSidecarVoiceSettings();
 		});
 	}
@@ -3103,6 +3114,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				nlpEnabled: false,
 				vadEnabled: true,
 				noiseSuppressionEnabled: voiceSettings.noiseSuppressionEnabled !== false,
+				contextAwarenessEnabled: voiceSettings.contextAwarenessEnabled !== false,
 				wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 					? Number(voiceSettings.wakeWordSensitivity)
 					: DEFAULT_WAKE_WORD_SENSITIVITY,
@@ -3523,6 +3535,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			nlpEnabled: false,
 			vadEnabled: true,
 			noiseSuppressionEnabled: voiceSettings.noiseSuppressionEnabled !== false,
+			contextAwarenessEnabled: voiceSettings.contextAwarenessEnabled !== false,
 			wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 				? Number(voiceSettings.wakeWordSensitivity)
 				: 0.5,
@@ -3545,6 +3558,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			// caches these in its own _settings and re-forwards them on every call,
 			// so omitting them here would resend a stale cached value and silently
 			// undo whatever was just set above.
+			contextAwarenessEnabled: voiceSettings.contextAwarenessEnabled !== false,
 			wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 				? Number(voiceSettings.wakeWordSensitivity)
 				: 0.5,
