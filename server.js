@@ -279,10 +279,22 @@ async function handleRealtimeMessage(ws, meta, raw) {
 function installRealtimeGateway(httpServer) {
   realtimeServer = new WebSocketServer({ noServer: true });
 
+  // Next.js needs to handle its own WebSocket upgrades (Turbopack/HMR dev
+  // socket at /_next/webpack-hmr). Destroying them kills the dev client's
+  // module runtime: the browser waits for the dev socket before executing
+  // page modules, so hydration silently never happens.
+  const nextUpgradeHandler = typeof app.getUpgradeHandler === "function"
+    ? app.getUpgradeHandler()
+    : null;
+
   httpServer.on("upgrade", async (req, socket, head) => {
     const parsed = parse(req.url || "", true);
     if (parsed.pathname !== REALTIME_PATH) {
-      socket.destroy();
+      if (nextUpgradeHandler) {
+        nextUpgradeHandler(req, socket, head);
+      } else {
+        socket.destroy();
+      }
       return;
     }
 

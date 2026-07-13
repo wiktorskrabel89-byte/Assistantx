@@ -49,3 +49,6 @@ next-env.d.ts
 *.pyc
 /jarvis/power-guard/target/
 .aider*
+
+# Waitlist signups (contains visitor emails - never commit)
+/data/waitlist.json

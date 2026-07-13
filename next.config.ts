@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Hide the floating "N" dev-tools indicator in the corner during `next dev`
+  devIndicators: false,
   outputFileTracingRoot: process.cwd(),
   turbopack: {
     root: process.cwd(),
@@ -109,11 +111,17 @@ const nextConfig = {
         // (lib/middleware.ts / proxy.ts) injects a stricter nonce-based policy for
         // pages that run through the Edge middleware.  This header acts as a
         // defence-in-depth fallback for any path not covered by the middleware matcher.
+        //
+        // 'unsafe-eval' must be allowed in development: Turbopack instantiates dev
+        // modules via eval(), and browsers enforce the INTERSECTION of all CSP
+        // headers on a response — so this baseline (stacked on top of the
+        // middleware's nonce policy) silently killed eval, which killed the entire
+        // client module graph: no hydration, no interactivity, no HMR, no errors.
         {
           key: 'Content-Security-Policy',
           value: [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+            `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : ''} https://cdn.jsdelivr.net`,
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "img-src 'self' blob: data: https:",
             "font-src 'self' https://fonts.gstatic.com data:",
