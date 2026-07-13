@@ -57,15 +57,43 @@ function Stop-Jarvis {
 
 # Files in jarvis/desktop/ that this deploy script knows how to overlay.
 # Add new entries here when the next change touches files not in this list.
+#
+# Audited live against every require('./X')/<script src="X"> reference in
+# the repo (2026-06-21) — several files were silently missing from this
+# list (splash.html, setup-wizard.html, launcher-overlay.html, and the
+# script-tag/preload-only files below never went through a real require()
+# call so they were invisible to a casual grep): every deploy before that
+# point was running stale code for those modules with no error anywhere.
+# ChatAI.js and phone-commands.js are confirmed orphaned (nothing requires
+# them) and intentionally excluded.
 $DesktopFiles = @(
     'main.js',
     'preload.js',
     'renderer.js',
+    'backend.js',
     'sidecar-bridge.js',
     'voice-gateway.js',
     'runtime-config.js',
     'index.html',
-    'package.json'
+    'splash.html',
+    'setup-wizard.html',
+    'launcher-overlay.html',
+    'package.json',
+    'accounts.js',
+    'ai-stream-segmenter.js',
+    'app-launch-config.js',
+    'app-resolver.js',
+    'app-scanner.js',
+    'auth.js',
+    'command-palette.js',
+    'launcher-overlay.js',
+    'launcher-preload.js',
+    'local-state.js',
+    'log-empty-state.js',
+    'map-widget.js',
+    'reminder-scheduler.js',
+    'scheduler.js',
+    'task-planner.js'
 )
 
 # Directories under jarvis/desktop/ that we mirror in full.

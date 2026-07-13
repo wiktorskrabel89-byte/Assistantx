@@ -211,3 +211,8 @@ function chooseCloudProvider(order, providers = {}) {
 module.exports = { decideRoute, classifyIntent: undefined /* re-exported below for ergonomics */ };
 // Convenience re-export so callers don't need two requires.
 module.exports.classifyIntent = require('./analyzer').classifyIntent;
+// Round-2: expose internal tables so the router-routing tests can assert
+// against the same dispatch defaults the policy actually uses.
+module.exports.DEFAULT_DISPATCH = DEFAULT_DISPATCH;
+module.exports.INTENT_TO_SLOT = INTENT_TO_SLOT;
+module.exports.SLOT_FALLBACK_CHAIN = SLOT_FALLBACK_CHAIN;

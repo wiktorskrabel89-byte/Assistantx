@@ -25,7 +25,7 @@ const { discoverApps } = require('./providers');
 
 function execFilePromise(file, args, options = {}) {
   return new Promise((resolve, reject) => {
-    execFile(file, args, options, (error, stdout, stderr) => {
+    execFile(file, args, { windowsHide: true, ...options }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(stderr?.trim() || error.message));
         return;

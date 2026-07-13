@@ -19,6 +19,73 @@
       --danger: #ef4444;
       --success: #22c55e;
       --warning: #f59e0b;
+
+      /* Meridian / Obsidian Intelligence tokens — additive aliases. */
+      --ox-bg: var(--bg);
+      --ox-bg-2: #0d1015;
+      --ox-bg-elev: var(--panel);
+      --ox-panel: var(--panel);
+      --ox-panel-soft: var(--panel-soft);
+      --ox-border: var(--panel-border);
+      --ox-border-strong: #2f3640;
+      --ox-text: var(--text);
+      --ox-text-muted: var(--muted);
+      --ox-text-dim: #6b7280;
+      --ox-accent-cyan: var(--accent);
+      --ox-accent-cyan-soft: rgba(125, 211, 252, 0.18);
+      --ox-accent-purple: #a78bfa;
+      --ox-accent-purple-soft: rgba(167, 139, 250, 0.18);
+      --ox-success: var(--success);
+      --ox-warning: var(--warning);
+      --ox-danger: var(--danger);
+
+      --ox-glass-bg: rgba(17, 20, 24, 0.72);
+      --ox-glass-border: rgba(125, 211, 252, 0.12);
+      --ox-glass-blur: 14px;
+      --ox-glow-cyan: 0 0 18px rgba(125, 211, 252, 0.28);
+      --ox-glow-cyan-strong: 0 0 24px rgba(125, 211, 252, 0.45);
+      --ox-glow-purple: 0 0 18px rgba(167, 139, 250, 0.28);
+
+      --ox-radius-sm: 6px;
+      --ox-radius: 10px;
+      --ox-radius-lg: 14px;
+
+      --ox-font-sans: "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --ox-font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+
+      --ox-duration-fast: 120ms;
+      --ox-duration: 200ms;
+      --ox-duration-slow: 360ms;
+      --ox-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+
+    /*
+     * JetBrains Mono — local() only. The Meridian mono accents render in
+     * JetBrains Mono when the OS has it installed and fall back to the
+     * --ox-font-mono stack (Cascadia Code / Consolas / system mono) otherwise.
+     * To bundle the webfont, drop the woff2 files under
+     * assets/fonts/jetbrains-mono/ and append url() entries to each src.
+     */
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: local('JetBrains Mono'), local('JetBrainsMono-Regular');
+    }
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: local('JetBrains Mono Medium'), local('JetBrainsMono-Medium');
+    }
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: local('JetBrains Mono Bold'), local('JetBrainsMono-Bold');
     }
 
     * { box-sizing: border-box; }
@@ -1238,19 +1305,21 @@
       margin: -4px 0 4px;
     }
 
-    /* Mic test live level meter */
+    /* Mic test live level meter — Meridian polish (M9). */
     .mic-test-meter {
       position: relative;
-      height: 10px;
-      border-radius: 6px;
-      background: rgba(15, 23, 42, 0.7);
-      border: 1px solid rgba(125, 211, 252, 0.14);
+      height: 12px;
+      border-radius: 999px;
+      background: var(--ox-bg-2);
+      border: 1px solid var(--ox-border);
       overflow: hidden;
+      box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.55);
     }
     .mic-test-meter-fill {
       height: 100%;
       width: 0%;
-      background: linear-gradient(90deg, #22d3ee 0%, #38bdf8 60%, #f59e0b 90%, #ef4444 100%);
+      background: linear-gradient(90deg, var(--ox-accent-cyan) 0%, var(--ox-accent-cyan) 55%, var(--ox-warning) 85%, var(--ox-danger) 100%);
+      box-shadow: 0 0 14px rgba(125, 211, 252, 0.45);
       transition: width 80ms linear;
     }
     .mic-test-status {
@@ -1274,6 +1343,21 @@
       min-width: 36px;
       text-align: right;
     }
+    .wake-sensitivity-advanced {
+      color: rgba(160, 180, 210, 0.85);
+      font-size: 12px;
+      border-top: 1px solid var(--ox-border);
+      padding-top: 10px;
+      margin-top: 4px;
+    }
+    .wake-sensitivity-advanced summary {
+      cursor: pointer;
+      color: rgba(200, 216, 240, 0.85);
+      font-size: 12px;
+    }
+    .wake-sensitivity-advanced .wake-sensitivity-row {
+      margin-top: 8px;
+    }
 
     .tab-content {
       min-width: 0;
@@ -1281,49 +1365,155 @@
 
     .command-workspace {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(420px, 55%);
+      grid-template-columns: minmax(0, 1fr) 360px;
       gap: 12px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .chat-column {
       min-width: 0;
     }
 
-    .viewport-shell {
+    /* ── Meridian Activity Panel (right column, 360px) ─────────────────── */
+    .ox-activity {
+      display: grid;
+      grid-template-rows: auto 1fr;
       min-height: 540px;
-      border-radius: 8px;
-      border: 1px solid var(--panel-border);
-      background: var(--panel-soft);
+      max-height: calc(100vh - 160px);
+      border-radius: var(--ox-radius-lg);
+      border: 1px solid var(--ox-glass-border);
+      background: var(--ox-glass-bg);
+      backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+      -webkit-backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+      overflow: hidden;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+    }
+    .ox-activity-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--ox-border);
+      background: linear-gradient(180deg, rgba(125, 211, 252, 0.04), transparent);
+    }
+    .ox-activity-tab {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 6px 8px;
+      border-radius: var(--ox-radius-sm);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ox-text-muted);
+      font-family: var(--ox-font-sans);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background var(--ox-duration-fast) var(--ox-ease),
+                  color var(--ox-duration-fast) var(--ox-ease),
+                  border-color var(--ox-duration-fast) var(--ox-ease);
+    }
+    .ox-activity-tab:hover { color: var(--ox-text); background: rgba(125, 211, 252, 0.06); }
+    .ox-activity-tab.active {
+      color: var(--ox-accent-cyan);
+      background: rgba(125, 211, 252, 0.10);
+      border-color: var(--ox-accent-cyan-soft);
+    }
+    .ox-activity-tab .ox-icon { width: 13px; height: 13px; }
+    .ox-activity-body {
+      position: relative;
+      overflow: auto;
+      padding: 10px;
+    }
+    .ox-activity-segment { display: none; }
+    .ox-activity-segment.active { display: grid; gap: 10px; align-content: start; }
+
+    .ox-activity-card {
+      display: grid;
+      gap: 6px;
+      padding: 10px 12px;
+      border-radius: var(--ox-radius);
+      border: 1px solid var(--ox-border);
+      background: rgba(13, 16, 21, 0.65);
+    }
+    .ox-activity-card-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ox-text-muted);
+    }
+    .ox-activity-card-title .ox-icon { width: 12px; height: 12px; color: var(--ox-accent-cyan); }
+    .ox-activity-card-body { font-size: 12px; color: var(--ox-text); line-height: 1.45; }
+    .ox-activity-empty {
+      display: grid;
+      justify-items: center;
+      align-content: center;
+      gap: 8px;
+      padding: 28px 16px;
+      border-radius: var(--ox-radius);
+      border: 1px dashed var(--ox-border);
+      background: rgba(125, 211, 252, 0.03);
+      color: var(--ox-text-muted);
+      font-size: 12px;
+      text-align: center;
+      min-height: 100px;
+    }
+    .ox-activity-empty .ox-icon { width: 22px; height: 22px; color: var(--ox-accent-cyan); opacity: 0.7; }
+
+    .ox-log-line {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 8px;
+      align-items: baseline;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-family: var(--ox-font-mono);
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--ox-text);
+    }
+    .ox-log-line + .ox-log-line { margin-top: 2px; }
+    .ox-log-time { color: var(--ox-text-dim); font-size: 10.5px; }
+    .ox-log-line.ok { color: var(--ox-success); }
+    .ox-log-line.warn { color: var(--ox-warning); }
+    .ox-log-line.bad { color: var(--ox-danger); }
+
+    /* Viewport pane CSS — now lives inside the Activity Panel's Pliki segment.
+       The .viewport-active body-class toggle from switchViewport() was dead
+       (no consumer); chat is always visible now. */
+    .viewport-shell {
+      border-radius: var(--ox-radius);
+      border: 1px solid var(--ox-border);
+      background: rgba(13, 16, 21, 0.55);
       overflow: hidden;
       display: grid;
+      min-height: 280px;
     }
-
     .viewport-pane {
       display: none;
-      padding: 12px;
+      padding: 10px;
       min-height: 100%;
       overflow: auto;
     }
-
-    .viewport-pane.active {
-      display: grid;
-      gap: 10px;
-    }
-
+    .viewport-pane.active { display: grid; gap: 8px; }
     #viewport-map-canvas {
-      min-height: 420px;
-      border-radius: 10px;
+      min-height: 240px;
+      border-radius: var(--ox-radius-sm);
       overflow: hidden;
-      border: 1px solid rgba(148, 163, 184, 0.24);
+      border: 1px solid var(--ox-border);
       background: rgba(2, 6, 23, 0.35);
     }
 
     .repo-layout {
       display: grid;
-      grid-template-columns: minmax(160px, 240px) minmax(0, 1fr);
-      gap: 10px;
-      min-height: 420px;
+      grid-template-columns: 1fr;
+      gap: 8px;
     }
 
     .repo-list,
@@ -1332,33 +1522,34 @@
     .hardware-cards,
     .google-status,
     .github-status {
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      border-radius: 10px;
+      border: 1px solid var(--ox-border);
+      border-radius: var(--ox-radius-sm);
       background: rgba(15, 23, 42, 0.45);
-      padding: 10px;
-      font-size: 12px;
-      color: #cbd5e1;
+      padding: 8px;
+      font-size: 11.5px;
+      color: var(--ox-text);
     }
 
     .repo-list,
     .repo-tree {
-      max-height: 420px;
+      max-height: 180px;
       overflow: auto;
       white-space: pre-wrap;
-      font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+      font-family: var(--ox-font-mono);
     }
 
     .repo-preview {
       white-space: pre-wrap;
-      font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+      font-family: var(--ox-font-mono);
       overflow: auto;
-      max-height: 420px;
+      max-height: 220px;
     }
 
     .hardware-cards {
       display: grid;
-      gap: 8px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      grid-template-columns: 1fr;
+      font-family: var(--ox-font-mono);
     }
 
     .settings-modal {
@@ -1906,9 +2097,1365 @@
       50%  { transform: translate(-4%, 3%) scale(1.05); }
       100% { transform: translate(3%, -2%) scale(1); }
     }
+
+    /* ── Meridian / Obsidian utility classes ───────────────────────────── */
+    .ox-mono {
+      font-family: var(--ox-font-mono);
+      font-feature-settings: 'liga' 0, 'calt' 0;
+      letter-spacing: 0;
+    }
+    .ox-panel {
+      background: var(--ox-panel);
+      border: 1px solid var(--ox-border);
+      border-radius: var(--ox-radius-lg);
+    }
+    .ox-glass {
+      background: var(--ox-glass-bg);
+      border: 1px solid var(--ox-glass-border);
+      border-radius: var(--ox-radius-lg);
+      backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+      -webkit-backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+    }
+    .ox-glow-cyan { box-shadow: var(--ox-glow-cyan); }
+    .ox-glow-cyan-strong { box-shadow: var(--ox-glow-cyan-strong); }
+    .ox-glow-purple { box-shadow: var(--ox-glow-purple); }
+    .ox-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--ox-border) 30%, var(--ox-border) 70%, transparent);
+    }
+    .ox-icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vertical-align: middle;
+    }
+    .ox-icon.sm { width: 14px; height: 14px; }
+    .ox-icon.lg { width: 22px; height: 22px; }
+    .ox-status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ox-text-dim);
+      box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+      transition: background var(--ox-duration) var(--ox-ease), box-shadow var(--ox-duration) var(--ox-ease);
+    }
+    .ox-status-dot.ok { background: var(--ox-success); box-shadow: 0 0 8px rgba(34, 197, 94, 0.55); }
+    .ox-status-dot.warn { background: var(--ox-warning); box-shadow: 0 0 8px rgba(245, 158, 11, 0.55); }
+    .ox-status-dot.bad { background: var(--ox-danger); box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+    .ox-status-dot.pulse {
+      animation: ox-pulse 1.6s var(--ox-ease) infinite;
+    }
+    @keyframes ox-pulse {
+      0%   { box-shadow: 0 0 0 0 currentColor; opacity: 0.95; }
+      70%  { box-shadow: 0 0 0 8px rgba(0, 0, 0, 0); opacity: 0.6; }
+      100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); opacity: 0.95; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ox-status-dot.pulse { animation: none; }
+      .ox-tab, .ox-rail-btn, .ox-activity-tab, .ox-settings-nav-btn,
+      .ox-window-controls button { transition: none !important; }
+    }
+
+    /* ── Meridian shell: fixed top bar + left icon rail ─────────────────
+       The Meridian shell sits above/left of the existing .app grid as
+       fixed-position chrome so the legacy layout inside .app keeps
+       working unchanged — we just push it down/right via body padding. */
+    body.ox-shell-on {
+      padding-top: 60px;   /* 44px topbar + 16px gutter */
+      padding-left: 64px;  /* 48px rail + 16px gutter */
+    }
+    body.ox-shell-on .app-header { display: none; }
+    body.ox-shell-on .main-shell > .tab-switcher-side { display: none; }
+    body.ox-shell-on .main-shell { grid-template-columns: 1fr; }
+    body.ox-shell-on #tab-rail-toggle { display: none; }
+    /* Round-2: kill the legacy UI clutter the user flagged on the preview.
+       Hard-hide (no body.ox-shell-on gate) so these stay gone even before
+       renderer.js applies the shell class:
+       - #task-list-panel + #task-list-toggle: duplicate of the right
+         Activity Panel (design rule 8 — no standalone Agent Activity panel).
+       - #orb-quick-actions: Mic + Vision + Copy + New buttons (design rule 6
+         — no mic/vision button in chat UI). Permission row stays — it's
+         not a voice control, it's a runtime-trust selector.
+       - #voice-waveform: superseded by the new VEGA orb bars below.
+       - .tab-switcher-side: the legacy floating notebook+cog column on
+         the left (replaced by the Meridian top bar's 3 tabs).               */
+    #task-list-panel,
+    #task-list-toggle,
+    #orb-quick-actions,
+    #voice-waveform,
+    .tab-switcher-side { display: none !important; }
+
+    .ox-topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      z-index: 60;
+      display: grid;
+      grid-template-columns: 200px 1fr 200px;
+      align-items: center;
+      gap: 12px;
+      padding: 0 12px 0 60px; /* leave 48px for rail + gap */
+      background: rgba(11, 13, 16, 0.78);
+      border-bottom: 1px solid var(--ox-border);
+      backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+      -webkit-backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+      -webkit-app-region: drag;
+      box-shadow: 0 1px 0 rgba(125, 211, 252, 0.04), 0 6px 18px rgba(0, 0, 0, 0.35);
+      user-select: none;
+    }
+    .ox-topbar button,
+    .ox-topbar a,
+    .ox-topbar .ox-tab,
+    .ox-topbar .ox-chip,
+    .ox-topbar .ox-window-controls { -webkit-app-region: no-drag; }
+
+    .ox-topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .ox-topbar-logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: var(--ox-radius-sm);
+      border: 1px solid var(--ox-accent-cyan-soft);
+      background: rgba(125, 211, 252, 0.08);
+      color: var(--ox-accent-cyan);
+      box-shadow: var(--ox-glow-cyan);
+      flex-shrink: 0;
+    }
+    .ox-topbar-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ox-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ox-topbar-title .ox-topbar-title-accent {
+      color: var(--ox-accent-cyan);
+      margin-left: 4px;
+      font-weight: 500;
+      font-family: var(--ox-font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.08em;
+    }
+
+    .ox-tabs {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px;
+      border-radius: 999px;
+      border: 1px solid var(--ox-border);
+      background: var(--ox-bg-2);
+      justify-self: center;
+    }
+    .ox-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ox-text-muted);
+      font-family: var(--ox-font-sans);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background var(--ox-duration) var(--ox-ease),
+                  color var(--ox-duration) var(--ox-ease),
+                  border-color var(--ox-duration) var(--ox-ease);
+    }
+    .ox-tab:hover { color: var(--ox-text); background: rgba(125, 211, 252, 0.06); }
+    .ox-tab.active {
+      color: var(--ox-accent-cyan);
+      background: rgba(125, 211, 252, 0.10);
+      border-color: var(--ox-accent-cyan-soft);
+      box-shadow: var(--ox-glow-cyan);
+    }
+    .ox-tab .ox-icon { width: 14px; height: 14px; }
+
+    .ox-topbar-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+      min-width: 0;
+    }
+    .ox-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(125, 211, 252, 0.06);
+      border: 1px solid var(--ox-border);
+      color: var(--ox-text-muted);
+      font-family: var(--ox-font-mono);
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ox-chip.ox-chip-accent { color: var(--ox-accent-cyan); }
+    .ox-chip .ox-icon { width: 12px; height: 12px; }
+    .ox-window-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .ox-window-controls button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 26px;
+      border-radius: var(--ox-radius-sm);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ox-text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: background var(--ox-duration-fast) var(--ox-ease), color var(--ox-duration-fast) var(--ox-ease);
+    }
+    .ox-window-controls button:hover {
+      background: rgba(125, 211, 252, 0.08);
+      color: var(--ox-text);
+    }
+    .ox-window-controls button.ox-close:hover {
+      background: rgba(239, 68, 68, 0.18);
+      color: #fecaca;
+    }
+
+    /* ── Left icon rail (48px) ──────────────────────────────────────────── */
+    .ox-rail {
+      position: fixed;
+      top: 44px;
+      left: 0;
+      bottom: 0;
+      width: 48px;
+      z-index: 55;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 0;
+      background: rgba(11, 13, 16, 0.72);
+      border-right: 1px solid var(--ox-border);
+      backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+      -webkit-backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+    }
+    .ox-rail-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+    }
+    .ox-rail-section + .ox-rail-section {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--ox-border);
+    }
+    .ox-rail-spacer { flex: 1; }
+    .ox-rail-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--ox-radius);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ox-text-muted);
+      cursor: pointer;
+      transition: background var(--ox-duration-fast) var(--ox-ease),
+                  color var(--ox-duration-fast) var(--ox-ease),
+                  border-color var(--ox-duration-fast) var(--ox-ease),
+                  box-shadow var(--ox-duration-fast) var(--ox-ease);
+      position: relative;
+    }
+    .ox-rail-btn:hover {
+      background: rgba(125, 211, 252, 0.08);
+      color: var(--ox-text);
+      border-color: var(--ox-accent-cyan-soft);
+    }
+    .ox-rail-btn.active {
+      color: var(--ox-accent-cyan);
+      background: rgba(125, 211, 252, 0.12);
+      border-color: var(--ox-accent-cyan-soft);
+      box-shadow: var(--ox-glow-cyan);
+    }
+    .ox-rail-btn .ox-icon { width: 18px; height: 18px; }
+    .ox-rail-btn[data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: 100%;
+      top: 50%;
+      transform: translate(8px, -50%);
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(11, 13, 16, 0.94);
+      border: 1px solid var(--ox-border);
+      color: var(--ox-text);
+      font-family: var(--ox-font-sans);
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--ox-duration-fast) var(--ox-ease);
+      z-index: 70;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    }
+    .ox-rail-btn:hover[data-tooltip]::after { opacity: 1; }
+
+    /* ── Settings shell (M3) — 9-section sub-nav ──────────────────────── */
+    .ox-settings-nav {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 8px;
+      margin-bottom: 12px;
+      border-radius: var(--ox-radius);
+      border: 1px solid var(--ox-border);
+      background: rgba(11, 13, 16, 0.85);
+      backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+      -webkit-backdrop-filter: blur(var(--ox-glass-blur)) saturate(140%);
+    }
+    .ox-settings-nav-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: var(--ox-radius-sm);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ox-text-muted);
+      font-family: var(--ox-font-sans);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: background var(--ox-duration-fast) var(--ox-ease),
+                  color var(--ox-duration-fast) var(--ox-ease),
+                  border-color var(--ox-duration-fast) var(--ox-ease);
+    }
+    .ox-settings-nav-btn:hover { color: var(--ox-text); background: rgba(125, 211, 252, 0.06); }
+    .ox-settings-nav-btn.active {
+      color: var(--ox-accent-cyan);
+      background: rgba(125, 211, 252, 0.10);
+      border-color: var(--ox-accent-cyan-soft);
+    }
+    .ox-settings-nav-btn .ox-icon { width: 14px; height: 14px; }
+    .ox-settings-stub {
+      display: grid;
+      gap: 10px;
+      padding: 24px 20px;
+      text-align: left;
+      color: var(--ox-text-muted);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+    .ox-settings-stub h4 {
+      margin: 0 0 4px 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ox-text);
+      letter-spacing: -0.01em;
+    }
+    .ox-settings-stub .ox-icon {
+      width: 20px;
+      height: 20px;
+      color: var(--ox-accent-cyan);
+    }
+    .ox-settings-stub-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: var(--ox-font-mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ox-accent-purple);
+      border: 1px solid var(--ox-accent-purple-soft);
+      background: rgba(167, 139, 250, 0.05);
+    }
+
+    /* ── Diagnostics terminal (M6 — Settings → Zaawansowane) ─────────── */
+    .ox-diag-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-bottom: 8px;
+    }
+    .ox-diag-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--ox-radius);
+      border: 1px solid var(--ox-border);
+      background: rgba(13, 16, 21, 0.6);
+    }
+    .ox-diag-card .ox-status-dot { width: 10px; height: 10px; }
+    .ox-diag-card-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ox-text);
+    }
+    .ox-diag-card-detail {
+      font-size: 10.5px;
+      color: var(--ox-text-muted);
+      margin-top: 2px;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ox-diag-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 6px 0 10px;
+    }
+    .ox-diag-toolbar button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ox-diag-terminal {
+      height: 280px;
+      overflow: auto;
+      padding: 10px;
+      border-radius: var(--ox-radius);
+      border: 1px solid var(--ox-border);
+      background: #0a0c10;
+      box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.04), inset 0 0 24px rgba(0, 0, 0, 0.6);
+    }
+    .ox-diag-terminal .ox-log-line { padding: 2px 0; border-radius: 0; }
+
+    /* ── Workspace shell (M8) ──────────────────────────────────────────── */
+    .ox-workspace {
+      display: grid;
+      gap: 14px;
+      max-height: calc(100vh - 130px);
+      overflow-y: auto;
+      padding: 4px 14px 24px 4px;
+      scrollbar-gutter: stable;
+    }
+    .ox-workspace::-webkit-scrollbar { width: 10px; }
+    .ox-workspace::-webkit-scrollbar-thumb {
+      background: rgba(125, 211, 252, 0.18);
+      border-radius: 8px;
+    }
+    .ox-workspace-section {
+      display: none;
+      padding: 16px;
+    }
+    .ox-workspace[data-active-workspace="search"] .ox-workspace-section[data-ox-workspace="search"],
+    .ox-workspace[data-active-workspace="projects"] .ox-workspace-section[data-ox-workspace="projects"],
+    .ox-workspace[data-active-workspace="skills"] .ox-workspace-section[data-ox-workspace="skills"],
+    .ox-workspace[data-active-workspace="memory"] .ox-workspace-section[data-ox-workspace="memory"],
+    .ox-workspace[data-active-workspace="knowledge"] .ox-workspace-section[data-ox-workspace="knowledge"],
+    .ox-workspace[data-active-workspace="lessons"] .ox-workspace-section[data-ox-workspace="lessons"],
+    .ox-workspace[data-active-workspace="workflows"] .ox-workspace-section[data-ox-workspace="workflows"],
+    .ox-workspace[data-active-workspace="blueprints"] .ox-workspace-section[data-ox-workspace="blueprints"],
+    .ox-workspace[data-active-workspace="missions"] .ox-workspace-section[data-ox-workspace="missions"] {
+      display: grid;
+      gap: 12px;
+    }
+    .ox-workspace-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .ox-workspace-section-head h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ox-text);
+      letter-spacing: -0.01em;
+    }
+    .ox-workspace-section-head p {
+      margin: 4px 0 0;
+      color: var(--ox-text-muted);
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .ox-workspace-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .ox-workspace-card {
+      display: grid;
+      gap: 6px;
+      padding: 12px 14px;
+      border-radius: var(--ox-radius);
+      border: 1px solid var(--ox-border);
+      background: rgba(13, 16, 21, 0.65);
+      cursor: pointer;
+      transition: border-color var(--ox-duration) var(--ox-ease),
+                  background var(--ox-duration) var(--ox-ease),
+                  transform var(--ox-duration) var(--ox-ease);
+    }
+    .ox-workspace-card:hover {
+      border-color: var(--ox-accent-cyan-soft);
+      background: rgba(125, 211, 252, 0.06);
+      transform: translateY(-1px);
+    }
+    .ox-workspace-card .ox-icon { width: 18px; height: 18px; color: var(--ox-accent-cyan); }
+    .ox-workspace-card h4 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ox-text);
+    }
+    .ox-workspace-card p {
+      margin: 0;
+      color: var(--ox-text-muted);
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+    .ox-project-files {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 4px;
+    }
+    .ox-project-files li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 11.5px;
+      color: var(--ox-text-muted);
+      background: rgba(125, 211, 252, 0.05);
+      border-radius: 6px;
+      padding: 3px 6px;
+    }
+    .ox-project-files li button { line-height: 1; padding: 0 6px; }
+    .ox-project-files-empty {
+      margin: 0;
+      color: var(--ox-text-dim);
+      font-size: 11px;
+      font-style: italic;
+    }
+    /* Search bar inside Szukaj */
+    .ox-search-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: var(--ox-radius);
+      border: 1px solid var(--ox-border);
+      background: var(--ox-bg-2);
+    }
+    .ox-search-bar .ox-icon { color: var(--ox-accent-cyan); }
+    .ox-search-bar input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--ox-text);
+      font-family: var(--ox-font-sans);
+      font-size: 13px;
+      outline: none;
+      padding: 6px 4px;
+    }
+    .ox-search-results {
+      display: grid;
+      gap: 8px;
+    }
+    .ox-search-result {
+      display: grid;
+      gap: 4px;
+      padding: 10px 12px;
+      border-radius: var(--ox-radius);
+      border: 1px solid var(--ox-border);
+      background: rgba(13, 16, 21, 0.6);
+    }
+    .ox-search-result-source {
+      font-family: var(--ox-font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.06em;
+      color: var(--ox-accent-purple);
+      text-transform: uppercase;
+    }
+    .ox-search-result-text {
+      font-size: 12.5px;
+      color: var(--ox-text);
+      line-height: 1.45;
+    }
+    .ox-search-result-meta {
+      font-family: var(--ox-font-mono);
+      font-size: 10.5px;
+      color: var(--ox-text-dim);
+    }
+
+    /* Workspace placeholder card */
+    .ox-workspace-stub {
+      display: grid;
+      gap: 14px;
+      padding: 40px 32px;
+      text-align: center;
+      align-content: center;
+      justify-items: center;
+      min-height: 360px;
+    }
+    .ox-workspace-stub .ox-icon { width: 32px; height: 32px; color: var(--ox-accent-cyan); }
+    .ox-workspace-stub h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--ox-text);
+      letter-spacing: -0.01em;
+    }
+    .ox-workspace-stub p {
+      margin: 0;
+      max-width: 480px;
+      color: var(--ox-text-muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    /* ── Round-2 — Language wizard (first-run modal) ─────────────────── */
+    .ox-wizard-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(5, 6, 8, 0.78);
+      backdrop-filter: blur(8px) saturate(120%);
+      -webkit-backdrop-filter: blur(8px) saturate(120%);
+    }
+    .ox-wizard-overlay[hidden] { display: none !important; }
+    .ox-wizard-card {
+      width: min(480px, 100%);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      background: var(--ox-bg2, var(--panel));
+      border: 1px solid var(--ox-border, var(--panel-border));
+      border-radius: var(--ox-radius-lg, 12px);
+      box-shadow: 0 0 24px 0 rgba(0, 240, 255, 0.18);
+    }
+    .ox-wizard-header { display: flex; align-items: center; gap: 12px; }
+    .ox-wizard-title {
+      margin: 0;
+      color: var(--ox-text-hi, var(--text));
+      font-family: var(--ox-font-ui, var(--ox-font-sans));
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .ox-wizard-subtitle {
+      color: var(--ox-text-mid, var(--muted));
+      font-size: 12px;
+    }
+    .ox-wizard-options { display: flex; flex-direction: column; gap: 6px; }
+    .ox-wizard-option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--ox-border, var(--panel-border));
+      background: transparent;
+      color: var(--ox-text-hi, var(--text));
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      transition: border-color var(--ox-duration-base, 200ms) var(--ox-ease, ease),
+                  background var(--ox-duration-base, 200ms) var(--ox-ease, ease);
+    }
+    .ox-wizard-option:hover:not(:disabled) { background: rgba(125, 211, 252, 0.06); }
+    .ox-wizard-option[aria-checked="true"] {
+      border-color: var(--ox-cyan, var(--accent));
+      background: var(--ox-bg3, var(--panel-soft));
+    }
+    .ox-wizard-option:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ox-wizard-radio {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--ox-border, var(--panel-border));
+      background: transparent;
+      color: var(--ox-bg, var(--bg));
+      flex-shrink: 0;
+      font-size: 12px;
+    }
+    .ox-wizard-option[aria-checked="true"] .ox-wizard-radio {
+      border-color: var(--ox-cyan, var(--accent));
+      background: var(--ox-cyan, var(--accent));
+    }
+    .ox-wizard-label { min-width: 64px; font-weight: 600; }
+    .ox-wizard-greeting { flex: 1; color: var(--ox-text-mid, var(--muted)); font-size: 12px; }
+    .ox-wizard-soon {
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--ox-border, var(--panel-border));
+      color: var(--ox-text-dim);
+      font-family: var(--ox-font-mono, monospace);
+      font-size: 9.5px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .ox-wizard-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .ox-wizard-hint {
+      color: var(--ox-text-dim);
+      font-family: var(--ox-font-mono, monospace);
+      font-size: 10px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .ox-wizard-confirm {
+      padding: 8px 16px;
+      background: var(--ox-cyan, var(--accent));
+      border: 1px solid var(--ox-cyan, var(--accent));
+      border-radius: 6px;
+      color: var(--ox-bg, var(--bg));
+      font-family: var(--ox-font-sans);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      box-shadow: 0 0 16px rgba(0, 240, 255, 0.35);
+    }
+
+    /* ── Round-2 — VEGA voice orb (Activity Panel + Chat hero) ───────── */
+    @keyframes vega-idle-pulse {
+      0%, 100% { transform: scale(1);    opacity: 0.55; }
+      50%      { transform: scale(1.04); opacity: 0.85; }
+    }
+    @keyframes vega-ring-expand {
+      0%   { transform: scale(0.3); opacity: 0.85; }
+      100% { transform: scale(2.4); opacity: 0; }
+    }
+    @keyframes vega-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes vega-bar-dance {
+      0%, 100% { transform: scaleY(0.18); }
+      25%      { transform: scaleY(0.65); }
+      50%      { transform: scaleY(1);    }
+      75%      { transform: scaleY(0.4);  }
+    }
+    @keyframes vega-bar-wave {
+      0%, 100% { transform: scaleY(0.25); }
+      50%      { transform: scaleY(0.95); }
+    }
+
+    .vega-orb {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .vega-orb-star {
+      width: 60%;
+      height: 60%;
+      color: var(--ox-cyan-dim, #008c9e);
+      filter: drop-shadow(0 0 6px rgba(70, 79, 94, 0.4));
+      overflow: visible;
+    }
+    /* AssistantX VEGA mark — 8-point star (4 long arms + 4 short notches),
+       generated from rLong=0.46*size / rShort=0.09*size on a 32x32 grid.
+       Outer path = dark body + colored stroke; inner path (58% scale) =
+       solid bright fill; core dot = white; 4 rays poke past the long tips. */
+    .vega-orb-star-outer {
+      fill: var(--ox-bg2, #0e1117);
+      stroke: currentColor;
+      stroke-width: 0.8;
+    }
+    .vega-orb-star-inner {
+      fill: currentColor;
+    }
+    .vega-orb-star-core {
+      fill: #ffffff;
+    }
+    .vega-orb-star-rays {
+      stroke: currentColor;
+      stroke-width: 0.7;
+      stroke-opacity: 0.45;
+    }
+    .vega-orb-ring {
+      position: absolute;
+      inset: 10%;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+      opacity: 0;
+      pointer-events: none;
+    }
+    /* Processing-only loading spinner — a true rotating partial ring,
+       distinct from the static translucent decorative rings below. */
+    .vega-orb-spinner {
+      position: absolute;
+      inset: 22%;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Round-2-fix3: VEGA orb composition — 1:1 with the reference state cards.
+       Animations are STATE-GATED via data-vega-state. In idle, rings + bars
+       sit quiet (no animation, dim opacity) — matches the reference's IDLE
+       card: "rings: none · orb: subtle pulse (3s ease)". Active states light
+       up rings + bars per their reference behaviour. */
+    .vega-orb-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin: 14px auto 4px;
+    }
+    #voice-visualizer.vega-orb {
+      width: 184px;
+      height: 184px;
+    }
+    #voice-visualizer.vega-orb .vega-orb-star {
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.4));
+    }
+
+    /* ── idle ── subtle pulse on the star, no rings, no spinner. Per spec:
+       "orb: dim cyan border · no rings · slow pulse animation". */
+    #voice-visualizer.vega-orb[data-vega-state="idle"] {
+      background: transparent;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-star {
+      color: var(--ox-cyan-dim, #008c9e);
+      filter: drop-shadow(0 0 6px rgba(0, 140, 158, 0.35));
+      animation: vega-idle-pulse 3s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-1,
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-2,
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-3,
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-ring-4,
+    #voice-visualizer.vega-orb[data-vega-state="idle"] .vega-orb-spinner {
+      opacity: 0;
+    }
+
+    /* ── wake ── bright cyan star + 2 rings (tight + outer). Spec: "orb:
+       cyan · 2 rings · subtle waveform · pop animation". */
+    #voice-visualizer.vega-orb[data-vega-state="wake"],
+    #voice-visualizer.vega-orb[data-vega-state="listening"] {
+      background: radial-gradient(circle, rgba(0, 240, 255, 0.12) 0%, transparent 65%);
+    }
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-star,
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-star {
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      filter: drop-shadow(0 0 16px rgba(0, 240, 255, 0.6));
+      animation: vega-idle-pulse 1.6s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-1 {
+      inset: 26%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.70;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-2,
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-3 {
+      opacity: 0;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="wake"] .vega-orb-ring-4 {
+      inset: -10%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.05;
+    }
+
+    /* ── listening ── bright cyan star + all 4 rings (tight→outer) + 18
+       live waveform bars. Spec: "orb: cyan · 4 rings · 18 live FFT bars". */
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-1 {
+      inset: 26%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.70;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-2 {
+      inset: 14%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.483;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-3 {
+      inset: 2%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.267;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="listening"] .vega-orb-ring-4 {
+      inset: -10%;
+      border-color: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 0.05;
+    }
+
+    /* ── processing ── purple star + 3 static rings + a true rotating
+       spinner ring (the only animated ring in this design). Spec: "orb:
+       purple · 3 rings · spin ring on orb border · no bars". */
+    #voice-visualizer.vega-orb[data-vega-state="processing"] {
+      background: radial-gradient(circle, rgba(120, 80, 220, 0.16) 0%, transparent 65%);
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-star {
+      color: var(--ox-purple, #7850dc);
+      filter: drop-shadow(0 0 14px rgba(120, 80, 220, 0.55));
+      animation: vega-idle-pulse 2s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-1 {
+      inset: 26%;
+      border-color: var(--ox-purple, #7850dc);
+      opacity: 0.70;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-2 {
+      inset: 14%;
+      border-color: var(--ox-purple, #7850dc);
+      opacity: 0.375;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-3 {
+      opacity: 0;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-ring-4 {
+      inset: -10%;
+      border-color: var(--ox-purple, #7850dc);
+      opacity: 0.05;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="processing"] .vega-orb-spinner {
+      color: var(--ox-purple, #7850dc);
+      opacity: 0.9;
+      animation: vega-spin 0.9s linear infinite;
+    }
+
+    /* ── speaking ── green star + all 4 rings + 18 TTS amplitude bars.
+       Spec: "orb: green · 4 rings · 18 TTS amplitude bars". */
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] {
+      background: radial-gradient(circle, rgba(80, 220, 120, 0.16) 0%, transparent 65%);
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-star {
+      color: var(--ox-green, #50dc78);
+      filter: drop-shadow(0 0 16px rgba(80, 220, 120, 0.55));
+      animation: vega-idle-pulse 1.4s var(--ox-ease, ease) infinite;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-1 {
+      inset: 26%;
+      border-color: var(--ox-green, #50dc78);
+      opacity: 0.70;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-2 {
+      inset: 14%;
+      border-color: var(--ox-green, #50dc78);
+      opacity: 0.483;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-3 {
+      inset: 2%;
+      border-color: var(--ox-green, #50dc78);
+      opacity: 0.267;
+    }
+    #voice-visualizer.vega-orb[data-vega-state="speaking"] .vega-orb-ring-4 {
+      inset: -10%;
+      border-color: var(--ox-green, #50dc78);
+      opacity: 0.05;
+    }
+
+    /* ── 18-bar waveform (matches the reference's 18-bar FFT/TTS strip,
+       not the previous 24-bar approximation). Each bar carries 3 frozen
+       height profiles — one per active state — selected by the
+       state-scoped rules below instead of a running keyframe loop. */
+    .vega-bars {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 2px;
+      height: 36px;
+      width: 180px;
+    }
+    .vega-bars span {
+      display: block;
+      width: 2.5px;
+      height: 14%;
+      border-radius: 1.5px;
+      background: var(--ox-cyan-dim, #008c9e);
+      transform-origin: bottom center;
+      opacity: 0.35;
+      transition: background var(--ox-duration-base, 200ms) var(--ox-ease, ease),
+                  opacity var(--ox-duration-base, 200ms) var(--ox-ease, ease),
+                  height var(--ox-duration-base, 200ms) var(--ox-ease, ease);
+    }
+    /* wake: heights ported 1:1 from mockBars [4,6,8,12,14,10,8,6,10,12,8,6,4,8,10,8,6,4] / 30px */
+    .vega-bars span:nth-child(1)  { --bar-h-wake: 13%; --bar-h-listen: 10%; --bar-h-speak: 20%; }
+    .vega-bars span:nth-child(2)  { --bar-h-wake: 20%; --bar-h-listen: 27%; --bar-h-speak: 40%; }
+    .vega-bars span:nth-child(3)  { --bar-h-wake: 27%; --bar-h-listen: 47%; --bar-h-speak: 60%; }
+    .vega-bars span:nth-child(4)  { --bar-h-wake: 40%; --bar-h-listen: 73%; --bar-h-speak: 87%; }
+    .vega-bars span:nth-child(5)  { --bar-h-wake: 47%; --bar-h-listen: 60%; --bar-h-speak: 100%; }
+    .vega-bars span:nth-child(6)  { --bar-h-wake: 33%; --bar-h-listen: 93%; --bar-h-speak: 80%; }
+    .vega-bars span:nth-child(7)  { --bar-h-wake: 27%; --bar-h-listen: 100%; --bar-h-speak: 67%; }
+    .vega-bars span:nth-child(8)  { --bar-h-wake: 20%; --bar-h-listen: 80%; --bar-h-speak: 93%; }
+    .vega-bars span:nth-child(9)  { --bar-h-wake: 33%; --bar-h-listen: 67%; --bar-h-speak: 73%; }
+    .vega-bars span:nth-child(10) { --bar-h-wake: 40%; --bar-h-listen: 47%; --bar-h-speak: 53%; }
+    .vega-bars span:nth-child(11) { --bar-h-wake: 27%; --bar-h-listen: 33%; --bar-h-speak: 67%; }
+    .vega-bars span:nth-child(12) { --bar-h-wake: 20%; --bar-h-listen: 53%; --bar-h-speak: 87%; }
+    .vega-bars span:nth-child(13) { --bar-h-wake: 13%; --bar-h-listen: 80%; --bar-h-speak: 60%; }
+    .vega-bars span:nth-child(14) { --bar-h-wake: 27%; --bar-h-listen: 93%; --bar-h-speak: 47%; }
+    .vega-bars span:nth-child(15) { --bar-h-wake: 33%; --bar-h-listen: 73%; --bar-h-speak: 33%; }
+    .vega-bars span:nth-child(16) { --bar-h-wake: 27%; --bar-h-listen: 53%; --bar-h-speak: 53%; }
+    .vega-bars span:nth-child(17) { --bar-h-wake: 20%; --bar-h-listen: 33%; --bar-h-speak: 40%; }
+    .vega-bars span:nth-child(18) { --bar-h-wake: 13%; --bar-h-listen: 17%; --bar-h-speak: 27%; }
+
+    /* idle — uniform short dim dots (no variation, no colour, no glow). */
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="idle"]) .vega-bars span {
+      height: 14%;
+      opacity: 0.3;
+    }
+    /* wake — frozen cyan EQ silhouette, subtler than listening. */
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="wake"]) .vega-bars span {
+      height: var(--bar-h-wake);
+      background: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 1;
+      box-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
+    }
+    /* listening — frozen cyan EQ silhouette, full live-FFT amplitude. */
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="listening"]) .vega-bars span {
+      height: var(--bar-h-listen);
+      background: var(--ox-cyan, var(--accent, #00f0ff));
+      opacity: 1;
+      box-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
+    }
+    /* speaking — frozen green EQ silhouette, TTS amplitude profile. */
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="speaking"]) .vega-bars span {
+      height: var(--bar-h-speak);
+      background: var(--ox-green, #50dc78);
+      opacity: 1;
+      box-shadow: 0 0 6px rgba(80, 220, 120, 0.5);
+    }
+    /* processing — no bars, just dim purple dots (reference shows none). */
+    .vega-orb-wrap:has(#voice-visualizer[data-vega-state="processing"]) .vega-bars span {
+      height: 14%;
+      background: var(--ox-purple-dim, #4a3290);
+      opacity: 0.55;
+    }
+
+    /* State label next to / under the orb. KEEP (user explicitly asked to
+       leave the napis), styled to match the reference's "LISTENING /
+       Hey AssistantX…" treatment. */
+    #voice-orb-status {
+      min-height: 14px;
+      margin-top: 4px;
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      font-family: var(--ox-font-mono, monospace);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .vega-bars span,
+      #voice-visualizer.vega-orb .vega-orb-star,
+      #voice-visualizer.vega-orb .vega-orb-ring { animation: none !important; }
+    }
+
+    /* ── Round-2-fix3: Activity Panel toggle (collapsible right column) ── */
+    body.ox-activity-collapsed .ox-activity {
+      display: none !important;
+    }
+    body.ox-activity-collapsed .command-workspace {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+    /* Edge re-open button — sticks to the right side of the viewport when
+       the activity panel is collapsed. Cyan chevron, glassy bg. */
+    .ox-activity-edge-toggle {
+      position: fixed;
+      right: 8px;
+      top: 72px;
+      z-index: 40;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 56px;
+      border-radius: 8px 0 0 8px;
+      border: 1px solid var(--ox-cyan-dim, #008c9e);
+      background: var(--ox-bg2, var(--panel));
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      cursor: pointer;
+      box-shadow: 0 0 18px rgba(0, 240, 255, 0.15);
+      transition: background var(--ox-duration-fast, 120ms) var(--ox-ease, ease);
+    }
+    .ox-activity-edge-toggle:hover { background: var(--ox-bg3, var(--panel-soft)); }
+    /* Internal toggle — small chevron inside the Activity Panel header. */
+    .ox-activity-collapse-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      margin-left: auto;
+      border-radius: 4px;
+      border: 1px solid var(--ox-border, var(--panel-border));
+      background: transparent;
+      color: var(--ox-text-mid, var(--muted));
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .ox-activity-collapse-btn:hover {
+      color: var(--ox-cyan, var(--accent, #00f0ff));
+      border-color: var(--ox-cyan-dim, #008c9e);
+    }
+    .vega-orb[data-vega-state="idle"] .vega-orb-star {
+      animation: vega-idle-pulse 3s var(--ox-ease, ease) infinite;
+    }
+    .vega-orb[data-vega-state="wake"],
+    .vega-orb[data-vega-state="listening"] {
+      color: var(--ox-cyan, var(--accent));
+      background: radial-gradient(circle, rgba(0, 240, 255, 0.20) 0%, transparent 65%);
+    }
+    .vega-orb[data-vega-state="wake"] .vega-orb-star,
+    .vega-orb[data-vega-state="listening"] .vega-orb-star {
+      color: var(--ox-cyan, var(--accent));
+      filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.45));
+    }
+    .vega-orb[data-vega-state="wake"] .vega-orb-ring,
+    .vega-orb[data-vega-state="listening"] .vega-orb-ring {
+      animation: vega-ring-expand 2.4s var(--ox-ease, ease) infinite;
+    }
+    .vega-orb[data-vega-state="processing"] {
+      color: var(--ox-purple, #7850dc);
+      background: radial-gradient(circle, rgba(120, 80, 220, 0.28) 0%, transparent 65%);
+    }
+    .vega-orb[data-vega-state="processing"] .vega-orb-star {
+      color: var(--ox-purple, #7850dc);
+      filter: drop-shadow(0 0 10px rgba(120, 80, 220, 0.45));
+    }
+    .vega-orb[data-vega-state="processing"] .vega-orb-ring {
+      animation: vega-spin 2s linear infinite;
+    }
+    .vega-orb[data-vega-state="speaking"] {
+      color: var(--ox-green, #50dc78);
+      background: radial-gradient(circle, rgba(80, 220, 120, 0.28) 0%, transparent 65%);
+    }
+    .vega-orb[data-vega-state="speaking"] .vega-orb-star {
+      color: var(--ox-green, #50dc78);
+      filter: drop-shadow(0 0 10px rgba(80, 220, 120, 0.45));
+    }
+    .vega-orb[data-vega-state="speaking"] .vega-orb-ring {
+      animation: vega-ring-expand 1.4s var(--ox-ease, ease) infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .vega-orb .vega-orb-star,
+      .vega-orb .vega-orb-ring,
+      .vega-bar { animation: none !important; }
+    }
+
+    /* Chat hero — welcome card shown when conversation is empty */
+    .ox-chat-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 28px 24px 32px;
+      text-align: center;
+    }
+    .ox-chat-hero .vega-orb { width: 96px; height: 96px; }
+    .ox-chat-hero-heading {
+      margin: 0;
+      color: var(--ox-text-hi, var(--text));
+      font-family: var(--ox-font-sans);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .ox-chat-hero-sub {
+      margin: 0;
+      max-width: 460px;
+      color: var(--ox-text-mid, var(--muted));
+      font-family: var(--ox-font-sans);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .ox-chat-hero-hints {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      width: 100%;
+      max-width: 640px;
+      margin-top: 8px;
+    }
+    .ox-chat-hint {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--ox-border, var(--panel-border));
+      background: var(--ox-bg2, var(--panel));
+      text-align: left;
+    }
+    .ox-chat-hint-title {
+      color: var(--ox-text-hi, var(--text));
+      font-family: var(--ox-font-sans);
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+    .ox-chat-hint-body {
+      color: var(--ox-text-mid, var(--muted));
+      font-family: var(--ox-font-sans);
+      font-size: 11px;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
+  <!--
+    Meridian icon sprite — Lucide-MIT paths inlined so the strict CSP
+    (no external script/img origins) is satisfied with zero network use.
+    Reference an icon anywhere with: <svg class="ox-icon"><use href="#ox-i-name"/></svg>
+  -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="ox-i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+      <symbol id="ox-i-layout-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></symbol>
+      <symbol id="ox-i-settings" viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.4 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.4l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+      <symbol id="ox-i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></symbol>
+      <symbol id="ox-i-mic-off" viewBox="0 0 24 24"><line x1="2" y1="2" x2="22" y2="22"/><path d="M18.89 13.23A7 7 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" y1="19" x2="12" y2="22"/></symbol>
+      <symbol id="ox-i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></symbol>
+      <symbol id="ox-i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/></symbol>
+      <symbol id="ox-i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+      <symbol id="ox-i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+      <symbol id="ox-i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+      <symbol id="ox-i-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></symbol>
+      <symbol id="ox-i-map" viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></symbol>
+      <symbol id="ox-i-git-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+      <symbol id="ox-i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+      <symbol id="ox-i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="ox-i-brain" viewBox="0 0 24 24"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15A2.5 2.5 0 0 1 9.5 22 2.5 2.5 0 0 1 7 19.5a2.5 2.5 0 0 1-3-2.5 2.5 2.5 0 0 1-1-4.5 2.5 2.5 0 0 1 1-4.5 2.5 2.5 0 0 1 3-2.5A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15A2.5 2.5 0 0 0 14.5 22a2.5 2.5 0 0 0 2.5-2.5 2.5 2.5 0 0 0 3-2.5 2.5 2.5 0 0 0 1-4.5 2.5 2.5 0 0 0-1-4.5 2.5 2.5 0 0 0-3-2.5A2.5 2.5 0 0 0 14.5 2z"/></symbol>
+      <symbol id="ox-i-terminal" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+      <symbol id="ox-i-folder-open" viewBox="0 0 24 24"><path d="M6 14l1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6A2 2 0 0 1 18.45 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></symbol>
+      <symbol id="ox-i-list-todo" viewBox="0 0 24 24"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+      <symbol id="ox-i-bot" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></symbol>
+      <symbol id="ox-i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+      <symbol id="ox-i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+      <symbol id="ox-i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+      <symbol id="ox-i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
+      <symbol id="ox-i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 4.6 4.6 1.9-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/><path d="M19 14l.95 2.3 2.3.95-2.3.95L19 20.5l-.95-2.3-2.3-.95 2.3-.95L19 14z"/><path d="M5 14l.95 2.3 2.3.95-2.3.95L5 20.5l-.95-2.3L1.75 18l2.3-.95L5 14z"/></symbol>
+      <symbol id="ox-i-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+      <symbol id="ox-i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+      <symbol id="ox-i-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></symbol>
+      <symbol id="ox-i-alert-triangle" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+      <symbol id="ox-i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- ── Meridian top bar (44px) — 3 tabs always visible ───────────────── -->
+  <header class="ox-topbar" id="ox-topbar" role="banner">
+    <div class="ox-topbar-brand">
+      <span class="ox-topbar-logo" aria-hidden="true">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-sparkles"/></svg>
+      </span>
+      <span class="ox-topbar-title">Jarvis<span class="ox-topbar-title-accent">OBSIDIAN</span></span>
+    </div>
+    <nav class="ox-tabs" role="tablist" aria-label="Główne sekcje">
+      <button id="ox-tab-chat" class="ox-tab active" type="button" role="tab" aria-selected="true" aria-controls="command-tab-panel" data-ox-tab="chat" title="Czat (1)">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-message-square"/></svg>
+        <span>Czat</span>
+      </button>
+      <button id="ox-tab-workspace" class="ox-tab" type="button" role="tab" aria-selected="false" aria-controls="workspace-tab-panel" data-ox-tab="workspace" title="Workspace (2)">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-layout-grid"/></svg>
+        <span>Workspace</span>
+      </button>
+      <button id="ox-tab-settings" class="ox-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-tab-panel" data-ox-tab="settings" title="Ustawienia (3)">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-settings"/></svg>
+        <span>Ustawienia</span>
+      </button>
+    </nav>
+    <div class="ox-topbar-status">
+      <span class="ox-chip ox-chip-accent" id="active-model-badge" title="Aktywny model">AI · Ready</span>
+      <span class="ox-chip" id="health-chip" title="Stan systemu" aria-live="polite">
+        <span class="ox-status-dot ok" id="header-connection-dot" aria-hidden="true"></span>
+        <span id="health-chip-label">All systems nominal</span>
+      </span>
+      <span class="ox-chip" id="account-badge" hidden></span>
+      <div class="ox-window-controls" role="toolbar" aria-label="Sterowanie oknem">
+        <button id="win-minimize" type="button" aria-label="Minimalizuj" title="Minimalizuj">
+          <svg class="ox-icon sm" aria-hidden="true" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
+        </button>
+        <button id="win-maximize" type="button" aria-label="Maksymalizuj / przywróć" title="Maksymalizuj">
+          <svg class="ox-icon sm" aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.75" fill="none"/></svg>
+        </button>
+        <button id="win-close" type="button" class="ox-close" aria-label="Zamknij" title="Zamknij">
+          <svg class="ox-icon sm" aria-hidden="true"><use href="#ox-i-x"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Left icon rail (48px) — context-sensitive shortcuts ───────────── -->
+  <nav class="ox-rail" id="ox-rail" aria-label="Skróty">
+    <div class="ox-rail-section" data-ox-rail-tab="chat">
+      <button class="ox-rail-btn active" type="button" data-tooltip="Czat" data-ox-rail="chat">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-message-square"/></svg>
+      </button>
+      <button class="ox-rail-btn" type="button" data-tooltip="Pliki" data-ox-rail="files">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-folder-open"/></svg>
+      </button>
+      <button class="ox-rail-btn" type="button" data-tooltip="Szukaj (Ctrl+K)" data-ox-rail="search">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-search"/></svg>
+      </button>
+      <button class="ox-rail-btn" type="button" data-tooltip="Aktywność" data-ox-rail="activity">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-activity"/></svg>
+      </button>
+    </div>
+    <div class="ox-rail-spacer"></div>
+    <div class="ox-rail-section">
+      <button class="ox-rail-btn" type="button" data-tooltip="Workspace" data-ox-rail="workspace-tab">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-layout-grid"/></svg>
+      </button>
+      <button class="ox-rail-btn" type="button" data-tooltip="Ustawienia" data-ox-rail="settings-tab">
+        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-settings"/></svg>
+      </button>
+    </div>
+  </nav>
+
   <!-- Predictive command palette — Ctrl+K to launch -->
   <div id="command-palette-overlay" role="dialog" aria-label="Command palette" aria-modal="true">
     <div id="command-palette">
@@ -1934,26 +3481,7 @@
     </div>
   </aside>
 
-  <!-- App header -->
-  <header class="app-header">
-    <div class="logo">🤖</div>
-    <div>
-      <div class="app-title">Jarvis Desktop</div>
-    </div>
-    <div class="header-status">
-      <span class="model-chip" id="active-model-badge">AI · Ready</span>
-      <span class="health-chip" id="health-chip" title="System health" aria-live="polite">
-        <span class="connection-indicator" id="header-connection-dot"></span>
-        <span id="health-chip-label">All systems nominal</span>
-      </span>
-      <span class="app-subtitle" id="account-badge" style="margin-left:0;"></span>
-    </div>
-    <div class="window-controls" role="toolbar" aria-label="Window controls">
-      <button id="win-minimize" type="button" aria-label="Minimize" title="Minimize">—</button>
-      <button id="win-maximize" type="button" aria-label="Maximize / restore" title="Maximize">▢</button>
-      <button id="win-close" type="button" class="close-btn" aria-label="Close" title="Close">✕</button>
-    </div>
-  </header>
+  <!-- (Legacy .app-header replaced by .ox-topbar above.) -->
 
   <div class="app">
     <!-- Sidebar -->
@@ -1971,7 +3499,7 @@
       <!-- Account / Cloud Sync -->
       <div class="stack">
         <div class="section-label">Account</div>
-        <div id="account-status" class="value">Not signed in</div>
+        <div id="account-status" class="value">Not signed in (optional for local models)</div>
         <div style="display:grid;gap:6px;grid-template-columns:1fr 1fr;">
           <button type="button" id="account-login" class="secondary sm">🔑 Sign in</button>
           <button type="button" id="account-sync" class="secondary sm" disabled>☁️ Sync now</button>
@@ -2089,10 +3617,37 @@
                   </span>
                   <button id="send" type="button">Send</button>
                 </div>
-                <div id="voice-visualizer" class="voice-visualizer" aria-hidden="true">
-                  <div class="orb-halo"></div>
-                  <div class="orb-ring"></div>
-                  <div class="orb-core"></div>
+                <!-- Round-2: VEGA orb composition — large prominent orb +
+                     FFT-style bars below, matching the reference design.
+                     Same #voice-visualizer id so renderer.js's existing
+                     setVoiceVisualizer wiring drives the data-vega-state. -->
+                <div class="vega-orb-wrap" aria-hidden="true">
+                  <div id="voice-visualizer" class="vega-orb voice-visualizer"
+                       data-vega-state="idle">
+                    <span class="vega-orb-ring vega-orb-ring-1" aria-hidden="true"></span>
+                    <span class="vega-orb-ring vega-orb-ring-2" aria-hidden="true"></span>
+                    <span class="vega-orb-ring vega-orb-ring-3" aria-hidden="true"></span>
+                    <span class="vega-orb-ring vega-orb-ring-4" aria-hidden="true"></span>
+                    <span class="vega-orb-spinner" aria-hidden="true"></span>
+                    <svg class="vega-orb-star" viewBox="0 0 32 32" aria-hidden="true">
+                      <path class="vega-orb-star-outer"
+                            d="M 16 1.28 L 18.04 13.96 L 30.72 16 L 18.04 18.04 L 16 30.72 L 13.96 18.04 L 1.28 16 L 13.96 13.96 Z"/>
+                      <path class="vega-orb-star-inner"
+                            d="M 16 7.46 L 17.18 14.82 L 24.54 16 L 17.18 17.18 L 16 24.54 L 14.82 17.18 L 7.46 16 L 14.82 14.82 Z"/>
+                      <circle class="vega-orb-star-core" cx="16" cy="16" r="2.1"/>
+                      <g class="vega-orb-star-rays">
+                        <line x1="16" y1="1.28" x2="16" y2="-4.31"/>
+                        <line x1="30.72" y1="16" x2="36.31" y2="16"/>
+                        <line x1="16" y1="30.72" x2="16" y2="36.31"/>
+                        <line x1="1.28" y1="16" x2="-4.31" y2="16"/>
+                      </g>
+                    </svg>
+                  </div>
+                  <div class="vega-bars" aria-hidden="true">
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                  </div>
                 </div>
                 <div id="voice-orb-status" class="voice-orb-status" aria-live="polite"></div>
 
@@ -2128,58 +3683,270 @@
 
                 <div id="log">
                   <div class="log-empty" id="log-empty">
-                    <span class="log-empty-icon">🤖</span>
-                    <span>No messages yet — send a command to get started</span>
-                  </div>
-                </div>
-              </div>
-              <section class="viewport-shell" id="workspace-viewport">
-                <div id="welcome-screen" class="viewport-pane active">
-                  <h3 style="margin:0;">Dynamic Viewport</h3>
-                  <p class="muted">Use commands like "pokaż mapę Tokio", "pokaż repo owner/repo", "status systemu".</p>
-                </div>
-                <div id="viewport-map" class="viewport-pane">
-                  <h3 style="margin:0;">Mapa Mapbox</h3>
-                  <div id="viewport-map-canvas"></div>
-                </div>
-                <div id="viewport-repo" class="viewport-pane">
-                  <h3 style="margin:0;">GitHub Repository Browser</h3>
-                  <div class="repo-layout">
-                    <div class="repo-list" id="repo-list">Brak repozytoriów.</div>
-                    <div style="display:grid;gap:10px;">
-                      <div class="repo-tree" id="repo-tree">Wybierz repozytorium.</div>
-                      <pre class="repo-preview"><code id="repo-preview">Wybierz plik z repozytorium.</code></pre>
+                    <div class="ox-chat-hero" id="ox-chat-hero">
+                      <div class="vega-orb" data-vega-state="idle" role="img" aria-label="VEGA voice state">
+                        <span class="vega-orb-ring" aria-hidden="true"></span>
+                        <svg class="vega-orb-star" viewBox="0 0 32 32" aria-hidden="true">
+                          <path class="vega-orb-star-outer"
+                                d="M 16 1.28 L 18.04 13.96 L 30.72 16 L 18.04 18.04 L 16 30.72 L 13.96 18.04 L 1.28 16 L 13.96 13.96 Z"/>
+                          <path class="vega-orb-star-inner"
+                                d="M 16 7.46 L 17.18 14.82 L 24.54 16 L 17.18 17.18 L 16 24.54 L 14.82 17.18 L 7.46 16 L 14.82 14.82 Z"/>
+                          <circle class="vega-orb-star-core" cx="16" cy="16" r="2.1"/>
+                          <g class="vega-orb-star-rays">
+                            <line x1="16" y1="1.28" x2="16" y2="-4.31"/>
+                            <line x1="30.72" y1="16" x2="36.31" y2="16"/>
+                            <line x1="16" y1="30.72" x2="16" y2="36.31"/>
+                            <line x1="1.28" y1="16" x2="-4.31" y2="16"/>
+                          </g>
+                        </svg>
+                      </div>
+                      <h2 class="ox-chat-hero-heading">Cześć — jestem Jarvis.</h2>
+                      <p class="ox-chat-hero-sub">
+                        Powiedz „Hey Jarvis”, wpisz polecenie poniżej, lub przejdź do Workspace,
+                        aby zacząć pracę z projektami, pamięcią i lekcjami.
+                      </p>
+                      <div class="ox-chat-hero-hints">
+                        <div class="ox-chat-hint">
+                          <div class="ox-chat-hint-title">Powiedz „Hey Jarvis”</div>
+                          <div class="ox-chat-hint-body">Wake word jest aktywne — bez przycisku mikrofonu.</div>
+                        </div>
+                        <div class="ox-chat-hint">
+                          <div class="ox-chat-hint-title">Wpisz polecenie</div>
+                          <div class="ox-chat-hint-body">Czat, kod, research, automatyzacja — w jednym oknie.</div>
+                        </div>
+                        <div class="ox-chat-hint">
+                          <div class="ox-chat-hint-title">Otwórz Workspace</div>
+                          <div class="ox-chat-hint-body">Projekty, pamięć, lekcje i zaplanowane zadania.</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div id="viewport-hardware" class="viewport-pane">
-                  <h3 style="margin:0;">Hardware Snapshot</h3>
-                  <div class="hardware-cards">
-                    <div id="hardware-cpu">CPU: --%</div>
-                    <div id="hardware-ram">RAM: --%</div>
-                    <div id="hardware-temp">TEMP: --°C</div>
-                  </div>
+              </div>
+              <!-- ── Meridian Activity Panel (M2) — replaces the dynamic viewport.
+                   Chat stays put in the left column; tools (map/repo/hardware)
+                   now open inside the Pliki segment of this panel instead of
+                   taking over the entire workspace. ────────────────────── -->
+              <aside class="ox-activity" id="ox-activity" aria-label="Panel aktywności">
+                <div class="ox-activity-tabs" role="tablist" aria-label="Segmenty panelu aktywności"
+                     style="display:flex;align-items:center;">
+                  <button type="button" class="ox-activity-collapse-btn"
+                          id="ox-activity-collapse" title="Ukryj panel" aria-label="Ukryj panel aktywności"
+                          style="margin-left:auto;order:99;">›</button>
+                  <button class="ox-activity-tab active" type="button" role="tab" data-ox-segment="activity" aria-selected="true">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-list-todo"/></svg>
+                    <span>Aktywność</span>
+                  </button>
+                  <button class="ox-activity-tab" type="button" role="tab" data-ox-segment="agents" aria-selected="false">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-bot"/></svg>
+                    <span>Agenci</span>
+                  </button>
+                  <button class="ox-activity-tab" type="button" role="tab" data-ox-segment="log" aria-selected="false">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-terminal"/></svg>
+                    <span>Log</span>
+                  </button>
+                  <button class="ox-activity-tab" type="button" role="tab" data-ox-segment="files" aria-selected="false">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-folder-open"/></svg>
+                    <span>Pliki</span>
+                  </button>
                 </div>
-              </section>
+                <div class="ox-activity-body">
+                  <!-- Aktywność zadań — static placeholder, wired in M5/M6. -->
+                  <section class="ox-activity-segment active" data-ox-segment="activity">
+                    <div class="ox-activity-card">
+                      <div class="ox-activity-card-title">
+                        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-list-todo"/></svg>
+                        Aktywne zadanie
+                      </div>
+                      <div class="ox-activity-empty" id="ox-activity-task-empty"
+                           style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+                        <div class="vega-orb" id="ox-activity-vega-orb" data-vega-state="idle"
+                             role="img" aria-label="VEGA voice state">
+                          <span class="vega-orb-ring" aria-hidden="true"></span>
+                          <svg class="vega-orb-star" viewBox="0 0 32 32" aria-hidden="true">
+                            <path class="vega-orb-star-outer"
+                                  d="M 16 1.28 L 18.04 13.96 L 30.72 16 L 18.04 18.04 L 16 30.72 L 13.96 18.04 L 1.28 16 L 13.96 13.96 Z"/>
+                            <path class="vega-orb-star-inner"
+                                  d="M 16 7.46 L 17.18 14.82 L 24.54 16 L 17.18 17.18 L 16 24.54 L 14.82 17.18 L 7.46 16 L 14.82 14.82 Z"/>
+                            <circle class="vega-orb-star-core" cx="16" cy="16" r="2.1"/>
+                            <g class="vega-orb-star-rays">
+                              <line x1="16" y1="1.28" x2="16" y2="-4.31"/>
+                              <line x1="30.72" y1="16" x2="36.31" y2="16"/>
+                              <line x1="16" y1="30.72" x2="16" y2="36.31"/>
+                              <line x1="1.28" y1="16" x2="-4.31" y2="16"/>
+                            </g>
+                          </svg>
+                        </div>
+                        <div id="ox-activity-task-label">Brak aktywnego zadania</div>
+                        <div class="ox-text-muted" style="font-size:11px;color:var(--ox-text-dim);">Powiedz „Hey Jarvis” lub wpisz polecenie.</div>
+                      </div>
+                    </div>
+                    <div class="ox-activity-card">
+                      <div class="ox-activity-card-title">
+                        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-activity"/></svg>
+                        Postęp
+                      </div>
+                      <div class="ox-activity-card-body" id="ox-activity-progress" style="color:var(--ox-text-muted);font-size:12px;">Czeka na pierwsze zadanie…</div>
+                    </div>
+                  </section>
+                  <!-- Agenci na żywo — placeholder. -->
+                  <section class="ox-activity-segment" data-ox-segment="agents">
+                    <div class="ox-activity-card">
+                      <div class="ox-activity-card-title">
+                        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-bot"/></svg>
+                        Agenci na żywo
+                      </div>
+                      <div class="ox-activity-empty">
+                        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-users"/></svg>
+                        <div>Żaden agent nie pracuje</div>
+                      </div>
+                    </div>
+                  </section>
+                  <!-- Log wykonania — placeholder; mono terminal stream wired in M6. -->
+                  <section class="ox-activity-segment" data-ox-segment="log">
+                    <div class="ox-activity-card">
+                      <div class="ox-activity-card-title">
+                        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-terminal"/></svg>
+                        Log wykonania
+                      </div>
+                      <div class="ox-activity-card-body ox-mono" id="ox-activity-log" style="font-size:11px;color:var(--ox-text-muted);max-height:280px;overflow:auto;">
+                        <div class="ox-activity-empty">
+                          <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-clock"/></svg>
+                          <div>Brak wpisów</div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                  <!-- Pliki / Narzędzia — host for map/repo/hardware viewports. -->
+                  <section class="ox-activity-segment" data-ox-segment="files">
+                    <div class="ox-activity-card">
+                      <div class="ox-activity-card-title">
+                        <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-folder-open"/></svg>
+                        Pliki i narzędzia
+                      </div>
+                      <div class="viewport-shell" id="workspace-viewport">
+                        <div id="welcome-screen" class="viewport-pane active">
+                          <div class="ox-activity-empty">
+                            <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-folder-open"/></svg>
+                            <div>Brak załączonych plików</div>
+                            <div style="font-size:11px;color:var(--ox-text-dim);">Powiedz „pokaż mapę…”, „pokaż repo…” lub „status systemu”.</div>
+                          </div>
+                        </div>
+                        <div id="viewport-map" class="viewport-pane">
+                          <h4 style="margin:0;font-size:12px;color:var(--ox-text);">Mapa Mapbox</h4>
+                          <div id="viewport-map-canvas"></div>
+                        </div>
+                        <div id="viewport-repo" class="viewport-pane">
+                          <h4 style="margin:0;font-size:12px;color:var(--ox-text);">Repozytorium GitHub</h4>
+                          <div class="repo-layout">
+                            <div class="repo-list" id="repo-list">Brak repozytoriów.</div>
+                            <div style="display:grid;gap:8px;">
+                              <div class="repo-tree" id="repo-tree">Wybierz repozytorium.</div>
+                              <pre class="repo-preview"><code id="repo-preview">Wybierz plik z repozytorium.</code></pre>
+                            </div>
+                          </div>
+                        </div>
+                        <div id="viewport-hardware" class="viewport-pane">
+                          <h4 style="margin:0;font-size:12px;color:var(--ox-text);">Sprzęt</h4>
+                          <div class="hardware-cards">
+                            <div id="hardware-cpu">CPU: --%</div>
+                            <div id="hardware-ram">RAM: --%</div>
+                            <div id="hardware-temp">TEMP: --°C</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </aside>
             </div>
           </div>
   
           <div id="settings-tab-panel" class="tab-panel" role="tabpanel" aria-labelledby="settings-tab-button">
-            <div class="settings-scroll">
-              <div class="settings-toolbar">
+            <div class="settings-scroll" id="settings-scroll-root" data-active-section="general">
+              <!-- ── Meridian Settings sub-nav (M3) ─────────────────────────── -->
+              <nav class="ox-settings-nav" id="ox-settings-nav" aria-label="Sekcje ustawień">
+                <button class="ox-settings-nav-btn active" type="button" data-ox-section="general">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-sparkles"/></svg>Ogólne
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-section="models">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-brain"/></svg>Modele
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-section="integrations">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-link"/></svg>Integracje
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-section="automation">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-zap"/></svg>Automatyzacja
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-section="audio">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-mic"/></svg>Audio
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-section="privacy">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-shield"/></svg>Prywatność
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-section="advanced">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-terminal"/></svg>Zaawansowane
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-section="agents">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-bot"/></svg>Agenci
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-section="about">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-cpu"/></svg>O programie
+                </button>
+              </nav>
+
+              <div class="settings-toolbar" data-ox-section="general models audio integrations advanced automation privacy agents about">
                 <button id="open-setup-wizard" type="button" class="secondary sm">🧙 Setup wizard</button>
                 <button id="open-settings-modal" type="button" class="secondary sm">🔐 Accounts &amp; integrations</button>
                 <button id="save-voice-settings" type="button" class="secondary sm">💾 Save all voice/audio settings</button>
               </div>
 
+              <!-- ── Ogólne (M3 stub — populated in M4+) ────────────────────── -->
+              <section class="settings-card ox-settings-stub" data-ox-section="general" aria-labelledby="settings-general-heading">
+                <div class="settings-card-header" id="settings-general-heading">
+                  <span class="settings-card-icon">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-sparkles"/></svg>
+                  </span>
+                  Ogólne
+                </div>
+                <p class="settings-card-subtitle">Motyw, język i podstawowe zachowanie aplikacji.</p>
+                <div class="settings-grid">
+                  <label class="field">
+                    <span>Motyw</span>
+                    <select id="ox-settings-theme">
+                      <option value="dark-obsidian" selected>Dark Obsidian (Meridian)</option>
+                      <option value="light" disabled>Light · wkrótce</option>
+                      <option value="oled-black" disabled>OLED Black · wkrótce</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Język interfejsu</span>
+                    <select id="ox-settings-language">
+                      <option value="pl-PL" selected>Polski</option>
+                      <option value="en-US">English (US)</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="field-note" style="grid-column:1 / -1;font-size:11px;color:var(--ox-text-dim);">
+                  Light / OLED i pełne tłumaczenia trafią tutaj w jednym z kolejnych etapów.
+                </div>
+                <div style="grid-column:1 / -1;display:flex;gap:8px;margin-top:8px;">
+                  <button type="button" id="ox-settings-open-wizard" class="secondary sm">
+                    🌐 Otwórz kreator języka
+                  </button>
+                </div>
+              </section>
+
               <!-- ── Audio & Voice ──────────────────────────────────────────── -->
-              <section class="settings-card" aria-labelledby="settings-audio-heading">
+              <section class="settings-card" data-ox-section="audio" aria-labelledby="settings-audio-heading">
                 <div class="settings-card-header" id="settings-audio-heading">
-                  <span class="settings-card-icon">🎙️</span>
-                  Audio &amp; voice
+                  <span class="settings-card-icon">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-mic"/></svg>
+                  </span>
+                  Audio i głos
                 </div>
                 <p class="settings-card-subtitle">
-                  Microphone, wake word, noise suppression, and TTS playback live here.
+                  Mikrofon, słowo wybudzające, redukcja szumów oraz odtwarzanie TTS.
                 </p>
                 <div class="settings-grid">
                   <label class="field field-full">
@@ -2202,10 +3969,27 @@
                   </label>
                   <label class="field field-full">
                     <span>Wake-word sensitivity</span>
+                    <select id="wake-word-sensitivity-preset">
+                      <option value="very_strict">Very strict — fewest false wakes, requires clear pronunciation</option>
+                      <option value="strict">Strict</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="relaxed" selected>Relaxed (default) — tolerates casual pronunciation</option>
+                      <option value="very_relaxed">Very relaxed — most forgiving, more false wakes possible</option>
+                    </select>
+                  </label>
+                  <details class="field-full wake-sensitivity-advanced">
+                    <summary>Advanced: numeric sensitivity slider</summary>
+                    <p class="settings-card-subtitle">
+                      Overrides the preset above with a raw 0-100% value. Most people should leave this alone — use the preset instead.
+                    </p>
                     <div class="wake-sensitivity-row">
-                      <input id="wake-word-sensitivity" type="range" min="0" max="100" step="1" value="50" />
-                      <span id="wake-word-sensitivity-value" class="wake-sensitivity-value">50%</span>
+                      <input id="wake-word-sensitivity" type="range" min="0" max="100" step="1" value="65" />
+                      <span id="wake-word-sensitivity-value" class="wake-sensitivity-value">65%</span>
                     </div>
+                  </details>
+                  <label class="toggle field-full" for="context-awareness-enabled">
+                    <input id="context-awareness-enabled" type="checkbox" checked />
+                    Context awareness — ignore likely false wakes while YouTube/Spotify/Discord audio is playing
                   </label>
                   <label class="toggle field-full" for="allow-background-wake">
                     <input id="allow-background-wake" type="checkbox" checked />
@@ -2219,49 +4003,15 @@
                     <input id="auto-tts" type="checkbox" checked />
                     Auto text-to-speech playback (replies are spoken aloud)
                   </label>
-                  <div class="field field-full" style="display:grid;gap:6px;">
-                    <span>Microphone test</span>
-                    <button id="mic-test-button" type="button" class="secondary">🎙 Test microphone</button>
-                    <div class="mic-test-meter" aria-hidden="true">
-                      <div id="mic-test-meter-fill" class="mic-test-meter-fill"></div>
-                    </div>
-                    <div id="mic-test-status" class="mic-test-status">
-                      Click "Test microphone" and speak — the meter shows live input level.
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <!-- ── Models ─────────────────────────────────────────────────── -->
-              <section class="settings-card" aria-labelledby="settings-models-heading">
-                <div class="settings-card-header" id="settings-models-heading">
-                  <span class="settings-card-icon">🧠</span>
-                  Models
-                </div>
-                <p class="settings-card-subtitle">
-                  Chat, code, STT, TTS and voice model selection. Hardware tier and dispatch table are wired from the setup wizard.
-                </p>
-                <div class="model-grid">
-                  <div id="engine-profile-summary" class="field-note" style="grid-column:1 / -1;">
-                    Loading current engine profile…
-                  </div>
-                  <label class="field" id="chat-model-field">
-                    <span>Chat model</span>
-                    <select id="chat-model">
-                      <option value="auto-smart">auto-smart (Qwen fast / GPT OSS 120B hard)</option>
-                      <option value="qwen/qwen3-32b">qwen/qwen3-32b</option>
-                      <option value="openai/gpt-oss-120b:free">openai/gpt-oss-120b:free</option>
-                      <option value="meta-llama/llama-4-scout">meta-llama/llama-4-scout</option>
-                      <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
-                    </select>
-                  </label>
-                  <label class="field" id="stt-model-field">
-                    <span>Speech-to-text model</span>
-                    <select id="stt-model">
-                      <option value="large">whisper-large-v3</option>
-                      <option value="medium">whisper-medium</option>
-                      <option value="base">whisper-base</option>
-                      <option value="tiny">whisper-tiny</option>
+                  <label class="field">
+                    <span>Jarvis voice profile</span>
+                    <select id="tts-voice-profile">
+                      <option value="jarvis">JARVIS</option>
+                      <option value="default">Default</option>
+                      <option value="nova">Nova</option>
+                      <option value="echo">Echo</option>
+                      <option value="aria">Aria</option>
+                      <option value="silent">Silent (say nothing)</option>
                     </select>
                   </label>
                   <label class="field" id="tts-backend-field">
@@ -2279,33 +4029,6 @@
                       </optgroup>
                     </select>
                   </label>
-                  <label class="field" id="tts-model-field">
-                    <span>Text-to-speech model</span>
-                    <select id="tts-model">
-                      <option value="kokoro">kokoro-82m (local voice runtime)</option>
-                      <option value="piper">piper local voice pack</option>
-                      <option value="playai-tts">playai-tts (Groq default)</option>
-                      <option value="gpt-4o-mini-tts">gpt-4o-mini-tts (OpenAI)</option>
-                      <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Jarvis voice profile</span>
-                    <select id="tts-voice-profile">
-                      <option value="jarvis">JARVIS</option>
-                      <option value="default">Default</option>
-                      <option value="nova">Nova</option>
-                      <option value="echo">Echo</option>
-                      <option value="aria">Aria</option>
-                      <option value="silent">Silent (say nothing)</option>
-                    </select>
-                  </label>
-                  <label class="field" id="voice-provider-mode-field">
-                    <span>Voice provider mode</span>
-                    <select id="voice-provider-mode">
-                      <option value="assistantx-server">AssistantX API gateway (default)</option>
-                    </select>
-                  </label>
                   <label class="field" id="voice-language-field">
                     <span>Voice language</span>
                     <select id="voice-language">
@@ -2317,20 +4040,95 @@
                       <option value="fr-FR">Français</option>
                     </select>
                   </label>
+                  <label class="field" id="voice-provider-mode-field">
+                    <span>Voice provider mode</span>
+                    <select id="voice-provider-mode">
+                      <option value="desktop-direct">Local only — on-device Whisper/Piper, no login (default)</option>
+                      <option value="assistantx-server">AssistantX API gateway (cloud STT/TTS, requires sign-in)</option>
+                    </select>
+                  </label>
+                  <div class="field field-full" style="display:grid;gap:6px;">
+                    <span>Microphone test</span>
+                    <button id="mic-test-button" type="button" class="secondary">🎙 Test microphone</button>
+                    <div class="mic-test-meter" aria-hidden="true">
+                      <div id="mic-test-meter-fill" class="mic-test-meter-fill"></div>
+                    </div>
+                    <div id="mic-test-status" class="mic-test-status">
+                      Click "Test microphone" and speak — the meter shows live input level.
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ── Models ─────────────────────────────────────────────────── -->
+              <section class="settings-card" data-ox-section="models" aria-labelledby="settings-models-heading">
+                <div class="settings-card-header" id="settings-models-heading">
+                  <span class="settings-card-icon">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-brain"/></svg>
+                  </span>
+                  Modele · czat, kod, mowa
+                </div>
+                <p class="settings-card-subtitle">
+                  Czat, kod, STT, TTS i głos. Profil sprzętu i tabela dyspozytora są spinane przez kreatora setup.
+                </p>
+                <div class="model-grid">
+                  <div id="engine-profile-summary" class="field-note" style="grid-column:1 / -1;">
+                    Loading current engine profile…
+                  </div>
+                  <label class="field">
+                    <span>LLM model (chat)</span>
+                    <select id="local-chat-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Coding model</span>
+                    <select id="local-code-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Multimodal / vision model</span>
+                    <select id="local-vision-model">
+                      <option value="">Use cloud auto-router</option>
+                    </select>
+                  </label>
+                  <label class="field" id="stt-model-field">
+                    <span>Speech-to-text model</span>
+                    <select id="stt-model">
+                      <option value="large">whisper-large-v3</option>
+                      <option value="medium">whisper-medium</option>
+                      <option value="base">whisper-base</option>
+                      <option value="tiny">whisper-tiny</option>
+                    </select>
+                  </label>
+                  <label class="field" id="tts-model-field">
+                    <span>Text-to-speech model</span>
+                    <select id="tts-model">
+                      <option value="kokoro">kokoro-82m (local voice runtime)</option>
+                      <option value="piper">piper local voice pack</option>
+                      <option value="playai-tts">playai-tts (Groq default)</option>
+                      <option value="gpt-4o-mini-tts">gpt-4o-mini-tts (OpenAI)</option>
+                      <option value="eleven_multilingual_v2">eleven_multilingual_v2 (ElevenLabs)</option>
+                    </select>
+                  </label>
+                  <button id="local-server-save-assignment" type="button" class="secondary" style="grid-column:1 / -1;">Save model selection</button>
                   <div id="model-settings-note" class="field-note" style="grid-column:1 / -1;">
                     Local engine settings are loading…
                   </div>
                 </div>
               </section>
 
-              <!-- ── Local servers & per-role routing ──────────────────────── -->
-              <section class="settings-card" aria-labelledby="settings-local-heading">
+              <!-- ── Custom local servers (advanced — separate from model selection) ── -->
+              <section class="settings-card" data-ox-section="models" aria-labelledby="settings-local-heading">
                 <div class="settings-card-header" id="settings-local-heading">
-                  <span class="settings-card-icon">🖥️</span>
-                  Local model servers
+                  <span class="settings-card-icon">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-cpu"/></svg>
+                  </span>
+                  Niestandardowe serwery (zaawansowane)
                 </div>
                 <p class="settings-card-subtitle">
-                  Attach extra Ollama / LM Studio / OpenAI-compatible endpoints and override which model handles each lane.
+                  Podłącz dodatkowe endpointy Ollama / LM Studio / OpenAI-compatible — pojawią się jako opcje powyżej.
                 </p>
                 <div class="settings-grid">
                   <label class="field">
@@ -2353,40 +4151,15 @@
                   <div id="local-server-list" class="field field-full" style="font-size:12px;line-height:1.5;color:#cbd5e1;">
                     No local servers configured.
                   </div>
-                  <label class="field">
-                    <span>Chat local model</span>
-                    <select id="local-chat-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Code local model</span>
-                    <select id="local-code-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>External local model</span>
-                    <select id="local-external-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Vision local model</span>
-                    <select id="local-vision-model">
-                      <option value="">Use cloud auto-router</option>
-                    </select>
-                  </label>
                   <label class="toggle" for="local-prefer-enabled">
                     <input id="local-prefer-enabled" type="checkbox" />
                     Prefer local when available
                   </label>
-                  <button id="local-server-save-assignment" type="button" class="secondary">Save local routing</button>
                 </div>
               </section>
 
               <!-- ── Cloud API keys (BYOK) ─────────────────────────────────── -->
-              <section class="settings-card" aria-labelledby="settings-byok-heading">
+              <section class="settings-card" data-ox-section="integrations" aria-labelledby="settings-byok-heading">
                 <div class="settings-card-header" id="settings-byok-heading">
                   <span class="settings-card-icon">🔑</span>
                   Cloud API keys (BYOK)
@@ -2423,7 +4196,7 @@
               </section>
 
               <!-- ── Runtime & sync ────────────────────────────────────────── -->
-              <section class="settings-card" aria-labelledby="settings-runtime-heading">
+              <section class="settings-card" data-ox-section="advanced" aria-labelledby="settings-runtime-heading">
                 <div class="settings-card-header" id="settings-runtime-heading">
                   <span class="settings-card-icon">⚙️</span>
                   Runtime &amp; sync
@@ -2479,7 +4252,7 @@
               </section>
 
               <!-- ── Temporal intelligence ─────────────────────────────────── -->
-              <section class="settings-card" aria-labelledby="settings-temporal-heading">
+              <section class="settings-card" data-ox-section="automation" aria-labelledby="settings-temporal-heading">
                 <div class="settings-card-header" id="settings-temporal-heading">
                   <span class="settings-card-icon">⏱️</span>
                   Temporal intelligence
@@ -2513,6 +4286,321 @@
                       <option value="minimal">Minimal</option>
                     </select>
                   </label>
+                </div>
+              </section>
+
+              <!-- ── Prywatność (M3 stub) ──────────────────────────────────── -->
+              <section class="settings-card ox-settings-stub" data-ox-section="privacy" aria-labelledby="settings-privacy-heading">
+                <div class="settings-card-header" id="settings-privacy-heading">
+                  <span class="settings-card-icon">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-shield"/></svg>
+                  </span>
+                  Prywatność
+                </div>
+                <p class="settings-card-subtitle">Historia rozmów, kontrola pamięci, eksport i bezpieczeństwo danych.</p>
+                <div class="ox-settings-stub">
+                  <h4>Kontrola danych</h4>
+                  <p>Eksport historii, czyszczenie pamięci oraz polityka przechowywania trafią tutaj w jednym z kolejnych etapów.</p>
+                  <span class="ox-settings-stub-tag">wkrótce</span>
+                </div>
+              </section>
+
+              <!-- ── Zaawansowane · Diagnostyka (M6) ─────────────────────── -->
+              <section class="settings-card" data-ox-section="advanced" aria-labelledby="settings-advanced-heading">
+                <div class="settings-card-header" id="settings-advanced-heading">
+                  <span class="settings-card-icon">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-terminal"/></svg>
+                  </span>
+                  Zaawansowane · Diagnostyka
+                </div>
+                <p class="settings-card-subtitle">
+                  Status sidecara Python, log zdrowia podsystemów (sidecar, Ollama, sieć)
+                  i live podgląd <code class="ox-mono">health-observer</code>.
+                </p>
+                <div class="ox-diag-grid">
+                  <div class="ox-diag-card" data-ox-subsystem="sidecar">
+                    <span class="ox-status-dot" data-ox-status-dot></span>
+                    <div>
+                      <div class="ox-diag-card-title">Sidecar Python</div>
+                      <div class="ox-diag-card-detail ox-mono" data-ox-status-detail>unknown</div>
+                    </div>
+                  </div>
+                  <div class="ox-diag-card" data-ox-subsystem="ollama">
+                    <span class="ox-status-dot" data-ox-status-dot></span>
+                    <div>
+                      <div class="ox-diag-card-title">Ollama (lokalne LLM)</div>
+                      <div class="ox-diag-card-detail ox-mono" data-ox-status-detail>unknown</div>
+                    </div>
+                  </div>
+                  <div class="ox-diag-card" data-ox-subsystem="network">
+                    <span class="ox-status-dot" data-ox-status-dot></span>
+                    <div>
+                      <div class="ox-diag-card-title">Sieć</div>
+                      <div class="ox-diag-card-detail ox-mono" data-ox-status-detail>unknown</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="ox-diag-toolbar">
+                  <button type="button" class="secondary sm" id="ox-diag-restart-sidecar">
+                    <svg class="ox-icon sm" aria-hidden="true"><use href="#ox-i-refresh"/></svg>
+                    Restartuj sidecar
+                  </button>
+                  <button type="button" class="secondary sm" id="ox-diag-snapshot">
+                    <svg class="ox-icon sm" aria-hidden="true"><use href="#ox-i-activity"/></svg>
+                    Pobierz snapshot
+                  </button>
+                  <button type="button" class="secondary sm" id="ox-diag-clear">
+                    <svg class="ox-icon sm" aria-hidden="true"><use href="#ox-i-x"/></svg>
+                    Wyczyść terminal
+                  </button>
+                </div>
+                <div class="ox-diag-terminal ox-mono" id="ox-diag-terminal" aria-live="polite">
+                  <div class="ox-log-line"><span class="ox-log-time">--:--:--</span><span class="ox-text-muted" style="color:var(--ox-text-muted);">Terminal diagnostyczny gotowy — pulse/heal-attempted/heal-outcome trafiają tutaj na żywo.</span></div>
+                </div>
+              </section>
+
+              <!-- ── Agenci (M3 stub — full multi-agent jest w Phase 2+) ─── -->
+              <section class="settings-card ox-settings-stub" data-ox-section="agents" aria-labelledby="settings-agents-heading">
+                <div class="settings-card-header" id="settings-agents-heading">
+                  <span class="settings-card-icon">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-bot"/></svg>
+                  </span>
+                  Agenci
+                </div>
+                <p class="settings-card-subtitle">Włączanie i limity agentów wykonawczych (multi-agent).</p>
+                <div class="ox-settings-stub">
+                  <h4>Pełny system agentów — później</h4>
+                  <p>Phase 2+: monitorowanie, limity rozmiaru zadań i uprawnień per-agent.</p>
+                  <span class="ox-settings-stub-tag">Phase 2+</span>
+                </div>
+              </section>
+
+              <!-- ── O programie (M3 stub — version/hardware/license/updates) ─ -->
+              <section class="settings-card" data-ox-section="about" aria-labelledby="settings-about-heading">
+                <div class="settings-card-header" id="settings-about-heading">
+                  <span class="settings-card-icon">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-cpu"/></svg>
+                  </span>
+                  O programie
+                </div>
+                <p class="settings-card-subtitle">Wersja, profil sprzętu, licencja i aktualizacje.</p>
+                <div class="settings-grid">
+                  <div class="field field-full">
+                    <span>Wersja aplikacji</span>
+                    <div id="ox-about-version" class="value ox-mono" style="color:var(--ox-accent-cyan);">Ładowanie…</div>
+                  </div>
+                  <div class="field field-full">
+                    <span>Status aktualizacji</span>
+                    <div id="ox-about-update-status" class="value">Sprawdzanie…</div>
+                  </div>
+                  <div class="field field-full" style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="button" id="ox-about-check-updates" class="secondary sm">Sprawdź teraz</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <!-- ── Workspace tab (M8) — 9 sub-sections ─────────────────────── -->
+          <div id="workspace-tab-panel" class="tab-panel" role="tabpanel" aria-labelledby="ox-tab-workspace">
+            <div class="ox-workspace" data-active-workspace="search">
+              <nav class="ox-settings-nav" id="ox-workspace-nav" aria-label="Sekcje Workspace">
+                <button class="ox-settings-nav-btn active" type="button" data-ox-workspace="search">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-search"/></svg>Szukaj
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-workspace="projects">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-folder-open"/></svg>Projekty
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-workspace="skills">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-sparkles"/></svg>Umiejętności
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-workspace="memory">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-brain"/></svg>Pamięć
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-workspace="knowledge">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-database"/></svg>Wiedza
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-workspace="lessons">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-book"/></svg>Lekcje
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-workspace="workflows">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-zap"/></svg>Workflowy
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-workspace="blueprints">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-file-text"/></svg>Blueprinty
+                </button>
+                <button class="ox-settings-nav-btn" type="button" data-ox-workspace="missions">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-target"/></svg>Misje
+                </button>
+              </nav>
+
+              <!-- Szukaj — global search over Pamięć/Wiedza/Projekty -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="search">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Szukaj</h3>
+                    <p>Wyszukiwarka po wszystkim co Jarvis już wie — pamięć, wiedza, projekty.</p>
+                  </div>
+                </header>
+                <div class="ox-search-bar">
+                  <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-search"/></svg>
+                  <input type="search" id="ox-workspace-search-input" placeholder="np. „kolor banera projektu Aurora"" autocomplete="off" spellcheck="false" />
+                  <button type="button" class="secondary sm" id="ox-workspace-search-go">Szukaj</button>
+                </div>
+                <div class="ox-search-results" id="ox-workspace-search-results">
+                  <div class="ox-activity-empty">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-sparkles"/></svg>
+                    <div>Wpisz frazę, aby przeszukać pamięć i wiedzę.</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Projekty -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="projects">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Projekty</h3>
+                    <p>Per-project: pliki, postęp, zależności, pamięć, umiejętności, lekcje, blueprinty.</p>
+                  </div>
+                  <button type="button" class="secondary sm" id="ox-workspace-add-project">+ Nowy projekt</button>
+                </header>
+                <div class="ox-workspace-grid" id="ox-projects-list">
+                  <div class="ox-activity-empty">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-folder-open"/></svg>
+                    <div>Brak projektów — dodaj pierwszy, aby rozpocząć śledzenie.</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Umiejętności -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="skills">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Umiejętności</h3>
+                    <p>Skill Confidence — sukces / pewność / liczba użyć. Jarvis preferuje wyższą pewność.</p>
+                  </div>
+                </header>
+                <div class="ox-workspace-grid" id="ox-skills-list">
+                  <div class="ox-activity-empty">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-sparkles"/></svg>
+                    <div>Brak umiejętności w bazie — wskaźniki zaczną rosnąć po pierwszych zadaniach.</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Pamięć -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="memory">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Pamięć</h3>
+                    <p>Preferencje, custom instructions, pamięć konwersacji i pamięć długoterminowa (user-specific).</p>
+                  </div>
+                  <button type="button" class="secondary sm" id="ox-workspace-memory-refresh">Odśwież</button>
+                </header>
+                <div class="ox-workspace-grid" id="ox-memory-list">
+                  <div class="ox-activity-empty">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-brain"/></svg>
+                    <div>Pamięć jest pusta.</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Wiedza -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="knowledge">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Wiedza</h3>
+                    <p>Encje (projekty / umiejętności / lekcje / integracje / agenci) + graf relacji.</p>
+                  </div>
+                  <button type="button" class="secondary sm" id="ox-workspace-knowledge-refresh">Odśwież</button>
+                </header>
+                <div class="ox-workspace-grid" id="ox-knowledge-list">
+                  <div class="ox-activity-empty">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-database"/></svg>
+                    <div>Graf wiedzy jest pusty.</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Lekcje -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="lessons">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Lekcje</h3>
+                    <p>Failure → Cause → Fix — każda nauka z błędu zapisana jako rekord.</p>
+                  </div>
+                </header>
+                <div class="ox-workspace-grid" id="ox-lessons-list">
+                  <div class="ox-activity-empty">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-book"/></svg>
+                    <div>Brak lekcji — pierwsza powstanie po pierwszym debug-cyklu.</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Workflowy -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="workflows">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Workflowy</h3>
+                    <p>One-click flow: Build Website / Launch Stream / Research Product / Create Discord Bot.</p>
+                  </div>
+                </header>
+                <div class="ox-workspace-grid">
+                  <div class="ox-workspace-card" data-ox-workflow="build-website">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-zap"/></svg>
+                    <h4>Zbuduj stronę</h4>
+                    <p>Od pomysłu do deploya — landing page z hostingiem.</p>
+                  </div>
+                  <div class="ox-workspace-card" data-ox-workflow="launch-stream">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-activity"/></svg>
+                    <h4>Uruchom stream</h4>
+                    <p>Konfiguracja OBS + Twitch/YouTube + harmonogram.</p>
+                  </div>
+                  <div class="ox-workspace-card" data-ox-workflow="research-product">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-search"/></svg>
+                    <h4>Zbadaj produkt</h4>
+                    <p>Wielo-źródłowy research + porównanie konkurencji.</p>
+                  </div>
+                  <div class="ox-workspace-card" data-ox-workflow="discord-bot">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-bot"/></svg>
+                    <h4>Stwórz bota Discord</h4>
+                    <p>Bootstrap + komendy + deploy.</p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Blueprinty -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="blueprints">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Blueprinty</h3>
+                    <p>Goal · wymagania · features · stack · ryzyka · timeline · koszt — przed dużym zadaniem.</p>
+                  </div>
+                  <button type="button" class="secondary sm" id="ox-workspace-add-blueprint">+ Nowy blueprint</button>
+                </header>
+                <div class="ox-workspace-grid" id="ox-blueprints-list">
+                  <div class="ox-activity-empty">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-file-text"/></svg>
+                    <div>Brak blueprintów. Generator dostępny po dodaniu pierwszego celu.</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Misje -->
+              <section class="ox-workspace-section ox-glass" data-ox-workspace="missions">
+                <header class="ox-workspace-section-head">
+                  <div>
+                    <h3>Misje</h3>
+                    <p>Długoterminowe cele — Learn React, Launch SaaS. Postęp, kamienie milowe, zależności.</p>
+                  </div>
+                  <button type="button" class="secondary sm" id="ox-workspace-add-mission">+ Nowa misja</button>
+                </header>
+                <div class="ox-workspace-grid" id="ox-missions-list">
+                  <div class="ox-activity-empty">
+                    <svg class="ox-icon" aria-hidden="true"><use href="#ox-i-target"/></svg>
+                    <div>Brak aktywnych misji. Dodaj pierwszy cel, aby śledzić długoterminowy postęp.</div>
+                  </div>
                 </div>
               </section>
             </div>
@@ -2636,6 +4724,65 @@
     </div>
     <div id="index-jobs-list" style="display:flex;flex-direction:column;gap:6px"></div>
   </div>
+
+  <!-- ── Round-2 — Language wizard (first-run modal) ─────────────────── -->
+  <div id="ox-language-wizard" class="ox-wizard-overlay" role="dialog" aria-modal="true"
+       aria-labelledby="ox-wizard-title" hidden>
+    <div class="ox-wizard-card">
+      <header class="ox-wizard-header">
+        <svg aria-hidden="true" width="28" height="28" viewBox="0 0 32 32"
+             style="color: var(--ox-cyan, var(--accent)); overflow: visible;">
+          <path d="M 16 1.28 L 18.04 13.96 L 30.72 16 L 18.04 18.04 L 16 30.72 L 13.96 18.04 L 1.28 16 L 13.96 13.96 Z"
+                fill="var(--ox-bg2, #0e1117)" stroke="currentColor" stroke-width="0.8"/>
+          <path d="M 16 7.46 L 17.18 14.82 L 24.54 16 L 17.18 17.18 L 16 24.54 L 14.82 17.18 L 7.46 16 L 14.82 14.82 Z"
+                fill="currentColor"/>
+          <circle cx="16" cy="16" r="2.1" fill="#ffffff"/>
+        </svg>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <h2 id="ox-wizard-title" class="ox-wizard-title">Witaj w Jarvisie</h2>
+          <span class="ox-wizard-subtitle">Wybierz język interfejsu · Choose your UI language</span>
+        </div>
+      </header>
+      <div class="ox-wizard-options" role="radiogroup" aria-label="Język">
+        <button type="button" class="ox-wizard-option" role="radio"
+                data-locale="pl" aria-checked="true">
+          <span class="ox-wizard-radio" aria-hidden="true">✓</span>
+          <span class="ox-wizard-label">Polski</span>
+          <span class="ox-wizard-greeting">Cześć, jestem Jarvis.</span>
+        </button>
+        <button type="button" class="ox-wizard-option" role="radio"
+                data-locale="en" aria-checked="false">
+          <span class="ox-wizard-radio" aria-hidden="true"></span>
+          <span class="ox-wizard-label">English</span>
+          <span class="ox-wizard-greeting">Hi, I am Jarvis.</span>
+        </button>
+        <button type="button" class="ox-wizard-option" role="radio"
+                data-locale="es" aria-checked="false" disabled>
+          <span class="ox-wizard-radio" aria-hidden="true"></span>
+          <span class="ox-wizard-label">Español</span>
+          <span class="ox-wizard-greeting">Hola, soy Jarvis.</span>
+          <span class="ox-wizard-soon">wkrótce</span>
+        </button>
+        <button type="button" class="ox-wizard-option" role="radio"
+                data-locale="de" aria-checked="false" disabled>
+          <span class="ox-wizard-radio" aria-hidden="true"></span>
+          <span class="ox-wizard-label">Deutsch</span>
+          <span class="ox-wizard-greeting">Hallo, ich bin Jarvis.</span>
+          <span class="ox-wizard-soon">wkrótce</span>
+        </button>
+      </div>
+      <footer class="ox-wizard-footer">
+        <span class="ox-wizard-hint">Zmienisz to później w Ustawieniach · Ogólne</span>
+        <button type="button" class="ox-wizard-confirm" id="ox-wizard-confirm">Potwierdź</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Round-2-fix3: edge re-open button — only visible when the Activity Panel
+       is collapsed (gated via body.ox-activity-collapsed in renderer.js). -->
+  <button type="button" id="ox-activity-edge-toggle" class="ox-activity-edge-toggle"
+          title="Pokaż panel aktywności" aria-label="Pokaż panel aktywności"
+          style="display:none;">‹</button>
 
   <script src="map-widget.js"></script>
   <script src="electron/ai/task-classifier.js"></script>

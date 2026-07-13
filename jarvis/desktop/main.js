@@ -28,6 +28,7 @@ const { buildSecureWebPreferences } = require('./electron/main/window-security')
 const { createMainIpcHandlers } = require('./electron/ipc/register-main-handlers');
 const { createUpdateCoordinator } = require('./electron/updater/coordinator');
 const { createPermissionPolicy } = require('./electron/permissions/policy');
+const { ensurePythonDependencies } = require('./electron/sidecar/ensure-python-deps');
 const { assertNoDynamicCodeExecution, sanitizeAuditValue } = require('./electron/security/guardrails');
 const { emitSessionChanged } = require('./electron/auth/events');
 const { redactUrl } = require('./electron/auth/redaction');
@@ -44,6 +45,16 @@ const { createMCPServerManager } = require('./electron/mcp/server-manager');
 const { createMCPToolRouter } = require('./electron/mcp/tool-router');
 const { AIRouter } = require('./electron/ai/router');
 const { createLocalServerStore } = require('./electron/ai/local-server-store');
+const { createCompressionEngine } = require('./electron/memory/context/compression-engine');
+const { createVerificationEngine } = require('./electron/ai/verification/engine');
+const { preflight: adaptiveThinkingPreflight, postflight: adaptiveThinkingPostflight } = require('./electron/ai/core/adaptive-thinking');
+const { runRealityCheck } = require('./electron/ai/core/reality-check');
+const { createDecisionMemory } = require('./electron/ai/core/decision-memory');
+const { recordFailureLesson, recordSuccessAnalysis } = require('./electron/ai/core/learning-hierarchy');
+const { createTrustEngine } = require('./electron/ai/core/trust-engine');
+const { createSelfDiagnosticEngine } = require('./electron/ai/core/self-diagnostic');
+const { scanForRisk, annotateResponse: annotateRiskyResponse } = require('./electron/ai/core/devils-advocate');
+const { buildDecisionContext, executiveDecide } = require('./electron/ai/core/decision-context');
 
 // ── DB readiness helper ───────────────────────────────────────────────────────
 // Ensures the launcher SQLite database is initialised before any IPC handler
@@ -125,9 +136,24 @@ let sidecarFatalError = null;
 // after unexpected sidecar exits.
 let sidecarHealRetryCount = 0;
 let sidecarHealTimer = null;
+// startSidecar() now awaits a possibly multi-minute first-time Python
+// dependency install before spawning anything, leaving sidecarProcess
+// null the whole time. Without this guard, the health-observer's periodic
+// probe (every 12s) sees "no process" during that wait and keeps
+// triggering MORE concurrent startSidecar() calls, each of which would
+// eventually try to spawn its own duplicate sidecar once the (deduped)
+// install resolves.
+let sidecarStartInFlight = false;
 const SIDECAR_HEAL_MAX_RETRIES = 5;
 const SIDECAR_HEAL_BASE_DELAY_MS = 1_500;
 let sidecarUserInitiatedStop = false;
+// Tracks the one-time Python dependency self-heal install (see
+// ensure-python-deps.js) so the splash screen's sidecar-wait loop knows to
+// keep showing real progress for as long as it's genuinely running,
+// instead of giving up after the normal 20s handshake window and silently
+// abandoning the UI while pip keeps installing torch/kokoro/faster-whisper
+// in the background for several more minutes.
+let pythonDepsInstallState = { active: false, percent: 0, status: '' };
 let localVoiceAssetsState = {
   started: false,
   complete: false,
@@ -141,6 +167,44 @@ const startupDiagnostics = createStartupDiagnostics();
 const localServerStore = createLocalServerStore();
 const aiRouter = new AIRouter({
   getLocalServerConfig: () => localServerStore.getRouterConfig(),
+  onRouteDecided: (decision) => {
+    // M5-followup: forward every routing decision into the Diagnostics
+    // terminal (Settings → Zaawansowane) and the Activity Panel's "Log
+    // wykonania" segment via the existing health:pulse-style fan-out.
+    // The renderer subscribes to 'router:decision' (added to preload
+    // ALLOWED_RECEIVE for this round).
+    sendToRenderer('router:decision', decision);
+  },
+});
+// Phase 1 LOCK LIST — Context Compression Engine. Stores are assigned once
+// registerWindowControlHandlers() runs (module load, before any chat can
+// fire); routeAiRequest only reads them later, on an actual IPC call.
+let workspaceMemoryStore = null;
+let workspaceKnowledgeStore = null;
+const compressionEngine = createCompressionEngine();
+compressionEngine.on('context-compressed', (stats) => {
+  sendToRenderer('context:compressed', stats);
+});
+// Phase 1 LOCK LIST — Basic Review Pipeline. Reuses the same verification
+// engine the Runtime V2 orchestrator uses (electron/ai/verification), but
+// invoked directly from the live chat path so it doesn't require opting
+// into the full multi-agent orchestrator (explicitly out of scope).
+const reviewEngine = createVerificationEngine();
+// Jarvis Core systems #10/#12/#13 — Decision Memory, Trust Engine and the
+// Self Diagnostic Engine are JSON-on-disk / timer-driven singletons with no
+// dependency on `app` being ready, so they're created here at module scope
+// (same as compressionEngine/reviewEngine above). healthObserverRef is
+// hoisted and assigned once registerWindowControlHandlers() creates the
+// real health observer, mirroring the workspace-store hoisting pattern.
+const decisionMemory = createDecisionMemory();
+const trustEngine = createTrustEngine();
+let healthObserverRef = null;
+const selfDiagnosticEngine = createSelfDiagnosticEngine({
+  getHealthSnapshot: () => (healthObserverRef ? healthObserverRef.snapshot() : null),
+  getTrustModels: () => trustEngine.rankModels(),
+});
+selfDiagnosticEngine.on('report', (report) => {
+  sendToRenderer('self-diagnostic:report', report);
 });
 const telemetryBus = createEventBus();
 wireLocalTelemetry(telemetryBus);
@@ -259,9 +323,27 @@ function resolvePythonExecutable() {
     'python3',
   ];
   const candidates = app.isPackaged ? packagedCandidates : devCandidates;
+  // Root-cause fix (2026-06): bare commands like 'python3'/'python' used to
+  // get exists=null and were accepted unconditionally — so 'python3' always
+  // "won" by array order even on machines (e.g. this Windows box) that only
+  // have 'python' on PATH, producing a silent `spawn python3 ENOENT` and the
+  // sidecar staying "offline" with no diagnostic. We now actually resolve
+  // bare commands via `where`/`which` (sync, short timeout, no shell) so the
+  // first REAL match wins regardless of array position — correct on every
+  // platform instead of just the one we happened to test on.
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+  function resolveBareCommand(name) {
+    try {
+      const { execFileSync } = require('child_process');
+      const out = execFileSync(whichCmd, [name], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 });
+      return out.toString('utf8').trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
   const candidateDetails = candidates.map((candidate) => {
     const isPath = candidate.includes(path.sep);
-    const exists = isPath ? fs.existsSync(candidate) : null;
+    const exists = isPath ? fs.existsSync(candidate) : resolveBareCommand(candidate);
     return { candidate, exists };
   });
   for (const entry of candidateDetails) {
@@ -425,6 +507,11 @@ function handleSidecarStdoutLine(line) {
     log(`[sidecar] ${line}`);
     return;
   }
+  // Diagnostic instrumentation (temporary, per systematic-debugging Phase 1):
+  // log every successfully-parsed stdout payload so we can see in this
+  // terminal whether 'model_download_complete' actually crosses the
+  // Python→Electron boundary, instead of only seeing JSON-parse failures.
+  log(`[sidecar:json] type=${payload?.type} phase=${payload?.phase}`);
   markSidecarReady({ messageType: payload?.type || 'unknown' });
   handleSidecarStatusPayload(payload);
   sendToRenderer('sidecar-message', payload);
@@ -445,7 +532,17 @@ function sendSidecarMessage(payload) {
   }
 }
 
-function startSidecar() {
+async function startSidecar() {
+  if (sidecarStartInFlight) return;
+  sidecarStartInFlight = true;
+  try {
+    await startSidecarImpl();
+  } finally {
+    sidecarStartInFlight = false;
+  }
+}
+
+async function startSidecarImpl() {
   const mainPy = getSidecarMainPath();
   setLauncherPhase('validating-runtime', 'Validating AI runtime paths.');
   if (!fs.existsSync(mainPy)) {
@@ -495,6 +592,43 @@ function startSidecar() {
   }
 
   setLauncherPhase('creating-venv', 'Detecting Python runtime environment.', { python });
+
+  // Auto-heal a missing/incomplete sidecar Python environment instead of
+  // crash-looping forever (the embeddable Python bundled with packaged
+  // builds ships with no dependencies pre-installed — see ai-agent's
+  // requirements.txt). Installs directly into the interpreter's own
+  // site-packages — an embeddable Python with a `._pth` file file ignores
+  // PYTHONPATH entirely, so a --target/PYTHONPATH approach can't work
+  // here. Falls back to a UAC-elevated retry if the direct install can't
+  // write into Program Files (one-time; every later launch's probe finds
+  // the packages already on disk and skips straight past this).
+  const requirementsPath = path.join(path.dirname(mainPy), 'requirements.txt');
+  setLauncherPhase('loading-models', 'Checking AI runtime Python dependencies.');
+  pythonDepsInstallState = { active: true, percent: 0, status: 'Checking AI runtime Python dependencies…' };
+  const depsResult = await ensurePythonDependencies({
+    pythonPath: python,
+    requirementsPath,
+    onProgress: ({ status, index, total }) => {
+      setLauncherPhase('loading-models', status);
+      const depsPercent = Number.isFinite(index) && Number.isFinite(total) && total > 0
+        ? Math.round((index / total) * 100)
+        : pythonDepsInstallState.percent;
+      pythonDepsInstallState = { active: true, percent: depsPercent, status };
+      sendToRenderer('splash:progress', { status, depsPercent });
+    },
+  });
+  pythonDepsInstallState = { active: false, percent: 100, status: pythonDepsInstallState.status };
+  if (!depsResult.skipped) {
+    log('[sidecar] Python dependency install:', depsResult.ok ? 'ok' : 'incomplete', depsResult);
+    startupDiagnostics.pushEvent('sidecar', depsResult.ok ? 'info' : 'warn',
+      depsResult.ok ? 'Installed missing Python dependencies.' : 'Python dependency install incomplete.',
+      depsResult);
+    sendToRenderer('splash:progress', {
+      depsPercent: 100,
+      status: depsResult.ok ? 'AI runtime dependencies ready.' : 'Some AI runtime dependencies could not be installed.',
+    });
+  }
+
   setLauncherPhase('loading-models', 'Loading AI runtime models.');
   telemetryBus.publish('sidecar.started');
   startupDiagnostics.setComponent('sidecar', 'starting', {
@@ -677,6 +811,42 @@ function emitDesktopHealth() {
   sendToRenderer('desktop-health', startupDiagnostics.snapshot());
 }
 
+// Model warm-up — Ollama unloads a model's weights from memory after it's
+// been idle, so the FIRST chat/code request after a cold start pays the
+// full load time on top of inference (can be many seconds for larger
+// models). Sending an empty-prompt /api/generate forces Ollama to load
+// the model into memory without generating anything, so by the time the
+// user actually sends a message it's already warm. keep_alive keeps it
+// resident for 30 minutes, matching normal idle-chat usage patterns.
+const ollamaWarmedModels = new Set();
+async function warmUpOllamaModel(modelName) {
+  const model = String(modelName || '').trim();
+  if (!model || ollamaWarmedModels.has(model)) return;
+  ollamaWarmedModels.add(model);
+  const url = String(process.env.JARVIS_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+  const startedAt = Date.now();
+  try {
+    await fetch(`${url}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt: '', keep_alive: '30m' }),
+    });
+    log(`[warmup] Ollama model "${model}" preloaded in ${Date.now() - startedAt}ms.`);
+  } catch (error) {
+    ollamaWarmedModels.delete(model); // allow retry on the next probe
+    log(`[warmup] Failed to preload Ollama model "${model}":`, error?.message || error);
+  }
+}
+
+function warmUpLocalModels() {
+  const modelConfig = getJarvisModelConfig();
+  const assignment = localServerStore.getAssignment() || {};
+  const candidates = new Set([modelConfig.llm_model, assignment.chatModelId, assignment.codeModelId].filter(Boolean));
+  for (const model of candidates) {
+    void warmUpOllamaModel(model);
+  }
+}
+
 async function probeOllamaAvailability(source = 'startup') {
   try {
     const availability = await aiRouter.getAvailability();
@@ -720,6 +890,11 @@ async function probeOllamaAvailability(source = 'startup') {
       },
     );
     emitDesktopHealth();
+    // Fire-and-forget — only on startup/post-install, not every manual
+    // Settings → Modele "check" click (those shouldn't re-warm on every poll).
+    if (availability.ollama_available && (source === 'startup' || source === 'post-install')) {
+      void warmUpLocalModels();
+    }
     return availability;
   } catch (error) {
     startupDiagnostics.setComponent('ollama', 'unavailable', {
@@ -813,9 +988,35 @@ async function routeAiRequest(payload = {}, options = {}) {
       }
     }
     : () => {};
+  const rawMessages = Array.isArray(request.messages) ? request.messages : [];
+  const { messages: compressedMessages } = compressionEngine.compress(rawMessages, {
+    query: request.message || '',
+    memoryStore: workspaceMemoryStore,
+    knowledgeStore: workspaceKnowledgeStore,
+  });
+
+  // ── Jarvis Core preflight (systems #8, #9) ───────────────────────────────
+  // Execution Modes sets the ceiling/floor Adaptive Thinking operates
+  // within; Reality Check + Contradiction Detector + Simulation Engine run
+  // as a pre-execution pipeline. Warnings are surfaced to diagnostics but
+  // never block dispatch — Basic scope per the Phase 1 LOCK LIST.
+  const executionMode = adaptiveThinkingPreflight({
+    message: request.message || '',
+    contextType: request.contextType,
+    retryCount: request.retryCount,
+  });
+  const realityCheck = runRealityCheck({
+    message: request.message || '',
+    knowledgeStore: workspaceKnowledgeStore,
+    memoryStore: workspaceMemoryStore,
+  });
+  if (!realityCheck.ok) {
+    sendToRenderer('reality-check:result', { ...realityCheck, streamId });
+  }
+
   const response = await aiRouter.routeRequest({
     message: request.message || '',
-    messages: Array.isArray(request.messages) ? request.messages : undefined,
+    messages: compressedMessages.length ? compressedMessages : undefined,
     images: Array.isArray(request.images) ? request.images : undefined,
     profile: request.profile,
     contextType: request.contextType,
@@ -824,15 +1025,53 @@ async function routeAiRequest(payload = {}, options = {}) {
     source: request.source,
     options: request.options,
   }, onChunk);
+
+  // ── Jarvis Core postflight (systems #8, #9, #11-#15) ─────────────────────
+  const taskType = request.contextType === 'code' ? 'coding' : 'general';
+  const review = await reviewEngine.verify(response, { taskType }).catch((err) => ({ ok: false, reason: String(err?.message || err) }));
+  sendToRenderer('review:result', { ...review, taskType, streamId });
+
+  const { confidence } = adaptiveThinkingPostflight({ response, route: response?.route, mode: executionMode.mode });
+  const advocate = scanForRisk(response?.text);
+  const modelId = response?.model || response?.route?.model || 'unknown';
+  const trustScoreVal = trustEngine.trustScore(modelId);
+
+  const decisionContext = buildDecisionContext({
+    mode: executionMode.mode,
+    confidence,
+    realityCheck,
+    review,
+    trustScore: trustScoreVal,
+    advocate,
+  });
+  const action = executiveDecide(decisionContext);
+
+  trustEngine.recordOutcome(modelId, { ok: review.ok, confidence });
+  selfDiagnosticEngine.recordReviewOutcome(review.ok);
+  decisionMemory.recordDecision({
+    mode: executionMode.mode,
+    confidence,
+    route: response?.route || null,
+    reviewOk: review.ok,
+    advocateFlags: advocate.flags,
+    action,
+  });
+  sendToRenderer('decision-context:result', { ...decisionContext, action, streamId });
+
+  const finalText = advocate.risky
+    ? annotateRiskyResponse(String(response?.text || ''), advocate.flags)
+    : String(response?.text || '');
+
   return {
     ok: true,
-    text: String(response?.text || ''),
+    text: finalText,
     provider: response?.provider || response?.route?.provider || 'unknown',
-    model: response?.model || response?.route?.model || 'unknown',
+    model: modelId,
     route: response?.route || null,
     profile: response?.profile || null,
     availability: response?.availability || null,
     streamId,
+    decision: { mode: executionMode.mode, confidence, action },
   };
 }
 
@@ -1364,18 +1603,34 @@ async function startSplashTransition(engineMode) {
     }
   }
 
-  // Wait for the Python sidecar to finish its health handshake (up to 20 s).
+  // Wait for the Python sidecar to finish its health handshake (up to 20 s
+  // normally). A first-time dependency install (downloading torch for
+  // Kokoro/faster-whisper) runs before the sidecar process even spawns and
+  // can legitimately take several minutes — without this, the loop would
+  // give up at the 20s mark, declare "AI runtime did not start", and
+  // transition away to index.html (which has no progress listener at all)
+  // while pip kept installing invisibly in the background.
   sendToRenderer('splash:progress', { pyPercent: 0, status: 'Starting Python AI runtime…' });
   const sidecarTimeoutMs = 20_000;
+  const depsInstallTimeoutMs = 600_000;
   const sidecarPollMs = 500;
   const sidecarStart = Date.now();
-  while (!sidecarReady && !sidecarDead && (Date.now() - sidecarStart) < sidecarTimeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
+  while (!sidecarReady && !sidecarDead) {
     const elapsed = Date.now() - sidecarStart;
-    sendToRenderer('splash:progress', {
-      pyPercent: Math.min(95, Math.round((elapsed / sidecarTimeoutMs) * 100)),
-      status: 'Waiting for AI runtime…',
-    });
+    const installingDeps = pythonDepsInstallState.active;
+    if (installingDeps ? elapsed >= depsInstallTimeoutMs : elapsed >= sidecarTimeoutMs) break;
+    await new Promise((resolve) => setTimeout(resolve, sidecarPollMs));
+    if (pythonDepsInstallState.active) {
+      sendToRenderer('splash:progress', {
+        depsPercent: pythonDepsInstallState.percent,
+        status: pythonDepsInstallState.status || 'Installing AI runtime dependencies… (one-time, may take a few minutes)',
+      });
+    } else {
+      sendToRenderer('splash:progress', {
+        pyPercent: Math.min(95, Math.round((Math.min(elapsed, sidecarTimeoutMs) / sidecarTimeoutMs) * 100)),
+        status: 'Waiting for AI runtime…',
+      });
+    }
   }
   if (sidecarDead) {
     sendToRenderer('splash:progress', {
@@ -1522,6 +1777,15 @@ function createWindow() {
 
   loadStartupScreen();
 
+  // Dev-only — auto-open DevTools so renderer console errors (e.g. a
+  // connection that hangs on "Starting…") are visible immediately without
+  // relying on a keyboard shortcut that may be intercepted by the global
+  // hotkey registration attempted before 'ready'. Never runs in a packaged
+  // build — packaged installs stay clean for end users.
+  if (!app.isPackaged) {
+    win.webContents.openDevTools({ mode: 'right' });
+  }
+
   win.webContents.on('did-finish-load', () => {
     sendToRenderer('app-meta', {
       version: app.getVersion(),
@@ -1590,6 +1854,7 @@ function registerWindowControlHandlers() {
     probeTimeoutMs: 4_000,
     log: (...args) => log('[health]', ...args),
   });
+  healthObserverRef = healthObserver;
   healthObserver.registerProbe('sidecar', () => {
     if (!sidecarProcess) return { status: 'unavailable', detail: 'no-process' };
     if (sidecarReady) return { status: 'healthy', detail: 'stdio-handshake-ok' };
@@ -1632,6 +1897,15 @@ function registerWindowControlHandlers() {
     catch (err) { log('[health] observer failed to start:', err?.message || err); }
   }, 6_000);
   ipcMain.handle('health:snapshot', () => healthObserver.snapshot());
+
+  // Jarvis Core #13 — Self Diagnostic Engine. Starts on the same delay as
+  // the health observer it consumes, so its first report isn't computed
+  // off an empty/uninitialized snapshot.
+  setTimeout(() => {
+    try { selfDiagnosticEngine.start(); }
+    catch (err) { log('[self-diagnostic] failed to start:', err?.message || err); }
+  }, 7_000);
+  ipcMain.handle('self-diagnostic:snapshot', () => selfDiagnosticEngine.runOnce());
 
   // Local Execution Bridge — sandboxed CLI runner per V2.0 Section 4.
   // Off by default; user must flip dev_mode_exec in settings.
@@ -1712,6 +1986,163 @@ function registerWindowControlHandlers() {
       return { ok: true, entries: list.slice(-limit) };
     } catch (err) {
       return { ok: false, error: String(err?.message || err), entries: [] };
+    }
+  });
+
+  // ─── M7/M8 — Memory + Knowledge stores backing the Workspace tab. ───
+  // Lazy singletons so the JSON files aren't created until first read.
+  const { createMemoryStore } = require('./electron/memory/store/memory-store');
+  const { createKnowledgeStore } = require('./electron/memory/store/knowledge-store');
+  const { createSkillConfidenceStore } = require('./electron/memory/store/skill-confidence-store');
+  const { hybridSearch } = require('./electron/memory/retrieval/hybrid-search');
+  workspaceMemoryStore = createMemoryStore({ baseDir: app.getPath('userData') });
+  workspaceKnowledgeStore = createKnowledgeStore({ baseDir: app.getPath('userData') });
+  const workspaceSkillStore = createSkillConfidenceStore({ baseDir: app.getPath('userData') });
+
+  ipcMain.handle('workspace:memory-snapshot', () => {
+    try { return { ok: true, snapshot: workspaceMemoryStore.snapshot() }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:knowledge-snapshot', () => {
+    try { return { ok: true, snapshot: workspaceKnowledgeStore.snapshot() }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:skills-snapshot', () => {
+    try { return { ok: true, skills: workspaceSkillStore.rankSkills() }; }
+    catch (err) { return { ok: false, error: String(err?.message || err), skills: [] }; }
+  });
+  // Voice Input gap-fix (fix d) — lets voice-gateway.js collapse STT
+  // confidence onto the same success/failure ledger used by the router's
+  // skill-confidence system, instead of a separate ad-hoc tracking scheme.
+  ipcMain.handle('workspace:skill-track', (_event, payload) => {
+    try {
+      const id = String(payload?.skillId || payload?.id || '').trim();
+      if (!id) return { ok: false, error: 'missing-skill-id' };
+      const runtimeMs = Number(payload?.runtimeMs) || 0;
+      const isFailure = payload?.outcome === 'failure';
+      const stats = isFailure
+        ? workspaceSkillStore.trackFailure(id, runtimeMs)
+        : workspaceSkillStore.trackSuccess(id, runtimeMs);
+      // Jarvis Core #11 — Learning Hierarchy / Failure Analysis & Learning
+      // Validation / Success Analysis Engine. Every tracked outcome feeds
+      // the knowledge graph so failures become reviewable lessons and
+      // success streaks get a symmetrical "what worked" record.
+      let lesson = null;
+      try {
+        lesson = isFailure
+          ? recordFailureLesson({ skillId: id, cause: String(payload?.cause || 'unspecified'), knowledgeStore: workspaceKnowledgeStore })
+          : recordSuccessAnalysis({ skillId: id, stats, knowledgeStore: workspaceKnowledgeStore });
+      } catch { /* learning-hierarchy is best-effort, never blocks skill tracking */ }
+      return { ok: true, stats, lesson };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('workspace:search', (_event, payload) => {
+    try {
+      const query = String(payload?.query || '').trim();
+      if (!query) return { ok: true, results: [] };
+      const results = hybridSearch({
+        query,
+        sources: Array.isArray(payload?.sources) ? payload.sources : [],
+        memoryStore: workspaceMemoryStore,
+        knowledgeStore: workspaceKnowledgeStore,
+      }).slice(0, Math.max(1, Math.min(50, Number(payload?.limit) || 25)));
+      return { ok: true, results };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err), results: [] };
+    }
+  });
+  ipcMain.handle('workspace:memory-remember', (_event, payload) => {
+    try { return { ok: true, entry: workspaceMemoryStore.rememberLongTerm(payload || {}) }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:knowledge-upsert', (_event, payload) => {
+    try { return { ok: true, entity: workspaceKnowledgeStore.upsertEntity(payload || {}) }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+  ipcMain.handle('workspace:knowledge-remove', (_event, payload) => {
+    try { return { ok: true, removed: workspaceKnowledgeStore.removeEntity(String(payload?.id || '')) }; }
+    catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  });
+
+  // Phase 1 LOCK LIST — Project Files Panel. Opens a native file picker and
+  // appends the chosen paths to the project entity's payload.files array
+  // (previously always initialized empty and never written to afterward).
+  ipcMain.handle('workspace:project-attach-file', async (_event, payload) => {
+    try {
+      const projectId = String(payload?.projectId || '').trim();
+      if (!projectId) return { ok: false, error: 'missing-project-id' };
+      const entity = workspaceKnowledgeStore.getEntity(projectId);
+      if (!entity || entity.type !== 'project') return { ok: false, error: 'project-not-found' };
+
+      const win = BrowserWindow.fromWebContents(_event.sender);
+      const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+        title: 'Dodaj plik do projektu',
+        properties: ['openFile', 'multiSelections'],
+      });
+      if (canceled || !filePaths.length) return { ok: false, error: 'canceled' };
+
+      const existingFiles = Array.isArray(entity.payload?.files) ? entity.payload.files : [];
+      const newFiles = filePaths.map((filePath) => ({
+        path: filePath,
+        name: path.basename(filePath),
+        addedAt: Date.now(),
+      }));
+      const updated = workspaceKnowledgeStore.upsertEntity({
+        ...entity,
+        payload: { ...entity.payload, files: [...existingFiles, ...newFiles] },
+      });
+      return { ok: true, entity: updated };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+  ipcMain.handle('workspace:project-remove-file', (_event, payload) => {
+    try {
+      const projectId = String(payload?.projectId || '').trim();
+      const filePath = String(payload?.path || '').trim();
+      if (!projectId || !filePath) return { ok: false, error: 'missing-arguments' };
+      const entity = workspaceKnowledgeStore.getEntity(projectId);
+      if (!entity || entity.type !== 'project') return { ok: false, error: 'project-not-found' };
+
+      const existingFiles = Array.isArray(entity.payload?.files) ? entity.payload.files : [];
+      const updated = workspaceKnowledgeStore.upsertEntity({
+        ...entity,
+        payload: { ...entity.payload, files: existingFiles.filter((f) => f.path !== filePath) },
+      });
+      return { ok: true, entity: updated };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
+  // ─── Intelligent Requirements System — Blueprinty generation ────────────
+  // Routes the goal through the same chat dispatch path as ordinary chat
+  // (routeAiRequest -> promptRegistry composer), so generated blueprints
+  // carry the AI Constitution and routing/persona prompts like any other
+  // model call. Result is stored as a `blueprint` knowledge entity.
+  const { generateBlueprint } = require('./electron/ai/requirements-engine');
+  ipcMain.handle('workspace:blueprint-generate', async (_event, payload) => {
+    try {
+      const goal = String(payload?.goal || '').trim();
+      if (!goal) return { ok: false, error: 'goal-required' };
+      const blueprint = await generateBlueprint({
+        goal,
+        dispatch: async (prompt) => {
+          const result = await routeAiRequest({ message: prompt });
+          if (!result?.ok) throw new Error(result?.error || 'blueprint-dispatch-failed');
+          return result.text;
+        },
+      });
+      const entity = workspaceKnowledgeStore.upsertEntity({
+        type: 'blueprint',
+        label: goal,
+        payload: { ...blueprint, projectId: payload?.projectId || null },
+      });
+      return { ok: true, entity };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
     }
   });
 
@@ -1974,6 +2405,12 @@ function restartSidecarNow() {
 // On successful sidecar handshake, retry count resets in markSidecarReady().
 function scheduleSidecarHeal(reason = 'unknown') {
   if (sidecarHealTimer) return; // already pending
+  // A start attempt (including a possibly multi-minute first-time Python
+  // dependency install) is already running — there's nothing to heal yet.
+  // Without this, the health-observer's periodic "no process" probe burns
+  // through the whole retry budget and gives up while the in-flight
+  // install is still working, even though it would have succeeded.
+  if (sidecarStartInFlight) return;
   if (sidecarHealRetryCount >= SIDECAR_HEAL_MAX_RETRIES) {
     log(`[sidecar:heal] max retries reached (${SIDECAR_HEAL_MAX_RETRIES}); giving up. reason=${reason}`);
     startupDiagnostics.pushEvent('sidecar', 'error', 'Auto-heal gave up after max retries.', {

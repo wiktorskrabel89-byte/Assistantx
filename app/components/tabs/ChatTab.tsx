@@ -39,7 +39,8 @@ import { DEFAULT_WEB_WAKE_PHRASE } from "@/app/lib/voice";
 import { filterAssistantCommandsForQuery, shouldShowSlashSuggestions } from "@/src/core/commands/parser";
 import { useJarvisDeviceStatus } from "@/app/hooks/useJarvisDeviceStatus";
 import { createClient } from "@/lib/client";
-import type { AgentName } from "../AgentStatusWidget";
+import type { AgentName } from "../../lib/agent-types";
+import { MeridianChatHero, type VoiceState } from "../meridian";
 
 /** Poll interval for the model health endpoint (ms). */
 const PREMIUM_BANNER_HIDDEN_KEY = "assistantx.premium-banner-hidden";
@@ -1021,6 +1022,22 @@ export function ChatTab({
                   onOpenCodeHistory={() => togglePanel("history")}
                   onOpenAiTools={() => togglePanel("tools")}
                   onOpenApps={() => togglePanel("apps")}
+                />
+              </div>
+
+              {/*
+                Step 6 — MeridianChatHero injection.
+                Full hero when there are no messages (welcome stage with VEGA
+                orb + greeting + 3 hint cards). Compact slim header otherwise,
+                so the orb's voice state stays glance-able while the user is
+                mid-conversation. Voice state derives from the existing
+                loading + voice-settings signals; the proper Phase 9 voice
+                state machine plugs in here later without UI changes.
+              */}
+              <div style={{ padding: activeChat.messages.length === 0 ? "16px 0" : "8px 0" }}>
+                <MeridianChatHero
+                  state={(loading ? "processing" : "idle") as VoiceState}
+                  compact={activeChat.messages.length > 0}
                 />
               </div>
 

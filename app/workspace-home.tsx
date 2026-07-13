@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { AppNavigationColumn, type AppNavigationTab } from "./components/AppNavigationColumn";
+import { type AppNavigationTab } from "./components/AppNavigationColumn";
 import { ChatTab } from "./components/tabs/ChatTab";
 import { PendingApprovalBanner } from "./components/PendingApprovalBanner";
 import { WorkspaceProvider, useWorkspace } from "./providers/WorkspaceProvider";
@@ -10,8 +10,19 @@ import { useNotifications } from "./hooks/useNotifications";
 import { usePendingApprovals } from "./hooks/usePendingApprovals";
 import { isEditableElementTarget } from "./lib/keyboard";
 import { createClient } from "@/lib/client";
-import type { AppMode, Mode } from "./lib/chat-types";
+import type { Mode } from "./lib/chat-types";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  MeridianActivityPanel,
+  MeridianDevTools,
+  MeridianLanguageWizard,
+  MeridianRail,
+  MeridianSettingsShell,
+  MeridianTopBar,
+  MeridianWorkspaceShell,
+  type MeridianHwStatus,
+  type MeridianTab,
+} from "./components/meridian";
 
 const GUEST_TOUR_TRIGGER_KEY = "assistantx.guest-tour";
 const GUEST_TOUR_DONE_KEY = "assistantx.guest-tour-done";
@@ -44,147 +55,51 @@ function WorkspaceLoadingScreen() {
   );
 }
 
-const ClinicalTab = dynamic(
-  () => import("./components/tabs/ClinicalTab").then((m) => m.ClinicalTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const SandboxTab = dynamic(
-  () => import("./components/tabs/SandboxTab").then((m) => m.SandboxTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const LearningTab = dynamic(
-  () => import("./components/tabs/LearningTab").then((m) => m.LearningTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const ProjectsTab = dynamic(
-  () => import("./components/tabs/ProjectsTab").then((m) => m.ProjectsTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const CodebaseTab = dynamic(
-  () => import("./components/tabs/CodebaseTab").then((m) => m.CodebaseTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const WebsiteCreatorTab = dynamic(
-  () => import("./components/tabs/WebsiteCreatorTab").then((m) => m.WebsiteCreatorTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const PromptLibraryTab = dynamic(
-  () => import("./components/tabs/PromptLibraryTab").then((m) => m.PromptLibraryTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const KnowledgeExportTab = dynamic(
-  () => import("./components/tabs/KnowledgeExportTab").then((m) => m.KnowledgeExportTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
+// Only SettingsTab survives as a direct dynamic import — it's rendered as
+// the "Ogólne" legacy content inside MeridianSettingsShell. The other legacy
+// tabs (Sandbox / Codebase / Projects / Learning / WebsiteCreator / Marketplace /
+// AILearning / Clinical / Jarvis / Notifications) are isolated per spec — code
+// stays on disk, no longer mounted from the shell. They'll be migrated into
+// Workspace sub-sections (Step 7 continuation) or dropped if Phase-2-only.
 const SettingsTab = dynamic(
   () => import("./components/tabs/SettingsTab").then((m) => m.SettingsTab),
   { ssr: false, loading: () => <TabSkeleton /> },
 );
-const NotificationsTab = dynamic(
-  () => import("./components/tabs/NotificationsTab").then((m) => m.NotificationsTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const AILearningTab = dynamic(
-  () => import("./components/tabs/AILearningTab").then((m) => m.AILearningTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const JarvisTab = dynamic(
-  () => import("./components/tabs/JarvisTab"),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
-const MarketplaceTab = dynamic(
-  () => import("./components/tabs/MarketplaceTab").then((m) => m.MarketplaceTab),
-  { ssr: false, loading: () => <TabSkeleton /> },
-);
 
-const AI_CODE_ONLY_TABS: AppNavigationTab[] = [
-  "sandbox", "codebase", "projects",
-];
-
-function TabContent({
-  activeTab,
-  notificationsHook,
-  sandboxInitCode,
-  onOpenInSandbox,
-  onAskAboutFile,
-  externalComposerSeed,
-  onConsumeComposerSeed,
-  highlightGitHubCard,
-  highlightCodebase,
-}: {
-  activeTab: AppNavigationTab;
-  notificationsHook: ReturnType<typeof useNotifications>;
-  sandboxInitCode?: { html: string; css: string; js: string } | null;
-  onOpenInSandbox?: (html: string, css: string, js: string) => void;
-  onAskAboutFile?: (prompt: string) => void;
-  externalComposerSeed?: { text: string; mode: Mode } | null;
-  onConsumeComposerSeed?: () => void;
-  highlightGitHubCard?: boolean;
-  highlightCodebase?: boolean;
-}) {
-  const { state } = useWorkspace();
-
-  switch (activeTab) {
-    case "chat":
-      return (
-        <ChatTab
-          externalComposerSeed={externalComposerSeed}
-          onConsumeExternalComposerSeed={onConsumeComposerSeed}
-          highlightGitHubCard={highlightGitHubCard}
-        />
-      );
-    case "jarvis":
-      return <JarvisTab />;
-    case "clinical":
-      return <ClinicalTab />;
-    case "sandbox":
-      return <SandboxTab dark={state.dark} initialCode={sandboxInitCode ?? undefined} />;
-    case "learning":
-      return <LearningTab dark={state.dark} />;
-    case "projects":
-      return <ProjectsTab dark={state.dark} />;
-    case "codebase":
-      return (
-        <CodebaseTab
-          dark={state.dark}
-          onAskAboutFile={onAskAboutFile}
-          highlightTour={highlightCodebase}
-        />
-      );
-    case "website-creator":
-      return <WebsiteCreatorTab dark={state.dark} onOpenInSandbox={onOpenInSandbox} />;
-    case "prompt-library":
-      return <PromptLibraryTab dark={state.dark} />;
-    case "knowledge-export":
-      return <KnowledgeExportTab dark={state.dark} />;
-    case "settings":
-      return <SettingsTab />;
-    case "notifications":
-      return <NotificationsTab dark={state.dark} notificationsHook={notificationsHook} />;
-    case "ai-learning":
-      return <AILearningTab dark={state.dark} />;
-    case "marketplace":
-      return <MarketplaceTab dark={state.dark} />;
-    default:
-      return null;
-  }
+/**
+ * Folds the legacy 14-value AppNavigationTab union to the 3 Meridian tabs so
+ * existing callers (guest tour, open-in-sandbox, navigate-tab event) keep
+ * working while the migration to the new shell completes. Mapping:
+ *   chat / notifications / jarvis    → "chat"
+ *   settings                          → "settings"
+ *   everything else (codebase, sandbox, projects, learning, …) → "workspace"
+ */
+function bridgeToMeridian(legacy: AppNavigationTab): MeridianTab {
+  if (legacy === "chat" || legacy === "notifications" || legacy === "jarvis") return "chat";
+  if (legacy === "settings") return "settings";
+  return "workspace";
 }
 
 function HomeContent() {
-  const { state, setAppMode, setPinnedAddOns, userEmail, authReady, loaded } = useWorkspace();
-  const [activeAppTab, setActiveAppTab] = useState<AppNavigationTab>("chat");
+  const { setAppMode, userEmail, authReady, loaded } = useWorkspace();
+  const [, setActiveAppTabRaw] = useState<AppNavigationTab>("chat");
+  const [meridianTab, setMeridianTab] = useState<MeridianTab>("chat");
+  // Wrap the legacy setter so anything still pointing at the 14-value tab
+  // system also moves the Meridian shell to the right top-level tab.
+  const setActiveAppTab = useCallback((tab: AppNavigationTab) => {
+    setActiveAppTabRaw(tab);
+    setMeridianTab(bridgeToMeridian(tab));
+  }, []);
   const notificationsHook = useNotifications();
   const approvalsHook = usePendingApprovals();
-  const [isAdmin, setIsAdmin] = useState(false);
   const adminCheckedRef = useRef(false);
-  const [sandboxInitCode, setSandboxInitCode] = useState<{ html: string; css: string; js: string } | null>(null);
   const [pendingComposerSeed, setPendingComposerSeed] = useState<{ text: string; mode: Mode } | null>(null);
   const [guestTourOpen, setGuestTourOpen] = useState(false);
   const [guestTourStep, setGuestTourStep] = useState(1);
 
-  const appMode: AppMode = state.appMode ?? "ai-chat";
-  const pinnedAddOns: string[] = state.pinnedAddOns ?? [];
-
+  // Admin check still runs (side-effect: future role-gated UI). The boolean
+  // result isn't currently rendered — the old AppNavigationColumn consumed
+  // it; new Settings sections will re-consume it in Step 8 continuation.
   useEffect(() => {
     if (adminCheckedRef.current) return;
     adminCheckedRef.current = true;
@@ -194,70 +109,33 @@ function HomeContent() {
       return fetch("/api/admin/check", {
         headers: { Authorization: `Bearer ${session.access_token}` },
       }).then((res) => res.ok ? res.json() : null);
-    }).then((data: { isAdmin?: boolean } | null | undefined) => {
-      if (data?.isAdmin) setIsAdmin(true);
     }).catch(() => null);
   }, []);
 
-  const visibleTab: AppNavigationTab =
-    appMode === "ai-chat" && AI_CODE_ONLY_TABS.includes(activeAppTab) ? "chat" : activeAppTab;
-
-  const handleSelectAppTab = useCallback((tab: AppNavigationTab) => {
-    setActiveAppTab(tab);
-    if (tab === "notifications" && notificationsHook.unreadCount > 0) {
-      void notificationsHook.markAllRead();
-    }
-  }, [notificationsHook]);
-
-  // Global keyboard shortcuts for workspace tab navigation.
-  // Ctrl/Cmd+Shift+1 → Chat, 2-4 → AI Code tabs (ai-code mode only),
-  // Ctrl/Cmd+, → Settings, Ctrl/Cmd+. → Notifications.
+  // Meridian shortcuts: Ctrl/Cmd+1/2/3 → Czat / Workspace / Ustawienia.
+  // Ctrl/Cmd+, also jumps to Ustawienia (familiar macOS convention).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey;
       if (!mod) return;
-      // Don't fire when the user is typing in an input or editable area.
       if (isEditableElementTarget(event.target)) return;
       if (event.key === "," || event.key === "<") {
         event.preventDefault();
-        handleSelectAppTab("settings");
+        setMeridianTab("settings");
         return;
       }
-      if (event.key === "." || event.key === ">") {
-        event.preventDefault();
-        handleSelectAppTab("notifications");
-        return;
-      }
-      if (!event.shiftKey) return;
-      switch (event.key) {
-        case "1":
-          event.preventDefault();
-          handleSelectAppTab("chat");
-          break;
-        case "2":
-          if (appMode === "ai-code") {
-            event.preventDefault();
-            handleSelectAppTab("sandbox");
-          }
-          break;
-        case "3":
-          if (appMode === "ai-code") {
-            event.preventDefault();
-            handleSelectAppTab("projects");
-          }
-          break;
-        case "4":
-          if (appMode === "ai-code") {
-            event.preventDefault();
-            handleSelectAppTab("codebase");
-          }
-          break;
+      if (event.shiftKey) {
+        switch (event.key) {
+          case "1": event.preventDefault(); setMeridianTab("chat"); break;
+          case "2": event.preventDefault(); setMeridianTab("workspace"); break;
+          case "3": event.preventDefault(); setMeridianTab("settings"); break;
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [appMode, handleSelectAppTab]);
+  }, []);
 
   useEffect(() => {
     const handleNavigateTab = (event: Event) => {
@@ -270,7 +148,7 @@ function HomeContent() {
     return () => {
       window.removeEventListener("assistantx:navigate-tab", handleNavigateTab as EventListener);
     };
-  }, []);
+  }, [setActiveAppTab]);
 
   useEffect(() => {
     if (!loaded || !authReady || typeof window === "undefined") return;
@@ -301,12 +179,6 @@ function HomeContent() {
     };
   }, [authReady, loaded, userEmail]);
 
-  const handleOpenInSandbox = useCallback((html: string, css: string, js: string) => {
-    setSandboxInitCode({ html, css, js });
-    setAppMode("ai-code");
-    setActiveAppTab("sandbox");
-  }, [setAppMode]);
-
   const closeGuestTour = useCallback((markDone = true) => {
     setGuestTourOpen(false);
     if (!markDone || typeof window === "undefined") return;
@@ -325,9 +197,7 @@ function HomeContent() {
     setAppMode("ai-chat");
     setActiveAppTab("chat");
     queueComposerSeed(GUEST_ANALYSIS_PROMPT, "code");
-  }, [queueComposerSeed, setAppMode]);
-
-  const isChatTab = visibleTab === "chat";
+  }, [queueComposerSeed, setAppMode, setActiveAppTab]);
 
   const goToTourStep = useCallback((step: number) => {
     setGuestTourStep(step);
@@ -345,68 +215,105 @@ function HomeContent() {
     if (step === 3) {
       openCodeAnalysisPrompt();
     }
-  }, [openCodeAnalysisPrompt, setAppMode]);
+  }, [openCodeAnalysisPrompt, setAppMode, setActiveAppTab]);
 
   if (!loaded) {
     return <WorkspaceLoadingScreen />;
   }
 
+  // Hardware status pill — populated by the Capability Awareness Engine in
+  // a follow-on milestone. For now we surface a static "idle" connection;
+  // the pill is real (not a placeholder) — it just reflects no telemetry yet.
+  const hwStatus: MeridianHwStatus = { connection: "idle" };
+
   return (
-    <div className="relative h-dvh overflow-hidden bg-background text-foreground transition-colors duration-300">
-      <div className="mx-auto flex h-full max-w-[1680px] gap-3 px-3 py-3">
-        <AppNavigationColumn
-          activeTab={visibleTab}
-          onSelectTab={handleSelectAppTab}
-          notificationUnread={notificationsHook.unreadCount}
-          appMode={appMode}
-          onSetAppMode={setAppMode}
-          pinnedAddOns={pinnedAddOns}
-          onSetPinnedAddOns={setPinnedAddOns}
-          userEmail={userEmail}
-          isAdmin={isAdmin}
-          highlightCodebase={guestTourOpen && guestTourStep === 2}
+    <div
+      className="relative flex h-dvh flex-col overflow-hidden"
+      style={{ background: "var(--ox-bg)", color: "var(--ox-text-hi)" }}
+    >
+      <MeridianTopBar activeTab={meridianTab} onTabChange={setMeridianTab} hwStatus={hwStatus} />
+      <div className="flex flex-1 overflow-hidden">
+        <MeridianRail
+          activeTab={meridianTab}
+          activeItemId={null}
+          onItemChange={() => {
+            /* Rail items map onto in-pane sub-sections in Steps 7/8 — no-op for now. */
+          }}
         />
 
-        {isChatTab ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-            <PendingApprovalBanner approvalsHook={approvalsHook} />
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <TabContent
-                key={visibleTab}
-                activeTab={visibleTab}
-                notificationsHook={notificationsHook}
-                sandboxInitCode={sandboxInitCode}
-                onOpenInSandbox={handleOpenInSandbox}
-                externalComposerSeed={pendingComposerSeed}
-                onConsumeComposerSeed={() => setPendingComposerSeed(null)}
-                highlightGitHubCard={guestTourOpen && guestTourStep === 1}
-              />
-            </div>
-          </div>
-        ) : (
-          <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-            <PendingApprovalBanner approvalsHook={approvalsHook} />
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card transition-all duration-200">
-            <TabContent
-              key={visibleTab}
-              activeTab={visibleTab}
-              notificationsHook={notificationsHook}
-              sandboxInitCode={sandboxInitCode}
-              onOpenInSandbox={handleOpenInSandbox}
-              onAskAboutFile={(prompt) => {
-                setAppMode("ai-chat");
-                setActiveAppTab("chat");
-                queueComposerSeed(prompt, "code");
-              }}
+        {/* Three persistent panes — display:none toggle so chat state survives  */}
+        {/* tab switches (per layout-tab-switch-chat acceptance test).            */}
+        <main className="flex flex-1 flex-col overflow-hidden">
+          <PendingApprovalBanner approvalsHook={approvalsHook} />
+
+          {/* Czat pane */}
+          <section
+            id="meridian-panel-chat"
+            role="tabpanel"
+            aria-labelledby="meridian-tab-chat"
+            hidden={meridianTab !== "chat"}
+            style={{
+              display: meridianTab === "chat" ? "flex" : "none",
+              flex: 1,
+              flexDirection: "column",
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
+            <ChatTab
               externalComposerSeed={pendingComposerSeed}
-              onConsumeComposerSeed={() => setPendingComposerSeed(null)}
+              onConsumeExternalComposerSeed={() => setPendingComposerSeed(null)}
               highlightGitHubCard={guestTourOpen && guestTourStep === 1}
-              highlightCodebase={guestTourOpen && guestTourStep === 2}
             />
-            </div>
-          </main>
-        )}
+          </section>
+
+          {/* Workspace pane */}
+          <section
+            id="meridian-panel-workspace"
+            role="tabpanel"
+            aria-labelledby="meridian-tab-workspace"
+            hidden={meridianTab !== "workspace"}
+            style={{
+              display: meridianTab === "workspace" ? "flex" : "none",
+              flex: 1,
+              flexDirection: "column",
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
+            <MeridianWorkspaceShell />
+          </section>
+
+          {/* Ustawienia pane */}
+          <section
+            id="meridian-panel-settings"
+            role="tabpanel"
+            aria-labelledby="meridian-tab-settings"
+            hidden={meridianTab !== "settings"}
+            style={{
+              display: meridianTab === "settings" ? "flex" : "none",
+              flex: 1,
+              flexDirection: "column",
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
+            <MeridianSettingsShell legacyGeneralContent={<SettingsTab />} />
+          </section>
+        </main>
+
+        {meridianTab === "chat" ? <MeridianActivityPanel /> : null}
       </div>
+
+      {/* Floating dev-tools overlay — wired via the localStorage hook, so the  */}
+      {/* Settings → Zaawansowane toggle (and Ctrl+Shift+D) both reach it.     */}
+      <MeridianDevTools />
+
+      {/* First-run language wizard — self-gates on hasChosen, so it's a no-op */}
+      {/* on every launch except the first (and any time the user re-opens it */}
+      {/* via Settings → Ogólne → "Otwórz kreator języka").                    */}
+      <MeridianLanguageWizard />
+
       {guestTourOpen ? (
         <>
           <button

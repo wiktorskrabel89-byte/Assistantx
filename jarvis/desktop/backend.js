@@ -451,7 +451,7 @@ function respond(text, extra = {}) {
 
 function execFilePromise(file, args) {
   return new Promise((resolve, reject) => {
-    execFile(file, args, (error, stdout, stderr) => {
+    execFile(file, args, { windowsHide: true }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(stderr?.trim() || error.message));
         return;
@@ -644,23 +644,11 @@ async function runAiPrompt(prompt, meta = {}) {
     });
   }
 
-  if (!accessToken) {
-    if (TTS_STREAMING_ENABLED) {
-      emitRawMessage({ type: 'ai_stream_done', streamId, reason: 'not-authenticated' });
-      pendingAiRouteStreams.delete(streamId);
-    }
-    emitRawMessage({ type: 'ai_thinking', inFlight: false });
-    return publishResult({
-      title: 'Not logged in',
-      text: 'Please log in to use the AI assistant.',
-      summary: 'Please log in to use the AI assistant.',
-      level: 'error',
-      source: meta.source || 'local',
-      origin: meta.origin || 'desktop',
-      taskId: meta.taskId || null,
-      streamId,
-    });
-  }
+  // No upfront "not logged in" gate here — the primary route below
+  // (ipcRenderer 'jarvis-ai-route', the local 6-lane Model Router → Ollama)
+  // never needs accessToken. It's only read further down as an optional
+  // Bearer header for the cloud HTTP fallback, which already degrades
+  // gracefully (and surfaces its own error) when accessToken is absent.
 
   // Record the user turn first, then snapshot — the current prompt is included.
   recordConversationTurn('user', prompt);

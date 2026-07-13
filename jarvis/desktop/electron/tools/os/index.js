@@ -8,7 +8,7 @@ const { desktopCapturer, screen } = require('electron');
 
 function execFilePromise(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, options, (error, stdout, stderr) => {
+    execFile(command, args, { windowsHide: true, ...options }, (error, stdout, stderr) => {
       if (error) {
         reject(Object.assign(error, { stdout, stderr }));
         return;

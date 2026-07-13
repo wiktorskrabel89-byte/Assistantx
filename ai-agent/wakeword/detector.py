@@ -43,6 +43,23 @@ DEFAULT_REFRACTORY_SECONDS = 2.0
 # Only the Jarvis wake model is loaded/scored by default.
 DEFAULT_WAKE_MODELS = ("hey_jarvis",)
 
+# Tiered sensitivity presets (2026-06 voice-activation upgrade). These set the
+# confidence threshold directly — NOT through the older linear
+# `0.9 - 0.7*sensitivity` mapping in set_sensitivity() below, which the
+# preset system supersedes for the primary UI control. The mapping is kept
+# only for the "Advanced" numeric slider's backward compatibility.
+# Per spec: never ship a default below "relaxed" (0.80) — 0.60 and below
+# produces too many false activations.
+SENSITIVITY_PRESETS: dict[str, float] = {
+    "very_strict": 0.95,
+    "strict": 0.90,
+    "balanced": 0.85,
+    "relaxed": 0.80,
+    "very_relaxed": 0.75,
+}
+
+DEFAULT_SENSITIVITY_PRESET = "relaxed"
+
 
 class WakeWordDetector:
     """
@@ -67,6 +84,7 @@ class WakeWordDetector:
         self._refractory_seconds = float(refractory_seconds)
         self._download_if_missing = bool(download_if_missing)
         self._clock = clock
+        self._sensitivity_preset = "custom"
         self._available = model is not None
         self._unavailable_reason = "" if model is not None else "not-loaded"
         self._last_detection_at = float("-inf")
@@ -129,12 +147,36 @@ class WakeWordDetector:
         """
         Map a user-facing 0..1 sensitivity slider onto the confidence threshold.
         0.0 → strict (threshold 0.9), 0.5 → balanced (~0.55), 1.0 → eager (0.2).
+
+        Superseded by set_sensitivity_preset() as the primary UI control — kept
+        for the "Advanced" numeric slider only. Do not call both for the same
+        adjustment; the later call simply wins since both end at set_threshold().
         """
         value = float(sensitivity)
         if not np.isfinite(value):
             return
         value = min(max(value, 0.0), 1.0)
         self.set_threshold(0.9 - 0.7 * value)
+
+    @property
+    def sensitivity_preset(self) -> str:
+        return self._sensitivity_preset
+
+    def set_sensitivity_preset(self, name: str) -> bool:
+        """
+        Apply one of SENSITIVITY_PRESETS by name, setting the confidence
+        threshold directly (bypassing set_sensitivity()'s linear mapping).
+        Returns True if applied, False if `name` is unknown — an unknown
+        preset is logged and left as a no-op rather than silently falling
+        back to something below the "never ship below 0.60" floor.
+        """
+        key = str(name).strip().lower()
+        if key not in SENSITIVITY_PRESETS:
+            logger.warning("Unknown wake-word sensitivity preset %r; ignoring.", name)
+            return False
+        self._sensitivity_preset = key
+        self.set_threshold(SENSITIVITY_PRESETS[key])
+        return True
 
     def _is_selected_model(self, prediction_key: str) -> bool:
         if not self._model_names:
