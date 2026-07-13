@@ -26,12 +26,8 @@ const PUBLIC_UPDATER_PATH_PREFIXES = [
   '/beta/mac/',
   '/beta/android/',
 ]
-const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support', '/demo', '/waitlist']
-const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/support', '/demo', '/waitlist']
-// Hostname prefix used for the waitlist subdomain (e.g. assistantx-waitlist.assistantx.pl).
-// When the project is added as a Vercel domain, requests to its root are
-// rewritten to /waitlist so the cinematic landing page is served directly.
-const WAITLIST_SUBDOMAIN_PREFIX = 'assistantx-waitlist'
+const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support', '/demo', '/roadmap', '/pricing']
+const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/support', '/demo', '/roadmap', '/pricing']
 const PUBLIC_UPDATER_FILE_PATTERN =
   /(?:^|\/)(?:latest(?:-[^/]+)?\.yml(?:\.sig)?|release-notes\.json|[^/]+\.(?:exe|nupkg|dmg|appimage|apk|blockmap))$/i
 
@@ -106,6 +102,13 @@ export async function updateSession(request: NextRequest) {
   const nonce = btoa(String.fromCharCode(...nonceBytes))
   const csp = buildCsp(nonce)
   const pathname = request.nextUrl.pathname
+
+  // The waitlist lives at the site root; keep old /waitlist links working.
+  if (pathname === '/waitlist') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    return NextResponse.redirect(url, 308)
+  }
   const existingLangCookie = request.cookies.get(UI_LANGUAGE_COOKIE_NAME)?.value ?? null
   const detectedUiLanguage = detectPreferredPublicLanguage({
     existingCookie: existingLangCookie,
@@ -118,18 +121,9 @@ export async function updateSession(request: NextRequest) {
   requestHeaders.set('x-nonce', nonce)
   requestHeaders.set('x-assistantx-ui-language', detectedUiLanguage)
 
-  // Serve the cinematic waitlist landing page at the root of the
-  // assistantx-waitlist subdomain (e.g. assistantx-waitlist.assistantx.pl).
-  const hostname = (request.headers.get('host') ?? '').split(':')[0]
-  const isWaitlistSubdomain = hostname.split('.')[0] === WAITLIST_SUBDOMAIN_PREFIX
-
-  let supabaseResponse = isWaitlistSubdomain && pathname === '/'
-    ? NextResponse.rewrite(new URL('/waitlist', request.url), {
-      request: { headers: requestHeaders },
-    })
-    : NextResponse.next({
-      request: { headers: requestHeaders },
-    })
+  let supabaseResponse = NextResponse.next({
+    request: { headers: requestHeaders },
+  })
 
   if (
     PUBLIC_METADATA_PATHS.has(pathname)
