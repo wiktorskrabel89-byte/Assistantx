@@ -8,7 +8,8 @@ downloaded.
 
 Message protocol (JSON lines sent by client → handled here):
   { "type": "configure",    ...settings, "ttsBackend": "kokoro|piper|auto",
-                            "noiseSuppressionEnabled": true, "wakeWordSensitivity": 0.5, "vadThreshold": 0.5 }
+                            "noiseSuppressionEnabled": true, "wakeWordSensitivity": 0.5, "vadThreshold": 0.5,
+                            "wakeWordSensitivityPreset": "very_strict|strict|balanced|relaxed|very_relaxed" }
   { "type": "audio_chunk",  "data": "<base64 PCM int16 LE>" }
   { "type": "playback_state", "active": true }   # client TTS playback gate (half-duplex)
   { "type": "tts_speak",    "text": "...", "requestId": "..." }
@@ -24,10 +25,11 @@ Message protocol (JSON lines sent by client → handled here):
 
 Events emitted to client:
   { "type": "status",           "phase": "...", "message": "..." }
-  { "type": "wake_word",        "phrase": "..." }
+  { "type": "wake_word",        "phrase": "...", "breakdown": {...} }
+  { "type": "wake_word_rejected", "phrase": "...", "breakdown": {...} }
   { "type": "vad_event",        "phase": "speech_start|speech_end", "sampleRate": 16000 }
   { "type": "audio_segment",    "data": "<base64 PCM int16 LE>", "format": "audio/raw", "sampleRate": 16000 }
-  { "type": "stt_result",       "text": "...", "isFinal": bool }
+  { "type": "stt_result",       "text": "...", "isFinal": bool, "confidence": float|None }
   { "type": "tts_audio",        "requestId": "...", "data": "<base64 WAV>", "format": "wav" }
   { "type": "tts_audio_chunk",  "requestId": "...", "chunkIndex": 0, "data": "<base64 WAV>", "format": "wav", "isFinal": bool }
   { "type": "tts_stream_done",  "requestId": "...", "chunks": 3, "backend": "kokoro-cpu" }
@@ -55,6 +57,16 @@ import time
 import wave
 from io import BytesIO
 from typing import Any
+
+# The packaged build's embeddable Python ships a python311._pth file,
+# which puts the interpreter in isolated-path mode — verified live that
+# this ALSO suppresses the normal automatic insertion of the running
+# script's own directory into sys.path (not just PYTHONPATH, which it
+# ignores entirely). Without this, sibling local modules like action_hub
+# are never importable, regardless of the process's cwd.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
 
 import websockets
 from websockets.server import WebSocketServerProtocol
@@ -87,6 +99,7 @@ _nlp_engine: Any = None
 _vad_engine: Any = None
 _noise_suppressor: Any = None
 _memory_store: Any = None
+_context_probe: Any = None
 _stt_backend_name = "none"
 _tts_backend_name = "none"
 
@@ -131,8 +144,9 @@ _set_tts_preferred_backend(DEFAULT_TTS_PREFERRED_BACKEND)
 def _get_wake_detector():
     global _wake_detector
     if _wake_detector is None:
-        from wakeword.detector import WakeWordDetector
+        from wakeword.detector import WakeWordDetector, DEFAULT_SENSITIVITY_PRESET
         _wake_detector = WakeWordDetector()
+        _wake_detector.set_sensitivity_preset(DEFAULT_SENSITIVITY_PRESET)
     return _wake_detector
 
 
@@ -177,6 +191,19 @@ def _get_stt_engine():
         _stt_engine = ParakeetSTT()
         _stt_backend_name = "parakeet-onnx"
     return _stt_engine
+
+
+def _get_stt_capabilities() -> dict:
+    """Reports whether *some* STT engine is actually usable right now, so the
+    desktop client can decide whether to rely on the sidecar's own local/cloud
+    STT pipeline or fall back to a different route, instead of assuming the
+    sidecar always handles transcription."""
+    try:
+        engine = _get_stt_engine()
+        return {"sttAvailable": bool(getattr(engine, "available", False)), "sttBackend": _stt_backend_name}
+    except Exception as exc:
+        logger.debug("STT engine unavailable: %s", exc)
+        return {"sttAvailable": False, "sttBackend": "none"}
 
 
 def _get_tts_engine():
@@ -260,6 +287,14 @@ def _get_memory_store():
     return _memory_store
 
 
+def _get_context_probe():
+    global _context_probe
+    if _context_probe is None:
+        from context.audio_session_probe import AudioSessionProbe
+        _context_probe = AudioSessionProbe()
+    return _context_probe
+
+
 def _health_snapshot() -> dict[str, Any]:
     stt_ready = _stt_engine is not None
     tts_ready = _tts_engine is not None
@@ -286,17 +321,46 @@ LISTEN_TIMEOUT_SECONDS = 10.0
 # Hard cap on a single command utterance.
 MAX_UTTERANCE_SECONDS = 30.0
 
+# Barge-in: let the user interrupt Jarvis by simply talking over it instead
+# of requiring the wake word again. No hardware acoustic echo cancellation
+# is available here, so this relies on an energy threshold well above
+# typical speaker-bleed level (the assistant's own TTS leaking back into the
+# mic), sustained for a few consecutive chunks, rather than a single
+# instantaneous spike — that combination is what keeps normal TTS playback
+# from constantly re-triggering itself.
+BARGE_IN_RMS_THRESHOLD = float(os.environ.get("JARVIS_BARGE_IN_RMS_THRESHOLD", "0.02"))
+BARGE_IN_MIN_CONSECUTIVE_CHUNKS = int(os.environ.get("JARVIS_BARGE_IN_MIN_CHUNKS", "3"))
+
+# ── Wake-word decision fusion (2026-06 voice-activation upgrade) ────────────
+# A wake score at or above this short-circuits voice-match/context/Whisper
+# checks entirely — confidence this high is not worth spending the extra
+# latency to second-guess.
+FAST_PATH_WAKE_SCORE = 0.92
+# Voice-match score (Phase 5) at/above this counts as "this sounds like the
+# enrolled speaker" in rule 2. Until Phase 5 trains a profile, voice match is
+# treated as None ("not yet trained"), which also satisfies rule 2.
+VOICE_MATCH_ACCEPT_SCORE = 0.60
+# A rejected wake attempt within this margin below threshold is a "near
+# miss" worth surfacing to Transparency Mode (Phase 6), not just silently
+# dropped — see _handle_audio_chunk's wake-word block.
+NEAR_MISS_SCORE_MARGIN = 0.10
+
 
 class ConnectionState:
     def __init__(self) -> None:
         self.wake_word_phrase: str = "hey jarvis"
         self.language: str = "en"
         self.wake_word_enabled: bool = True
+        self.wake_sensitivity_preset: str = "relaxed"
+        self.last_decision_breakdown: dict = {}
         self.stt_enabled: bool = False
         self.tts_enabled: bool = True
         self.nlp_enabled: bool = False
         self.vad_enabled: bool = True
         self.noise_suppression_enabled: bool = True
+        # Phase 2: suppress likely-false wake candidates while a known media
+        # process (browser/Spotify/Discord) is actively playing audio.
+        self.context_awareness_enabled: bool = True
         self.runtime_state: str = "idle"
         self.model_mode: str = "fast"
         self.listening_for_command: bool = False
@@ -306,6 +370,10 @@ class ConnectionState:
         # mic keeps streaming, but wake-word/VAD processing is suspended so
         # Jarvis cannot hear (and answer) itself — half-duplex gating.
         self.playback_active: bool = False
+        # Barge-in: if true (default), sustained mic energy during playback
+        # interrupts Jarvis instead of being dropped — see BARGE_IN_* above.
+        self.barge_in_enabled: bool = True
+        self._barge_in_streak: int = 0
         self.audio_buffer: list[bytes] = []
         self.command_audio_buffer: list[bytes] = []
         self.speech_active: bool = False
@@ -313,6 +381,11 @@ class ConnectionState:
         self.sample_rate: int = 16000
         self.outbound_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=256)
         self.last_rms_sent_at: float = 0.0
+        # Most recent mic-input RMS (0..1), updated every chunk regardless of
+        # the rms_level WS-emit throttle below — _evaluate_activation_decision
+        # reads this for breakdown["noiseFloor"] since it only receives
+        # (state, wake_score), never the raw chunk. See _emit_rms.
+        self.last_rms: float = 0.0
         self.tts_stream_request_id: str = ""
         self.tts_stream_chunk_index: int = 0
 
@@ -412,6 +485,9 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
         state.sample_rate = int(msg["sampleRate"])
     if "vadEnabled" in msg:
         state.vad_enabled = bool(msg["vadEnabled"])
+    if "bargeInEnabled" in msg:
+        state.barge_in_enabled = bool(msg["bargeInEnabled"])
+        state._barge_in_streak = 0
     if "noiseSuppressionEnabled" in msg:
         state.noise_suppression_enabled = bool(msg["noiseSuppressionEnabled"])
         try:
@@ -423,6 +499,15 @@ async def _handle_configure(ws: WebSocketServerProtocol, state: ConnectionState,
             _get_wake_detector().set_sensitivity(float(msg["wakeWordSensitivity"]))
         except Exception as exc:
             logger.debug("Wake sensitivity configure failed: %s", exc)
+    if "wakeWordSensitivityPreset" in msg:
+        preset = str(msg["wakeWordSensitivityPreset"]).strip().lower()
+        try:
+            if _get_wake_detector().set_sensitivity_preset(preset):
+                state.wake_sensitivity_preset = preset
+        except Exception as exc:
+            logger.debug("Wake sensitivity preset configure failed: %s", exc)
+    if "contextAwarenessEnabled" in msg:
+        state.context_awareness_enabled = bool(msg["contextAwarenessEnabled"])
     if "vadThreshold" in msg:
         try:
             _get_vad_engine().set_threshold(float(msg["vadThreshold"]))
@@ -474,6 +559,7 @@ async def _handle_playback_state(ws: WebSocketServerProtocol, state: ConnectionS
     if active == state.playback_active:
         return
     state.playback_active = active
+    state._barge_in_streak = 0
     if active:
         # Drop any partial capture — it may already contain speaker bleed.
         state.audio_buffer.clear()
@@ -508,6 +594,132 @@ async def _end_command_listening(ws: WebSocketServerProtocol, state: ConnectionS
         pass
 
 
+async def _check_barge_in(ws: WebSocketServerProtocol, state: ConnectionState, pcm_bytes: bytes, now: float) -> None:
+    """
+    Called on every mic chunk while playback_active is True (instead of just
+    dropping it). If the user talks over Jarvis for BARGE_IN_MIN_CONSECUTIVE_
+    CHUNKS in a row above BARGE_IN_RMS_THRESHOLD, treat it exactly like a
+    wake-word trigger: lift the half-duplex gate, tell the client to cut TTS
+    playback (`barge_in` event), and start capturing their command right
+    away — no need to repeat the wake word.
+    """
+    rms = _pcm_int16_rms(pcm_bytes)
+    if rms < BARGE_IN_RMS_THRESHOLD:
+        state._barge_in_streak = 0
+        return
+    state._barge_in_streak += 1
+    if state._barge_in_streak < BARGE_IN_MIN_CONSECUTIVE_CHUNKS:
+        return
+
+    state._barge_in_streak = 0
+    state.playback_active = False
+    state.audio_buffer.clear()
+    state.command_audio_buffer.clear()
+    state.speech_active = False
+    state.trailing_silence_seconds = 0.0
+    state.listening_for_command = True
+    state.listen_started_at = now
+    state.speech_started_at = 0.0
+    state.runtime_state = "listening"
+    try:
+        _get_vad_engine().reset()
+    except Exception:
+        pass
+    await _send(ws, {"type": "barge_in"}, state)
+
+
+def _evaluate_activation_decision(state: ConnectionState, wake_score: float) -> dict:
+    """
+    Decision fusion for one wake-word candidate: combine the wake score with
+    voice-match (Phase 5), context-awareness (Phase 2), and Whisper
+    verification (Phase 3) signals — when those phases are enabled and have
+    something to say — into a single accept/reject decision.
+
+    An explainable rule table, not a weighted-sum formula, because
+    Transparency Mode (Phase 6) needs to show *which rule fired* for every
+    attempt, not just a blended score:
+      1. wake_score >= FAST_PATH_WAKE_SCORE -> activate, skip every other
+         check (latency fast-path for unambiguous wakes).
+      2. wake_score >= detector threshold, voice-match agrees (or hasn't
+         been trained yet), no suppressing context (Phase 2: no known media
+         process actively playing audio) -> activate.
+      3. wake_score >= detector threshold but voice-match/context disagree
+         -> tie-break via Whisper verification (Phase 3 fills this branch
+         in; until then it rejects rather than activating without a
+         tie-breaker).
+      4. wake_score < detector threshold -> reject, always. A hard floor
+         that no other signal may override upward.
+
+    Returns a stable-shaped breakdown dict from Phase 1 onward — later
+    phases populate fields that start out None here, never change the shape
+    (Transparency Mode and the event log both depend on that stability):
+      {"wakeScore", "voiceMatchScore", "contextScore", "contextSources",
+       "noiseFloor", "whisperConfirmed", "whisperTranscript", "decision",
+       "ruleFired"}
+    """
+    score = float(wake_score)
+    breakdown: dict[str, Any] = {
+        "wakeScore": round(score, 4),
+        "voiceMatchScore": None,
+        "contextScore": None,
+        "contextSources": None,
+        "noiseFloor": None,
+        "whisperConfirmed": None,
+        "whisperTranscript": None,
+        "decision": "reject",
+        "ruleFired": 4,
+    }
+
+    threshold = _get_wake_detector().threshold
+
+    # Rule 4 (hard floor) — checked first, never overridden upward below.
+    if score < threshold:
+        return breakdown
+
+    # Rule 1 (fast path).
+    if score >= FAST_PATH_WAKE_SCORE:
+        breakdown["decision"] = "activate"
+        breakdown["ruleFired"] = 1
+        return breakdown
+
+    # Mid-band: candidate clears the floor but isn't an unambiguous fast-path
+    # wake, so the extra signals are worth consulting. Noise floor is always
+    # cheap to report (already computed per-chunk in _emit_rms). The context
+    # probe is a COM call (TTL-cached inside AudioSessionProbe) and is only
+    # consulted here — never on every audio chunk — and only when Phase 2 is
+    # enabled and pycaw is actually available on this platform.
+    breakdown["noiseFloor"] = round(float(state.last_rms), 6)
+
+    context_sources: list[str] = []
+    if state.context_awareness_enabled:
+        try:
+            probe = _get_context_probe()
+            if probe.available:
+                context_sources = probe.get_active_media_sources()
+        except Exception as exc:
+            logger.debug("Context probe error: %s", exc)
+    breakdown["contextSources"] = context_sources or None
+
+    # Phase 5 (voice match) fills this in when enabled; until then it reads
+    # as "not yet trained", which is exactly rule 2's accept condition.
+    voice_match_score = None
+    context_suppressing = bool(context_sources)
+    voice_match_agrees = voice_match_score is None or voice_match_score >= VOICE_MATCH_ACCEPT_SCORE
+
+    # Rule 2.
+    if voice_match_agrees and not context_suppressing:
+        breakdown["decision"] = "activate"
+        breakdown["ruleFired"] = 2
+        return breakdown
+
+    # Rule 3 (tie-break) — Phase 3 wires a real Whisper call into this
+    # branch. No tie-breaker exists yet, so disagreement rejects rather
+    # than activating unverified (spec favors low false-activation rate).
+    breakdown["decision"] = "reject"
+    breakdown["ruleFired"] = 3
+    return breakdown
+
+
 async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionState, msg: dict) -> None:
     raw_b64 = msg.get("data", "")
     if not raw_b64:
@@ -520,12 +732,17 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
 
     _emit_rms(state, pcm_bytes, source="mic", sample_rate=state.sample_rate)
 
-    # Half-duplex gate: ignore mic input entirely while TTS audio is playing.
+    now = time.monotonic()
+
+    # Half-duplex gate while TTS audio is playing — but with barge-in: keep
+    # checking mic energy instead of dropping the chunk outright, so the
+    # user can interrupt Jarvis by talking over it (see _check_barge_in).
     if state.playback_active:
+        if state.barge_in_enabled:
+            await _check_barge_in(ws, state, pcm_bytes, now)
         return
 
     chunk_seconds = (len(pcm_bytes) / 2.0) / float(state.sample_rate or 16000)
-    now = time.monotonic()
     loop = asyncio.get_event_loop()
 
     # Noise suppression (high-pass) ahead of the wake-word/VAD stages.
@@ -553,18 +770,37 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
             detected = await loop.run_in_executor(
                 None, detector.process_chunk, pcm_bytes, state.sample_rate
             )
-            if detected:
-                state.listening_for_command = True
-                state.listen_started_at = now
-                state.speech_started_at = 0.0
-                state.runtime_state = "listening"
-                state.audio_buffer.clear()
-                try:
-                    _get_vad_engine().reset()
-                except Exception:
-                    pass
-                await _send(ws, {"type": "wake_word", "phrase": state.wake_word_phrase}, state)
-                return
+            wake_score = float(getattr(detector, "last_score", 0.0))
+            threshold = detector.threshold
+            # Near misses (rejected, but within NEAR_MISS_SCORE_MARGIN of the
+            # threshold) are worth a breakdown too — Transparency Mode (Phase
+            # 6) needs reject data, not just accepts.
+            near_miss = (not detected) and (threshold - NEAR_MISS_SCORE_MARGIN <= wake_score < threshold)
+            if detected or near_miss:
+                decision = _evaluate_activation_decision(state, wake_score)
+                state.last_decision_breakdown = decision
+                if decision["decision"] == "activate":
+                    state.listening_for_command = True
+                    state.listen_started_at = now
+                    state.speech_started_at = 0.0
+                    state.runtime_state = "listening"
+                    state.audio_buffer.clear()
+                    try:
+                        _get_vad_engine().reset()
+                    except Exception:
+                        pass
+                    await _send(ws, {
+                        "type": "wake_word",
+                        "phrase": state.wake_word_phrase,
+                        "breakdown": decision,
+                    }, state)
+                    return
+                else:
+                    await _send(ws, {
+                        "type": "wake_word_rejected",
+                        "phrase": state.wake_word_phrase,
+                        "breakdown": decision,
+                    }, state)
         except Exception as exc:
             logger.debug("Wake word processing error: %s", exc)
 
@@ -662,6 +898,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                         "type": "stt_result",
                         "text": text,
                         "isFinal": is_final,
+                        "confidence": result.get("confidence"),
                     }, state)
                 if is_final:
                     state.audio_buffer.clear()
@@ -1065,6 +1302,7 @@ async def handle_connection(ws: WebSocketServerProtocol) -> None:
             "ttsStreamingSupported": bool(TTS_STREAMING_ENABLED),
             "ttsBackend": _tts_backend_name,
             "ttsPreferredBackend": _tts_preferred_backend,
+            **_get_stt_capabilities(),
         },
     }, state)
     if TTS_STREAMING_ENABLED:
@@ -1112,11 +1350,18 @@ async def _dispatch_message(endpoint: Any, state: ConnectionState, msg: dict) ->
 def _emit_rms(state: ConnectionState, pcm_bytes: bytes, source: str, sample_rate: int) -> None:
     if not pcm_bytes:
         return
+    rms = _pcm_int16_rms(pcm_bytes)
+    if source == "mic":
+        # Tracked every chunk, independent of the WS-emit throttle below —
+        # _evaluate_activation_decision reads this as the room noise floor.
+        # Mic-only: a "tts" source here is the assistant's own playback
+        # level (see _emit_rms_from_wav callers), not room noise, and must
+        # never overwrite it.
+        state.last_rms = rms
     now = time.monotonic()
     if now - state.last_rms_sent_at < 0.06:
         return
     state.last_rms_sent_at = now
-    rms = _pcm_int16_rms(pcm_bytes)
     payload = {
         "type": "rms_level",
         "source": source,
@@ -1221,6 +1466,34 @@ def _start_model_download_background(endpoint=None, state=None) -> None:
 
         _emit({"phase": "model_download_complete", "percent": 100, "status": "All local models ready."})
         logger.info("Local engine: all model checks complete.")
+
+        # Warm-up — model weights being present on disk and being LOADED
+        # into memory are different things. Without this, the first real
+        # user request pays the full STT/TTS load time on top of inference
+        # (can be several seconds). One throwaway inference per engine,
+        # right after a successful download check, means that cost is
+        # already paid by the time the user actually speaks/asks for audio.
+        try:
+            import numpy as _np
+
+            logger.info("Local engine: warming up STT…")
+            stt = _get_stt_engine()
+            # Low-amplitude noise, not silence — a silent buffer is
+            # rejected before the model ever runs, which would skip the
+            # very load step this warm-up exists to force.
+            warm_pcm = (_np.random.randint(-200, 200, size=16000, dtype=_np.int16)).tobytes()
+            stt.transcribe_chunk(warm_pcm, language, 16000)
+            logger.info("Local engine: STT warm.")
+        except Exception as exc:
+            logger.debug("STT warm-up skipped: %s", exc)
+
+        try:
+            logger.info("Local engine: warming up TTS…")
+            tts = _get_tts_engine()
+            tts.synthesize("Hej.")
+            logger.info("Local engine: TTS warm.")
+        except Exception as exc:
+            logger.debug("TTS warm-up skipped: %s", exc)
 
     t = threading.Thread(target=_run, name="jarvis-model-downloader", daemon=True)
     t.start()

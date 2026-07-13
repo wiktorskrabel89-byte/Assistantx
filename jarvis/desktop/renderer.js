@@ -49,6 +49,15 @@ const voiceGateway = window.jarvisApi.voiceGateway || null;
 let sidecarConnected = false;
 
 const DEFAULT_JARVIS_WAKE_PHRASE = 'Hey Jarvis';
+// Legacy numeric slider default, kept only for the "Advanced" disclosure's
+// backward compat — superseded by DEFAULT_WAKE_WORD_SENSITIVITY_PRESET as
+// the primary control (the sidecar applies the preset after the numeric
+// value on every configure call, so the preset wins whenever both are sent).
+const DEFAULT_WAKE_WORD_SENSITIVITY = 0.65;
+// Tiered preset, mirrors ai-agent/wakeword/detector.py's SENSITIVITY_PRESETS.
+// "relaxed" (0.80 confidence threshold) is the spec-mandated default — never
+// ship below it, 0.60 and under produces too many false activations.
+const DEFAULT_WAKE_WORD_SENSITIVITY_PRESET = 'relaxed';
 const STT_MODEL_ALIASES = {
 	'whisper-tiny': 'tiny',
 	'whisper-base': 'base',
@@ -349,6 +358,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const localCodeModelSelect = document.getElementById('local-code-model');
 	const localExternalModelSelect = document.getElementById('local-external-model');
 	const localVisionModelSelect = document.getElementById('local-vision-model');
+	// M5 — full 6-lane router selects.
+	const localCodeHeavyModelSelect = document.getElementById('local-code-heavy-model');
+	const localReasoningModelSelect = document.getElementById('local-reasoning-model');
+	const localRouterModelSelect = document.getElementById('local-router-model');
 	const localPreferEnabledToggle = document.getElementById('local-prefer-enabled');
 	const localServerSaveAssignmentButton = document.getElementById('local-server-save-assignment');
 	const sttModelSelect = document.getElementById('stt-model');
@@ -387,6 +400,8 @@ window.addEventListener('DOMContentLoaded', () => {
 	// Settings → Audio (consolidated mic controls)
 	const micDeviceSelect = document.getElementById('mic-device-select');
 	const noiseSuppressionToggle = document.getElementById('noise-suppression-enabled');
+	const contextAwarenessToggle = document.getElementById('context-awareness-enabled');
+	const wakeSensitivityPresetSelect = document.getElementById('wake-word-sensitivity-preset');
 	const wakeSensitivitySlider = document.getElementById('wake-word-sensitivity');
 	const wakeSensitivityValueNode = document.getElementById('wake-word-sensitivity-value');
 	const micTestButton = document.getElementById('mic-test-button');
@@ -444,6 +459,7 @@ window.addEventListener('DOMContentLoaded', () => {
 	let speechVoicePromise = null;
 
 	const JARVIS_SETTINGS_KEY = 'jarvis-desktop-voice-settings-v1';
+	const PROVIDER_MODE_MIGRATED_KEY = 'jarvis-desktop-provider-mode-migrated-v1';
 	const DEFAULT_LOCAL_TTS_MODEL = 'kokoro';
 	const DEFAULT_CLOUD_TTS_MODEL = 'playai-tts';
 	const AGENT_STATE = {
@@ -460,19 +476,190 @@ window.addEventListener('DOMContentLoaded', () => {
 	let currentRepoContext = null;
 	let googleDevicePollTimer = null;
 
+	// Meridian shell — 3 tabs. `chat` (alias for legacy `command`),
+	// `workspace`, `settings`. Legacy two-button side switcher continues to
+	// work but is hidden visually when body has .ox-shell-on.
+	const workspaceTabPanel = document.getElementById('workspace-tab-panel');
+	const oxTabChat = document.getElementById('ox-tab-chat');
+	const oxTabWorkspace = document.getElementById('ox-tab-workspace');
+	const oxTabSettings = document.getElementById('ox-tab-settings');
+	const OX_TAB_BUTTONS = { chat: oxTabChat, workspace: oxTabWorkspace, settings: oxTabSettings };
+
 	function setMainPanelTab(tab) {
-		const settingsActive = tab === 'settings';
-		commandTabButton?.classList.toggle('active', !settingsActive);
-		settingsTabButton?.classList.toggle('active', settingsActive);
-		commandTabButton?.setAttribute('aria-selected', settingsActive ? 'false' : 'true');
-		settingsTabButton?.setAttribute('aria-selected', settingsActive ? 'true' : 'false');
-		commandTabPanel?.classList.toggle('active', !settingsActive);
-		settingsTabPanel?.classList.toggle('active', settingsActive);
+		// Normalise legacy 'command' alias.
+		const target = tab === 'command' ? 'chat' : tab;
+		const isChat = target === 'chat';
+		const isWorkspace = target === 'workspace';
+		const isSettings = target === 'settings';
+		commandTabPanel?.classList.toggle('active', isChat);
+		workspaceTabPanel?.classList.toggle('active', isWorkspace);
+		settingsTabPanel?.classList.toggle('active', isSettings);
+		// Sync legacy 2-tab side switcher (still wired to listeners elsewhere).
+		commandTabButton?.classList.toggle('active', isChat);
+		settingsTabButton?.classList.toggle('active', isSettings);
+		commandTabButton?.setAttribute('aria-selected', isChat ? 'true' : 'false');
+		settingsTabButton?.setAttribute('aria-selected', isSettings ? 'true' : 'false');
+		// Sync Meridian top-bar tabs.
+		Object.entries(OX_TAB_BUTTONS).forEach(([key, btn]) => {
+			if (!btn) return;
+			const active = key === target;
+			btn.classList.toggle('active', active);
+			btn.setAttribute('aria-selected', active ? 'true' : 'false');
+		});
+		// Sync rail highlights (workspace/settings rail buttons mirror tabs).
+		document.querySelectorAll('.ox-rail-btn[data-ox-rail]').forEach((btn) => {
+			const key = btn.getAttribute('data-ox-rail');
+			let match = false;
+			if (target === 'chat' && key === 'chat') match = true;
+			if (target === 'workspace' && key === 'workspace-tab') match = true;
+			if (target === 'settings' && key === 'settings-tab') match = true;
+			btn.classList.toggle('active', match);
+		});
 	}
 
-	commandTabButton?.addEventListener('click', () => setMainPanelTab('command'));
+	commandTabButton?.addEventListener('click', () => setMainPanelTab('chat'));
 	settingsTabButton?.addEventListener('click', () => setMainPanelTab('settings'));
-	setMainPanelTab('command');
+	oxTabChat?.addEventListener('click', () => setMainPanelTab('chat'));
+	oxTabWorkspace?.addEventListener('click', () => setMainPanelTab('workspace'));
+	oxTabSettings?.addEventListener('click', () => setMainPanelTab('settings'));
+
+	// Rail shortcuts — top-bar tabs + Activity Panel segments + command palette.
+	document.getElementById('ox-rail')?.querySelectorAll('.ox-rail-btn[data-ox-rail]').forEach((btn) => {
+		const key = btn.getAttribute('data-ox-rail');
+		if (key === 'workspace-tab') btn.addEventListener('click', () => setMainPanelTab('workspace'));
+		else if (key === 'settings-tab') btn.addEventListener('click', () => setMainPanelTab('settings'));
+		else if (key === 'chat') btn.addEventListener('click', () => setMainPanelTab('chat'));
+		else if (key === 'files') btn.addEventListener('click', () => { setMainPanelTab('chat'); setActivitySegment('files'); });
+		else if (key === 'activity') btn.addEventListener('click', () => { setMainPanelTab('chat'); setActivitySegment('activity'); });
+		else if (key === 'search') btn.addEventListener('click', () => {
+			document.getElementById('command-palette-overlay')?.classList.add('open');
+			document.getElementById('command-palette-input')?.focus();
+		});
+	});
+
+	// Keyboard shortcuts 1/2/3 jump to Czat/Workspace/Ustawienia (when no
+	// input is focused — guard against typing collisions).
+	window.addEventListener('keydown', (e) => {
+		if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+		const tag = (e.target?.tagName || '').toLowerCase();
+		if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+		if (e.key === '1') { setMainPanelTab('chat'); e.preventDefault(); }
+		else if (e.key === '2') { setMainPanelTab('workspace'); e.preventDefault(); }
+		else if (e.key === '3') { setMainPanelTab('settings'); e.preventDefault(); }
+	});
+
+	// Activate the Meridian shell. Set on <body> so the additive CSS
+	// (padding/topbar/rail visibility, legacy header hidden) kicks in.
+	document.body.classList.add('ox-shell-on');
+	setMainPanelTab('chat');
+
+	// Round-2-fix3: collapsible Activity Panel — toggle + persist + restore.
+	(function initActivityToggle() {
+		const STORAGE_KEY = 'jarvis.activity.collapsed';
+		const collapseBtn = document.getElementById('ox-activity-collapse');
+		const edgeBtn = document.getElementById('ox-activity-edge-toggle');
+		if (!collapseBtn && !edgeBtn) return;
+
+		function applyState(collapsed) {
+			document.body.classList.toggle('ox-activity-collapsed', collapsed);
+			if (edgeBtn) edgeBtn.style.display = collapsed ? 'inline-flex' : 'none';
+			try { window.localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); }
+			catch { /* storage blocked */ }
+		}
+
+		// Restore prior state on launch — default expanded.
+		let initial = false;
+		try { initial = window.localStorage.getItem(STORAGE_KEY) === '1'; }
+		catch { /* ignore */ }
+		applyState(initial);
+
+		collapseBtn?.addEventListener('click', () => applyState(true));
+		edgeBtn?.addEventListener('click', () => applyState(false));
+	})();
+
+	// Round-2 — VEGA orb state setter. Drives the data-vega-state attribute
+	// on the orb in the Activity Panel (and any other vega-orb in the DOM).
+	// Defined at module scope so the wake_word / route / health subscribers
+	// above can call it without prop-drilling.
+	function setVegaOrbState(state) {
+		const valid = ['idle', 'wake', 'listening', 'processing', 'speaking'];
+		const next = valid.includes(state) ? state : 'idle';
+		document.querySelectorAll('.vega-orb').forEach((el) => {
+			el.setAttribute('data-vega-state', next);
+		});
+	}
+	// Expose globally so other modules + subscribers above can call it
+	// (renderer.js is one big closure; this lifts the function up).
+	window.__jarvisSetVegaOrbState = setVegaOrbState;
+
+	// ── Round-2 — Language wizard (first-run) ───────────────────────────
+	// Show the modal when the user has never picked a locale. Subsequent
+	// launches skip it. Reachable later from Settings → Ogólne via the same
+	// reset() pattern (clears the chosen flag).
+	(function initLanguageWizard() {
+		const overlay = document.getElementById('ox-language-wizard');
+		if (!overlay) return;
+		let chosenAlready = false;
+		try { chosenAlready = window.localStorage.getItem('jarvis.locale.chosen') === '1'; }
+		catch { /* storage blocked */ }
+		if (chosenAlready) { overlay.hidden = true; return; }
+		overlay.hidden = false;
+
+		const options = overlay.querySelectorAll('.ox-wizard-option[data-locale]');
+		let pickedLocale = 'pl';
+		try {
+			const stored = window.localStorage.getItem('jarvis.locale');
+			if (stored === 'pl' || stored === 'en') pickedLocale = stored;
+		} catch { /* ignore */ }
+
+		function paintSelection() {
+			options.forEach((btn) => {
+				const isActive = btn.getAttribute('data-locale') === pickedLocale;
+				btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+				const radio = btn.querySelector('.ox-wizard-radio');
+				if (radio) radio.textContent = isActive ? '✓' : '';
+			});
+		}
+
+		options.forEach((btn) => {
+			btn.addEventListener('click', () => {
+				if (btn.disabled) return;
+				const locale = btn.getAttribute('data-locale');
+				if (!locale) return;
+				pickedLocale = locale;
+				paintSelection();
+			});
+		});
+		paintSelection();
+
+		const confirmBtn = document.getElementById('ox-wizard-confirm');
+		confirmBtn?.addEventListener('click', () => {
+			try {
+				window.localStorage.setItem('jarvis.locale', pickedLocale);
+				window.localStorage.setItem('jarvis.locale.chosen', '1');
+			} catch { /* storage blocked — choice still applies in-session */ }
+			overlay.hidden = true;
+			// Reflect the choice in the Settings → Ogólne language picker.
+			const langSelect = document.getElementById('ox-settings-language');
+			if (langSelect) langSelect.value = pickedLocale === 'en' ? 'en-US' : 'pl-PL';
+		});
+
+		// Settings → Ogólne button to re-open the wizard (clears chosen flag).
+		const reopenBtn = document.getElementById('ox-settings-open-wizard');
+		reopenBtn?.addEventListener('click', () => {
+			try { window.localStorage.removeItem('jarvis.locale.chosen'); } catch { /* ignore */ }
+			overlay.hidden = false;
+		});
+
+		// Settings → Ogólne language <select> persists straight to localStorage
+		// so the wizard's next opening shows the user's last choice highlighted.
+		const langSelect = document.getElementById('ox-settings-language');
+		langSelect?.addEventListener('change', (e) => {
+			const v = String(e.target?.value || '');
+			const locale = v.startsWith('en') ? 'en' : 'pl';
+			try { window.localStorage.setItem('jarvis.locale', locale); } catch { /* ignore */ }
+		});
+	})();
 
 	// Left tab rail — Claude-style toggle. Persist the collapsed preference so
 	// the rail stays in the user's preferred state across launches.
@@ -713,13 +900,263 @@ window.addEventListener('DOMContentLoaded', () => {
 	winMaximize?.addEventListener('click', () => invokeWindow('window:toggle-maximize'));
 	winClose?.addEventListener('click', () => invokeWindow('window:close'));
 
+	// M2 — chat stays visible at all times. Switching a viewport (map/repo/
+	// hardware) just toggles which pane inside the Activity Panel's "Pliki"
+	// segment is active, and brings that segment to the front. The legacy
+	// .viewport-active body class was dead (no CSS consumer); removed.
 	function switchViewport(mode) {
 		viewportWelcome?.classList.toggle('active', mode === 'welcome');
 		viewportMap?.classList.toggle('active', mode === 'map');
 		viewportRepo?.classList.toggle('active', mode === 'repo');
 		viewportHardware?.classList.toggle('active', mode === 'hardware');
-		workspaceApp?.classList.toggle('viewport-active', mode !== 'welcome');
+		// When a tool opens, surface the Pliki segment in the Activity Panel
+		// so the user doesn't have to switch tabs to see what they asked for.
+		if (mode && mode !== 'welcome') setActivitySegment('files');
 	}
+
+	// Meridian Activity Panel — segment switcher (Aktywność / Agenci / Log / Pliki).
+	function setActivitySegment(segment) {
+		document.querySelectorAll('.ox-activity-tab[data-ox-segment]').forEach((btn) => {
+			const active = btn.getAttribute('data-ox-segment') === segment;
+			btn.classList.toggle('active', active);
+			btn.setAttribute('aria-selected', active ? 'true' : 'false');
+		});
+		document.querySelectorAll('.ox-activity-segment[data-ox-segment]').forEach((sec) => {
+			sec.classList.toggle('active', sec.getAttribute('data-ox-segment') === segment);
+		});
+	}
+	document.querySelectorAll('.ox-activity-tab[data-ox-segment]').forEach((btn) => {
+		btn.addEventListener('click', () => setActivitySegment(btn.getAttribute('data-ox-segment')));
+	});
+
+	// ── M3: Settings shell — 9-section sub-nav (Ogólne / Modele / …) ─────
+	const SETTINGS_SCROLL_ROOT = document.getElementById('settings-scroll-root');
+	function setSettingsSection(section) {
+		if (!SETTINGS_SCROLL_ROOT) return;
+		SETTINGS_SCROLL_ROOT.setAttribute('data-active-section', section);
+		document.querySelectorAll('.ox-settings-nav-btn[data-ox-section]').forEach((btn) => {
+			btn.classList.toggle('active', btn.getAttribute('data-ox-section') === section);
+		});
+		// Sections may declare multiple owners via space-separated list (e.g.
+		// the global .settings-toolbar lives in every section). A naïve
+		// equality check would hide it on every click.
+		SETTINGS_SCROLL_ROOT.querySelectorAll('[data-ox-section]').forEach((node) => {
+			if (node.classList?.contains('ox-settings-nav-btn')) return; // skip the nav itself
+			const owners = (node.getAttribute('data-ox-section') || '').split(/\s+/).filter(Boolean);
+			const visible = owners.includes(section);
+			node.style.display = visible ? '' : 'none';
+		});
+		try { localStorage.setItem('jarvis.settingsSection', section); } catch { /* no storage */ }
+	}
+	document.querySelectorAll('.ox-settings-nav-btn[data-ox-section]').forEach((btn) => {
+		btn.addEventListener('click', () => setSettingsSection(btn.getAttribute('data-ox-section')));
+	});
+	try {
+		const remembered = localStorage.getItem('jarvis.settingsSection');
+		setSettingsSection(remembered || 'general');
+	} catch { setSettingsSection('general'); }
+
+	// ── M8: Workspace sub-nav (Szukaj / Projekty / Umiejętności / …) ────
+	const WORKSPACE_ROOT = document.querySelector('.ox-workspace');
+	function setWorkspaceSection(section) {
+		if (!WORKSPACE_ROOT) return;
+		WORKSPACE_ROOT.setAttribute('data-active-workspace', section);
+		document.querySelectorAll('#ox-workspace-nav .ox-settings-nav-btn').forEach((btn) => {
+			btn.classList.toggle('active', btn.getAttribute('data-ox-workspace') === section);
+		});
+		try { localStorage.setItem('jarvis.workspaceSection', section); } catch { /* no storage */ }
+	}
+	document.querySelectorAll('#ox-workspace-nav .ox-settings-nav-btn').forEach((btn) => {
+		btn.addEventListener('click', () => setWorkspaceSection(btn.getAttribute('data-ox-workspace')));
+	});
+	try {
+		const remembered = localStorage.getItem('jarvis.workspaceSection');
+		setWorkspaceSection(remembered || 'search');
+	} catch { setWorkspaceSection('search'); }
+
+	// Szukaj — runs the cross-store hybrid search via main-process IPC.
+	const workspaceSearchInput = document.getElementById('ox-workspace-search-input');
+	const workspaceSearchGo = document.getElementById('ox-workspace-search-go');
+	const workspaceSearchResults = document.getElementById('ox-workspace-search-results');
+	async function runWorkspaceSearch() {
+		if (!workspaceSearchResults || !ipcRenderer) return;
+		const query = workspaceSearchInput?.value?.trim() || '';
+		if (!query) {
+			workspaceSearchResults.innerHTML = '<div class="ox-activity-empty"><svg class="ox-icon" aria-hidden="true"><use href="#ox-i-sparkles"/></svg><div>Wpisz frazę, aby przeszukać pamięć i wiedzę.</div></div>';
+			return;
+		}
+		workspaceSearchResults.innerHTML = '<div class="ox-activity-empty"><svg class="ox-icon" aria-hidden="true"><use href="#ox-i-clock"/></svg><div>Szukam…</div></div>';
+		try {
+			const r = await ipcRenderer.invoke('workspace:search', { query, limit: 25 });
+			if (!r?.ok) throw new Error(r?.error || 'search-failed');
+			const results = Array.isArray(r.results) ? r.results : [];
+			if (results.length === 0) {
+				workspaceSearchResults.innerHTML = '<div class="ox-activity-empty"><svg class="ox-icon" aria-hidden="true"><use href="#ox-i-search"/></svg><div>Nic nie pasuje do frazy „' + query.replace(/[<>&]/g, '') + '".</div></div>';
+				return;
+			}
+			workspaceSearchResults.innerHTML = '';
+			results.forEach((row) => {
+				const card = document.createElement('div');
+				card.className = 'ox-search-result';
+				const src = document.createElement('div');
+				src.className = 'ox-search-result-source';
+				src.textContent = row.source || 'unknown';
+				const text = document.createElement('div');
+				text.className = 'ox-search-result-text';
+				text.textContent = row.text || row.summary || '(empty)';
+				const meta = document.createElement('div');
+				meta.className = 'ox-search-result-meta';
+				meta.textContent = `score=${row.retrievalScore?.toFixed?.(2) ?? row.retrievalScore} · id=${row.id || '-'}`;
+				card.appendChild(src);
+				card.appendChild(text);
+				card.appendChild(meta);
+				workspaceSearchResults.appendChild(card);
+			});
+		} catch (err) {
+			workspaceSearchResults.innerHTML = '<div class="ox-activity-empty ox-status-dot bad" style="border-color: var(--ox-danger);"><div>Błąd: ' + String(err?.message || err) + '</div></div>';
+		}
+	}
+	workspaceSearchGo?.addEventListener('click', runWorkspaceSearch);
+	workspaceSearchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') runWorkspaceSearch(); });
+
+	// Pamięć / Wiedza refresh buttons.
+	async function refreshWorkspaceMemory() {
+		const node = document.getElementById('ox-memory-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:memory-snapshot');
+			const snap = r?.snapshot;
+			if (!snap) return;
+			const ltm = snap.longTermMemory || [];
+			const conv = snap.conversationMemory || [];
+			const cards = [];
+			cards.push(`<div class="ox-workspace-card"><h4>Long-term memory</h4><p>${ltm.length} rekord(ów)</p></div>`);
+			cards.push(`<div class="ox-workspace-card"><h4>Conversation memory</h4><p>${conv.length} rekord(ów)</p></div>`);
+			cards.push(`<div class="ox-workspace-card"><h4>Project knowledge</h4><p>${Object.keys(snap.projectKnowledge || {}).length} projekt(y)</p></div>`);
+			cards.push(`<div class="ox-workspace-card"><h4>Custom instructions</h4><p>${snap.customInstructions?.systemPrompt ? '✓ ustawiony' : '— brak'}</p></div>`);
+			node.innerHTML = cards.join('');
+		} catch { /* keep empty state */ }
+	}
+	async function refreshWorkspaceKnowledge() {
+		const node = document.getElementById('ox-knowledge-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:knowledge-snapshot');
+			const snap = r?.snapshot;
+			if (!snap) return;
+			const ents = snap.entities || [];
+			const rels = snap.relations || [];
+			if (ents.length === 0) return;
+			const byType = ents.reduce((acc, e) => ({ ...acc, [e.type]: (acc[e.type] || 0) + 1 }), {});
+			node.innerHTML = Object.entries(byType).map(([type, count]) =>
+				`<div class="ox-workspace-card"><h4>${type}</h4><p>${count} encji</p></div>`
+			).join('') + `<div class="ox-workspace-card"><h4>Relacje</h4><p>${rels.length} krawędzi</p></div>`;
+		} catch { /* keep empty state */ }
+	}
+	async function refreshWorkspaceProjects() {
+		const node = document.getElementById('ox-projects-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:knowledge-snapshot');
+			const projects = (r?.snapshot?.entities || []).filter((e) => e.type === 'project');
+			if (projects.length === 0) return;
+			node.innerHTML = projects.map((p) => {
+				const progress = Number.isFinite(p.payload?.progress) ? p.payload.progress : 0;
+				const files = Array.isArray(p.payload?.files) ? p.payload.files : [];
+				const fileList = files.length
+					? `<ul class="ox-project-files">${files.map((f) => `<li><span>${escapeHtml(f.name || f.path)}</span><button type="button" class="secondary sm" data-remove-file="${escapeHtml(p.id)}" data-file-path="${escapeHtml(f.path)}">×</button></li>`).join('')}</ul>`
+					: '<p class="ox-project-files-empty">Brak plików</p>';
+				return `<div class="ox-workspace-card" data-project-id="${escapeHtml(p.id)}"><h4>${escapeHtml(p.label)}</h4><p>Postęp ${progress}% · ${files.length} plik(ów)</p>${fileList}<button type="button" class="secondary sm" data-attach-file="${escapeHtml(p.id)}">Dodaj plik</button> <button type="button" class="secondary sm" data-remove-project="${escapeHtml(p.id)}">Usuń</button></div>`;
+			}).join('');
+			node.querySelectorAll('[data-remove-project]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					await ipcRenderer.invoke('workspace:knowledge-remove', { id: btn.getAttribute('data-remove-project') });
+					refreshWorkspaceProjects();
+				});
+			});
+			node.querySelectorAll('[data-attach-file]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					await ipcRenderer.invoke('workspace:project-attach-file', { projectId: btn.getAttribute('data-attach-file') });
+					refreshWorkspaceProjects();
+				});
+			});
+			node.querySelectorAll('[data-remove-file]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					await ipcRenderer.invoke('workspace:project-remove-file', {
+						projectId: btn.getAttribute('data-remove-file'),
+						path: btn.getAttribute('data-file-path'),
+					});
+					refreshWorkspaceProjects();
+				});
+			});
+		} catch { /* keep empty state */ }
+	}
+	document.getElementById('ox-workspace-add-project')?.addEventListener('click', async () => {
+		const name = window.prompt('Nazwa projektu:');
+		if (!name || !name.trim() || !ipcRenderer) return;
+		await ipcRenderer.invoke('workspace:knowledge-upsert', {
+			type: 'project',
+			label: name.trim(),
+			payload: { files: [], progress: 0, dependencies: [] },
+		});
+		refreshWorkspaceProjects();
+	});
+
+	async function refreshWorkspaceBlueprints() {
+		const node = document.getElementById('ox-blueprints-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:knowledge-snapshot');
+			const blueprints = (r?.snapshot?.entities || []).filter((e) => e.type === 'blueprint');
+			if (blueprints.length === 0) return;
+			node.innerHTML = blueprints.map((b) => {
+				const p = b.payload || {};
+				const reqCount = Array.isArray(p.requirements) ? p.requirements.length : 0;
+				const featCount = Array.isArray(p.features) ? p.features.length : 0;
+				return `<div class="ox-workspace-card" data-blueprint-id="${escapeHtml(b.id)}"><h4>${escapeHtml(b.label)}</h4><p>${reqCount} wymagań · ${featCount} funkcji · ${escapeHtml(p.timeline || '—')}</p><button type="button" class="secondary sm" data-remove-blueprint="${escapeHtml(b.id)}">Usuń</button></div>`;
+			}).join('');
+			node.querySelectorAll('[data-remove-blueprint]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					await ipcRenderer.invoke('workspace:knowledge-remove', { id: btn.getAttribute('data-remove-blueprint') });
+					refreshWorkspaceBlueprints();
+				});
+			});
+		} catch { /* keep empty state */ }
+	}
+	document.getElementById('ox-workspace-add-blueprint')?.addEventListener('click', async () => {
+		const goal = window.prompt('Cel projektu (Intelligent Requirements wygeneruje blueprint):');
+		if (!goal || !goal.trim() || !ipcRenderer) return;
+		const node = document.getElementById('ox-blueprints-list');
+		if (node) node.innerHTML = '<div class="ox-activity-empty"><svg class="ox-icon" aria-hidden="true"><use href="#ox-i-file-text"/></svg><div>Generowanie blueprintu…</div></div>';
+		const r = await ipcRenderer.invoke('workspace:blueprint-generate', { goal: goal.trim() });
+		if (!r?.ok && node) {
+			node.innerHTML = `<div class="ox-activity-empty ox-status-dot bad" style="border-color: var(--ox-danger);"><div>Błąd: ${escapeHtml(String(r?.error || 'nieznany'))}</div></div>`;
+			return;
+		}
+		refreshWorkspaceBlueprints();
+	});
+
+	async function refreshWorkspaceSkills() {
+		const node = document.getElementById('ox-skills-list');
+		if (!node || !ipcRenderer) return;
+		try {
+			const r = await ipcRenderer.invoke('workspace:skills-snapshot');
+			const skills = Array.isArray(r?.skills) ? r.skills : [];
+			if (skills.length === 0) return;
+			node.innerHTML = skills.map(({ id, stats, confidence }) => {
+				const total = (stats.successCount || 0) + (stats.failureCount || 0);
+				const successRate = total > 0 ? Math.round((stats.successCount / total) * 100) : 0;
+				return `<div class="ox-workspace-card"><h4>${id}</h4><p>Sukces ${successRate}% · Pewność ${Math.round(confidence * 100)}% · Użycia ${stats.usageCount}</p></div>`;
+			}).join('');
+		} catch { /* keep empty state */ }
+	}
+	document.getElementById('ox-workspace-memory-refresh')?.addEventListener('click', refreshWorkspaceMemory);
+	document.getElementById('ox-workspace-knowledge-refresh')?.addEventListener('click', refreshWorkspaceKnowledge);
+	refreshWorkspaceMemory();
+	refreshWorkspaceKnowledge();
+	refreshWorkspaceSkills();
+	refreshWorkspaceProjects();
+	refreshWorkspaceBlueprints();
 
 	async function ensureMapWidget() {
 		if (!viewportMapCanvas) return null;
@@ -1066,14 +1503,16 @@ window.addEventListener('DOMContentLoaded', () => {
 		allowBackgroundWake: true,
 		voiceLanguage: voiceLanguageSelect?.value || (typeof navigator !== 'undefined' ? navigator.language : 'en-US') || 'en-US',
 		autoTts: true,
-		providerMode: 'assistantx-server',
+		providerMode: 'desktop-direct',
 		temporalAwareness: true,
 		proactiveReminders: true,
 		ambientAnnouncements: false,
 		dailySummary: false,
 		reminderVoiceStyle: 'neutral',
 		noiseSuppressionEnabled: true,
-		wakeWordSensitivity: 0.5,
+		contextAwarenessEnabled: true,
+		wakeWordSensitivity: DEFAULT_WAKE_WORD_SENSITIVITY,
+		wakeWordSensitivityPreset: DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 		micInputDeviceId: '',
 	};
 
@@ -1081,7 +1520,19 @@ window.addEventListener('DOMContentLoaded', () => {
 		try {
 			const raw = localStorage.getItem(JARVIS_SETTINGS_KEY);
 			if (!raw) return { ...defaultVoiceSettings };
-			return { ...defaultVoiceSettings, ...JSON.parse(raw) };
+			const parsed = JSON.parse(raw);
+			// One-time migration: 'assistantx-server' used to be the only default,
+			// requiring sign-in for STT/TTS even though most users never sign in
+			// to the desktop app itself. Now that 'desktop-direct' is the real
+			// default, drop a never-explicitly-changed stale value exactly once so
+			// existing installs pick up local-only voice without re-saving
+			// Settings. A deliberate later choice of 'assistantx-server' persists
+			// normally since this migration never runs a second time.
+			if (parsed.providerMode === 'assistantx-server' && !localStorage.getItem(PROVIDER_MODE_MIGRATED_KEY)) {
+				delete parsed.providerMode;
+			}
+			localStorage.setItem(PROVIDER_MODE_MIGRATED_KEY, '1');
+			return { ...defaultVoiceSettings, ...parsed };
 		} catch {
 			return { ...defaultVoiceSettings };
 		}
@@ -1110,6 +1561,10 @@ window.addEventListener('DOMContentLoaded', () => {
 	const MAX_TTS_AUDIO_QUEUE = 24;
 	let ttsAudioChunkPlaying = false;
 	let ttsAudioActiveStreamId = '';
+	// Barge-in: the currently-playing chunk's nodes, so a barge_in event can
+	// stop audible playback immediately instead of waiting for source.onended.
+	let activeTtsSource = null;
+	let activeTtsContext = null;
 	let voiceSettings = readVoiceSettings();
 	let desktopLocalServers = [];
 	let desktopLocalAssignment = {
@@ -1144,19 +1599,24 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (wakeWordPhraseInput) wakeWordPhraseInput.value = voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE;
 		if (allowBackgroundWakeToggle) allowBackgroundWakeToggle.checked = !!voiceSettings.allowBackgroundWake;
 		if (noiseSuppressionToggle) noiseSuppressionToggle.checked = voiceSettings.noiseSuppressionEnabled !== false;
+		if (contextAwarenessToggle) contextAwarenessToggle.checked = voiceSettings.contextAwarenessEnabled !== false;
 		if (wakeSensitivitySlider) {
 			const sensitivity = Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 				? Number(voiceSettings.wakeWordSensitivity)
-				: 0.5;
+				: DEFAULT_WAKE_WORD_SENSITIVITY;
 			wakeSensitivitySlider.value = String(Math.round(sensitivity * 100));
 			if (wakeSensitivityValueNode) wakeSensitivityValueNode.textContent = `${Math.round(sensitivity * 100)}%`;
+		}
+		if (wakeSensitivityPresetSelect) {
+			// "custom" (set when the Advanced slider is touched directly) has no
+			// matching <option> by design — the select just shows no selection,
+			// a harmless signal that a non-preset value is active.
+			wakeSensitivityPresetSelect.value = voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET;
 		}
 		if (micDeviceSelect && voiceSettings.micInputDeviceId !== undefined) {
 			micDeviceSelect.value = voiceSettings.micInputDeviceId || '';
 		}
 		if (voiceLanguageSelect && voiceSettings.voiceLanguage) voiceLanguageSelect.value = voiceSettings.voiceLanguage;
-		// 'desktop-direct' is not implemented in voice-gateway.js — silently migrate to the working default.
-		if (voiceSettings.providerMode === 'desktop-direct') voiceSettings.providerMode = 'assistantx-server';
 		if (voiceProviderModeSelect && voiceSettings.providerMode) voiceProviderModeSelect.value = voiceSettings.providerMode;
 		if (autoTtsToggle) autoTtsToggle.checked = Boolean(voiceSettings.autoTts);
 		if (temporalAwarenessToggle) temporalAwarenessToggle.checked = Boolean(voiceSettings.temporalAwareness);
@@ -1289,6 +1749,22 @@ window.addEventListener('DOMContentLoaded', () => {
 		setTtsPlaybackGate(false);
 	}
 
+	// Barge-in: the sidecar detected the user talking over Jarvis. Cut the
+	// currently-audible chunk immediately (not just stop queuing new ones —
+	// source.onended would otherwise let the in-flight chunk finish playing
+	// out loud for up to several seconds) and drop everything still queued.
+	function stopTtsPlaybackForBargeIn() {
+		try { activeTtsSource?.stop(0); } catch { /* already stopped/ended */ }
+		try { activeTtsContext?.close(); } catch { /* already closed */ }
+		activeTtsSource = null;
+		activeTtsContext = null;
+		ttsAudioChunkQueue.length = 0;
+		ttsAudioChunkPlaying = false;
+		speechPlaybackActive = false;
+		setVoiceVisualizer('listening');
+		setTtsPlaybackGate(false);
+	}
+
 	function playNextTtsChunk() {
 		if (ttsAudioChunkPlaying) return;
 		const next = ttsAudioChunkQueue.shift();
@@ -1309,9 +1785,19 @@ window.addEventListener('DOMContentLoaded', () => {
 				source.buffer = decoded;
 				source.connect(actx.destination);
 				speechPlaybackActive = true;
+				activeTtsSource = source;
+				activeTtsContext = actx;
 				setTtsPlaybackGate(true);
 				setVoiceVisualizer('speaking');
 				source.onended = () => {
+					// stopTtsPlaybackForBargeIn() already nulled activeTtsSource and
+					// handled the queue/visualizer/gate before calling source.stop(0)
+					// — this 'ended' event is just that stop() landing. Without this
+					// guard it would immediately overwrite the 'listening' state
+					// barge-in just set back to 'idle'.
+					if (activeTtsSource !== source) return;
+					activeTtsSource = null;
+					activeTtsContext = null;
 					ttsAudioChunkPlaying = false;
 					speechPlaybackActive = false;
 					if (ttsAudioChunkQueue.length === 0) {
@@ -1428,6 +1914,10 @@ window.addEventListener('DOMContentLoaded', () => {
 		fillLocalModelSelect(localCodeModelSelect, localAssignmentValue('codeModelId'));
 		fillLocalModelSelect(localExternalModelSelect, localAssignmentValue('externalApiModelId'));
 		fillLocalModelSelect(localVisionModelSelect, localAssignmentValue('visionModelId'));
+		// M5 — full 6-lane router selects.
+		fillLocalModelSelect(localCodeHeavyModelSelect, localAssignmentValue('codeHeavyModelId'));
+		fillLocalModelSelect(localReasoningModelSelect, localAssignmentValue('reasoningModelId'));
+		fillLocalModelSelect(localRouterModelSelect, localAssignmentValue('routerModelId'));
 		if (localPreferEnabledToggle) {
 			localPreferEnabledToggle.checked = Boolean(desktopLocalAssignment.preferLocalWhenAvailable);
 		}
@@ -1516,12 +2006,20 @@ window.addEventListener('DOMContentLoaded', () => {
 		const code = parseSelection(localCodeModelSelect?.value);
 		const external = parseSelection(localExternalModelSelect?.value);
 		const vision = parseSelection(localVisionModelSelect?.value);
-		const resolvedServerId = chat.serverId || code.serverId || external.serverId || vision.serverId || null;
+		// M5 — full 6-lane router selections.
+		const codeHeavy = parseSelection(localCodeHeavyModelSelect?.value);
+		const reasoning = parseSelection(localReasoningModelSelect?.value);
+		const router = parseSelection(localRouterModelSelect?.value);
+		const resolvedServerId = chat.serverId || code.serverId || external.serverId || vision.serverId
+			|| codeHeavy.serverId || reasoning.serverId || router.serverId || null;
 		const result = await localServerApi.setModelAssignment({
 			localModelAssignment: {
 				serverId: resolvedServerId,
 				chatModelId: chat.modelId,
 				codeModelId: code.modelId,
+				codeHeavyModelId: codeHeavy.modelId,
+				reasoningModelId: reasoning.modelId,
+				routerModelId: router.modelId,
 				externalApiModelId: external.modelId,
 				visionModelId: vision.modelId,
 			},
@@ -1534,6 +2032,27 @@ window.addEventListener('DOMContentLoaded', () => {
 		appendMessage(log, 'Local servers', 'Local model assignment saved.', 'system');
 		await loadLocalServersState();
 	});
+
+	// Idea #1 — Live waveform bars. Twelve <span>s under the orb that scale
+	// from the rms_level stream. We keep a small ring buffer of recent
+	// energies so the bars dance rather than all jumping together.
+	// NOTE: must be declared before setVoiceVisualizer('idle') below, since
+	// that call synchronously reaches applyVisualizerEnergy -> updateWaveform.
+	const waveformBars = Array.from(document.querySelectorAll('#voice-waveform span'));
+	const waveformHistory = new Array(waveformBars.length).fill(0);
+	function updateWaveform(energy) {
+		if (waveformBars.length === 0) return;
+		waveformHistory.shift();
+		waveformHistory.push(energy);
+		const peak = Math.max(0.05, ...waveformHistory);
+		for (let i = 0; i < waveformBars.length; i++) {
+			const value = waveformHistory[i];
+			const normalized = value / peak;
+			const px = 4 + Math.round(normalized * 22); // 4–26 px
+			waveformBars[i].style.height = `${px}px`;
+		}
+	}
+
 	setVoiceVisualizer('idle');
 	['mousemove', 'keydown', 'click', 'focus'].forEach((eventName) => {
 		window.addEventListener(eventName, () => touchAgentActivity(), { passive: true });
@@ -1558,24 +2077,6 @@ window.addEventListener('DOMContentLoaded', () => {
 		}, 10_000);
 	}
 
-	// Idea #1 — Live waveform bars. Twelve <span>s under the orb that scale
-	// from the rms_level stream. We keep a small ring buffer of recent
-	// energies so the bars dance rather than all jumping together.
-	const waveformBars = Array.from(document.querySelectorAll('#voice-waveform span'));
-	const waveformHistory = new Array(waveformBars.length).fill(0);
-	function updateWaveform(energy) {
-		if (waveformBars.length === 0) return;
-		waveformHistory.shift();
-		waveformHistory.push(energy);
-		const peak = Math.max(0.05, ...waveformHistory);
-		for (let i = 0; i < waveformBars.length; i++) {
-			const value = waveformHistory[i];
-			const normalized = value / peak;
-			const px = 4 + Math.round(normalized * 22); // 4–26 px
-			waveformBars[i].style.height = `${px}px`;
-		}
-	}
-
 	function applyVisualizerEnergy(nextEnergy = 0) {
 		if (!voiceVisualizer) return;
 		const clamped = Math.max(0, Math.min(1, Number(nextEnergy) || 0));
@@ -1587,6 +2088,21 @@ window.addEventListener('DOMContentLoaded', () => {
 	function setVoiceVisualizer(state, options = {}) {
 		if (!voiceVisualizer) return;
 		voiceVisualizer.classList.remove('listening', 'speaking', 'thinking');
+		// Round-2: orb markup is now the VEGA star — flip data-vega-state on
+		// EVERY orb in the DOM (#voice-visualizer + Activity Panel + hero)
+		// so the cyan/purple/green/wake animations stay in sync everywhere.
+		try {
+			const vegaMap = {
+				listening: 'listening',
+				speaking: 'speaking',
+				thinking: 'processing',
+				idle: 'idle',
+			};
+			const vegaState = vegaMap[state] || 'idle';
+			document.querySelectorAll('.vega-orb').forEach((el) => {
+				el.setAttribute('data-vega-state', vegaState);
+			});
+		} catch { /* DOM unavailable */ }
 		const statusEl = document.getElementById('voice-orb-status');
 		const setStatus = (text) => { if (statusEl) statusEl.textContent = text; };
 		// Mirror state into the palette context signals so predictive
@@ -1604,7 +2120,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (state === 'listening') {
 			voiceVisualizer.classList.add('listening');
 			setAgentState(AGENT_STATE.LISTENING);
-			setStatus('Listening…');
+			setStatus('LISTENING · Słucham…');
 			setWakeChipState('listening', 'Listening — speak now');
 			pushTaskStep('VOICE', 'Listening to microphone…', 'active');
 			touchAgentActivity();
@@ -1613,7 +2129,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (state === 'speaking') {
 			voiceVisualizer.classList.add('speaking');
 			setAgentState(AGENT_STATE.SPEAKING);
-			setStatus('Speaking…');
+			setStatus('SPEAKING · Odpowiadam…');
 			pushTaskStep('TTS', 'Synthesizing audio…', 'active');
 			touchAgentActivity();
 			return;
@@ -1621,13 +2137,13 @@ window.addEventListener('DOMContentLoaded', () => {
 		if (state === 'thinking') {
 			voiceVisualizer.classList.add('thinking');
 			setAgentState(AGENT_STATE.THINKING);
-			setStatus('Thinking…');
+			setStatus('PROCESSING · Myślę…');
 			pushTaskStep('REASON', 'Reasoning over context…', 'active');
 			touchAgentActivity();
 			return;
 		}
 		setAgentState(AGENT_STATE.IDLE);
-		setStatus('');
+		setStatus('IDLE · Wake word');
 		// Restore wake-listening label when the orb returns to idle.
 		if (voiceSettings?.sttEnabled && voiceSettings?.wakeWordEnabled) {
 			setWakeChipState(null, `Say "${voiceSettings.wakeWordPhrase || 'Hey Jarvis'}"`);
@@ -2270,13 +2786,15 @@ window.addEventListener('DOMContentLoaded', () => {
 				wakeWordPhrase: wakeWordPhraseInput?.value?.trim() || DEFAULT_JARVIS_WAKE_PHRASE,
 				allowBackgroundWake: Boolean(allowBackgroundWakeToggle?.checked),
 				noiseSuppressionEnabled: noiseSuppressionToggle ? Boolean(noiseSuppressionToggle.checked) : voiceSettings.noiseSuppressionEnabled !== false,
+				contextAwarenessEnabled: contextAwarenessToggle ? Boolean(contextAwarenessToggle.checked) : voiceSettings.contextAwarenessEnabled !== false,
 				wakeWordSensitivity: wakeSensitivitySlider
 					? Math.min(1, Math.max(0, Number(wakeSensitivitySlider.value) / 100))
 					: (Number.isFinite(Number(voiceSettings.wakeWordSensitivity)) ? Number(voiceSettings.wakeWordSensitivity) : 0.5),
+				wakeWordSensitivityPreset: wakeSensitivityPresetSelect?.value || voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 				micInputDeviceId: micDeviceSelect ? String(micDeviceSelect.value || '') : (voiceSettings.micInputDeviceId || ''),
 				voiceLanguage: getVoiceLanguage(),
 				autoTts: Boolean(autoTtsToggle?.checked),
-				providerMode: voiceProviderModeSelect?.value || 'assistantx-server',
+				providerMode: voiceProviderModeSelect?.value || 'desktop-direct',
 				temporalAwareness: Boolean(temporalAwarenessToggle?.checked),
 				proactiveReminders: Boolean(proactiveRemindersToggle?.checked),
 				ambientAnnouncements: Boolean(ambientAnnouncementsToggle?.checked),
@@ -2320,6 +2838,14 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 	}
 
+	if (wakeSensitivityPresetSelect) {
+		wakeSensitivityPresetSelect.addEventListener('change', () => {
+			const preset = wakeSensitivityPresetSelect.value || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET;
+			applyVoiceSettings({ ...voiceSettings, wakeWordSensitivityPreset: preset });
+			syncSidecarVoiceSettings();
+		});
+	}
+
 	if (wakeSensitivitySlider) {
 		wakeSensitivitySlider.addEventListener('input', () => {
 			if (wakeSensitivityValueNode) {
@@ -2328,7 +2854,12 @@ window.addEventListener('DOMContentLoaded', () => {
 		});
 		wakeSensitivitySlider.addEventListener('change', () => {
 			const sensitivity = Math.min(1, Math.max(0, Number(wakeSensitivitySlider.value) / 100));
-			applyVoiceSettings({ ...voiceSettings, wakeWordSensitivity: sensitivity });
+			// Touching the Advanced slider directly switches away from the
+			// preset system — 'custom' has no matching preset server-side, so
+			// the backend leaves the numeric threshold just set here in
+			// effect instead of immediately overriding it back (see
+			// SENSITIVITY_PRESETS / set_sensitivity_preset in detector.py).
+			applyVoiceSettings({ ...voiceSettings, wakeWordSensitivity: sensitivity, wakeWordSensitivityPreset: 'custom' });
 			syncSidecarVoiceSettings();
 		});
 	}
@@ -2336,6 +2867,13 @@ window.addEventListener('DOMContentLoaded', () => {
 	if (noiseSuppressionToggle) {
 		noiseSuppressionToggle.addEventListener('change', () => {
 			applyVoiceSettings({ ...voiceSettings, noiseSuppressionEnabled: Boolean(noiseSuppressionToggle.checked) });
+			syncSidecarVoiceSettings();
+		});
+	}
+
+	if (contextAwarenessToggle) {
+		contextAwarenessToggle.addEventListener('change', () => {
+			applyVoiceSettings({ ...voiceSettings, contextAwarenessEnabled: Boolean(contextAwarenessToggle.checked) });
 			syncSidecarVoiceSettings();
 		});
 	}
@@ -2452,7 +2990,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 	if (voiceProviderModeSelect) {
 		voiceProviderModeSelect.addEventListener('change', () => {
-			applyVoiceSettings({ ...voiceSettings, providerMode: voiceProviderModeSelect.value || 'assistantx-server' });
+			applyVoiceSettings({ ...voiceSettings, providerMode: voiceProviderModeSelect.value || 'desktop-direct' });
 			syncSidecarVoiceSettings();
 		});
 	}
@@ -2587,9 +3125,11 @@ window.addEventListener('DOMContentLoaded', () => {
 				nlpEnabled: false,
 				vadEnabled: true,
 				noiseSuppressionEnabled: voiceSettings.noiseSuppressionEnabled !== false,
+				contextAwarenessEnabled: voiceSettings.contextAwarenessEnabled !== false,
 				wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 					? Number(voiceSettings.wakeWordSensitivity)
-					: 0.5,
+					: DEFAULT_WAKE_WORD_SENSITIVITY,
+				wakeWordSensitivityPreset: voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 				sampleRate: 16000,
 			};
 			sidecar.configure(configuration);
@@ -2598,7 +3138,7 @@ window.addEventListener('DOMContentLoaded', () => {
 			}
 			voiceGateway?.configure({
 				...configuration,
-				providerMode: voiceSettings.providerMode || 'assistantx-server',
+				providerMode: voiceSettings.providerMode || 'desktop-direct',
 				sttModel: voiceSettings.sttModel,
 				persona: voiceSettings.ttsVoiceId,
 				ttsBackend: voiceSettings.ttsBackend || 'kokoro-local',
@@ -2620,7 +3160,12 @@ window.addEventListener('DOMContentLoaded', () => {
 					})
 					.catch((err) => {
 						const msg = String(err?.message || err || 'unknown');
-						setWakeChipState('error', /permission|notallowed/i.test(msg) ? 'Mic permission denied' : 'Mic unavailable');
+						const chipLabel = err?.code === 'permission-denied'
+							? 'Mic permission denied'
+							: err?.code === 'no-device'
+								? 'No microphone found'
+								: 'Mic unavailable';
+						setWakeChipState('error', chipLabel);
 						pushTaskStep('MIC', `Always-on listening failed: ${msg}`, 'error');
 						document.body.classList.remove('mic-active');
 					});
@@ -2674,6 +3219,19 @@ window.addEventListener('DOMContentLoaded', () => {
 				sidecarManualListening = false;
 				setVoiceToTextUiActive(false);
 			}
+			// Fix (e) — mic capture errors that land here mid-session (most
+			// notably device-disconnected, fired by sidecar-bridge.js's
+			// track.onended handler) leave the wake chip's "Say Hey Jarvis"
+			// label stuck and active even though capture already stopped.
+			if (['permission-denied', 'no-device', 'device-disconnected'].includes(error?.code)) {
+				const chipLabel = error.code === 'permission-denied'
+					? 'Mic permission denied'
+					: error.code === 'no-device'
+						? 'No microphone found'
+						: 'Microphone disconnected';
+				setWakeChipState('error', chipLabel);
+				document.body.classList.remove('mic-active');
+			}
 		});
 
 		sidecar.on('status', (payload) => {
@@ -2700,6 +3258,18 @@ window.addEventListener('DOMContentLoaded', () => {
 			appendMessage(log, 'AI Sidecar', `Wake word detected — listening…`);
 			pushTaskStep('WAKE', 'Wake word "Hey Jarvis" detected', 'done');
 			setVoiceVisualizer('listening');
+			setWakeChipState('listening', 'Listening — speak now');
+			(voiceGateway || sidecar).setListeningForCommand(true);
+		});
+
+		// Barge-in: the sidecar detected the user talking over Jarvis (see
+		// ai-agent/main.py _check_barge_in) and already flipped its own
+		// playback_active/listening state — cut the audible TTS chunk on this
+		// side immediately and start capturing their command, same as a
+		// wake-word trigger, but without needing to repeat the wake word.
+		sidecar.on('barge_in', () => {
+			stopTtsPlaybackForBargeIn();
+			pushTaskStep('VOICE', 'Barge-in — interrupted Jarvis, listening…', 'done');
 			setWakeChipState('listening', 'Listening — speak now');
 			(voiceGateway || sidecar).setListeningForCommand(true);
 		});
@@ -2898,6 +3468,29 @@ window.addEventListener('DOMContentLoaded', () => {
 				setVoiceVisualizer('listening');
 			}
 		});
+
+		// Round-2: wake_word from the sidecar flips the orb into "listening"
+		// so the user gets visual feedback the instant "Hey Jarvis" is heard.
+		// The audio capture flow (configure → startAudioCapture) is already
+		// wired separately; this handler is purely the UI state transition.
+		voiceGateway?.on('wake_word', (payload) => {
+			setAgentState(AGENT_STATE.LISTENING);
+			setVoiceVisualizer('listening');
+			// Round-2: flip the VEGA orb (Activity Panel) into "wake" briefly,
+			// then "listening" once STT actually starts streaming.
+			setVegaOrbState('wake');
+			setTimeout(() => setVegaOrbState('listening'), 350);
+			try {
+				if (typeof ipcRenderer !== 'undefined' && ipcRenderer?.send) {
+					// echo into diagnostics terminal via the same path as router/compression
+					const line = `[wake   ] phrase="${payload?.phrase || 'hey jarvis'}"`;
+					if (typeof appendDiagLine === 'function') {
+						appendDiagLine(diagTerminal, Date.now(), line, 'ok');
+						appendDiagLine(activityLogNode, Date.now(), line, 'ok');
+					}
+				}
+			} catch { /* diagnostics terminal not mounted yet */ }
+		});
 		voiceGateway?.on('route', ({ mode }) => {
 			if (mode) appendMessage(log, 'Voice route', `Routing via ${mode}`, 'system');
 		});
@@ -2907,7 +3500,22 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (scaled > 0.01) touchAgentActivity();
 		});
 		voiceGateway?.on('fallback_required', () => {
+			// Fix (b) — this used to only log; the browser-speech fallback it
+			// announced never actually started, so STT silently went dark
+			// whenever the sidecar route failed. startBrowserWakeFallback()
+			// is the same function the sidecar 'disconnected'/'unavailable'
+			// handlers already use, so this and those paths converge on one
+			// fallback implementation instead of duplicating it.
 			appendMessage(log, 'Voice gateway', 'Falling back to browser speech APIs.', 'system');
+			startBrowserWakeFallback();
+		});
+		// VoiceGateway extends EventEmitter — Node throws an unhandled exception
+		// for any 'error' emission with zero listeners. _handleAudioSegment's
+		// catch block emits 'error' before 'fallback_required', so without this
+		// listener the throw happens first and the browser-speech fallback
+		// above never even runs.
+		voiceGateway?.on('error', (error) => {
+			appendMessage(log, 'Voice gateway', formatVoiceCaptureError(error), 'error');
 		});
 		if (ipcRenderer?.invoke) {
 			ipcRenderer.invoke('get-sidecar-status')
@@ -2938,15 +3546,17 @@ window.addEventListener('DOMContentLoaded', () => {
 			nlpEnabled: false,
 			vadEnabled: true,
 			noiseSuppressionEnabled: voiceSettings.noiseSuppressionEnabled !== false,
+			contextAwarenessEnabled: voiceSettings.contextAwarenessEnabled !== false,
 			wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
 				? Number(voiceSettings.wakeWordSensitivity)
 				: 0.5,
+			wakeWordSensitivityPreset: voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 		});
 		if (voiceSettings.micInputDeviceId) {
 			sidecar.setInputDevice?.(voiceSettings.micInputDeviceId);
 		}
 		voiceGateway?.configure({
-			providerMode: voiceSettings.providerMode || 'assistantx-server',
+			providerMode: voiceSettings.providerMode || 'desktop-direct',
 			wakeWordPhrase: voiceSettings.wakeWordPhrase || DEFAULT_JARVIS_WAKE_PHRASE,
 			language: (voiceSettings.voiceLanguage || 'en-US').split('-')[0],
 			wakeWordEnabled: Boolean(voiceSettings.wakeWordEnabled),
@@ -2955,6 +3565,15 @@ window.addEventListener('DOMContentLoaded', () => {
 			ttsBackend: voiceSettings.ttsBackend || 'kokoro-local',
 			ttsModel: voiceSettings.ttsModel || (isLocalTtsBackend(voiceSettings.ttsBackend) ? DEFAULT_LOCAL_TTS_MODEL : DEFAULT_CLOUD_TTS_MODEL),
 			fallbackToBrowserSpeech: true,
+			// Must stay in sync with the sidecar.configure() call above — voiceGateway
+			// caches these in its own _settings and re-forwards them on every call,
+			// so omitting them here would resend a stale cached value and silently
+			// undo whatever was just set above.
+			contextAwarenessEnabled: voiceSettings.contextAwarenessEnabled !== false,
+			wakeWordSensitivity: Number.isFinite(Number(voiceSettings.wakeWordSensitivity))
+				? Number(voiceSettings.wakeWordSensitivity)
+				: 0.5,
+			wakeWordSensitivityPreset: voiceSettings.wakeWordSensitivityPreset || DEFAULT_WAKE_WORD_SENSITIVITY_PRESET,
 		});
 		if (voiceSettings.wakeWordEnabled && !sidecar.isCapturing()) {
 			(voiceGateway || sidecar).startAudioCapture().catch(() => null);
@@ -2973,6 +3592,19 @@ window.addEventListener('DOMContentLoaded', () => {
 	}
 
 	function formatVoiceCaptureError(error) {
+		// Fix (e) — prefer the structured code (set by sidecar-bridge.js /
+		// voice-gateway.js) over message-sniffing, which broke whenever an
+		// error's wording didn't match the keywords below.
+		switch (error?.code) {
+			case 'permission-denied':
+				return 'Microphone permission is blocked. Enable microphone access for Jarvis Desktop in system privacy settings.';
+			case 'no-device':
+				return 'No microphone device was found. Connect a microphone and try again.';
+			case 'device-disconnected':
+				return 'Microphone was disconnected during recording. Reconnect it and try again.';
+			default:
+				break;
+		}
 		const message = String(error?.message || '').toLowerCase();
 		if (message.includes('notallowed') || message.includes('permission') || message.includes('denied')) {
 			return 'Microphone permission is blocked. Enable microphone access for Jarvis Desktop in system privacy settings.';
@@ -3160,6 +3792,167 @@ window.addEventListener('DOMContentLoaded', () => {
 				? `Auto-heal: ${payload.subsystem} recovered`
 				: `Auto-heal: ${payload.subsystem} failed — ${payload.error || 'unknown'}`;
 			pushTaskStep('HEAL', msg, status);
+		});
+
+		// M6 — Diagnostics terminal stream. Subscribers below fan health
+		// events into (a) the Settings → Zaawansowane terminal panel and
+		// (b) the Activity Panel's "Log wykonania" segment. The status
+		// cards in Diagnostyka track each subsystem's most recent state.
+		const diagTerminal = document.getElementById('ox-diag-terminal');
+		const activityLogNode = document.getElementById('ox-activity-log');
+		const DIAG_LINE_CAP = 300;
+		function fmtTime(ts) {
+			const d = ts ? new Date(ts) : new Date();
+			const pad = (n) => String(n).padStart(2, '0');
+			return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+		}
+		function appendDiagLine(target, ts, message, level) {
+			if (!target) return;
+			// Drop the "brak wpisów" empty state on first real entry.
+			target.querySelectorAll('.ox-activity-empty').forEach((node) => node.remove());
+			const row = document.createElement('div');
+			row.className = `ox-log-line${level ? ` ${level}` : ''}`;
+			const time = document.createElement('span');
+			time.className = 'ox-log-time';
+			time.textContent = fmtTime(ts);
+			const text = document.createElement('span');
+			text.textContent = message;
+			row.appendChild(time);
+			row.appendChild(text);
+			target.appendChild(row);
+			while (target.children.length > DIAG_LINE_CAP) target.removeChild(target.firstChild);
+			target.scrollTop = target.scrollHeight;
+		}
+		function paintDiagCard(subsystem, status, detail) {
+			const card = document.querySelector(`.ox-diag-card[data-ox-subsystem="${subsystem}"]`);
+			if (!card) return;
+			const dot = card.querySelector('[data-ox-status-dot]');
+			const detailNode = card.querySelector('[data-ox-status-detail]');
+			if (dot) {
+				dot.classList.remove('ok', 'warn', 'bad', 'pulse');
+				if (status === 'healthy') dot.classList.add('ok');
+				else if (status === 'degraded') dot.classList.add('warn');
+				else if (status === 'unavailable') dot.classList.add('bad', 'pulse');
+			}
+			if (detailNode) detailNode.textContent = detail || status || 'unknown';
+		}
+		function diagEmit(payload, level) {
+			const sub = payload?.subsystem || '?';
+			const status = payload?.status || '?';
+			const detail = payload?.detail ? ` — ${payload.detail}` : '';
+			const line = `[${sub.padEnd(7)}] ${status}${detail}`;
+			appendDiagLine(diagTerminal, payload?.timestamp, line, level);
+			appendDiagLine(activityLogNode, payload?.timestamp, line, level);
+			if (payload?.subsystem) paintDiagCard(payload.subsystem, status, payload?.detail);
+		}
+		ipcRenderer.on('health:pulse', (payload) => {
+			const level = payload?.status === 'unavailable' ? 'bad'
+				: payload?.status === 'degraded' ? 'warn'
+				: payload?.status === 'healthy' ? 'ok'
+				: null;
+			diagEmit(payload, level);
+		});
+		ipcRenderer.on('health:heal-attempted', (payload) => {
+			const line = `[heal   ] start ${payload?.subsystem} (was ${payload?.status})`;
+			appendDiagLine(diagTerminal, payload?.timestamp, line, 'warn');
+			appendDiagLine(activityLogNode, payload?.timestamp, line, 'warn');
+		});
+		ipcRenderer.on('health:heal-outcome', (payload) => {
+			const ok = Boolean(payload?.ok);
+			const line = ok
+				? `[heal   ] ok    ${payload?.subsystem}`
+				: `[heal   ] fail  ${payload?.subsystem} — ${payload?.error || 'unknown'}`;
+			appendDiagLine(diagTerminal, payload?.timestamp, line, ok ? 'ok' : 'bad');
+			appendDiagLine(activityLogNode, payload?.timestamp, line, ok ? 'ok' : 'bad');
+		});
+		// Round-2: route decisions + context compression events. Every router
+		// dispatch + every context-compression run prints one line here so the
+		// user can see "what model handled this" and "how much we compressed."
+		ipcRenderer.on('router:decision', (payload) => {
+			const intent = String(payload?.intent || '?');
+			const lane = String(payload?.lane || '?');
+			const model = String(payload?.model || '?');
+			const via = String(payload?.via || '?');
+			const confidence = payload?.confidence != null ? ` conf=${Number(payload.confidence).toFixed(2)}` : '';
+			const line = `[route  ] intent=${intent} lane=${lane} model=${model} via=${via}${confidence}`;
+			appendDiagLine(diagTerminal, payload?.ts || Date.now(), line, 'ok');
+			appendDiagLine(activityLogNode, payload?.ts || Date.now(), line);
+		});
+		ipcRenderer.on('context:compressed', (payload) => {
+			const tin = Number(payload?.tokensIn || 0);
+			const tout = Number(payload?.tokensOut || 0);
+			const dropped = Number(payload?.droppedMessages || 0);
+			const line = `[compress] ${tin} → ${tout} tokens (dropped ${dropped} msgs in ${payload?.runtimeMs || 0}ms)`;
+			appendDiagLine(diagTerminal, Date.now(), line, 'warn');
+			appendDiagLine(activityLogNode, Date.now(), line, 'warn');
+		});
+		// Phase 1 LOCK LIST — Basic Review Pipeline. Every chat response runs
+		// through a lightweight verification pass (output-sanity + syntax/
+		// patch/import checks where applicable); failures surface here instead
+		// of silently passing through, without requiring the full Runtime V2
+		// multi-agent orchestrator (explicitly out of scope for Phase 1).
+		ipcRenderer.on('review:result', (payload) => {
+			const ok = Boolean(payload?.ok);
+			const line = ok
+				? `[review ] ok    checks=${(payload?.outcomes || []).length}`
+				: `[review ] fail  ${payload?.failedCheck || '?'} — ${payload?.reason || 'unknown'}`;
+			appendDiagLine(diagTerminal, Date.now(), line, ok ? 'ok' : 'bad');
+			appendDiagLine(activityLogNode, Date.now(), line, ok ? 'ok' : 'bad');
+		});
+		// Jarvis Core #9 — Reality Check Engine / Contradiction Detector /
+		// Simulation Engine preflight warnings.
+		ipcRenderer.on('reality-check:result', (payload) => {
+			const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+			warnings.forEach((w) => {
+				appendDiagLine(diagTerminal, Date.now(), `[reality] ${w.type} — ${w.message}`, 'warn');
+				appendDiagLine(activityLogNode, Date.now(), `[reality] ${w.message}`, 'warn');
+			});
+		});
+		// Jarvis Core #15 — Decision Context Layer + Executive Decision
+		// Engine final verdict for this turn.
+		ipcRenderer.on('decision-context:result', (payload) => {
+			const action = String(payload?.action || 'proceed');
+			const level = action === 'flag-for-review' ? 'bad' : action === 'proceed-with-warning' ? 'warn' : 'ok';
+			const conf = payload?.confidence != null ? Number(payload.confidence).toFixed(2) : '?';
+			const line = `[decide ] mode=${payload?.mode || '?'} conf=${conf} action=${action}`;
+			appendDiagLine(diagTerminal, Date.now(), line, level);
+			appendDiagLine(activityLogNode, Date.now(), line, level);
+		});
+		// Jarvis Core #13 — Self Diagnostic Engine periodic aggregated report.
+		ipcRenderer.on('self-diagnostic:report', (payload) => {
+			const status = String(payload?.status || 'healthy');
+			const level = status === 'unhealthy' ? 'bad' : status === 'degraded' ? 'warn' : 'ok';
+			const line = `[self   ] status=${status} score=${payload?.score ?? '?'} reviewFailRate=${payload?.reviewFailRate ?? '?'}`;
+			appendDiagLine(diagTerminal, Date.now(), line, level);
+		});
+
+		// Hydrate the diagnostics cards on first paint with whatever the
+		// observer already has (in case the user lands on the panel after
+		// pulses have already fired).
+		ipcRenderer.invoke('health:snapshot').then((snap) => {
+			Object.entries(snap?.subsystems || {}).forEach(([sub, state]) => paintDiagCard(sub, state.status));
+		}).catch(() => null);
+
+		document.getElementById('ox-diag-restart-sidecar')?.addEventListener('click', async () => {
+			appendDiagLine(diagTerminal, Date.now(), '[user   ] restart-sidecar requested', 'warn');
+			try {
+				const r = await ipcRenderer.invoke('restart-sidecar');
+				appendDiagLine(diagTerminal, Date.now(), `[user   ] restart-sidecar → ${JSON.stringify(r || { ok: true })}`, 'ok');
+			} catch (err) {
+				appendDiagLine(diagTerminal, Date.now(), `[user   ] restart-sidecar failed: ${err?.message || err}`, 'bad');
+			}
+		});
+		document.getElementById('ox-diag-snapshot')?.addEventListener('click', async () => {
+			try {
+				const snap = await ipcRenderer.invoke('health:snapshot');
+				appendDiagLine(diagTerminal, Date.now(), `[snap   ] ${JSON.stringify(snap?.subsystems || {})}`, 'ok');
+			} catch (err) {
+				appendDiagLine(diagTerminal, Date.now(), `[snap   ] failed: ${err?.message || err}`, 'bad');
+			}
+		});
+		document.getElementById('ox-diag-clear')?.addEventListener('click', () => {
+			if (diagTerminal) diagTerminal.innerHTML = '';
+			appendDiagLine(diagTerminal, Date.now(), '[user   ] terminal cleared');
 		});
 	}
 
@@ -3411,6 +4204,20 @@ window.addEventListener('DOMContentLoaded', () => {
 				}
 				return;
 			}
+			if (parsed.type === 'ai_stream_token') {
+				// Per-token event from the live model stream (backend.js
+				// bindAiRouteStreamingEvents) — fires once per token, dozens of
+				// times per response. There's no live-typing UI consuming this
+				// yet, so without this early return it fell through to the
+				// generic fallback below, which has no `summary`/`text` field to
+				// read and JSON.stringify()'d the whole raw event into its own
+				// chat bubble for every single token (the reported "streaming
+				// isn't really working" JSON spam). The full response still
+				// arrives as one clean message via `command_result` below once
+				// it's complete; TTS audio streams progressively regardless via
+				// ai_stream_segment.
+				return;
+			}
 			if (parsed.type === 'ai_stream_segment') {
 				const streamId = String(parsed.streamId || '').trim();
 				const segment = String(parsed.segment || '').trim();
@@ -3481,7 +4288,11 @@ window.addEventListener('DOMContentLoaded', () => {
 			if (accountLoginButton) accountLoginButton.textContent = '🔓 Sign out';
 			if (accountSyncButton) accountSyncButton.disabled = false;
 		} else {
-			if (accountStatusNode) accountStatusNode.textContent = 'Not signed in';
+			// Sign-in is optional — local engine mode (Ollama) runs fully signed
+			// out. Only cloud sync / cloud-routed models need an account, so say
+			// so here instead of leaving a bare "Not signed in" that reads as a
+			// hard requirement.
+			if (accountStatusNode) accountStatusNode.textContent = 'Not signed in (optional for local models)';
 			if (accountBadge) accountBadge.textContent = 'AssistantX AI Agent';
 			if (accountLoginButton) accountLoginButton.textContent = '🔑 Sign in';
 			if (accountSyncButton) accountSyncButton.disabled = true;

@@ -22,6 +22,7 @@ const {
   pickBestFreeModel,
 } = require('../ai/free-model-catalog');
 const { createByokKeyStore, normalizeProvider } = require('../ai/byok-key-store');
+const { refreshSessionIfNeeded } = require('../../accounts');
 
 const byokKeyStore = createByokKeyStore();
 
@@ -399,7 +400,14 @@ function createMainIpcHandlers(deps) {
           'User-Agent': `JarvisDesktop/${app.getVersion()} Electron`,
           Origin: endpointUrl.origin,
         };
-        const token = validateString(body.token, { allowEmpty: true, maxLen: 5000 });
+        // The renderer/preload's own session cache is a separate, never-
+        // refreshed process-local copy (preload never calls loadSession()),
+        // so body.token is structurally stale/empty. The main process holds
+        // the live, periodically-refreshed session — source the bearer
+        // token from there, falling back to the renderer-supplied one only
+        // if main has no session of its own.
+        const liveSession = await refreshSessionIfNeeded({ reason: 'jarvis-ai-request' }).catch(() => null);
+        const token = liveSession?.accessToken || validateString(body.token, { allowEmpty: true, maxLen: 5000 });
         if (token) requestHeaders.Authorization = `Bearer ${token}`;
         const response = await fetch(endpoint, {
           method: 'POST',
@@ -637,6 +645,12 @@ function createMainIpcHandlers(deps) {
     },
     'server:get-runtime-status': () => serverGetRuntimeStatus(),
     'server:set-permission-level': async (_event, payload) => {
+      // Clicking Domyślnie/Auto dostęp/Pełny dostęp in the UI IS the user's
+      // explicit, in-the-moment consent for this action — grant() was never
+      // called anywhere in the codebase, so this 'high'-risk gate permanently
+      // denied the one control that exists specifically to let the user make
+      // this choice. Grant before authorizing so the click actually works.
+      permissions.grant('server:set-permission-level');
       const auth = await permissions.authorize('server:set-permission-level');
       if (!auth.allowed) return denied('server:set-permission-level', auth.reason);
       const body = validatePlainObject(payload) || {};

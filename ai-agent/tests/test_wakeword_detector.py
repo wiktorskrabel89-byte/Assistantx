@@ -146,6 +146,32 @@ class SensitivityTests(unittest.TestCase):
         self.assertAlmostEqual(detector.threshold, 0.5)
 
 
+class SensitivityPresetTests(unittest.TestCase):
+    def test_known_presets_map_to_documented_thresholds(self):
+        from wakeword.detector import SENSITIVITY_PRESETS
+        detector = WakeWordDetector(model=FakeOwwModel([{}]))
+        for name, expected in SENSITIVITY_PRESETS.items():
+            self.assertTrue(detector.set_sensitivity_preset(name))
+            self.assertAlmostEqual(detector.threshold, expected)
+            self.assertEqual(detector.sensitivity_preset, name)
+
+    def test_unknown_preset_is_a_no_op(self):
+        detector = WakeWordDetector(model=FakeOwwModel([{}]), threshold=0.42)
+        self.assertFalse(detector.set_sensitivity_preset("ultra-mega-eager"))
+        self.assertAlmostEqual(detector.threshold, 0.42)
+
+    def test_no_preset_is_ever_below_the_never_ship_floor(self):
+        # Spec: never ship a preset at/below 0.60 — too many false activations.
+        from wakeword.detector import SENSITIVITY_PRESETS
+        for value in SENSITIVITY_PRESETS.values():
+            self.assertGreaterEqual(value, 0.75)
+
+    def test_preset_name_is_case_and_whitespace_insensitive(self):
+        detector = WakeWordDetector(model=FakeOwwModel([{}]))
+        self.assertTrue(detector.set_sensitivity_preset("  STRICT  "))
+        self.assertAlmostEqual(detector.threshold, 0.90)
+
+
 class DegradedModeTests(unittest.TestCase):
     def test_unavailable_detector_never_triggers(self):
         detector = WakeWordDetector(model=None, download_if_missing=False, model_names=["definitely-not-a-model"])

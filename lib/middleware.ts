@@ -26,9 +26,8 @@ const PUBLIC_UPDATER_PATH_PREFIXES = [
   '/beta/mac/',
   '/beta/android/',
 ]
-const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support', '/demo', '/waitlist']
-const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/support', '/demo', '/waitlist']
-const WAITLIST_SUBDOMAIN_PREFIX = 'assistantx-waitlist.'
+const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/support', '/demo', '/roadmap', '/pricing']
+const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/support', '/demo', '/roadmap', '/pricing']
 const PUBLIC_UPDATER_FILE_PATTERN =
   /(?:^|\/)(?:latest(?:-[^/]+)?\.yml(?:\.sig)?|release-notes\.json|[^/]+\.(?:exe|nupkg|dmg|appimage|apk|blockmap))$/i
 
@@ -110,9 +109,13 @@ export async function updateSession(request: NextRequest) {
   const nonce = btoa(String.fromCharCode(...nonceBytes))
   const csp = buildCsp(nonce)
   const pathname = request.nextUrl.pathname
-  // Visiting the waitlist subdomain's root serves the dedicated /waitlist
-  // landing page instead of the main PublicHome/WorkspaceHome.
-  const isWaitlistSubdomainRoot = pathname === '/' && isWaitlistSubdomainHost(request.headers.get('host'))
+
+  // The waitlist lives at the site root; keep old /waitlist links working.
+  if (pathname === '/waitlist') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    return NextResponse.redirect(url, 308)
+  }
   const existingLangCookie = request.cookies.get(UI_LANGUAGE_COOKIE_NAME)?.value ?? null
   const detectedUiLanguage = detectPreferredPublicLanguage({
     existingCookie: existingLangCookie,

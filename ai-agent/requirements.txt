@@ -5,7 +5,13 @@ websockets>=12.0
 # Wake word detection
 openwakeword>=0.6.0
 
-# Speech-to-text (Parakeet ONNX local CPU path)
+# Speech-to-text — faster-whisper (CTranslate2) is the preferred local CPU
+# path; main.py's _get_stt_engine() already prefers it over the ONNX
+# Parakeet fallback below whenever it's importable, no code change needed.
+faster-whisper>=1.0.0
+
+# Speech-to-text (Parakeet ONNX local CPU path — fallback if faster-whisper
+# can't load on this machine)
 onnxruntime>=1.18.0
 huggingface_hub>=0.23.0
 
@@ -38,3 +44,21 @@ GitPython>=3.1.43
 
 # Cloud AI providers (cloud engine mode: STT + TTS via OpenAI API)
 openai>=1.30.0
+
+# Context-awareness (Phase 2 voice-activation upgrade): detects whether a
+# known media process (browser/Spotify/Discord) is actively playing audio,
+# so a borderline wake-word candidate can be treated as a likely false
+# trigger. Windows-only (WASAPI session enumeration); main.py's
+# AudioSessionProbe degrades to "unavailable" everywhere else.
+pycaw>=20230407; sys_platform == 'win32'
+
+# Each requirement above installs via its own separate `pip install` call
+# (see ensure-python-deps.js's comment on why), so pip never resolves one
+# consistent dependency graph across the whole file — installing
+# sentence-transformers independently bumps tokenizers past the version
+# transformers (pulled in by kokoro, above) actually allows. Verified live:
+# this breaks `import kokoro` with "tokenizers==0.23.1 is required
+# <=0.23.0" — Kokoro TTS silently dead with no error surfaced anywhere
+# except that exact ImportError. Keeping this pin LAST in the file means
+# it installs after everything else and wins regardless of install order.
+tokenizers<=0.23.0

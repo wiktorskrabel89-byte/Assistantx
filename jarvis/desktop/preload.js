@@ -111,6 +111,18 @@ const ALLOWED_INVOKE = new Set([
   'vision:capture-screen',
   'memory:list-recent',
   'memory:save',
+  'workspace:memory-snapshot',
+  'workspace:knowledge-snapshot',
+  'workspace:skills-snapshot',
+  'workspace:skill-track',
+  'workspace:search',
+  'workspace:memory-remember',
+  'workspace:knowledge-upsert',
+  'workspace:knowledge-remove',
+  'workspace:blueprint-generate',
+  'workspace:project-attach-file',
+  'workspace:project-remove-file',
+  'self-diagnostic:snapshot',
 ]);
 
 const ALLOWED_RECEIVE = new Set([
@@ -125,6 +137,10 @@ const ALLOWED_RECEIVE = new Set([
   'clipboard:status',
   'index:job-update',
   'splash:progress',
+  'review:result',
+  'self-diagnostic:report',
+  'reality-check:result',
+  'decision-context:result',
   'auth:login-timeout',
   'auth:login-failed',
   'auth:login-success',
@@ -132,6 +148,9 @@ const ALLOWED_RECEIVE = new Set([
   'health:pulse',
   'health:heal-attempted',
   'health:heal-outcome',
+  'router:decision',
+  'context:compressed',
+  'wake_word',
 ]);
 
 // ── Node module imports ───────────────────────────────────────────────────────

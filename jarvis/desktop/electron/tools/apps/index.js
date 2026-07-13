@@ -134,6 +134,7 @@ function findMacAppWithSpotlight(appName) {
     execFile('mdfind', [`kMDItemKind == "Application" && kMDItemDisplayName == "*${query}*"`], {
       timeout: 2000,
       maxBuffer: 1024 * 1024,
+      windowsHide: true,
     }, (error, stdout) => {
       if (error) {
         resolve(null);
@@ -188,7 +189,7 @@ function findLinuxDesktopEntry(appName) {
 
 function execFilePromise(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, options, (error, stdout, stderr) => {
+    execFile(command, args, { windowsHide: true, ...options }, (error, stdout, stderr) => {
       if (error) {
         reject(Object.assign(error, { stdout, stderr }));
         return;

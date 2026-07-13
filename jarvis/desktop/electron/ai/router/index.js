@@ -62,6 +62,16 @@ class AIRouter {
     // Engine mode and hardware profile injected from runtime-config
     this._engineMode = typeof options.getEngineMode === 'function' ? options.getEngineMode : () => null;
     this._modelConfig = typeof options.getModelConfig === 'function' ? options.getModelConfig : () => null;
+    // M5-followup: every routing decision is fed to this callback so main.js
+    // can forward it into the Diagnostics terminal (Settings → Zaawansowane).
+    // The renderer already subscribes via the IPC plumbed in M6.
+    this._onRouteDecided = typeof options.onRouteDecided === 'function' ? options.onRouteDecided : null;
+  }
+
+  /** Internal — emit a route decision so the Diagnostics terminal can log it. */
+  _emitRouteDecision(payload) {
+    if (!this._onRouteDecided) return;
+    try { this._onRouteDecided(payload); } catch { /* never let logging break routing */ }
   }
 
   async getAvailability() {
@@ -186,6 +196,18 @@ class AIRouter {
       route.model = profileChatModel;
     }
     const effectiveRoute = localRoute || route;
+    // M5-followup: emit the decision so the Diagnostics terminal can log it.
+    // Payload is intentionally flat + small — the terminal renders one line.
+    this._emitRouteDecision({
+      intent: analysis?.intent ?? 'chat',
+      profile,
+      lane: effectiveRoute?.lane ?? effectiveRoute?.slot ?? null,
+      provider: effectiveRoute?.provider ?? null,
+      model: effectiveRoute?.model ?? null,
+      via: localRoute ? 'local-server-assignment' : 'tier-aware-policy',
+      confidence: analysis?.confidence ?? null,
+      ts: Date.now(),
+    });
     const resolvedRequest = {
       ...request,
       messages: normalizeMessages(request),
@@ -364,13 +386,20 @@ function resolveConfiguredLocalRoute(localConfig, profile, availability) {
   const assignment = localConfig.localModelAssignment || {};
   const serverId = assignment.serverId ? String(assignment.serverId) : '';
   if (!serverId) return null;
-  const roleModelId = profile === 'coding'
-    ? assignment.codeModelId
-    : profile === 'tool'
-      ? assignment.externalApiModelId
-      : profile === 'vision'
-        ? assignment.visionModelId
-        : assignment.chatModelId;
+  // M5 — full 6-lane router map. Falls back to chat if a lane is unset
+  // or unknown so older profiles ('coding' / 'tool' / 'vision') keep
+  // working exactly like before.
+  const LANE_FIELD = {
+    coding: 'codeModelId',
+    code_heavy: 'codeHeavyModelId',
+    reasoning: 'reasoningModelId',
+    router: 'routerModelId',
+    tool: 'externalApiModelId',
+    vision: 'visionModelId',
+    chat: 'chatModelId',
+  };
+  const field = LANE_FIELD[profile] || 'chatModelId';
+  const roleModelId = assignment[field] || assignment.chatModelId;
   if (!roleModelId) return null;
   const server = Array.isArray(localConfig.localServers)
     ? localConfig.localServers.find((entry) => entry?.id === serverId && entry?.enabled)
