@@ -5,6 +5,7 @@
 create table if not exists public.waitlist_signups (
   id          uuid primary key default gen_random_uuid(),
   email       text not null unique,
+  name        text null,
   locale      text null,
   source      text null,
   created_at  timestamptz not null default timezone('utc', now())
