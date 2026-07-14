@@ -191,6 +191,7 @@ export default function PublicHome() {
   const [formWebsite, setFormWebsite] = useState(""); // honeypot — stays empty
   const [submitted, setSubmitted] = useState(false);
   const [alreadyOnList, setAlreadyOnList] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -211,7 +212,8 @@ export default function PublicHome() {
         return;
       }
       if (!res.ok) throw new Error("Request failed");
-      setAlreadyOnList(Boolean(data?.duplicate));
+      setPendingConfirm(Boolean(data?.pendingConfirmation));
+      setAlreadyOnList(Boolean(data?.duplicate) || Boolean(data?.alreadyConfirmed));
       setSubmitted(true);
     } catch {
       setSubmitError("Something went wrong — please try again.");
@@ -591,12 +593,18 @@ export default function PublicHome() {
                     <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                   </div>
                   <h3 className="text-xl font-bold">
-                    {alreadyOnList ? "You're already on the list!" : "You're on the list!"}
+                    {alreadyOnList
+                      ? "You're already on the list!"
+                      : pendingConfirm
+                        ? "Check your email 📬"
+                        : "You're on the list!"}
                   </h3>
                   <p className="text-sm text-white/40 mt-2">
                     {alreadyOnList
                       ? "This email is already registered — no need to sign up twice."
-                      : "We'll notify you when Jarvis is ready."}
+                      : pendingConfirm
+                        ? "We sent you a confirmation link. Click it to lock in your spot — check spam if you don't see it."
+                        : "We'll notify you when Jarvis is ready."}
                   </p>
                 </div>
               ) : (
