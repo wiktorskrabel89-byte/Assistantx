@@ -42,13 +42,6 @@ function isAuthOptionalPath(pathname: string): boolean {
   return pathname === '/' || AUTH_OPTIONAL_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 }
 
-/** True if the request's Host header points at the waitlist landing page subdomain. */
-function isWaitlistSubdomainHost(host: string | null): boolean {
-  if (!host) return false
-  const hostname = host.split(':')[0].toLowerCase()
-  return hostname.startsWith(WAITLIST_SUBDOMAIN_PREFIX)
-}
-
 function isPublicUpdaterPath(pathname: string): boolean {
   if (PUBLIC_UPDATER_ROOT_PATHS.has(pathname)) return true
 
@@ -128,20 +121,15 @@ export async function updateSession(request: NextRequest) {
   requestHeaders.set('x-nonce', nonce)
   requestHeaders.set('x-assistantx-ui-language', detectedUiLanguage)
 
-  let supabaseResponse = isWaitlistSubdomainRoot
-    ? NextResponse.rewrite(new URL('/waitlist', request.url), {
-        request: { headers: requestHeaders },
-      })
-    : NextResponse.next({
-        request: { headers: requestHeaders },
-      })
+  let supabaseResponse = NextResponse.next({
+    request: { headers: requestHeaders },
+  })
 
   if (
     PUBLIC_METADATA_PATHS.has(pathname)
     || isPublicUpdaterPath(pathname)
     || !hasSupabaseConfig()
     || isAuthOptionalPath(pathname)
-    || isWaitlistSubdomainRoot
   ) {
     if (!existingLangCookie) {
       supabaseResponse.cookies.set(UI_LANGUAGE_COOKIE_NAME, detectedUiLanguage, {
