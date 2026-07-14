@@ -5,9 +5,12 @@ import { promises as fs } from "fs";
 import path from "path";
 
 // Waitlist signups (POST { name?, email }):
-//  - persisted to Supabase table public.waitlist_signups when the service-role
-//    key is configured (survives serverless deploys); falls back to a local
-//    git-ignored JSON file for dev/self-hosted runs
+//  - persisted to Supabase via the public.waitlist_join() RPC, which inserts
+//    the row AND returns the running total in one call. The RPC is
+//    SECURITY DEFINER, so it works with the public anon key the app already
+//    ships (no service-role key required) while the table itself stays fully
+//    locked — emails are never readable through the API. Falls back to a
+//    local git-ignored JSON file only for dev/self-hosted runs.
 //  - Discord webhook notification WITHOUT the email address (privacy: emails
 //    must never appear in a chat channel) — shortened name + live total + host
 //  - full details (incl. email) go only to the private notification email
@@ -23,38 +26,41 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
-function getSupabaseAdmin() {
+/**
+ * Supabase client for the waitlist RPC. Prefers the service-role key if set,
+ * but the anon/publishable key (always present in this deployment) is enough
+ * because waitlist_join() is SECURITY DEFINER.
+ */
+function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
   return createAdminClient(url, key, { auth: { persistSession: false } });
 }
 
 async function storeInSupabase(name: string, email: string): Promise<StoreResult | null> {
-  const supabase = getSupabaseAdmin();
+  const supabase = getSupabaseClient();
   if (!supabase) return null;
 
-  const { error } = await supabase
-    .from("waitlist_signups")
-    .insert({ email, name: name || null, source: "landing" });
+  const { data, error } = await supabase.rpc("waitlist_join", {
+    p_email: email,
+    p_name: name || null,
+    p_source: "landing",
+  });
 
-  let duplicate = false;
   if (error) {
-    if (error.code === "23505") {
-      duplicate = true; // unique violation → already subscribed
-    } else {
-      // Table missing / transient failure — let the caller fall back.
-      console.error("[waitlist] supabase insert failed:", error.message);
-      return null;
-    }
+    // RPC missing / transient failure — let the caller fall back to file.
+    console.error("[waitlist] supabase waitlist_join failed:", error.message);
+    return null;
   }
 
-  const { count, error: countError } = await supabase
-    .from("waitlist_signups")
-    .select("*", { count: "exact", head: true });
-  if (countError) console.error("[waitlist] supabase count failed:", countError.message);
-
-  return { stored: !duplicate, duplicate, total: count ?? 0 };
+  const row = Array.isArray(data) ? data[0] : data;
+  const total = Number(row?.total ?? 0);
+  const duplicate = Boolean(row?.is_duplicate);
+  return { stored: !duplicate, duplicate, total };
 }
 
 async function storeInFile(name: string, email: string): Promise<StoreResult> {
