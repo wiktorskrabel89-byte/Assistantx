@@ -188,7 +188,9 @@ export default function PublicHome() {
   const [waitlistCount] = useState(128431);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
+  const [formWebsite, setFormWebsite] = useState(""); // honeypot — stays empty
   const [submitted, setSubmitted] = useState(false);
+  const [alreadyOnList, setAlreadyOnList] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -201,9 +203,15 @@ export default function PublicHome() {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: formName, email: formEmail }),
+        body: JSON.stringify({ name: formName, email: formEmail, website: formWebsite }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 429) {
+        setSubmitError("Too many signups from your network — please try again in a little while.");
+        return;
+      }
       if (!res.ok) throw new Error("Request failed");
+      setAlreadyOnList(Boolean(data?.duplicate));
       setSubmitted(true);
     } catch {
       setSubmitError("Something went wrong — please try again.");
@@ -582,11 +590,28 @@ export default function PublicHome() {
                   <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
                     <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                   </div>
-                  <h3 className="text-xl font-bold">You&apos;re on the list!</h3>
-                  <p className="text-sm text-white/40 mt-2">We&apos;ll notify you when Jarvis is ready.</p>
+                  <h3 className="text-xl font-bold">
+                    {alreadyOnList ? "You're already on the list!" : "You're on the list!"}
+                  </h3>
+                  <p className="text-sm text-white/40 mt-2">
+                    {alreadyOnList
+                      ? "This email is already registered — no need to sign up twice."
+                      : "We'll notify you when Jarvis is ready."}
+                  </p>
                 </div>
               ) : (
                 <form onSubmit={handleWaitlistSubmit} className="space-y-4">
+                  {/* Honeypot: hidden from humans, bots fill it → silently rejected. */}
+                  <input
+                    type="text"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={formWebsite}
+                    onChange={(e) => setFormWebsite(e.target.value)}
+                    aria-hidden="true"
+                    style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
+                  />
                   <div>
                     <input
                       type="text"

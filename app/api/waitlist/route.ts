@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { promises as fs } from "fs";
 import path from "path";
+import { createHash } from "crypto";
 
 // Waitlist signups (POST { name?, email }):
 //  - persisted to Supabase via the public.waitlist_join() RPC, which inserts
@@ -20,10 +21,22 @@ const NOTIFY_EMAIL = process.env.WAITLIST_NOTIFY_EMAIL || "wiktorskrabel89@gmail
 const DATA_FILE = path.join(process.cwd(), "data", "waitlist.json");
 
 type Entry = { name: string; email: string; at: string };
-type StoreResult = { stored: boolean; duplicate: boolean; total: number };
+type StoreResult = { stored: boolean; duplicate: boolean; total: number; rateLimited?: boolean };
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+/**
+ * Salted hash of the submitter IP. We rate-limit by this hash but never store
+ * or log the raw IP, so no personally-identifying address is retained.
+ */
+function hashIp(req: Request): string | null {
+  const fwd = req.headers.get("x-forwarded-for") || "";
+  const ip = fwd.split(",")[0].trim() || req.headers.get("x-real-ip") || "";
+  if (!ip) return null;
+  const salt = process.env.WAITLIST_IP_SALT || "assistantx-waitlist-static-salt";
+  return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
 
 /**
@@ -41,7 +54,7 @@ function getSupabaseClient() {
   return createAdminClient(url, key, { auth: { persistSession: false } });
 }
 
-async function storeInSupabase(name: string, email: string): Promise<StoreResult | null> {
+async function storeInSupabase(name: string, email: string, ipHash: string | null): Promise<StoreResult | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
 
@@ -49,6 +62,7 @@ async function storeInSupabase(name: string, email: string): Promise<StoreResult
     p_email: email,
     p_name: name || null,
     p_source: "landing",
+    p_ip_hash: ipHash,
   });
 
   if (error) {
@@ -60,7 +74,8 @@ async function storeInSupabase(name: string, email: string): Promise<StoreResult
   const row = Array.isArray(data) ? data[0] : data;
   const total = Number(row?.total ?? 0);
   const duplicate = Boolean(row?.is_duplicate);
-  return { stored: !duplicate, duplicate, total };
+  const rateLimited = Boolean(row?.rate_limited);
+  return { stored: !duplicate && !rateLimited, duplicate, total, rateLimited };
 }
 
 async function storeInFile(name: string, email: string): Promise<StoreResult> {
@@ -150,11 +165,17 @@ async function sendEmail(name: string, email: string, total: number) {
 }
 
 export async function POST(request: Request) {
-  let body: { name?: string; email?: string };
+  let body: { name?: string; email?: string; website?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "invalid JSON" }, { status: 400 });
+  }
+
+  // Honeypot: real users never fill the hidden "website" field; bots fill
+  // every field. Silently accept so the bot can't tell it was caught.
+  if (typeof body.website === "string" && body.website.trim() !== "") {
+    return NextResponse.json({ ok: true, delivered: false, total: 0 });
   }
 
   const name = (body.name || "").toString().trim().slice(0, 100);
@@ -163,7 +184,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid email" }, { status: 400 });
   }
 
-  const result = (await storeInSupabase(name, email)) ?? (await storeInFile(name, email));
+  const ipHash = hashIp(request);
+  const result = (await storeInSupabase(name, email, ipHash)) ?? (await storeInFile(name, email));
+
+  // Too many signups from one source in a short window → soft-block without
+  // notifying, so mass email entry can't spam the list or Discord.
+  if (result.rateLimited) {
+    return NextResponse.json(
+      { ok: false, rateLimited: true, error: "Too many signups from here — please try again later." },
+      { status: 429 },
+    );
+  }
 
   // Same email twice → idempotent success, no duplicate notification spam.
   if (result.duplicate) {
