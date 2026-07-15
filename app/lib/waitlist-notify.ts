@@ -12,13 +12,19 @@ export function doubleOptInEnabled(): boolean {
   return process.env.WAITLIST_DOUBLE_OPTIN === "true" && Boolean(process.env.RESEND_API_KEY);
 }
 
-/** Public display name: first name + initials — "Zuzanna Wachskrabel" → "Zuzanna W." */
+/**
+ * Public display name for Discord:
+ *  - "Zuzanna Wachskrabel" → "Zuzanna W." (first name + initials, privacy)
+ *  - "wiktor.skrabel"      → "Wiktor S."  (dots/underscores count as separators)
+ *  - "kubasiu"             → "Kubasiu"    (single word shown in FULL, not initials)
+ */
 export function publicName(name: string): string {
-  const words = String(name || "").split(/\s+/).filter(Boolean);
+  const words = String(name || "").split(/[\s._-]+/).filter(Boolean);
   if (words.length === 0) return "Someone";
+  const cap = (w: string) => w[0].toUpperCase() + w.slice(1);
   const [first, ...rest] = words;
   const initials = rest.map((w) => `${w[0].toUpperCase()}.`).join(" ");
-  return initials ? `${first} ${initials}` : first;
+  return initials ? `${cap(first)} ${initials}` : cap(first);
 }
 
 /**
