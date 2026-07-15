@@ -80,8 +80,9 @@ export async function sendOwnerEmail(name: string, email: string, total: number)
 }
 
 /**
- * Confirmation ("please confirm") email via Resend. Returns true on success.
- * Uses Resend's REST API directly (no SDK dependency).
+ * Confirmation ("please confirm") email via Resend. Table-based layout with
+ * a PNG logo — email clients (Gmail especially) ignore flexbox and block SVG,
+ * so everything here is old-school HTML that renders identically everywhere.
  */
 export async function sendConfirmationEmail(email: string, name: string, token: string): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
@@ -89,22 +90,96 @@ export async function sendConfirmationEmail(email: string, name: string, token: 
   const from = process.env.RESEND_FROM || "AssistantX <onboarding@resend.dev>";
   const base = (process.env.WAITLIST_PUBLIC_URL || "https://assistantx.pl").replace(/\/$/, "");
   const link = `${base}/api/waitlist/confirm?token=${encodeURIComponent(token)}`;
-  const first = publicName(name).split(" ")[0];
+  const logo = `${base}/media/email-logo.png`;
 
-  const html = `
-  <div style="background:#050508;padding:40px 0;font-family:-apple-system,Segoe UI,Roboto,sans-serif">
-    <div style="max-width:480px;margin:0 auto;background:#0a0a12;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:40px;color:#fff">
-      <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#7c3aed,#2563eb);display:flex;align-items:center;justify-content:center;margin-bottom:24px;font-weight:900;font-size:22px;color:#fff;text-align:center;line-height:56px">X</div>
-      <h1 style="font-size:24px;font-weight:800;margin:0 0 12px">Confirm your spot${first && first !== "Someone" ? `, ${first}` : ""}</h1>
-      <p style="color:rgba(255,255,255,0.6);font-size:15px;line-height:1.6;margin:0 0 28px">
-        You're almost on the AssistantX-Jarvis waitlist. Tap the button below to confirm this email — it's the last step.
-      </p>
-      <a href="${link}" style="display:inline-block;background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:14px 28px;border-radius:12px">Confirm my spot →</a>
-      <p style="color:rgba(255,255,255,0.3);font-size:12px;line-height:1.6;margin:28px 0 0">
-        If you didn't sign up, just ignore this email — nothing will happen and you won't be added.
-      </p>
-    </div>
-  </div>`;
+  // Greeting name: first word, Title Case, letters only — "wiktor.skrabel"
+  // → "Wiktor". Falls back to no name at all rather than something ugly.
+  const rawFirst = (String(name || "").trim().split(/[\s._-]+/)[0] || "").replace(/[^\p{L}]/gu, "");
+  const first = rawFirst ? rawFirst[0].toUpperCase() + rawFirst.slice(1).toLowerCase() : "";
+  const greeting = first ? `Confirm your spot, ${first}` : "Confirm your spot";
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="color-scheme" content="dark"/>
+<meta name="supported-color-schemes" content="dark"/>
+<title>${greeting}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#050508;">
+  <!-- preheader: shows as the preview line in the inbox, invisible in the body -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    One tap and you're officially on the AssistantX-Jarvis waitlist.&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#050508;">
+    <tr><td align="center" style="padding:48px 16px;">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background-color:#0b0b13;border:1px solid #23233a;border-radius:24px;">
+        <tr><td align="center" style="padding:44px 40px 40px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+          <!-- logo -->
+          <img src="${logo}" width="56" height="56" alt="AssistantX-Jarvis" style="display:block;border:0;outline:none;margin:0 auto 26px;"/>
+
+          <!-- eyebrow -->
+          <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:3px;color:#8b7cf6;text-transform:uppercase;">
+            AssistantX&#8209;Jarvis&nbsp;&nbsp;·&nbsp;&nbsp;Waitlist
+          </p>
+
+          <!-- heading -->
+          <h1 style="margin:0 0 14px;font-size:26px;line-height:1.25;font-weight:800;color:#ffffff;">
+            ${greeting}
+          </h1>
+
+          <!-- copy -->
+          <p style="margin:0 auto 32px;max-width:380px;font-size:15px;line-height:1.65;color:#9b9bb0;">
+            You're one tap away from the AI Operating System.
+            Confirm this email address to lock in your place in line.
+          </p>
+
+          <!-- button (bulletproof: solid bg + padding on the <a> itself) -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+            <tr><td align="center" style="border-radius:14px;background-color:#7c3aed;background-image:linear-gradient(90deg,#8b5cf6,#4f46e5);">
+              <a href="${link}"
+                 style="display:inline-block;padding:16px 42px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:14px;">
+                Confirm my spot&nbsp;&nbsp;&#8594;
+              </a>
+            </td></tr>
+          </table>
+
+          <!-- fallback link -->
+          <p style="margin:30px 0 0;font-size:12px;line-height:1.6;color:#55556a;">
+            Button not working? Paste this link into your browser:<br/>
+            <a href="${link}" style="color:#8b7cf6;text-decoration:underline;word-break:break-all;">${link}</a>
+          </p>
+
+          <!-- divider -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr><td style="padding:30px 0 22px;"><div style="height:1px;line-height:1px;font-size:0;background-color:#1d1d30;">&nbsp;</div></td></tr>
+          </table>
+
+          <p style="margin:0;font-size:12px;line-height:1.6;color:#55556a;">
+            Didn't sign up? Just ignore this email — you won't be added and nothing else will happen.
+          </p>
+
+        </td></tr>
+      </table>
+
+      <!-- footer -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+        <tr><td align="center" style="padding:22px 10px 0;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          <p style="margin:0;font-size:11px;line-height:1.7;color:#3d3d52;">
+            AssistantX&#8209;Jarvis · The AI Operating System<br/>
+            <a href="${base}" style="color:#55556a;text-decoration:none;">assistantx.pl</a>
+          </p>
+        </td></tr>
+      </table>
+
+    </td></tr>
+  </table>
+</body>
+</html>`;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -114,7 +189,7 @@ export async function sendConfirmationEmail(email: string, name: string, token: 
       to: [email],
       subject: "Confirm your AssistantX-Jarvis waitlist spot",
       html,
-      text: `Confirm your AssistantX-Jarvis waitlist spot: ${link}\n\nIf you didn't sign up, ignore this email.`,
+      text: `${greeting}\n\nYou're one tap away from the AI Operating System. Confirm this email to lock in your place in line:\n\n${link}\n\nDidn't sign up? Ignore this email — you won't be added.\n\nAssistantX-Jarvis · assistantx.pl`,
     }),
   });
   if (!res.ok) {
