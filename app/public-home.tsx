@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import Image from "next/image";
 function AnimatedSection({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
   return (
     <div
@@ -247,8 +248,41 @@ export default function PublicHome() {
     };
   }, [modal]);
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://www.assistantx.pl#org",
+        name: "AssistantX",
+        url: "https://www.assistantx.pl",
+        logo: "https://www.assistantx.pl/icon-512.png",
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://www.assistantx.pl#website",
+        url: "https://www.assistantx.pl",
+        name: "AssistantX",
+        description:
+          "AssistantX is your AI assistant — a workspace for chat, uploads, integrations, cloud-synced projects, creation, and editing.",
+        publisher: { "@id": "https://www.assistantx.pl#org" },
+      },
+      {
+        "@type": "SoftwareApplication",
+        name: "AssistantX",
+        applicationCategory: "ProductivityApplication",
+        operatingSystem: "Web, Windows, macOS, Linux",
+        offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+      },
+    ],
+  };
+
   return (
     <div ref={containerRef} className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Animated background mesh */}
       <div className="fixed inset-0 pointer-events-none">
         <div
@@ -297,12 +331,14 @@ export default function PublicHome() {
       {/* ═══════════════ HERO ═══════════════ */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden">
         {/* Cinematic backdrop */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src="/media/hero-bg.png"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none"
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover opacity-40 pointer-events-none"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#050508]/60 via-transparent to-[#050508] pointer-events-none" />
         <GlowOrb className="w-[800px] h-[800px] -top-40 left-1/2 -translate-x-1/2 opacity-20" color="rgba(120,80,220,0.4)" />
@@ -314,7 +350,7 @@ export default function PublicHome() {
           <div className="relative">
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 flex items-center justify-center shadow-2xl shadow-purple-500/20">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/jarvis-logo.svg" alt="AssistantX-Jarvis logo" className="w-12 h-12" />
+              <img src="/jarvis-logo.svg" alt="AssistantX logo" className="w-12 h-12" />
             </div>
             <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 opacity-20 blur-xl" />
           </div>
@@ -364,7 +400,7 @@ export default function PublicHome() {
       </section>
 
       {/* ═══════════════ AI SHOWCASE ═══════════════ */}
-      <section id="showcase" className="relative py-32 px-6">
+      <section id="showcase" className="relative py-32 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "1200px" }}>
         <AnimatedSection className="text-center mb-24">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
             <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
@@ -383,6 +419,7 @@ export default function PublicHome() {
               <div
                 role="button"
                 tabIndex={0}
+                aria-label={`Learn more about ${item.title}`}
                 onClick={() => setModal({
                   title: item.title,
                   subtitle: item.subtitle,
@@ -392,7 +429,7 @@ export default function PublicHome() {
                   icon: item.icon,
                 })}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
-                className="group relative h-full rounded-3xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-8 overflow-hidden hover:border-white/[0.14] transition-all duration-500 hover:-translate-y-1 cursor-pointer active:scale-[0.98]"
+                className="group relative h-full rounded-3xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-8 overflow-hidden hover:border-white/[0.14] transition-all duration-500 hover:-translate-y-1 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508]"
               >
                 <div className={`absolute -top-20 -right-20 w-40 h-40 rounded-full bg-gradient-to-br ${item.gradient} opacity-0 group-hover:opacity-15 blur-3xl transition-opacity duration-700`} />
                 <div
@@ -416,7 +453,7 @@ export default function PublicHome() {
       </section>
 
       {/* ═══════════════ DEMO VIDEOS ═══════════════ */}
-      <section className="relative py-32 px-6">
+      <section className="relative py-32 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "900px" }}>
         <GlowOrb className="w-[600px] h-[600px] top-0 left-1/4 opacity-10" color="rgba(120,80,220,0.3)" />
         <AnimatedSection className="text-center mb-16">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
@@ -436,6 +473,7 @@ export default function PublicHome() {
               <div
                 role="button"
                 tabIndex={0}
+                aria-label={`Play demo: ${demo.title}`}
                 onClick={() => setModal({
                   title: demo.title,
                   subtitle: "Demo film",
@@ -444,13 +482,15 @@ export default function PublicHome() {
                   gradient: "from-violet-500 to-blue-500",
                 })}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
-                className="group relative aspect-video rounded-2xl border border-white/[0.06] overflow-hidden hover:border-white/[0.12] transition-all cursor-pointer active:scale-[0.99]"
+                className="group relative aspect-video rounded-2xl border border-white/[0.06] overflow-hidden hover:border-white/[0.12] transition-all cursor-pointer active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508]"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={demo.image}
                   alt={demo.title}
-                  className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"
+                  fill
+                  sizes="(min-width: 768px) 50vw, 100vw"
+                  loading="lazy"
+                  className="object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-16 h-16 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/20 group-hover:scale-110 transition-transform">
@@ -468,7 +508,7 @@ export default function PublicHome() {
       </section>
 
       {/* ═══════════════ FEATURE TIMELINE ═══════════════ */}
-      <section className="relative py-32 px-6">
+      <section className="relative py-32 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "1400px" }}>
         <AnimatedSection className="text-center mb-20">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
             <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">The full stack of intelligence.</span>
@@ -484,9 +524,11 @@ export default function PublicHome() {
               <div
                 role="button"
                 tabIndex={0}
+                aria-expanded={expandedTimeline === i}
+                aria-label={`${expandedTimeline === i ? "Collapse" : "Expand"} ${item.label}`}
                 onClick={() => setExpandedTimeline(expandedTimeline === i ? null : i)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedTimeline(expandedTimeline === i ? null : i); } }}
-                className="group cursor-pointer -m-2 p-2 rounded-xl hover:bg-white/[0.03] transition-colors"
+                className="group cursor-pointer -m-2 p-2 rounded-xl hover:bg-white/[0.03] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
               >
                 <div className={`absolute left-4 top-1 w-4 h-4 rounded-full border-2 bg-[#050508] transition-colors ${expandedTimeline === i ? "border-cyan-400" : "border-violet-400/60"}`}>
                   <div className={`absolute inset-1 rounded-full transition-colors ${expandedTimeline === i ? "bg-cyan-400/70" : "bg-violet-400/40"}`} />
@@ -513,7 +555,7 @@ export default function PublicHome() {
       </section>
 
       {/* ═══════════════ WHY ASSISTANTX ═══════════════ */}
-      <section className="relative py-32 px-6">
+      <section className="relative py-32 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "1200px" }}>
         <GlowOrb className="w-[700px] h-[700px] top-1/4 right-0 opacity-10" color="rgba(0,180,255,0.2)" />
         <AnimatedSection className="text-center mb-16">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
@@ -678,7 +720,7 @@ export default function PublicHome() {
       </section>
 
       {/* ═══════════════ COMMUNITY ═══════════════ */}
-      <section className="relative py-24 px-6">
+      <section className="relative py-24 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "700px" }}>
         <AnimatedSection className="text-center mb-12">
           <h2 className="text-3xl sm:text-4xl font-black tracking-[-0.03em]">
             <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Join the community.</span>
@@ -802,16 +844,38 @@ export default function PublicHome() {
 
       {/* ═══════════════ FOOTER ═══════════════ */}
       <footer className="relative border-t border-white/[0.05] py-10 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-6xl mx-auto flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/jarvis-logo.svg" alt="" className="w-5 h-5" />
             </div>
-            <span className="text-sm text-white/40">AssistantX-Jarvis</span>
+            <span className="text-sm text-white/40">AssistantX</span>
           </div>
-          <div className="text-xs text-white/20">
-            &copy; {new Date().getFullYear()} Acrux.pl Sp. z o.o. All rights reserved.
+
+          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs">
+            <a
+              href="/privacy"
+              className="text-white/40 hover:text-white/80 transition-colors"
+            >
+              Privacy Policy
+            </a>
+            <a
+              href="/terms"
+              className="text-white/40 hover:text-white/80 transition-colors"
+            >
+              Terms of Service
+            </a>
+            <a
+              href="/contact"
+              className="text-white/40 hover:text-white/80 transition-colors"
+            >
+              Contact
+            </a>
+          </nav>
+
+          <div className="text-xs text-white/30 text-center sm:text-right">
+            &copy; {new Date().getFullYear()} AssistantX. All rights reserved.
           </div>
         </div>
       </footer>
