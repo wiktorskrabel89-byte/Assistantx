@@ -88,6 +88,12 @@ const nextConfig = {
     'mdast-util-mdx-jsx',
     'mdast-util-mdxjs-esm',
   ],
+  redirects: async () => [
+    // /support was removed — send stale inbound links (Google cache, old
+    // bookmarks) to the new Contact page instead of the auth wall.
+    { source: '/support', destination: '/contact', permanent: true },
+    { source: '/support/:path*', destination: '/contact', permanent: true },
+  ],
   headers: async () => {
     const headers = [
       {
