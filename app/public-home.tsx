@@ -163,6 +163,49 @@ const TIMELINE_ITEMS = [
   { label: "Cloud Intelligence", desc: "Distributed AI processing", detail: "Local-first processing with cloud escalation only when a task truly demands it." },
 ];
 
+const FAQ_ITEMS: { question: string; answer: string }[] = [
+  {
+    question: "What is AssistantX?",
+    answer:
+      "AssistantX is an AI assistant that lives with you across chat, uploads, integrations, cloud-synced projects, creation, and editing. Think of it as one place to talk, plan, generate, and get things done — with your context following you everywhere.",
+  },
+  {
+    question: "When will it launch?",
+    answer:
+      "We're onboarding waitlist members in waves. Sign up on the homepage and you'll get an early invite email the moment your slot opens — no spam, just the invite and product updates you can unsubscribe from at any time.",
+  },
+  {
+    question: "Is AssistantX free?",
+    answer:
+      "A generous free tier will always be available. Paid plans unlock heavier usage, priority queues, and premium models. Pricing is shown inside the app before you commit — no surprise charges.",
+  },
+  {
+    question: "What platforms does it run on?",
+    answer:
+      "AssistantX works in any modern browser and is being packaged as a desktop app for Windows, macOS, and Linux. A native mobile experience is on the roadmap.",
+  },
+  {
+    question: "Is my data private?",
+    answer:
+      "Yes. Your private workspace content is never used to train foundation models. Data in transit is encrypted, storage is authenticated, and you can delete your workspace or account at any time. Full details in our Privacy Policy.",
+  },
+  {
+    question: "How is this different from ChatGPT or Claude?",
+    answer:
+      "Those are great models — AssistantX is the workspace around them. Persistent memory, uploaded files, integrations, and multi-model routing all in one place, so you don't have to rebuild context every time you switch tools.",
+  },
+  {
+    question: "Which AI models can I use?",
+    answer:
+      "AssistantX routes each task to the best-fit model — including leading OpenAI, Anthropic, Google, and open-source options. You'll be able to pin favorites or let the assistant pick automatically.",
+  },
+  {
+    question: "How do I contact you?",
+    answer:
+      "Head to the Contact page (also linked in the footer) and pick a topic — your mail app will open with the right subject pre-filled. We aim to reply within 1–2 business days.",
+  },
+];
+
 const COMPARISON = [
   { feature: "Understands context", jarvis: true, chatbot: false, why: "Jarvis keeps project, memory and screen context. Chatbots start from zero with every message." },
   { feature: "Controls your computer", jarvis: true, chatbot: false, why: "Chatbots can only talk about it. Jarvis actually clicks, types, launches and automates." },
@@ -236,6 +279,7 @@ export default function PublicHome() {
   const [modal, setModal] = useState<ModalContent | null>(null);
   const [expandedTimeline, setExpandedTimeline] = useState<number | null>(null);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   useEffect(() => {
     if (!modal) return;
@@ -273,6 +317,14 @@ export default function PublicHome() {
         applicationCategory: "ProductivityApplication",
         operatingSystem: "Web, Windows, macOS, Linux",
         offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: FAQ_ITEMS.map((item) => ({
+          "@type": "Question",
+          name: item.question,
+          acceptedAnswer: { "@type": "Answer", text: item.answer },
+        })),
       },
     ],
   };
@@ -613,6 +665,78 @@ export default function PublicHome() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* ═══════════════ FAQ ═══════════════ */}
+      <section
+        id="faq"
+        className="relative py-32 px-6"
+        style={{ contentVisibility: "auto", containIntrinsicSize: "1400px" }}
+      >
+        <GlowOrb className="w-[600px] h-[600px] top-1/3 left-1/4 opacity-10" color="rgba(120,80,220,0.25)" />
+        <AnimatedSection className="text-center mb-16">
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+              Frequently asked.
+            </span>
+          </h2>
+          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">
+            Short answers to the questions we hear most.
+          </p>
+        </AnimatedSection>
+
+        <div className="max-w-3xl mx-auto space-y-3">
+          {FAQ_ITEMS.map((item, i) => {
+            const open = expandedFaq === i;
+            return (
+              <AnimatedSection key={item.question} delay={i * 0.03}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={open}
+                  aria-label={`${open ? "Collapse" : "Expand"} answer: ${item.question}`}
+                  onClick={() => setExpandedFaq(open ? null : i)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setExpandedFaq(open ? null : i);
+                    }
+                  }}
+                  className="group rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm px-6 py-5 cursor-pointer hover:border-white/[0.14] hover:bg-white/[0.04] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508]"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <h3 className={`text-base sm:text-lg font-semibold tracking-tight transition-colors ${open ? "text-white" : "text-white/85 group-hover:text-white"}`}>
+                      {item.question}
+                    </h3>
+                    <span
+                      className={`mt-1 shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-white/50 transition-all ${open ? "rotate-45 border-violet-400/50 text-violet-300 bg-violet-500/10" : "group-hover:text-white/80"}`}
+                      aria-hidden="true"
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                    </span>
+                  </div>
+                  {open && (
+                    <p className="mt-4 text-sm leading-7 text-white/60 timeline-detail-enter">
+                      {item.answer}
+                    </p>
+                  )}
+                </div>
+              </AnimatedSection>
+            );
+          })}
+        </div>
+
+        <AnimatedSection delay={0.2}>
+          <p className="mt-12 text-center text-sm text-white/40">
+            Didn&apos;t find your answer?{" "}
+            <a href="/contact" className="text-violet-300 hover:text-violet-200 underline decoration-violet-400/50 underline-offset-2 transition-colors">
+              Get in touch
+            </a>
+            .
+          </p>
+        </AnimatedSection>
       </section>
 
       {/* ═══════════════ WAITLIST ═══════════════ */}
