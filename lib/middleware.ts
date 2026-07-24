@@ -26,8 +26,8 @@ const PUBLIC_UPDATER_PATH_PREFIXES = [
   '/beta/mac/',
   '/beta/android/',
 ]
-const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/contact', '/support', '/demo', '/roadmap', '/pricing']
-const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/contact', '/support', '/demo', '/roadmap', '/pricing']
+const AUTH_OPTIONAL_PATH_PREFIXES = ['/auth', '/privacy', '/terms', '/contact', '/demo', '/roadmap', '/pricing']
+const AUTH_REDIRECT_EXCLUDED_PREFIXES = ['/api', '/auth', '/login', '/privacy', '/terms', '/contact', '/demo', '/roadmap', '/pricing']
 const PUBLIC_UPDATER_FILE_PATTERN =
   /(?:^|\/)(?:latest(?:-[^/]+)?\.yml(?:\.sig)?|release-notes\.json|[^/]+\.(?:exe|nupkg|dmg|appimage|apk|blockmap))$/i
 
