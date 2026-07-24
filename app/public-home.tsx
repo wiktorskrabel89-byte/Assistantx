@@ -866,6 +866,12 @@ export default function PublicHome() {
             >
               Terms of Service
             </a>
+            <a
+              href="/contact"
+              className="text-white/40 hover:text-white/80 transition-colors"
+            >
+              Contact
+            </a>
           </nav>
 
           <div className="text-xs text-white/30 text-center sm:text-right">

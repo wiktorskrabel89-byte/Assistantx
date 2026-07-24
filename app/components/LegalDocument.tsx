@@ -71,6 +71,12 @@ export function LegalDocument({
             >
               Terms
             </Link>
+            <Link
+              href="/contact"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
+            >
+              Contact
+            </Link>
           </nav>
         </div>
 
@@ -98,6 +104,9 @@ export function LegalDocument({
             </Link>
             <Link href="/terms" className="hover:text-white/60 transition-colors">
               Terms of Service
+            </Link>
+            <Link href="/contact" className="hover:text-white/60 transition-colors">
+              Contact
             </Link>
           </div>
         </footer>

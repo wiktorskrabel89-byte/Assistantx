@@ -141,7 +141,7 @@ export default function PrivacyPage() {
         <section>
           <h2>13. Contact</h2>
           <p>
-            Questions or requests about this Privacy Policy can be sent to the contact address published on <Link href="/">the AssistantX homepage</Link>. We aim to respond within 30 days.
+            Questions or requests about this Privacy Policy can be sent through our <Link href="/contact">Contact page</Link>. We aim to respond within 30 days.
           </p>
         </section>
     </LegalDocument>

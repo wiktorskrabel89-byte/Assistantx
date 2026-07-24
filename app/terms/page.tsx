@@ -140,11 +140,7 @@ export default function TermsPage() {
       <section>
         <h2>16. Contact</h2>
         <p>
-          Questions about these Terms of Service can be sent to
-          {" "}
-          <a href="mailto:support.assistantx.pl@gmail.com" className="underline">support.assistantx.pl@gmail.com</a>
-          {" "}
-          or reach us through <Link href="/" className="underline">the AssistantX homepage</Link>.
+          Questions about these Terms of Service can be sent through our <Link href="/contact">Contact page</Link>.
         </p>
       </section>
     </LegalDocument>
