@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import type { PublicUILanguage } from "@/app/lib/ui-language";
+import { STRINGS } from "@/app/lib/landing-strings";
+import { LanguageSwitcher } from "@/app/components/LanguageSwitcher";
 function AnimatedSection({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
   return (
     <div
@@ -183,7 +186,8 @@ type ModalContent = {
   icon?: string;
 };
 
-export default function PublicHome() {
+export default function PublicHome({ lang = "en" }: { lang?: PublicUILanguage }) {
+  const t = STRINGS[lang];
   const [waitlistCount] = useState(128431);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
@@ -207,7 +211,7 @@ export default function PublicHome() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 429) {
-        setSubmitError("Too many signups from your network — please try again in a little while.");
+        setSubmitError(t.waitlist.rateLimited);
         return;
       }
       if (!res.ok) throw new Error("Request failed");
@@ -215,7 +219,7 @@ export default function PublicHome() {
       setAlreadyOnList(Boolean(data?.duplicate) || Boolean(data?.alreadyConfirmed));
       setSubmitted(true);
     } catch {
-      setSubmitError("Something went wrong — please try again.");
+      setSubmitError(t.waitlist.genericError);
     } finally {
       setSubmitting(false);
     }
@@ -268,6 +272,7 @@ export default function PublicHome() {
 
   return (
     <div className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
+      <LanguageSwitcher lang={lang} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -347,17 +352,16 @@ export default function PublicHome() {
         {/* Title */}
         <h1 className="text-center hero-title">
           <span className="block text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-[-0.04em] leading-[0.9]">
-            <span className="bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">The AI</span>
+            <span className="bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">{t.hero.titleTop}</span>
           </span>
           <span className="block text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-[-0.04em] leading-[0.9] mt-2">
-            <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">Operating System.</span>
+            <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">{t.hero.titleBottom}</span>
           </span>
         </h1>
 
         {/* Subtitle */}
         <p className="mt-8 text-lg sm:text-xl text-white/50 max-w-2xl text-center leading-relaxed hero-subtitle">
-          AssistantX-Jarvis is the intelligence layer between you and your entire digital life.
-          It thinks, acts, learns, and evolves.
+          {t.hero.subtitle}
         </p>
 
         {/* CTA Buttons */}
@@ -369,13 +373,13 @@ export default function PublicHome() {
             <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-blue-600" />
             <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="absolute inset-0 shadow-[0_0_40px_rgba(120,80,220,0.4)]" />
-            <span className="relative z-10">Join Waitlist</span>
+            <span className="relative z-10">{t.hero.joinCta}</span>
           </a>
           <a
             href="#showcase"
             className="px-8 py-4 rounded-full text-sm font-semibold border border-white/10 bg-white/[0.03] backdrop-blur-sm hover:border-white/20 hover:bg-white/[0.06] transition-all"
           >
-            Watch Demo
+            {t.hero.demoCta}
           </a>
         </div>
 
@@ -392,11 +396,11 @@ export default function PublicHome() {
         <AnimatedSection className="text-center mb-24">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
             <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-              Not a chatbot.
+              {t.showcaseHeading.top}
             </span>
             <br />
             <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
-              An operating system.
+              {t.showcaseHeading.bottom}
             </span>
           </h2>
         </AnimatedSection>
@@ -445,9 +449,9 @@ export default function PublicHome() {
         <GlowOrb className="w-[600px] h-[600px] top-0 left-1/4 opacity-10" color="rgba(120,80,220,0.3)" />
         <AnimatedSection className="text-center mb-16">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">See it in action.</span>
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">{t.demos.heading}</span>
           </h2>
-          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">Real demonstrations of what Jarvis can do.</p>
+          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">{t.demos.subtitle}</p>
         </AnimatedSection>
 
         <div className="max-w-5xl mx-auto grid gap-8 md:grid-cols-2">
@@ -464,9 +468,9 @@ export default function PublicHome() {
                 aria-label={`Play demo: ${demo.title}`}
                 onClick={() => setModal({
                   title: demo.title,
-                  subtitle: "Demo film",
-                  body: "This demo film is in production. Join the waitlist and you'll be the first to see Jarvis in action — real tasks, real screen, no cuts.",
-                  bullets: ["Recorded on real hardware, unscripted", "Narrated walkthrough of every step", "Premieres to waitlist members first"],
+                  subtitle: t.demos.filmSubtitle,
+                  body: t.demos.filmBody,
+                  bullets: t.demos.filmBullets,
                   gradient: "from-violet-500 to-blue-500",
                 })}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
@@ -487,7 +491,7 @@ export default function PublicHome() {
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-black/80 to-transparent">
                   <p className="text-sm font-semibold">{demo.title}</p>
-                  <p className="text-xs text-white/40 mt-1">Coming soon</p>
+                  <p className="text-xs text-white/40 mt-1">{t.demos.comingSoon}</p>
                 </div>
               </div>
             </AnimatedSection>
@@ -499,7 +503,7 @@ export default function PublicHome() {
       <section className="relative py-32 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "1400px" }}>
         <AnimatedSection className="text-center mb-20">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">The full stack of intelligence.</span>
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">{t.timelineHeading}</span>
           </h2>
         </AnimatedSection>
 
@@ -547,18 +551,18 @@ export default function PublicHome() {
         <GlowOrb className="w-[700px] h-[700px] top-1/4 right-0 opacity-10" color="rgba(0,180,255,0.2)" />
         <AnimatedSection className="text-center mb-16">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Beyond chatbots.</span>
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">{t.comparison.heading}</span>
           </h2>
-          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">AssistantX-Jarvis is not another AI chatbot. It is an AI Operating System.</p>
+          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">{t.comparison.subheading}</p>
         </AnimatedSection>
 
         <div className="max-w-2xl mx-auto">
           <div className="rounded-3xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm overflow-hidden">
             {/* Header */}
             <div className="grid grid-cols-3 px-8 py-5 border-b border-white/[0.06]">
-              <span className="text-sm text-white/40 font-medium">Feature</span>
-              <span className="text-sm font-bold text-center bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">Jarvis</span>
-              <span className="text-sm text-white/30 text-center">AI Chatbots</span>
+              <span className="text-sm text-white/40 font-medium">{t.comparison.feature}</span>
+              <span className="text-sm font-bold text-center bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">{t.comparison.jarvisCol}</span>
+              <span className="text-sm text-white/30 text-center">{t.comparison.chatbotCol}</span>
             </div>
             {/* Rows */}
             {COMPARISON.map((row, i) => (
@@ -609,9 +613,9 @@ export default function PublicHome() {
 
         <AnimatedSection className="text-center mb-12">
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Be first in line.</span>
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">{t.waitlist.heading}</span>
           </h2>
-          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">Join the waitlist and get early access to the future of computing.</p>
+          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">{t.waitlist.subheading}</p>
         </AnimatedSection>
 
         <AnimatedSection delay={0.2}>
@@ -624,17 +628,17 @@ export default function PublicHome() {
                   </div>
                   <h3 className="text-xl font-bold">
                     {alreadyOnList
-                      ? "You're already on the list!"
+                      ? t.waitlist.successAlready
                       : pendingConfirm
-                        ? "Check your email 📬"
-                        : "You're on the list!"}
+                        ? t.waitlist.successPending
+                        : t.waitlist.successOn}
                   </h3>
                   <p className="text-sm text-white/40 mt-2">
                     {alreadyOnList
-                      ? "This email is already registered — no need to sign up twice."
+                      ? t.waitlist.successAlreadyBody
                       : pendingConfirm
-                        ? "We sent you a confirmation link. Click it to lock in your spot — check spam if you don't see it."
-                        : "We'll notify you when Jarvis is ready."}
+                        ? t.waitlist.successPendingBody
+                        : t.waitlist.successOnBody}
                   </p>
                 </div>
               ) : (
@@ -653,7 +657,7 @@ export default function PublicHome() {
                   <div>
                     <input
                       type="text"
-                      placeholder="Your name"
+                      placeholder={t.waitlist.namePh}
                       value={formName}
                       onChange={(e) => setFormName(e.target.value)}
                       required
@@ -663,7 +667,7 @@ export default function PublicHome() {
                   <div>
                     <input
                       type="email"
-                      placeholder="your@email.com"
+                      placeholder={t.waitlist.emailPh}
                       value={formEmail}
                       onChange={(e) => setFormEmail(e.target.value)}
                       required
@@ -678,14 +682,13 @@ export default function PublicHome() {
                     <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-blue-600" />
                     <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="absolute inset-0 shadow-[0_0_60px_rgba(120,80,220,0.4)] group-hover:shadow-[0_0_80px_rgba(120,80,220,0.6)] transition-shadow" />
-                    <span className="relative z-10">{submitting ? "Joining…" : "Join Waitlist"}</span>
+                    <span className="relative z-10">{submitting ? t.waitlist.joining : t.waitlist.join}</span>
                   </button>
                   {submitError && (
                     <p className="text-xs text-red-400/80 text-center">{submitError}</p>
                   )}
                   <p className="text-[11px] text-white/25 text-center leading-relaxed">
-                    When you join, your first name (e.g. &quot;Anna K.&quot;) is announced in our Discord community.
-                    Your email is never shown anywhere.
+                    {t.waitlist.disclaimer}
                   </p>
                 </form>
               )}
@@ -698,7 +701,7 @@ export default function PublicHome() {
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400" />
                   </span>
                   <span className="text-sm text-white/50">
-                    <span className="font-bold text-white/80">{waitlistCount.toLocaleString()}</span> people waiting
+                    <span className="font-bold text-white/80">{waitlistCount.toLocaleString()}</span> {t.waitlist.peopleWaiting}
                   </span>
                 </div>
               </div>
@@ -711,15 +714,15 @@ export default function PublicHome() {
       <section className="relative py-24 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "700px" }}>
         <AnimatedSection className="text-center mb-12">
           <h2 className="text-3xl sm:text-4xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Join the community.</span>
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">{t.community.heading}</span>
           </h2>
         </AnimatedSection>
 
         <div className="max-w-2xl mx-auto grid gap-4 sm:grid-cols-3">
           {[
             {
-              label: "Discord",
-              desc: "Chat with builders",
+              label: t.community.discord.label,
+              desc: t.community.discord.desc,
               href: "https://discord.gg/mpjHw5QD",
               gradient: "from-indigo-500 to-violet-500",
               icon: (
@@ -729,8 +732,8 @@ export default function PublicHome() {
               ),
             },
             {
-              label: "Documentation",
-              desc: "Learn how it works",
+              label: t.community.docs.label,
+              desc: t.community.docs.desc,
               href: "#",
               gradient: "from-blue-500 to-cyan-500",
               icon: (
@@ -740,8 +743,8 @@ export default function PublicHome() {
               ),
             },
             {
-              label: "Roadmap",
-              desc: "See what's next",
+              label: t.community.roadmap.label,
+              desc: t.community.roadmap.desc,
               href: "/roadmap",
               gradient: "from-violet-500 to-fuchsia-500",
               icon: (
@@ -785,7 +788,7 @@ export default function PublicHome() {
           >
             <button
               onClick={() => setModal(null)}
-              aria-label="Close"
+              aria-label={t.modal.close}
               className="absolute top-5 right-5 w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center text-white/50 hover:text-white hover:border-white/25 transition-all active:scale-90"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -823,7 +826,7 @@ export default function PublicHome() {
               onClick={() => setModal(null)}
               className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-violet-300 hover:text-violet-200 transition-colors"
             >
-              Get early access
+              {t.modal.getAccess}
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
             </a>
           </div>
@@ -846,30 +849,30 @@ export default function PublicHome() {
               href="/faq"
               className="text-white/40 hover:text-white/80 transition-colors"
             >
-              FAQ
+              {t.footer.faq}
             </a>
             <a
               href="/privacy"
               className="text-white/40 hover:text-white/80 transition-colors"
             >
-              Privacy Policy
+              {t.footer.privacy}
             </a>
             <a
               href="/terms"
               className="text-white/40 hover:text-white/80 transition-colors"
             >
-              Terms of Service
+              {t.footer.terms}
             </a>
             <a
               href="/contact"
               className="text-white/40 hover:text-white/80 transition-colors"
             >
-              Contact
+              {t.footer.contact}
             </a>
           </nav>
 
           <div className="text-xs text-white/30 text-center sm:text-right">
-            &copy; {new Date().getFullYear()} AssistantX. All rights reserved.
+            &copy; {new Date().getFullYear()} AssistantX. {t.footer.rights}
           </div>
         </div>
       </footer>

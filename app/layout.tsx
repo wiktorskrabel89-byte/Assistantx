@@ -93,11 +93,12 @@ export default async function RootLayout({
   // own inline bootstrap <script> tags with the correct nonce attribute.
   // Without this, browsers that honour nonces in CSP ignore 'unsafe-inline'
   // and block Next.js's hydration scripts.
-  await headers();
+  const h = await headers();
+  const uiLang = h.get("x-assistantx-ui-language") === "pl" ? "pl" : "en";
 
   return (
     <html
-      lang="en"
+      lang={uiLang}
       className={`dark ${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
       <head>
