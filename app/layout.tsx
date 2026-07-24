@@ -16,8 +16,53 @@ export const metadata: Metadata = {
   },
   metadataBase: new URL("https://www.assistantx.pl"),
   description: "AssistantX is your AI assistant — a workspace for chat, uploads, integrations, cloud-synced projects, creation, and editing.",
+  applicationName: "AssistantX",
+  keywords: [
+    "AssistantX",
+    "AI assistant",
+    "AI workspace",
+    "chat",
+    "AI integrations",
+    "cloud sync",
+    "AI creation",
+    "AI editing",
+  ],
   alternates: {
     canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: "https://www.assistantx.pl",
+    siteName: "AssistantX",
+    title: "AssistantX — your AI assistant",
+    description:
+      "A workspace for chat, uploads, integrations, cloud-synced projects, creation, and editing.",
+    locale: "en_US",
+    images: [
+      {
+        url: "/icon-512.png",
+        width: 512,
+        height: 512,
+        alt: "AssistantX",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AssistantX — your AI assistant",
+    description:
+      "A workspace for chat, uploads, integrations, cloud-synced projects, creation, and editing.",
+    images: ["/icon-512.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
   },
   icons: {
     icon: [

@@ -11,104 +11,140 @@ export default function TermsPage() {
   return (
     <LegalDocument
       title="Terms of Service"
-      description="These Terms of Service govern your access to and use of AssistantX, including chat, uploads, integrations, exports, and related services. By using the site, you agree to these terms."
-      lastUpdated="April 14, 2026"
+      description="These Terms of Service (the “Terms”) are a legal agreement between you and the operator of AssistantX (the “Service”). They govern your access to and use of the Service, including the website, chat, uploads, integrations, and any related features. By using the Service you agree to these Terms."
+      lastUpdated="July 24, 2026"
     >
       <section>
-        <h2>1. Acceptance Of Terms</h2>
+        <h2>1. Agreement</h2>
         <p>
-          By accessing or using AssistantX, you agree to be bound by these Terms of Service and by our Privacy Policy. If you do not agree, do not use the service.
+          By creating an account, joining the waitlist, or otherwise using the Service, you confirm that you have read, understood, and agreed to these Terms and to our <Link href="/privacy">Privacy Policy</Link>. If you do not agree to any part of the Terms, do not use the Service.
         </p>
       </section>
 
-        <section>
-          <h2>2. Eligibility And Accounts</h2>
-          <p>
-            You must use the service only in compliance with applicable law. You are responsible for maintaining the security of your account, authentication methods, and any third-party integrations you connect.
-          </p>
-        </section>
-
-        <section>
-          <h2>3. Use Of The Service</h2>
-          <p>
-            You may use the service to create, store, and process prompts, files, outputs, and workspace data. We may update, improve, limit, suspend, or discontinue parts of the service at any time.
-          </p>
-        </section>
-
-        <section>
-          <h2>4. Acceptable Use</h2>
-          <p>You agree not to use the service to:</p>
-          <ul>
-            <li>Break the law or violate the rights of others.</li>
-            <li>Upload or submit content you do not have the right to use.</li>
-            <li>Attempt to gain unauthorized access to accounts, systems, tokens, or data.</li>
-            <li>Interfere with service availability, abuse rate limits, or bypass security controls.</li>
-            <li>Use the service to distribute malware, spam, deceptive content, or harmful automated traffic.</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2>5. Your Content</h2>
-          <p>
-            You retain ownership of content you submit to the service. By using AssistantX, you grant us a limited, non-exclusive license to host, store, reproduce, transmit, and process that content only as needed to operate, secure, and improve the service and to fulfill the features you request.
-          </p>
-        </section>
-
-        <section>
-          <h2>6. AI Outputs</h2>
-          <p>
-            AI-generated responses may be incomplete, inaccurate, offensive, or unsuitable for your use case. You are responsible for reviewing and validating outputs before relying on them for legal, financial, medical, security, engineering, or other high-impact decisions.
-          </p>
-        </section>
-
-        <section>
-          <h2>7. Integrations And Third-Party Services</h2>
-          <p>
-            Some features depend on third-party services such as authentication providers, cloud storage, code hosting, or AI APIs. Your use of those services may also be governed by their own terms and policies. We are not responsible for third-party services, content, availability, or security practices.
-          </p>
-        </section>
-
-        <section>
-          <h2>8. Fees And Changes</h2>
-          <p>
-            Unless explicitly stated otherwise, the service is provided on the pricing and availability terms shown within the app or on the site at the time of use. We may add, remove, or change features or pricing in the future.
-          </p>
-        </section>
-
-        <section>
-          <h2>9. Suspension And Termination</h2>
-          <p>
-            We may suspend or terminate access to the service at any time if we believe you have violated these terms, created risk for the service or other users, or if continued access is no longer operationally feasible.
-          </p>
-        </section>
-
-        <section>
-          <h2>10. Disclaimers</h2>
-          <p>
-            The service is provided on an as-is and as-available basis, without warranties of any kind, whether express or implied, to the maximum extent permitted by law. We do not guarantee uninterrupted availability, perfect accuracy, or that the service will meet every requirement.
-          </p>
-        </section>
-
-        <section>
-          <h2>11. Limitation Of Liability</h2>
-          <p>
-            To the maximum extent permitted by law, the operator of AssistantX will not be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for any loss of profits, revenue, goodwill, data, or business opportunity arising from or related to your use of the service.
-          </p>
-        </section>
-
-        <section>
-          <h2>12. Changes To These Terms</h2>
-          <p>
-            We may update these Terms of Service from time to time. When we do, we will post the revised version on this page and update the last updated date. Continued use of the service after the updated terms take effect means you accept them.
-          </p>
-        </section>
+      <section>
+        <h2>2. Eligibility</h2>
+        <p>
+          You must be at least 16 years old to use the Service, or the age of digital consent in your jurisdiction — whichever is higher. If you are using the Service on behalf of a company or organization, you represent that you have authority to bind that entity to these Terms.
+        </p>
+      </section>
 
       <section>
-        <h2>13. Contact</h2>
+        <h2>3. Accounts And Security</h2>
+        <ul>
+          <li>You are responsible for all activity that occurs under your account.</li>
+          <li>Keep your login credentials and authentication factors confidential.</li>
+          <li>Notify us promptly of any suspected unauthorized access or security incident.</li>
+          <li>We may suspend accounts that show signs of compromise or abuse.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. Your Content</h2>
         <p>
-          If you have questions about these Terms of Service, contact the operator at
-          <a href="mailto:support.assistantx.pl@gmail.com" className="text-blue-600 underline ml-1">support.assistantx.pl@gmail.com</a>
-          or visit our <Link href="/" className="text-blue-600 underline ml-1">homepage</Link> for more information.
+          You retain ownership of the content you submit, upload, or generate through the Service (&ldquo;Your Content&rdquo;). You grant us a worldwide, non-exclusive, royalty-free license to host, store, transmit, display, and process Your Content solely to operate, secure, and improve the Service and to provide the features you request.
+        </p>
+        <p>
+          You are responsible for making sure Your Content does not infringe any third-party rights and complies with applicable law.
+        </p>
+      </section>
+
+      <section>
+        <h2>5. AI Features And Output</h2>
+        <p>
+          The Service uses large language models and other AI systems to generate output (&ldquo;Output&rdquo;). Because AI systems can produce inaccurate, misleading, incomplete, or offensive content, you agree that:
+        </p>
+        <ul>
+          <li>Output is provided &ldquo;as is&rdquo; and should not be treated as professional advice (legal, medical, financial, engineering, or otherwise).</li>
+          <li>You are responsible for reviewing Output before relying on it or sharing it.</li>
+          <li>Similar prompts from different users may produce similar Output; we cannot guarantee uniqueness.</li>
+          <li>Some Output may be subject to third-party rights depending on the sources reflected in training data — you are responsible for confirming your right to use it.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>6. Acceptable Use</h2>
+        <p>You agree not to use the Service to:</p>
+        <ul>
+          <li>Violate any law, regulation, or the rights of others.</li>
+          <li>Upload or generate content that is unlawful, harmful, sexually explicit involving minors, or that promotes violence or discrimination.</li>
+          <li>Attempt to reverse engineer, decompile, or circumvent security measures.</li>
+          <li>Scrape, crawl, or automate the Service in a way that is not expressly permitted.</li>
+          <li>Interfere with the Service, other users, or the underlying infrastructure.</li>
+          <li>Use the Service to build a competing product, or to train competing AI models.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>7. Third-Party Services And Integrations</h2>
+        <p>
+          The Service may integrate with third-party providers (for example GitHub, Google Drive, AI model APIs). Your use of those services is governed by their own terms and privacy policies, and we are not responsible for their content, availability, or practices.
+        </p>
+      </section>
+
+      <section>
+        <h2>8. Fees, Trials, And Changes</h2>
+        <p>
+          Some parts of the Service may be free, and other parts may require payment. Any paid features, prices, billing cycles, and refund terms will be presented in the Service before you commit to them. We may change pricing or introduce new charges by giving reasonable prior notice. Free trials may end at any time.
+        </p>
+      </section>
+
+      <section>
+        <h2>9. Intellectual Property</h2>
+        <p>
+          The Service, including its software, design, trademarks, and logos, is owned by AssistantX and its licensors and is protected by intellectual property laws. Except for the limited rights expressly granted in these Terms, you receive no rights in the Service.
+        </p>
+      </section>
+
+      <section>
+        <h2>10. Suspension And Termination</h2>
+        <p>
+          You may stop using the Service at any time. We may suspend or terminate your access to the Service — with or without notice — if you violate these Terms, if we are required to do so by law, or if continued access creates a material risk. On termination, your license to use the Service ends immediately.
+        </p>
+      </section>
+
+      <section>
+        <h2>11. Warranty Disclaimer</h2>
+        <p>
+          THE SERVICE AND OUTPUT ARE PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS AVAILABLE&rdquo;, WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND ACCURACY. WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, OR SECURE.
+        </p>
+      </section>
+
+      <section>
+        <h2>12. Limitation Of Liability</h2>
+        <p>
+          TO THE MAXIMUM EXTENT PERMITTED BY LAW, ASSISTANTX AND ITS OPERATORS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL, OR BUSINESS OPPORTUNITY, EVEN IF ADVISED OF THE POSSIBILITY. OUR TOTAL LIABILITY FOR ANY CLAIM ARISING OUT OF OR RELATING TO THE SERVICE WILL NOT EXCEED THE GREATER OF (A) THE AMOUNTS YOU PAID US IN THE 12 MONTHS BEFORE THE CLAIM AND (B) €100.
+        </p>
+      </section>
+
+      <section>
+        <h2>13. Indemnification</h2>
+        <p>
+          You agree to indemnify and hold harmless AssistantX, its operators, contractors, and licensors from any claims, damages, liabilities, and expenses (including reasonable legal fees) arising out of your Content, your use of the Service, or your violation of these Terms.
+        </p>
+      </section>
+
+      <section>
+        <h2>14. Governing Law And Disputes</h2>
+        <p>
+          These Terms are governed by the laws of the jurisdiction where the operator of AssistantX is established, without regard to conflict-of-laws principles. Disputes arising out of or in connection with the Service will be resolved in the courts of that jurisdiction, unless mandatory consumer-protection laws in your country of residence require otherwise.
+        </p>
+      </section>
+
+      <section>
+        <h2>15. Changes To These Terms</h2>
+        <p>
+          We may update these Terms from time to time. The updated version will be posted on this page with a new &ldquo;Last updated&rdquo; date. Material changes will be announced within the Service or by email. Continued use of the Service after changes take effect means you accept them.
+        </p>
+      </section>
+
+      <section>
+        <h2>16. Contact</h2>
+        <p>
+          Questions about these Terms of Service can be sent to
+          {" "}
+          <a href="mailto:support.assistantx.pl@gmail.com" className="underline">support.assistantx.pl@gmail.com</a>
+          {" "}
+          or reach us through <Link href="/" className="underline">the AssistantX homepage</Link>.
         </p>
       </section>
     </LegalDocument>
