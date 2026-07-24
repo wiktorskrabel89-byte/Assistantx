@@ -827,7 +827,7 @@ export default function PublicHome() {
           </nav>
 
           <div className="text-xs text-white/30 text-center sm:text-right">
-            &copy; {new Date().getFullYear()} AssistantX by Acrux.pl Sp. z o.o. All rights reserved.
+            &copy; {new Date().getFullYear()} AssistantX. All rights reserved.
           </div>
         </div>
       </footer>
