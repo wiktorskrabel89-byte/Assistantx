@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 function AnimatedSection({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
   return (
@@ -247,8 +247,6 @@ type ModalContent = {
 };
 
 export default function PublicHome() {
-  const containerRef = useRef<HTMLDivElement>(null);
-
   const [waitlistCount] = useState(128431);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
@@ -285,15 +283,6 @@ export default function PublicHome() {
       setSubmitting(false);
     }
   };
-
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
-    };
-    window.addEventListener("mousemove", handler);
-    return () => window.removeEventListener("mousemove", handler);
-  }, []);
 
   // Click-to-explain interactions
   const [modal, setModal] = useState<ModalContent | null>(null);
@@ -350,7 +339,7 @@ export default function PublicHome() {
   };
 
   return (
-    <div ref={containerRef} className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
+    <div className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -360,8 +349,7 @@ export default function PublicHome() {
         <div
           className="absolute inset-0 opacity-30"
           style={{
-            background: `radial-gradient(ellipse 80% 50% at ${50 + mousePos.x * 10}% ${30 + mousePos.y * 10}%, rgba(120,80,220,0.15), transparent)`,
-            transition: "background 0.3s ease",
+            background: "radial-gradient(ellipse 80% 50% at 55% 35%, rgba(120,80,220,0.15), transparent)",
           }}
         />
         <div className="absolute inset-0 opacity-20" style={{ background: "radial-gradient(ellipse 60% 40% at 70% 60%, rgba(0,180,255,0.1), transparent)" }} />
