@@ -118,28 +118,21 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2>10. Children</h2>
-          <p>
-            The Service is not directed to children under 16, and we do not knowingly collect personal information from children. If you believe a child has provided personal information, contact us and we will delete it.
-          </p>
-        </section>
-
-        <section>
-          <h2>11. Cookies</h2>
+          <h2>10. Cookies</h2>
           <p>
             We use strictly necessary cookies to sign you in and remember basic preferences. We may also use analytics cookies to understand product usage. You can control non-essential cookies through your browser settings and any consent controls presented on the site.
           </p>
         </section>
 
         <section>
-          <h2>12. Changes To This Policy</h2>
+          <h2>11. Changes To This Policy</h2>
           <p>
             We may update this Privacy Policy from time to time. When we do, we will post the updated version on this page and change the &ldquo;Last updated&rdquo; date at the top. Material changes will also be highlighted in the Service or by email where appropriate.
           </p>
         </section>
 
         <section>
-          <h2>13. Contact</h2>
+          <h2>12. Contact</h2>
           <p>
             Questions or requests about this Privacy Policy can be sent through our <Link href="/contact">Contact page</Link>. We aim to respond within 30 days.
           </p>
