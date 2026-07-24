@@ -1,7 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { getUiLang } from "@/app/lib/get-ui-lang";
+import { PAGE_STRINGS } from "@/app/lib/page-strings";
+import { LanguageSwitcher } from "@/app/components/LanguageSwitcher";
 
-export function LegalDocument({
+export async function LegalDocument({
   title,
   description,
   lastUpdated,
@@ -12,9 +15,12 @@ export function LegalDocument({
   lastUpdated: string;
   children: ReactNode;
 }) {
+  const lang = await getUiLang();
+  const s = PAGE_STRINGS[lang];
+
   return (
     <main className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
-      {/* Ambient background matching the landing page */}
+      <LanguageSwitcher lang={lang} />
       <div className="pointer-events-none fixed inset-0">
         <div
           className="absolute inset-0 opacity-30"
@@ -55,7 +61,7 @@ export function LegalDocument({
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
             </svg>
-            Back to AssistantX
+            {s.back}
           </Link>
 
           <nav className="flex flex-wrap gap-2 text-xs">
@@ -63,32 +69,32 @@ export function LegalDocument({
               href="/faq"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
-              FAQ
+              {s.nav.faq}
             </Link>
             <Link
               href="/privacy"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
-              Privacy
+              {s.nav.privacy}
             </Link>
             <Link
               href="/terms"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
-              Terms
+              {s.nav.terms}
             </Link>
             <Link
               href="/contact"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
-              Contact
+              {s.nav.contact}
             </Link>
           </nav>
         </div>
 
         <article className="relative rounded-3xl border border-white/[0.08] bg-white/[0.03] p-7 shadow-2xl shadow-purple-500/5 backdrop-blur-xl sm:p-10">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-violet-300/80">
-            Last updated {lastUpdated}
+            {s.legal.lastUpdatedLabel} {lastUpdated}
           </p>
           <h1 className="mt-4 text-4xl font-black tracking-[-0.03em] sm:text-5xl">
             <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
@@ -103,19 +109,19 @@ export function LegalDocument({
         </article>
 
         <footer className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-xs text-white/30 sm:flex-row">
-          <span>&copy; {new Date().getFullYear()} AssistantX. All rights reserved.</span>
+          <span>&copy; {new Date().getFullYear()} AssistantX. {s.footerRights}</span>
           <div className="flex gap-4">
             <Link href="/faq" className="hover:text-white/60 transition-colors">
-              FAQ
+              {s.nav.faq}
             </Link>
             <Link href="/privacy" className="hover:text-white/60 transition-colors">
-              Privacy Policy
+              {s.nav.privacy}
             </Link>
             <Link href="/terms" className="hover:text-white/60 transition-colors">
-              Terms of Service
+              {s.nav.terms}
             </Link>
             <Link href="/contact" className="hover:text-white/60 transition-colors">
-              Contact
+              {s.nav.contact}
             </Link>
           </div>
         </footer>

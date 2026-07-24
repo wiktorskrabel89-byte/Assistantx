@@ -1,6 +1,8 @@
+import type { PublicUILanguage } from "@/app/lib/ui-language";
+
 export type FaqItem = { question: string; answer: string };
 
-export const FAQ_ITEMS: FaqItem[] = [
+const EN: FaqItem[] = [
   {
     question: "What exactly is AssistantX?",
     answer:
@@ -62,3 +64,73 @@ export const FAQ_ITEMS: FaqItem[] = [
       "Use the Contact page (also linked in the footer) — pick a topic and your mail app will open with the right subject pre-filled. We aim to reply within 1–2 business days. You can also join the Discord community for real-time discussion.",
   },
 ];
+
+const PL: FaqItem[] = [
+  {
+    question: "Czym dokładnie jest AssistantX?",
+    answer:
+      "AssistantX (roboczo: Jarvis) to osobisty asystent AI, który żyje na Twoim urządzeniu — nie chatbot w karcie przeglądarki. Słucha głosu, czyta kontekst z ekranu, obsługuje Twój pulpit, pamięta co mu powiesz i staje się lepszy, im częściej go używasz. Prawdziwy asystent w formie oprogramowania.",
+  },
+  {
+    question: "Czy naprawdę działa offline?",
+    answer:
+      "Tak. AssistantX działa lokalnie: sam asystent, jego pamięć i umiejętności działają na Twoim urządzeniu, korzystając z lokalnych modeli (Ollama i podobne). Bez internetu też działa — Twoje dane nie opuszczają komputera. Gdy zadanie naprawdę skorzysta z modelu chmurowego, asystent może eskalować — ale tylko za Twoją zgodą.",
+  },
+  {
+    question: "Z jakich modeli AI korzysta?",
+    answer:
+      "Domyślnie korzysta z lokalnych modeli open-source. Gdy potrzeba więcej mocy, możesz włączyć eskalację do dostawców chmurowych (OpenAI, Anthropic, Google, OpenRouter). Każde zadanie jest kierowane do najlepszego modelu, a Ty możesz przypiąć ulubione lub wymusić tylko lokalne dla ścisłej prywatności.",
+  },
+  {
+    question: "Czy naprawdę uczy się na błędach?",
+    answer:
+      "Tak — to jedna z kluczowych idei. Każda porażka i sukces są analizowane, klasyfikowane i zamieniane w lekcję. Umiejętności są wersjonowane jak oprogramowanie: poprawiają się z użyciem, można je cofnąć, a każda nauczona zmiana jest sprawdzalna. Jest też walidacja anty-zatruwania, więc asystenta nie da się nauczyć czegoś szkodliwego.",
+  },
+  {
+    question: "Jak działa pamięć?",
+    answer:
+      "AssistantX ma pamięć warstwową — pamięć rozmowy dla bieżącego wątku i pamięć długoterminową dla faktów, preferencji, projektów i decyzji między sesjami. Każdy zapis pamięci można sprawdzić, edytować i usunąć. Żadnej czarnej skrzynki: możesz otworzyć ślad audytu i zobaczyć, co i dlaczego asystent zapamiętał.",
+  },
+  {
+    question: "Czy naprawdę może sterować moim komputerem?",
+    answer:
+      "Tak. AssistantX obsługuje pulpit natywnie — uruchamia aplikacje, klika, pisze, przenosi pliki, koordynuje przepływy między narzędziami. Każda realna akcja przechodzi przez bramę uprawnień, którą kontrolujesz — nic nie dzieje się za Twoimi plecami. Możesz też całkowicie wyłączyć sterowanie pulpitem i używać AssistantX tylko jako asystenta głosowego.",
+  },
+  {
+    question: "Czy moje dane są prywatne?",
+    answer:
+      "Z założenia tak. Architektura local-first oznacza, że Twój obszar roboczy, pamięć, pliki i prompty pozostają na Twoim urządzeniu, chyba że jawnie wyślesz je do modelu chmurowego. Twoje prywatne treści nigdy nie są wykorzystywane do trenowania modeli. Dane w tranzycie są szyfrowane, dostęp jest uwierzytelniany, a obszar roboczy lub konto możesz usunąć w każdej chwili — szczegóły w Polityce prywatności.",
+  },
+  {
+    question: "Czym różni się od ChatGPT, Claude'a albo Gemini?",
+    answer:
+      "To są modele AI. AssistantX to asystent zbudowany wokół nich: trwała pamięć, prawdziwe akcje na pulpicie, praca offline dzięki lokalnym modelom, uczenie się z doświadczenia, interfejs głosowy i wielu współpracujących agentów przy złożonych zadaniach. Możesz używać tych modeli przez AssistantX — ale AssistantX daje to, czego one same nie mają: pamięć, autonomię, wykonanie i ciągłość.",
+  },
+  {
+    question: "Czym jest inteligencja wieloagentowa?",
+    answer:
+      "Przy dużych zadaniach AssistantX potrafi uruchomić wyspecjalizowanych sub-agentów pracujących równolegle — badacz, programista, recenzent — koordynowanych przez warstwę orkiestracji z oceną zaufania i adwersarialną weryfikacją wyników. Zamiast jednego zgadującego modelu, kilku agentów sprawdza się nawzajem. Pojawi się w wersji 2.0.",
+  },
+  {
+    question: "Na jakich platformach działa?",
+    answer:
+      "Aplikacja desktopowa na Windows, macOS i Linux (spakowana w Electronie). Wersja webowa działa w każdej nowoczesnej przeglądarce. Natywna aplikacja mobilna jest w planach.",
+  },
+  {
+    question: "Kiedy premiera i czy jest darmowy?",
+    answer:
+      "Zapraszamy z listy oczekujących falami — dołącz do listy, aby dostać wczesne zaproszenie. Hojna wersja darmowa zawsze będzie dostępna do codziennego użytku. Płatne plany odblokują większe użycie modeli chmurowych, premium i priorytetowe kolejki. Ceny są zawsze pokazane w aplikacji, zanim się zdecydujesz.",
+  },
+  {
+    question: "Jak się z Wami skontaktować?",
+    answer:
+      "Skorzystaj ze strony Kontakt (link jest też w stopce) — wybierz temat, a Twoja aplikacja pocztowa otworzy się z odpowiednim tematem. Odpowiadamy zwykle w 1–2 dni robocze. Możesz też dołączyć do naszej społeczności na Discordzie.",
+  },
+];
+
+export function getFaqItems(lang: PublicUILanguage): FaqItem[] {
+  return lang === "pl" ? PL : EN;
+}
+
+// Backwards-compatible export for callers that don't yet pass a language.
+export const FAQ_ITEMS: FaqItem[] = EN;
