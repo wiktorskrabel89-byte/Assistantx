@@ -312,11 +312,11 @@ export default function PublicHome() {
         {/* Logo */}
         <div className="mb-8 hero-logo">
           <div className="relative">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 flex items-center justify-center shadow-2xl shadow-purple-500/20">
+            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-2xl shadow-purple-500/20 overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/jarvis-logo.svg" alt="AssistantX-Jarvis logo" className="w-12 h-12" />
+              <img src="/assistantx-logo.svg" alt="AssistantX logo" className="w-20 h-20" />
             </div>
-            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 opacity-20 blur-xl" />
+            <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 opacity-20 blur-xl" />
           </div>
         </div>
 
@@ -802,16 +802,32 @@ export default function PublicHome() {
 
       {/* ═══════════════ FOOTER ═══════════════ */}
       <footer className="relative border-t border-white/[0.05] py-10 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-6xl mx-auto flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/jarvis-logo.svg" alt="" className="w-5 h-5" />
+              <img src="/assistantx-logo.svg" alt="" className="w-8 h-8" />
             </div>
-            <span className="text-sm text-white/40">AssistantX-Jarvis</span>
+            <span className="text-sm text-white/40">AssistantX</span>
           </div>
-          <div className="text-xs text-white/20">
-            &copy; {new Date().getFullYear()} Acrux.pl Sp. z o.o. All rights reserved.
+
+          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs">
+            <a
+              href="/privacy"
+              className="text-white/40 hover:text-white/80 transition-colors"
+            >
+              Privacy Policy
+            </a>
+            <a
+              href="/terms"
+              className="text-white/40 hover:text-white/80 transition-colors"
+            >
+              Terms of Service
+            </a>
+          </nav>
+
+          <div className="text-xs text-white/30 text-center sm:text-right">
+            &copy; {new Date().getFullYear()} AssistantX by Acrux.pl Sp. z o.o. All rights reserved.
           </div>
         </div>
       </footer>
