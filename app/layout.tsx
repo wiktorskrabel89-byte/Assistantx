@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     template: "%s | AssistantX",
   },
   metadataBase: new URL("https://www.assistantx.pl"),
-  description: "AssistantX is the AI Operating System — a workspace for chat, uploads, integrations, cloud-synced projects, creation, and editing.",
+  description: "AssistantX is your AI assistant — a workspace for chat, uploads, integrations, cloud-synced projects, creation, and editing.",
   alternates: {
     canonical: "/",
   },
