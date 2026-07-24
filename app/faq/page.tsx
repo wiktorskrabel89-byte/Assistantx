@@ -1,17 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FAQ_ITEMS } from "@/app/lib/faq-items";
+import { getFaqItems } from "@/app/lib/faq-items";
+import { getUiLang } from "@/app/lib/get-ui-lang";
+import { PAGE_STRINGS } from "@/app/lib/page-strings";
+import { LanguageSwitcher } from "@/app/components/LanguageSwitcher";
 
 export const metadata: Metadata = {
   title: "FAQ",
   description: "Answers to the questions most people ask about AssistantX.",
 };
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const lang = await getUiLang();
+  const s = PAGE_STRINGS[lang];
+  const items = getFaqItems(lang);
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: FAQ_ITEMS.map((item) => ({
+    mainEntity: items.map((item) => ({
       "@type": "Question",
       name: item.question,
       acceptedAnswer: { "@type": "Answer", text: item.answer },
@@ -20,6 +27,7 @@ export default function FaqPage() {
 
   return (
     <main className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
+      <LanguageSwitcher lang={lang} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -69,51 +77,51 @@ export default function FaqPage() {
                 d="M15.75 19.5 8.25 12l7.5-7.5"
               />
             </svg>
-            Back to AssistantX
+            {s.back}
           </Link>
           <nav className="flex flex-wrap gap-2 text-xs">
             <Link
               href="/faq"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
-              FAQ
+              {s.nav.faq}
             </Link>
             <Link
               href="/privacy"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
-              Privacy
+              {s.nav.privacy}
             </Link>
             <Link
               href="/terms"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
-              Terms
+              {s.nav.terms}
             </Link>
             <Link
               href="/contact"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
-              Contact
+              {s.nav.contact}
             </Link>
           </nav>
         </div>
 
         <article className="relative rounded-3xl border border-white/[0.08] bg-white/[0.03] p-7 shadow-2xl shadow-purple-500/5 backdrop-blur-xl sm:p-10">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-violet-300/80">
-            FAQ
+            {s.faq.eyebrow}
           </p>
           <h1 className="mt-4 text-4xl font-black tracking-[-0.03em] sm:text-5xl">
             <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-              Frequently asked.
+              {s.faq.heading}
             </span>
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-white/60">
-            Short, honest answers to the questions we hear most.
+            {s.faq.intro}
           </p>
 
           <div className="mt-10 space-y-3">
-            {FAQ_ITEMS.map((item) => (
+            {items.map((item) => (
               <details
                 key={item.question}
                 className="group rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-5 transition-all hover:border-white/[0.14] hover:bg-white/[0.04] open:border-white/[0.14] open:bg-white/[0.04]"
@@ -147,31 +155,31 @@ export default function FaqPage() {
           </div>
 
           <p className="mt-10 text-center text-sm text-white/40">
-            Didn&apos;t find your answer?{" "}
+            {s.faq.notFound}{" "}
             <Link
               href="/contact"
               className="text-violet-300 hover:text-violet-200 underline decoration-violet-400/50 underline-offset-2 transition-colors"
             >
-              Get in touch
+              {s.faq.getInTouch}
             </Link>
             .
           </p>
         </article>
 
         <footer className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-xs text-white/30 sm:flex-row">
-          <span>&copy; {new Date().getFullYear()} AssistantX. All rights reserved.</span>
+          <span>&copy; {new Date().getFullYear()} AssistantX. {s.footerRights}</span>
           <div className="flex gap-4">
             <Link href="/faq" className="hover:text-white/60 transition-colors">
-              FAQ
+              {s.nav.faq}
             </Link>
             <Link href="/privacy" className="hover:text-white/60 transition-colors">
-              Privacy Policy
+              {s.nav.privacy}
             </Link>
             <Link href="/terms" className="hover:text-white/60 transition-colors">
-              Terms of Service
+              {s.nav.terms}
             </Link>
             <Link href="/contact" className="hover:text-white/60 transition-colors">
-              Contact
+              {s.nav.contact}
             </Link>
           </div>
         </footer>
