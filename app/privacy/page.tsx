@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalDocument } from "@/app/components/LegalDocument";
-import ChatbotSection from "@/app/components/ChatbotSection";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -10,8 +9,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <>
-      <LegalDocument
+    <LegalDocument
         title="Privacy Policy"
         description="This Privacy Policy describes how AssistantX (the “Service”) collects, uses, and shares information when you visit the website, create an account, or use any of the product’s features. By using the Service you agree to the practices described here."
         lastUpdated="July 24, 2026"
@@ -146,8 +144,6 @@ export default function PrivacyPage() {
             Questions or requests about this Privacy Policy can be sent to the contact address published on <Link href="/">the AssistantX homepage</Link>. We aim to respond within 30 days.
           </p>
         </section>
-      </LegalDocument>
-      <ChatbotSection />
-    </>
+    </LegalDocument>
   );
 }

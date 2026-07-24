@@ -13,37 +13,94 @@ export function LegalDocument({
   children: ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),_transparent_35%),linear-gradient(180deg,_#0f172a,_#111827_45%,_#020617)] px-6 py-12 text-white">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-300">
-          <div className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-cyan-200">
-            AssistantX Legal
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/" className="rounded-xl border border-white/10 px-3 py-2 transition hover:bg-white/10">
-              App
-            </Link>
-            <Link href="/auth/login" className="rounded-xl border border-white/10 px-3 py-2 transition hover:bg-white/10">
-              Sign in
-            </Link>
-            <Link href="/privacy" className="rounded-xl border border-white/10 px-3 py-2 transition hover:bg-white/10">
+    <main className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
+      {/* Ambient background matching the landing page */}
+      <div className="pointer-events-none fixed inset-0">
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 50% at 50% 15%, rgba(120,80,220,0.15), transparent)",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 40% at 80% 60%, rgba(0,180,255,0.1), transparent)",
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+          }}
+        />
+      </div>
+
+      <div className="relative mx-auto max-w-4xl px-6 py-14">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-white/60 transition-colors hover:text-white"
+          >
+            <svg
+              className="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+            Back to AssistantX
+          </Link>
+
+          <nav className="flex flex-wrap gap-2 text-xs">
+            <Link
+              href="/privacy"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
+            >
               Privacy
             </Link>
-            <Link href="/terms" className="rounded-xl border border-white/10 px-3 py-2 transition hover:bg-white/10">
+            <Link
+              href="/terms"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
+            >
               Terms
             </Link>
-          </div>
+          </nav>
         </div>
 
-        <article className="rounded-[2rem] border border-white/10 bg-white/8 p-7 shadow-2xl shadow-cyan-950/30 backdrop-blur-xl sm:p-10">
-          <p className="text-sm uppercase tracking-[0.22em] text-cyan-200">Last updated {lastUpdated}</p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance">{title}</h1>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">{description}</p>
+        <article className="relative rounded-3xl border border-white/[0.08] bg-white/[0.03] p-7 shadow-2xl shadow-purple-500/5 backdrop-blur-xl sm:p-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-violet-300/80">
+            Last updated {lastUpdated}
+          </p>
+          <h1 className="mt-4 text-4xl font-black tracking-[-0.03em] sm:text-5xl">
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+              {title}
+            </span>
+          </h1>
+          <p className="mt-5 max-w-3xl text-base leading-7 text-white/60">{description}</p>
 
-          <div className="mt-8 space-y-8 text-sm leading-7 text-slate-200 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-white [&_li]:ml-5 [&_li]:list-disc [&_p]:text-slate-200 [&_ul]:space-y-2">
+          <div className="mt-10 space-y-8 text-sm leading-7 text-white/70 [&_a]:text-violet-300 [&_a]:underline [&_a]:decoration-violet-400/50 [&_a]:underline-offset-2 [&_a:hover]:text-violet-200 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:text-white [&_h3]:mt-6 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-white/90 [&_li]:ml-5 [&_li]:list-disc [&_li]:marker:text-violet-400/60 [&_p]:text-white/70 [&_strong]:text-white [&_ul]:space-y-2">
             {children}
           </div>
         </article>
+
+        <footer className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-xs text-white/30 sm:flex-row">
+          <span>&copy; {new Date().getFullYear()} AssistantX. All rights reserved.</span>
+          <div className="flex gap-4">
+            <Link href="/privacy" className="hover:text-white/60 transition-colors">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-white/60 transition-colors">
+              Terms of Service
+            </Link>
+          </div>
+        </footer>
       </div>
     </main>
   );
