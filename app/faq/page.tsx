@@ -1,20 +1,30 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { FAQ_ITEMS } from "@/app/lib/faq-items";
 
-export function LegalDocument({
-  title,
-  description,
-  lastUpdated,
-  children,
-}: {
-  title: string;
-  description: string;
-  lastUpdated: string;
-  children: ReactNode;
-}) {
+export const metadata: Metadata = {
+  title: "FAQ",
+  description: "Answers to the questions most people ask about AssistantX.",
+};
+
+export default function FaqPage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQ_ITEMS.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer },
+    })),
+  };
+
   return (
     <main className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
-      {/* Ambient background matching the landing page */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <div className="pointer-events-none fixed inset-0">
         <div
           className="absolute inset-0 opacity-30"
@@ -53,11 +63,14 @@ export function LegalDocument({
               stroke="currentColor"
               strokeWidth={2.5}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15.75 19.5 8.25 12l7.5-7.5"
+              />
             </svg>
             Back to AssistantX
           </Link>
-
           <nav className="flex flex-wrap gap-2 text-xs">
             <Link
               href="/faq"
@@ -88,18 +101,61 @@ export function LegalDocument({
 
         <article className="relative rounded-3xl border border-white/[0.08] bg-white/[0.03] p-7 shadow-2xl shadow-purple-500/5 backdrop-blur-xl sm:p-10">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-violet-300/80">
-            Last updated {lastUpdated}
+            FAQ
           </p>
           <h1 className="mt-4 text-4xl font-black tracking-[-0.03em] sm:text-5xl">
             <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-              {title}
+              Frequently asked.
             </span>
           </h1>
-          <p className="mt-5 max-w-3xl text-base leading-7 text-white/60">{description}</p>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-white/60">
+            Short, honest answers to the questions we hear most.
+          </p>
 
-          <div className="mt-10 space-y-8 text-sm leading-7 text-white/70 [&_a]:text-violet-300 [&_a]:underline [&_a]:decoration-violet-400/50 [&_a]:underline-offset-2 [&_a:hover]:text-violet-200 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:text-white [&_h3]:mt-6 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-white/90 [&_li]:ml-5 [&_li]:list-disc [&_li]:marker:text-violet-400/60 [&_p]:text-white/70 [&_strong]:text-white [&_ul]:space-y-2">
-            {children}
+          <div className="mt-10 space-y-3">
+            {FAQ_ITEMS.map((item) => (
+              <details
+                key={item.question}
+                className="group rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-5 transition-all hover:border-white/[0.14] hover:bg-white/[0.04] open:border-white/[0.14] open:bg-white/[0.04]"
+              >
+                <summary className="flex list-none items-start justify-between gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508] rounded-md">
+                  <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white/85 group-open:text-white transition-colors">
+                    {item.question}
+                  </h2>
+                  <span
+                    aria-hidden="true"
+                    className="mt-1 shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-white/50 transition-all group-open:rotate-45 group-open:border-violet-400/50 group-open:text-violet-300 group-open:bg-violet-500/10"
+                  >
+                    <svg
+                      className="h-3 w-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 4.5v15m7.5-7.5h-15"
+                      />
+                    </svg>
+                  </span>
+                </summary>
+                <p className="mt-4 text-sm leading-7 text-white/60">{item.answer}</p>
+              </details>
+            ))}
           </div>
+
+          <p className="mt-10 text-center text-sm text-white/40">
+            Didn&apos;t find your answer?{" "}
+            <Link
+              href="/contact"
+              className="text-violet-300 hover:text-violet-200 underline decoration-violet-400/50 underline-offset-2 transition-colors"
+            >
+              Get in touch
+            </Link>
+            .
+          </p>
         </article>
 
         <footer className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-xs text-white/30 sm:flex-row">
