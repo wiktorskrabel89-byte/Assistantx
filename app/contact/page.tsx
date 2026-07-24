@@ -87,6 +87,12 @@ export default function ContactPage() {
           </Link>
           <nav className="flex flex-wrap gap-2 text-xs">
             <Link
+              href="/faq"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
+            >
+              FAQ
+            </Link>
+            <Link
               href="/privacy"
               className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 transition hover:border-white/20 hover:bg-white/[0.06]"
             >
@@ -183,6 +189,9 @@ export default function ContactPage() {
         <footer className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-xs text-white/30 sm:flex-row">
           <span>&copy; {new Date().getFullYear()} AssistantX. All rights reserved.</span>
           <div className="flex gap-4">
+            <Link href="/faq" className="hover:text-white/60 transition-colors">
+              FAQ
+            </Link>
             <Link href="/privacy" className="hover:text-white/60 transition-colors">
               Privacy Policy
             </Link>

@@ -163,69 +163,6 @@ const TIMELINE_ITEMS = [
   { label: "Cloud Intelligence", desc: "Distributed AI processing", detail: "Local-first processing with cloud escalation only when a task truly demands it." },
 ];
 
-const FAQ_ITEMS: { question: string; answer: string }[] = [
-  {
-    question: "What exactly is AssistantX?",
-    answer:
-      "AssistantX (codename: Jarvis) is a personal AI assistant that sits on your machine — not a chatbot in a browser tab. It listens to voice, reads context off your screen, controls your desktop, remembers what you tell it, and gets better the more you use it. Think of a real assistant that happens to live in software.",
-  },
-  {
-    question: "Does it actually run offline?",
-    answer:
-      "Yes. AssistantX is local-first: the assistant, its memory, and its skills run on your machine using local models (Ollama and similar). No internet, no problem — your data doesn't leave your computer, and the assistant keeps working. When a task truly benefits from a cloud model, it can escalate to one, but only with your consent.",
-  },
-  {
-    question: "Which AI models does it use?",
-    answer:
-      "By default it uses local open-source models. When a task needs more horsepower, you can enable escalation to cloud providers (OpenAI, Anthropic, Google, OpenRouter). Every task is automatically routed to the best-fit model for the job, and you can pin favorites or force local-only if you prefer strict privacy.",
-  },
-  {
-    question: "Does it really learn from its mistakes?",
-    answer:
-      "Yes — this is one of the core ideas. Every failure and success is analyzed, classified, and turned into a lesson. Skills version like software: they improve with use, can be rolled back if a new lesson misfires, and every learned change is inspectable. There's also anti-poisoning validation so the assistant can't be tricked into learning something harmful.",
-  },
-  {
-    question: "How does memory work?",
-    answer:
-      "AssistantX has layered memory — conversation memory for the current thread, and long-term memory for facts, preferences, projects, and decisions across sessions. Every memory is inspectable, editable, and deletable. Nothing is a black box: you can open the audit trail and see exactly what the assistant remembers and why.",
-  },
-  {
-    question: "Can it really control my computer?",
-    answer:
-      "Yes. AssistantX operates the desktop natively — launching apps, clicking, typing, moving files, coordinating workflows across your tools. Every real-world action passes through a permission gate you control, so nothing happens behind your back. You can also disable desktop control entirely and use AssistantX purely as a voice-chat assistant.",
-  },
-  {
-    question: "Is my data private?",
-    answer:
-      "By design. Local-first architecture means your workspace, memory, files, and prompts stay on your machine unless you explicitly send them to a cloud model. Your private content is never used to train foundation models. Data in transit is encrypted, storage is authenticated, and you can wipe your workspace or account at any time — details in the Privacy Policy.",
-  },
-  {
-    question: "How is this different from ChatGPT, Claude, or Gemini?",
-    answer:
-      "Those are AI models. AssistantX is the assistant around them: persistent memory, real desktop actions, offline operation via local models, learning from experience, voice-first interaction, and multi-agent reasoning for complex tasks. You can use those models through AssistantX — but AssistantX brings the parts they don't: memory, autonomy, execution, and continuity.",
-  },
-  {
-    question: "What's multi-agent intelligence?",
-    answer:
-      "For big tasks, AssistantX can spin up specialist sub-agents that work in parallel — a researcher, a coder, a reviewer — coordinated by a trust-scored orchestration layer with adversarial verification of results. Instead of one model guessing alone, several agents cross-check each other. Arriving in v2.0.",
-  },
-  {
-    question: "What platforms does it run on?",
-    answer:
-      "Desktop app for Windows, macOS, and Linux (packaged with Electron). A web workspace runs in any modern browser. A native mobile app is on the roadmap.",
-  },
-  {
-    question: "When will it launch and is it free?",
-    answer:
-      "We're onboarding waitlist members in waves — join the waitlist above to get an early invite. A generous free tier will always exist for everyday use. Paid plans unlock heavier cloud-model usage, premium model access, and priority queues. Pricing is always shown inside the app before you commit.",
-  },
-  {
-    question: "How do I get in touch?",
-    answer:
-      "Use the Contact page (also linked in the footer) — pick a topic and your mail app will open with the right subject pre-filled. We aim to reply within 1–2 business days. You can also join the Discord community for real-time discussion.",
-  },
-];
-
 const COMPARISON = [
   { feature: "Understands context", jarvis: true, chatbot: false, why: "Jarvis keeps project, memory and screen context. Chatbots start from zero with every message." },
   { feature: "Controls your computer", jarvis: true, chatbot: false, why: "Chatbots can only talk about it. Jarvis actually clicks, types, launches and automates." },
@@ -288,7 +225,6 @@ export default function PublicHome() {
   const [modal, setModal] = useState<ModalContent | null>(null);
   const [expandedTimeline, setExpandedTimeline] = useState<number | null>(null);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   useEffect(() => {
     if (!modal) return;
@@ -326,14 +262,6 @@ export default function PublicHome() {
         applicationCategory: "ProductivityApplication",
         operatingSystem: "Web, Windows, macOS, Linux",
         offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
-      },
-      {
-        "@type": "FAQPage",
-        mainEntity: FAQ_ITEMS.map((item) => ({
-          "@type": "Question",
-          name: item.question,
-          acceptedAnswer: { "@type": "Answer", text: item.answer },
-        })),
       },
     ],
   };
@@ -675,78 +603,6 @@ export default function PublicHome() {
         </div>
       </section>
 
-      {/* ═══════════════ FAQ ═══════════════ */}
-      <section
-        id="faq"
-        className="relative py-32 px-6"
-        style={{ contentVisibility: "auto", containIntrinsicSize: "1400px" }}
-      >
-        <GlowOrb className="w-[600px] h-[600px] top-1/3 left-1/4 opacity-10" color="rgba(120,80,220,0.25)" />
-        <AnimatedSection className="text-center mb-16">
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-              Frequently asked.
-            </span>
-          </h2>
-          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">
-            Short answers to the questions we hear most.
-          </p>
-        </AnimatedSection>
-
-        <div className="max-w-3xl mx-auto space-y-3">
-          {FAQ_ITEMS.map((item, i) => {
-            const open = expandedFaq === i;
-            return (
-              <AnimatedSection key={item.question} delay={i * 0.03}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  aria-expanded={open}
-                  aria-label={`${open ? "Collapse" : "Expand"} answer: ${item.question}`}
-                  onClick={() => setExpandedFaq(open ? null : i)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setExpandedFaq(open ? null : i);
-                    }
-                  }}
-                  className="group rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm px-6 py-5 cursor-pointer hover:border-white/[0.14] hover:bg-white/[0.04] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508]"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <h3 className={`text-base sm:text-lg font-semibold tracking-tight transition-colors ${open ? "text-white" : "text-white/85 group-hover:text-white"}`}>
-                      {item.question}
-                    </h3>
-                    <span
-                      className={`mt-1 shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-white/50 transition-all ${open ? "rotate-45 border-violet-400/50 text-violet-300 bg-violet-500/10" : "group-hover:text-white/80"}`}
-                      aria-hidden="true"
-                    >
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                      </svg>
-                    </span>
-                  </div>
-                  {open && (
-                    <p className="mt-4 text-sm leading-7 text-white/60 timeline-detail-enter">
-                      {item.answer}
-                    </p>
-                  )}
-                </div>
-              </AnimatedSection>
-            );
-          })}
-        </div>
-
-        <AnimatedSection delay={0.2}>
-          <p className="mt-12 text-center text-sm text-white/40">
-            Didn&apos;t find your answer?{" "}
-            <a href="/contact" className="text-violet-300 hover:text-violet-200 underline decoration-violet-400/50 underline-offset-2 transition-colors">
-              Get in touch
-            </a>
-            .
-          </p>
-        </AnimatedSection>
-      </section>
-
       {/* ═══════════════ WAITLIST ═══════════════ */}
       <section id="waitlist" className="relative py-32 px-6">
         <GlowOrb className="w-[800px] h-[800px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-15" color="rgba(120,80,220,0.3)" />
@@ -986,6 +842,12 @@ export default function PublicHome() {
           </div>
 
           <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs">
+            <a
+              href="/faq"
+              className="text-white/40 hover:text-white/80 transition-colors"
+            >
+              FAQ
+            </a>
             <a
               href="/privacy"
               className="text-white/40 hover:text-white/80 transition-colors"
