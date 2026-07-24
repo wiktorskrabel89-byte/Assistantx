@@ -348,17 +348,11 @@ export default function PublicHome() {
         {/* Logo */}
         <div className="mb-8 hero-logo">
           <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-2xl shadow-purple-500/20 overflow-hidden">
-              <Image
-                src="/icon-192.png"
-                alt="AssistantX logo"
-                width={80}
-                height={80}
-                priority
-                className="w-20 h-20 object-contain"
-              />
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 flex items-center justify-center shadow-2xl shadow-purple-500/20">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/jarvis-logo.svg" alt="AssistantX logo" className="w-12 h-12" />
             </div>
-            <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 opacity-20 blur-xl" />
+            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 opacity-20 blur-xl" />
           </div>
         </div>
 
@@ -852,14 +846,9 @@ export default function PublicHome() {
       <footer className="relative border-t border-white/[0.05] py-10 px-6">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center overflow-hidden">
-              <Image
-                src="/icon-192.png"
-                alt=""
-                width={32}
-                height={32}
-                className="w-8 h-8 object-contain"
-              />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/jarvis-logo.svg" alt="" className="w-5 h-5" />
             </div>
             <span className="text-sm text-white/40">AssistantX</span>
           </div>
