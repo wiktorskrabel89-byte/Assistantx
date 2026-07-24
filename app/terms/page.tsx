@@ -22,14 +22,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>2. Eligibility</h2>
-        <p>
-          You must be at least 16 years old to use the Service, or the age of digital consent in your jurisdiction — whichever is higher. If you are using the Service on behalf of a company or organization, you represent that you have authority to bind that entity to these Terms.
-        </p>
-      </section>
-
-      <section>
-        <h2>3. Accounts And Security</h2>
+        <h2>2. Accounts And Security</h2>
         <ul>
           <li>You are responsible for all activity that occurs under your account.</li>
           <li>Keep your login credentials and authentication factors confidential.</li>
@@ -39,7 +32,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>4. Your Content</h2>
+        <h2>3. Your Content</h2>
         <p>
           You retain ownership of the content you submit, upload, or generate through the Service (&ldquo;Your Content&rdquo;). You grant us a worldwide, non-exclusive, royalty-free license to host, store, transmit, display, and process Your Content solely to operate, secure, and improve the Service and to provide the features you request.
         </p>
@@ -49,7 +42,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>5. AI Features And Output</h2>
+        <h2>4. AI Features And Output</h2>
         <p>
           The Service uses large language models and other AI systems to generate output (&ldquo;Output&rdquo;). Because AI systems can produce inaccurate, misleading, incomplete, or offensive content, you agree that:
         </p>
@@ -62,7 +55,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>6. Acceptable Use</h2>
+        <h2>5. Acceptable Use</h2>
         <p>You agree not to use the Service to:</p>
         <ul>
           <li>Violate any law, regulation, or the rights of others.</li>
@@ -75,70 +68,70 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2>7. Third-Party Services And Integrations</h2>
+        <h2>6. Third-Party Services And Integrations</h2>
         <p>
           The Service may integrate with third-party providers (for example GitHub, Google Drive, AI model APIs). Your use of those services is governed by their own terms and privacy policies, and we are not responsible for their content, availability, or practices.
         </p>
       </section>
 
       <section>
-        <h2>8. Fees, Trials, And Changes</h2>
+        <h2>7. Fees, Trials, And Changes</h2>
         <p>
           Some parts of the Service may be free, and other parts may require payment. Any paid features, prices, billing cycles, and refund terms will be presented in the Service before you commit to them. We may change pricing or introduce new charges by giving reasonable prior notice. Free trials may end at any time.
         </p>
       </section>
 
       <section>
-        <h2>9. Intellectual Property</h2>
+        <h2>8. Intellectual Property</h2>
         <p>
           The Service, including its software, design, trademarks, and logos, is owned by AssistantX and its licensors and is protected by intellectual property laws. Except for the limited rights expressly granted in these Terms, you receive no rights in the Service.
         </p>
       </section>
 
       <section>
-        <h2>10. Suspension And Termination</h2>
+        <h2>9. Suspension And Termination</h2>
         <p>
           You may stop using the Service at any time. We may suspend or terminate your access to the Service — with or without notice — if you violate these Terms, if we are required to do so by law, or if continued access creates a material risk. On termination, your license to use the Service ends immediately.
         </p>
       </section>
 
       <section>
-        <h2>11. Warranty Disclaimer</h2>
+        <h2>10. Warranty Disclaimer</h2>
         <p>
           THE SERVICE AND OUTPUT ARE PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS AVAILABLE&rdquo;, WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND ACCURACY. WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, OR SECURE.
         </p>
       </section>
 
       <section>
-        <h2>12. Limitation Of Liability</h2>
+        <h2>11. Limitation Of Liability</h2>
         <p>
           TO THE MAXIMUM EXTENT PERMITTED BY LAW, ASSISTANTX AND ITS OPERATORS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL, OR BUSINESS OPPORTUNITY, EVEN IF ADVISED OF THE POSSIBILITY. OUR TOTAL LIABILITY FOR ANY CLAIM ARISING OUT OF OR RELATING TO THE SERVICE WILL NOT EXCEED THE GREATER OF (A) THE AMOUNTS YOU PAID US IN THE 12 MONTHS BEFORE THE CLAIM AND (B) €100.
         </p>
       </section>
 
       <section>
-        <h2>13. Indemnification</h2>
+        <h2>12. Indemnification</h2>
         <p>
           You agree to indemnify and hold harmless AssistantX, its operators, contractors, and licensors from any claims, damages, liabilities, and expenses (including reasonable legal fees) arising out of your Content, your use of the Service, or your violation of these Terms.
         </p>
       </section>
 
       <section>
-        <h2>14. Governing Law And Disputes</h2>
+        <h2>13. Governing Law And Disputes</h2>
         <p>
           These Terms are governed by the laws of the jurisdiction where the operator of AssistantX is established, without regard to conflict-of-laws principles. Disputes arising out of or in connection with the Service will be resolved in the courts of that jurisdiction, unless mandatory consumer-protection laws in your country of residence require otherwise.
         </p>
       </section>
 
       <section>
-        <h2>15. Changes To These Terms</h2>
+        <h2>14. Changes To These Terms</h2>
         <p>
           We may update these Terms from time to time. The updated version will be posted on this page with a new &ldquo;Last updated&rdquo; date. Material changes will be announced within the Service or by email. Continued use of the Service after changes take effect means you accept them.
         </p>
       </section>
 
       <section>
-        <h2>16. Contact</h2>
+        <h2>15. Contact</h2>
         <p>
           Questions about these Terms of Service can be sent through our <Link href="/contact">Contact page</Link>.
         </p>
