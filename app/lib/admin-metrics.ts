@@ -102,3 +102,62 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignup[]> {
     .limit(limit);
   return (data ?? []) as RecentSignup[];
 }
+
+/**
+ * Return an array of {date: 'YYYY-MM-DD', count} for the last `days` days
+ * (inclusive of today). Missing days are filled with 0. UTC boundaries.
+ */
+export async function getDailySignups(days = 30): Promise<{ date: string; count: number }[]> {
+  const supabase = getServiceRoleClient();
+  if (!supabase) return emptyDaily(days);
+
+  const start = startOfDayUtc();
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+
+  const { data, error } = await supabase
+    .from("waitlist_signups")
+    .select("created_at")
+    .gte("created_at", start.toISOString())
+    .limit(50_000);
+
+  if (error || !data) return emptyDaily(days);
+
+  const counts = new Map<string, number>();
+  for (const row of data as { created_at: string }[]) {
+    const key = row.created_at.slice(0, 10); // YYYY-MM-DD in UTC
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  return buildDailySeries(start, days, counts);
+}
+
+function emptyDaily(days: number): { date: string; count: number }[] {
+  const start = startOfDayUtc();
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+  return buildDailySeries(start, days, new Map());
+}
+
+function buildDailySeries(
+  start: Date,
+  days: number,
+  counts: Map<string, number>,
+): { date: string; count: number }[] {
+  const out: { date: string; count: number }[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start);
+    d.setUTCDate(d.getUTCDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    out.push({ date: key, count: counts.get(key) ?? 0 });
+  }
+  return out;
+}
+
+/** Percentage change between two consecutive equal-sized periods. */
+export function periodDelta(series: { count: number }[]): { current: number; previous: number; delta: number | null } {
+  const half = Math.floor(series.length / 2);
+  if (half <= 0) return { current: 0, previous: 0, delta: null };
+  const previous = series.slice(0, half).reduce((s, r) => s + r.count, 0);
+  const current = series.slice(-half).reduce((s, r) => s + r.count, 0);
+  if (previous === 0) return { current, previous: 0, delta: current > 0 ? 100 : null };
+  return { current, previous, delta: Math.round(((current - previous) / previous) * 1000) / 10 };
+}
