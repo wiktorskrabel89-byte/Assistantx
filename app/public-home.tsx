@@ -5,6 +5,8 @@ import Image from "next/image";
 import type { PublicUILanguage } from "@/app/lib/ui-language";
 import { STRINGS } from "@/app/lib/landing-strings";
 import { LanguageSwitcher } from "@/app/components/LanguageSwitcher";
+import { CookieBanner } from "@/app/components/CookieBanner";
+import { LaunchCountdown } from "@/app/components/LaunchCountdown";
 function AnimatedSection({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
   return (
     <div
@@ -186,9 +188,15 @@ type ModalContent = {
   icon?: string;
 };
 
-export default function PublicHome({ lang = "en" }: { lang?: PublicUILanguage }) {
+export default function PublicHome({
+  lang = "en",
+  waitlistCount: initialCount = 1,
+}: {
+  lang?: PublicUILanguage;
+  waitlistCount?: number;
+}) {
   const t = STRINGS[lang];
-  const [waitlistCount] = useState(128431);
+  const [waitlistCount] = useState(initialCount);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formWebsite, setFormWebsite] = useState(""); // honeypot — stays empty
@@ -273,6 +281,7 @@ export default function PublicHome({ lang = "en" }: { lang?: PublicUILanguage })
   return (
     <div className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
       <LanguageSwitcher lang={lang} />
+      <CookieBanner lang={lang} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -382,6 +391,13 @@ export default function PublicHome({ lang = "en" }: { lang?: PublicUILanguage })
             {t.hero.demoCta}
           </a>
         </div>
+
+        {process.env.NEXT_PUBLIC_LAUNCH_DATE && (
+          <LaunchCountdown
+            targetIso={process.env.NEXT_PUBLIC_LAUNCH_DATE}
+            lang={lang}
+          />
+        )}
 
         {/* Scroll indicator */}
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 hero-scroll">
