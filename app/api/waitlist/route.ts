@@ -9,6 +9,7 @@ import {
   sendOwnerEmail,
   sendConfirmationEmail,
 } from "@/app/lib/waitlist-notify";
+import { logEvent } from "@/app/lib/analytics-events";
 
 // Waitlist signups (POST { name?, email }):
 //  - persisted via the public.waitlist_join() SECURITY DEFINER RPC (works with
@@ -127,11 +128,29 @@ export async function POST(request: Request) {
     (await storeInFile(name, email));
 
   if (result.rateLimited) {
+    await logEvent({
+      name: "waitlist.rate_limited",
+      source: "web",
+      properties: { email_domain: email.split("@")[1] ?? null },
+      request,
+    });
     return NextResponse.json(
       { ok: false, rateLimited: true, error: "Too many signups from here — please try again later." },
       { status: 429 },
     );
   }
+
+  // Analytics — one event per signup, regardless of confirm/direct mode.
+  await logEvent({
+    name: result.duplicate ? "waitlist.duplicate" : "waitlist.joined",
+    source: "web",
+    properties: {
+      confirm_mode: confirmMode,
+      email_domain: email.split("@")[1] ?? null,
+      already_confirmed: Boolean(result.alreadyConfirmed),
+    },
+    request,
+  });
 
   // ── Double opt-in: send a confirmation email; Discord fires on confirm. ──
   if (confirmMode) {

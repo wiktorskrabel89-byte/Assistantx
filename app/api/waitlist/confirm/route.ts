@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient, sendDiscord, sendOwnerEmail } from "@/app/lib/waitlist-notify";
+import { logEvent } from "@/app/lib/analytics-events";
 
 // GET /api/waitlist/confirm?token=<uuid>
 // The visitor lands here from the confirmation email. Flips their row to
@@ -59,9 +60,18 @@ export async function GET(request: Request) {
     return html(page("Already confirmed", "You're already on the waitlist — nothing more to do. We'll be in touch.", "info"));
   }
 
-  // Freshly confirmed → now it counts: notify Discord + owner.
+  // Freshly confirmed → now it counts: notify Discord + owner + analytics.
   const host = request.headers.get("host") || "assistantx.pl";
-  await Promise.allSettled([sendDiscord(name, total, host), sendOwnerEmail(name, "(confirmed)", total)]);
+  await Promise.allSettled([
+    sendDiscord(name, total, host),
+    sendOwnerEmail(name, "(confirmed)", total),
+    logEvent({
+      name: "waitlist.confirmed",
+      source: "email",
+      properties: { total_after: total },
+      request,
+    }),
+  ]);
 
   return html(page("You're on the list! 🎉", "Your spot is confirmed. You'll be among the first to get AssistantX-Jarvis.", "ok"));
 }
