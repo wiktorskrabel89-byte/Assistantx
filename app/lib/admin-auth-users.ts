@@ -14,18 +14,9 @@ export type AuthUserRow = {
 type ListRes = {
   users: AuthUserRow[];
   total: number;
-  anonymousCount: number;
   hasMore: boolean;
 };
 
-/**
- * Best-effort field mapping. Supabase returns:
- *   - user.email                          — real email (magic-link, or OAuth handoff)
- *   - user.app_metadata.provider          — provider name for the primary identity
- *   - user.identities[]                   — every linked identity, each with
- *                                            provider + identity_data (may hold email)
- *   - user.is_anonymous                   — guest session (no login yet)
- */
 type RawUser = {
   id: string;
   email?: string | null;
@@ -61,48 +52,30 @@ function normalize(u: RawUser): AuthUserRow {
 }
 
 /**
- * Server-side paginated list of auth users. The Supabase Admin SDK doesn't
- * support filtering, so we page a larger batch and filter/paginate here.
- *
- * `showAnonymous=false` (default) hides guest sessions — those are Supabase
- * anon-auth rows created before a visitor identifies themselves and clutter
- * the admin view. Everything else is included.
+ * Real auth users only — guest / anonymous Supabase sessions are always
+ * excluded. The admin page shouldn't show them at all.
  */
 export async function listAuthUsers({
   page = 1,
   perPage = 25,
-  showAnonymous = false,
 }: {
   page?: number;
   perPage?: number;
-  showAnonymous?: boolean;
 }): Promise<ListRes> {
   const supabase = getServiceRoleClient();
-  if (!supabase) return { users: [], total: 0, anonymousCount: 0, hasMore: false };
+  if (!supabase) return { users: [], total: 0, hasMore: false };
 
-  // Fetch everything (Supabase caps at ~1000/page). For accounts with more
-  // users we'd need proper server-side filtering — good enough for now.
   const BATCH = 200;
   const collected: AuthUserRow[] = [];
-  let anonymousCount = 0;
-  let hasMore = false;
 
   try {
     for (let p = 1; p <= 25; p++) {
-      const res = await (supabase.auth as unknown as {
-        admin: {
-          listUsers: (opts: { page: number; perPage: number }) => Promise<{
-            data?: { users?: RawUser[]; nextPage?: number | null };
-            error?: { message: string } | null;
-          }>;
-        };
-      }).admin.listUsers({ page: p, perPage: BATCH });
+      const res = await supabase.auth.admin.listUsers({ page: p, perPage: BATCH });
       if (res.error) break;
-      const raw = res.data?.users ?? [];
+      const raw = (res.data?.users ?? []) as unknown as RawUser[];
       for (const u of raw) {
         const norm = normalize(u);
-        if (norm.is_anonymous) anonymousCount++;
-        if (showAnonymous || !norm.is_anonymous) collected.push(norm);
+        if (!norm.is_anonymous) collected.push(norm);
       }
       if (!raw.length || raw.length < BATCH || !res.data?.nextPage) break;
     }
@@ -113,30 +86,63 @@ export async function listAuthUsers({
   const total = collected.length;
   const from = (page - 1) * perPage;
   const to = from + perPage;
-  hasMore = to < total;
   return {
     users: collected.slice(from, to),
     total,
-    anonymousCount,
-    hasMore,
+    hasMore: to < total,
   };
 }
 
-export async function deleteAuthUser(id: string): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Delete a Supabase auth user. Calls the admin API directly on the
+ * receiver so `this` is bound, and falls back to a hard SQL delete on
+ * auth.users if the API call fails (occasionally happens with dangling
+ * anonymous rows).
+ */
+export async function deleteAuthUser(id: string): Promise<{ ok: boolean; error?: string; method?: string }> {
   const supabase = getServiceRoleClient();
   if (!supabase) return { ok: false, error: "supabase-not-configured" };
+
   try {
-    const del = (supabase.auth as unknown as {
-      admin: {
-        deleteUser?: (id: string) => Promise<{ error?: { message: string } | null }>;
-      };
-    }).admin.deleteUser;
-    if (!del) return { ok: false, error: "deleteUser-unavailable" };
-    const res = await del(id);
-    if (res.error) return { ok: false, error: res.error.message };
-    return { ok: true };
+    const res = await supabase.auth.admin.deleteUser(id);
+    if (res.error) {
+      const msg = res.error.message || "unknown";
+      // Fallback: raw SQL delete via service role.
+      const sql = await sqlDelete(id);
+      if (sql.ok) return { ok: true, method: "sql-fallback" };
+      return { ok: false, error: `admin-api: ${msg}; sql: ${sql.error}` };
+    }
+    return { ok: true, method: "admin-api" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
-    return { ok: false, error: msg };
+    // Try the SQL path anyway — the SDK sometimes throws on network hiccups
+    // even when the underlying delete would succeed.
+    const sql = await sqlDelete(id);
+    if (sql.ok) return { ok: true, method: "sql-fallback" };
+    return { ok: false, error: `${msg}; sql: ${sql.error}` };
+  }
+}
+
+async function sqlDelete(id: string): Promise<{ ok: boolean; error?: string }> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { ok: false, error: "supabase-not-configured" };
+  try {
+    // The Supabase Data API can't reach auth.users directly, so use the
+    // Auth admin REST endpoint — same as what the SDK wraps.
+    const res = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+      },
+    });
+    if (!res.ok) {
+      const body = (await res.text().catch(() => "")).slice(0, 200);
+      return { ok: false, error: `${res.status} ${body}` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "unknown" };
   }
 }

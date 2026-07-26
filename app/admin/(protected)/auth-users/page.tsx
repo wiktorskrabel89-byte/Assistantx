@@ -15,8 +15,7 @@ function maskEmail(email: string | null): string {
   return `${shown}@${domain}`;
 }
 
-function displayEmail(u: { email: string | null; phone: string | null; is_anonymous: boolean }, reveal: boolean): string {
-  if (u.is_anonymous) return "Guest session";
+function displayEmail(u: { email: string | null; phone: string | null }, reveal: boolean): string {
   if (u.email) return reveal ? u.email : maskEmail(u.email);
   if (u.phone) return reveal ? u.phone : `••••${u.phone.slice(-3)}`;
   return "—";
@@ -25,23 +24,17 @@ function displayEmail(u: { email: string | null; phone: string | null; is_anonym
 export default async function AdminAuthUsers({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; reveal?: string; anon?: string }>;
+  searchParams: Promise<{ page?: string; reveal?: string }>;
 }) {
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page || "1", 10) || 1);
   const reveal = sp.reveal === "1";
-  const showAnonymous = sp.anon === "1";
-  const { users, total, anonymousCount, hasMore } = await listAuthUsers({
-    page,
-    perPage: PAGE_SIZE,
-    showAnonymous,
-  });
+  const { users, total, hasMore } = await listAuthUsers({ page, perPage: PAGE_SIZE });
 
   const buildQuery = (overrides: Record<string, string | number | undefined>) => {
     const base: Record<string, string | number> = {};
     if (page > 1) base.page = page;
     if (reveal) base.reveal = 1;
-    if (showAnonymous) base.anon = 1;
     return { ...base, ...overrides };
   };
 
@@ -57,9 +50,7 @@ export default async function AdminAuthUsers({
           </span>
         </h1>
         <p className="mt-2 text-sm text-white/40">
-          Real Supabase <code className="text-white/70">auth.users</code>. {total.toLocaleString()} visible ·{" "}
-          <span className="text-white/60">{anonymousCount.toLocaleString()} guest session(s)</span> hidden by default (Supabase creates
-          these for anonymous visitors before they identify themselves).
+          Real Supabase <code className="text-white/70">auth.users</code>. {total.toLocaleString()} account(s). Guest / anonymous sessions are hidden from this view.
         </p>
       </header>
 
@@ -85,34 +76,11 @@ export default async function AdminAuthUsers({
           </svg>
           {reveal ? "Hide emails" : "Reveal emails"}
         </Link>
-
-        <Link
-          href={{ pathname: "/admin/auth-users", query: buildQuery({ page: 1, anon: showAnonymous ? undefined : 1 }) }}
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs transition ${
-            showAnonymous
-              ? "border-amber-400/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
-              : "border-white/10 bg-white/[0.03] text-white/70 hover:text-white hover:border-white/20"
-          }`}
-        >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0v.75H4.5v-.75z"
-            />
-          </svg>
-          {showAnonymous ? "Hide guest sessions" : `Show guest sessions (${anonymousCount})`}
-        </Link>
       </div>
 
       {users.length === 0 ? (
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-10 text-center">
-          <p className="text-sm text-white/60">No accounts to show on this page.</p>
-          {!showAnonymous && anonymousCount > 0 && (
-            <p className="mt-2 text-xs text-white/40">
-              {anonymousCount} guest session(s) are hidden. Click &ldquo;Show guest sessions&rdquo; above to include them.
-            </p>
-          )}
+          <p className="text-sm text-white/60">No real accounts to show yet.</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-white/[0.06] bg-white/[0.02]">
@@ -130,18 +98,10 @@ export default async function AdminAuthUsers({
             <tbody className="divide-y divide-white/[0.04]">
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
-                  <td className={`px-4 py-3 font-mono text-xs ${u.is_anonymous ? "text-white/40 italic" : "text-white/80"}`}>
+                  <td className="px-4 py-3 text-white/80 font-mono text-xs">
                     {displayEmail(u, reveal)}
                   </td>
-                  <td className="px-4 py-3 text-white/60 text-xs">
-                    {u.is_anonymous ? (
-                      <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-amber-200">
-                        anonymous
-                      </span>
-                    ) : (
-                      u.provider || "email"
-                    )}
-                  </td>
+                  <td className="px-4 py-3 text-white/60 text-xs">{u.provider || "email"}</td>
                   <td className="px-4 py-3 text-white/50 text-xs whitespace-nowrap">
                     {new Date(u.created_at).toLocaleString(undefined, { hour12: false })}
                   </td>

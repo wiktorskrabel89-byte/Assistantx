@@ -22,6 +22,7 @@ export function DeleteWaitlistRowButton({ id, email }: { id: string; email: stri
         return;
       }
       router.refresh();
+      window.location.reload();
     } finally {
       setBusy(false);
     }
