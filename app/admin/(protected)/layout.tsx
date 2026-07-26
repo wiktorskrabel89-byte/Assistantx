@@ -2,17 +2,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getAdminSession } from "@/app/lib/admin-session";
 import { AdminLogoutButton } from "@/app/admin/(protected)/logout-button";
+import { AdminSidebarNav, AdminMobileNav } from "@/app/admin/(protected)/admin-nav";
 
 export const metadata = { title: "Admin", robots: { index: false, follow: false } };
-
-const NAV = [
-  { href: "/admin/dashboard", label: "Overview" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/revenue", label: "Revenue" },
-  { href: "/admin/launch", label: "Launches" },
-  { href: "/admin/analytics", label: "Analytics" },
-  { href: "/admin/audit-logs", label: "Audit log" },
-];
 
 export default async function ProtectedAdminLayout({
   children,
@@ -49,17 +41,7 @@ export default async function ProtectedAdminLayout({
             </span>
           </Link>
 
-          <nav className="flex flex-col gap-1 text-sm">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-lg px-3 py-2 text-white/60 hover:text-white hover:bg-white/[0.04] transition-colors"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <AdminSidebarNav />
 
           <div className="mt-auto pt-6 border-t border-white/[0.06]">
             <AdminLogoutButton />
@@ -73,19 +55,7 @@ export default async function ProtectedAdminLayout({
             </Link>
             <AdminLogoutButton compact />
           </div>
-          <div className="md:hidden mb-6 -mx-2 overflow-x-auto">
-            <nav className="flex gap-1 px-2 text-xs">
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="whitespace-nowrap rounded-full border border-white/10 px-3 py-1.5 text-white/60 hover:text-white hover:border-white/20 transition-colors"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
+          <AdminMobileNav />
           {children}
         </main>
       </div>
