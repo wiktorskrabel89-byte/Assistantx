@@ -10,7 +10,7 @@ export function DeleteAuthUserButton({ id, email }: { id: string; email: string 
   const del = async () => {
     if (
       !window.confirm(
-        `Delete Supabase auth user ${email ?? id.slice(0, 8)}?\n\nThis calls auth.admin.deleteUser and removes their account permanently. Any owned rows referenced by their user_id may cascade or become orphaned depending on your schema.`,
+        `Delete Supabase auth user ${email ?? id.slice(0, 8)}?\n\nCalls auth.admin.deleteUser (falls back to a direct REST call if the SDK fails). Cannot be undone.`,
       )
     )
       return;
@@ -20,13 +20,23 @@ export function DeleteAuthUserButton({ id, email }: { id: string; email: string 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "delete", id }),
+        cache: "no-store",
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      let data: { ok?: boolean; error?: string; method?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        /* ignore */
+      }
+      if (!res.ok || !data.ok) {
         alert(`Delete failed: ${data.error || res.status}`);
         return;
       }
+      // Hard reload — router.refresh() sometimes serves the previous
+      // server-render output back if the route is force-dynamic'd but the
+      // cache boundary shifts. Full navigation guarantees the row is gone.
       router.refresh();
+      window.location.reload();
     } finally {
       setBusy(false);
     }
