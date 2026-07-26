@@ -56,18 +56,24 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   const confirmedCount = confirmed.error ? total.count ?? 0 : confirmed.count ?? 0;
   const pendingCount = pending.error ? 0 : pending.count ?? 0;
 
-  // Auth users via the admin API. Requires SUPABASE_SERVICE_ROLE_KEY.
+  // Auth users via the admin API, filtered to REAL accounts only —
+  // Supabase anonymous / guest sessions are excluded from every admin
+  // surface, including this counter. We page through and tally rows where
+  // is_anonymous is falsy.
   let authUsers: number | null = null;
   try {
-    // The listUsers admin API returns a total when perPage=1.
-    const admin = (supabase as unknown as {
-      auth: { admin: { listUsers: (opts?: { page?: number; perPage?: number }) => Promise<{
-        data?: { users?: unknown[]; total?: number; nextPage?: number | null };
-        error?: unknown;
-      }> } };
-    }).auth.admin;
-    const res = await admin.listUsers({ page: 1, perPage: 1 });
-    if (!res.error && typeof res.data?.total === "number") authUsers = res.data.total;
+    let count = 0;
+    let sawSomething = false;
+    const BATCH = 200;
+    for (let p = 1; p <= 25; p++) {
+      const res = await supabase.auth.admin.listUsers({ page: p, perPage: BATCH });
+      if (res.error) break;
+      const raw = (res.data?.users ?? []) as Array<{ is_anonymous?: boolean }>;
+      if (raw.length) sawSomething = true;
+      for (const u of raw) if (!u.is_anonymous) count++;
+      if (raw.length < BATCH || !res.data?.nextPage) break;
+    }
+    authUsers = sawSomething ? count : 0;
   } catch {
     authUsers = null;
   }
