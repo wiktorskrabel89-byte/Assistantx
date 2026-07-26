@@ -116,7 +116,7 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
         "Too many signups from your network — please try again in a little while.",
       genericError: "Something went wrong — please try again.",
       disclaimer:
-        "When you join, your first name (e.g. “Anna K.”) is announced in our Discord community. Your email is never shown anywhere.",
+        "By joining the waitlist you agree to receive occasional email updates about AssistantX — you can unsubscribe at any time. Your first name (e.g. “Anna K.”) is announced in our Discord community; your email is never shown anywhere.",
       peopleWaiting: "people waiting",
     },
     community: {
@@ -187,7 +187,7 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
         "Zbyt wiele zapisów z Twojej sieci — spróbuj ponownie za chwilę.",
       genericError: "Coś poszło nie tak — spróbuj ponownie.",
       disclaimer:
-        "Po dołączeniu Twoje imię (np. „Anna K.”) jest ogłaszane na naszym Discordzie. Twój email nie jest nigdzie pokazywany.",
+        "Dołączając do listy oczekujących zgadzasz się na otrzymywanie okazjonalnych maili z aktualizacjami o AssistantX — możesz się wypisać w każdej chwili. Twoje imię (np. „Anna K.”) jest ogłaszane na naszym Discordzie; Twój email nie jest nigdzie pokazywany.",
       peopleWaiting: "osób w kolejce",
     },
     community: {
