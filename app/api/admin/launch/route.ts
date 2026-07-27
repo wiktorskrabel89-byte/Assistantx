@@ -33,16 +33,39 @@ export async function POST(req: Request) {
     const subject = String(body.subject || "").trim();
     const html = String(body.body_html || "").trim();
     const text = String(body.body_text || "").trim() || null;
+    const scheduledFor = String(body.scheduled_for || "").trim() || null;
     if (!name || !subject || !html) {
       return NextResponse.json({ ok: false, error: "missing-fields" }, { status: 400 });
     }
+    // Validate the schedule date (ISO); if it parses and is in the future,
+    // save the launch directly as 'scheduled'. Otherwise stay 'draft'.
+    let status: "draft" | "scheduled" = "draft";
+    let scheduledForIso: string | null = null;
+    if (scheduledFor) {
+      const d = new Date(scheduledFor);
+      if (Number.isFinite(d.getTime()) && d.getTime() > Date.now()) {
+        status = "scheduled";
+        scheduledForIso = d.toISOString();
+      }
+    }
     const { data, error } = await supabase
       .from("admin_launches")
-      .insert({ name, subject, body_html: html, body_text: text, status: "draft" })
-      .select("id, name")
+      .insert({
+        name,
+        subject,
+        body_html: html,
+        body_text: text,
+        status,
+        scheduled_for: scheduledForIso,
+      })
+      .select("id, name, status, scheduled_for")
       .single();
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-    await logAdmin("launch.created", { sessionId: session.id, target: data.id as string, metadata: { name: data.name } });
+    await logAdmin("launch.created", {
+      sessionId: session.id,
+      target: data.id as string,
+      metadata: { name: data.name, status: data.status, scheduled_for: data.scheduled_for },
+    });
     return NextResponse.json({ ok: true, launch: data });
   }
 
