@@ -137,7 +137,17 @@ export default async function AdminUsers({
             <tbody className="divide-y divide-white/[0.04]">
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-white/[0.02] transition-colors">
-                  <td className="px-4 py-3 text-white/80">{r.name || "—"}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={{
+                        pathname: `/admin/users/${r.id}`,
+                        query: reveal ? { reveal: 1 } : {},
+                      }}
+                      className="text-white/85 hover:text-white underline decoration-white/20 decoration-dotted underline-offset-4 transition-colors"
+                    >
+                      {r.name || "—"}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-white/60 font-mono text-xs">
                     {reveal ? r.email : maskEmail(r.email)}
                   </td>
