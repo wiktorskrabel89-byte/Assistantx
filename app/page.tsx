@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import PublicHome from "./public-home";
 import { normalizePublicLanguage } from "@/app/lib/ui-language";
 import { getServiceRoleClient } from "@/app/lib/supabase-admin";
+import { getPublicSetting } from "@/app/lib/admin-settings";
 
 // The public site IS the waitlist. Everyone — signed in or not — gets the
 // cinematic waitlist landing page.
@@ -28,5 +29,13 @@ export default async function Home() {
   }
   const waitlistCount = Math.max(confirmed, 1);
 
-  return <PublicHome lang={lang} waitlistCount={waitlistCount} />;
+  // Admin-configurable launch date lives in admin_settings.launch_date.
+  // Falls back to the old env var so existing setups keep working.
+  const setting = await getPublicSetting<string | null>("launch_date");
+  const launchDate =
+    (typeof setting === "string" && setting.length > 0 ? setting : null) ||
+    process.env.NEXT_PUBLIC_LAUNCH_DATE ||
+    null;
+
+  return <PublicHome lang={lang} waitlistCount={waitlistCount} launchDate={launchDate} />;
 }
