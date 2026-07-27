@@ -5,8 +5,9 @@ import { useState } from "react";
 export function LaunchComposer({ audienceSize }: { audienceSize: number }) {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
-  const [html, setHtml] = useState("<p>Hey {{name}},</p><p>Big update:</p><p>— The AssistantX team</p>");
+  const [html, setHtml] = useState("<p>Hey there,</p><p>Big update:</p><p>— The AssistantX team</p>");
   const [text, setText] = useState("");
+  const [scheduledFor, setScheduledFor] = useState("");
   const [creating, setCreating] = useState(false);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -20,7 +21,16 @@ export function LaunchComposer({ audienceSize }: { audienceSize: number }) {
       const res = await fetch("/api/admin/launch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", name, subject, body_html: html, body_text: text || null }),
+        body: JSON.stringify({
+          action: "create",
+          name,
+          subject,
+          body_html: html,
+          body_text: text || null,
+          scheduled_for: scheduledFor
+            ? new Date(scheduledFor).toISOString()
+            : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -28,7 +38,11 @@ export function LaunchComposer({ audienceSize }: { audienceSize: number }) {
         return;
       }
       setLaunchId(data.launch.id);
-      setStatus(`Draft saved as "${data.launch.name}".`);
+      const when =
+        data.launch.status === "scheduled" && data.launch.scheduled_for
+          ? ` — will send at ${new Date(data.launch.scheduled_for).toLocaleString()}`
+          : "";
+      setStatus(`Saved as "${data.launch.name}" (${data.launch.status})${when}.`);
     } finally {
       setCreating(false);
     }
@@ -114,6 +128,19 @@ export function LaunchComposer({ audienceSize }: { audienceSize: number }) {
           rows={4}
           className="mt-2 w-full rounded-xl border border-white/[0.08] bg-white/[0.05] px-4 py-3 text-sm font-mono normal-case tracking-normal focus:outline-none focus:border-violet-500/50"
         />
+      </label>
+
+      <label className="mt-4 block text-xs uppercase tracking-wider text-white/50">
+        Schedule (optional — local time)
+        <input
+          type="datetime-local"
+          value={scheduledFor}
+          onChange={(e) => setScheduledFor(e.target.value)}
+          className="mt-2 w-full rounded-xl border border-white/[0.08] bg-white/[0.05] px-4 py-2.5 text-sm normal-case tracking-normal focus:outline-none focus:border-violet-500/50"
+        />
+        <span className="mt-1 block text-[10px] normal-case tracking-normal text-white/40">
+          Leave empty to save as draft. Cron sweeps every 5 minutes.
+        </span>
       </label>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">

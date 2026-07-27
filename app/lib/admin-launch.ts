@@ -1,5 +1,6 @@
 import "server-only";
 import { getServiceRoleClient } from "@/app/lib/supabase-admin";
+import { wrapLaunchEmail, makeUnsubscribeToken } from "@/app/lib/launch-email-template";
 
 const RESEND_URL = "https://api.resend.com/emails";
 
@@ -34,22 +35,29 @@ async function sendOne(opts: {
 
 /**
  * Fetch a launch's target audience. For MVP we treat every launch as going
- * to confirmed waitlist rows only — never pending, never anonymous.
+ * to confirmed waitlist rows only — never pending, never anonymous. Also
+ * filters out rows on the suppression list (unsubscribed).
  */
 async function getAudience(): Promise<string[]> {
   const supabase = getServiceRoleClient();
   if (!supabase) return [];
-  const { data } = await supabase
-    .from("waitlist_signups")
-    .select("email, status")
-    .in("status", ["confirmed"]) // hard-coded safety
-    .limit(50_000);
-  const rows = (data ?? []) as { email: string }[];
+  const [signupsRes, suppressedRes] = await Promise.all([
+    supabase
+      .from("waitlist_signups")
+      .select("email, status")
+      .in("status", ["confirmed"])
+      .limit(50_000),
+    supabase.from("email_suppressions").select("email").limit(50_000),
+  ]);
+  const suppressed = new Set(
+    ((suppressedRes.data ?? []) as { email: string }[]).map((r) => r.email.trim().toLowerCase()),
+  );
+  const rows = (signupsRes.data ?? []) as { email: string }[];
   const seen = new Set<string>();
   return rows
     .map((r) => r.email.trim().toLowerCase())
     .filter((e) => {
-      if (!e || seen.has(e)) return false;
+      if (!e || seen.has(e) || suppressed.has(e)) return false;
       seen.add(e);
       return true;
     });
@@ -92,13 +100,22 @@ export async function sendLaunch(launchId: string): Promise<SendResult> {
   let failed = 0;
   let lastError: string | null = null;
 
+  const publicUrl = (process.env.WAITLIST_PUBLIC_URL || "https://assistantx.pl").replace(/\/$/, "");
+
   for (let i = 0; i < recipients.length; i++) {
     const to = recipients[i];
+    const unsubscribeUrl = `${publicUrl}/api/waitlist/unsubscribe?email=${encodeURIComponent(to)}&token=${makeUnsubscribeToken(to)}`;
+    const wrappedHtml = wrapLaunchEmail({
+      subject: launch.subject as string,
+      bodyHtml: launch.body_html as string,
+      publicUrl,
+      unsubscribeUrl,
+    });
     const r = await sendOne({
       from,
       to,
       subject: launch.subject as string,
-      html: launch.body_html as string,
+      html: wrappedHtml,
       text: (launch.body_text as string | null) ?? null,
       apiKey,
     });
