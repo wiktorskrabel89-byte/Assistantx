@@ -203,6 +203,9 @@ export default function PublicHome({
   const [submitted, setSubmitted] = useState(false);
   const [alreadyOnList, setAlreadyOnList] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState(false);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referredBy, setReferredBy] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -215,7 +218,12 @@ export default function PublicHome({
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: formName, email: formEmail, website: formWebsite }),
+        body: JSON.stringify({
+          name: formName,
+          email: formEmail,
+          website: formWebsite,
+          referred_by: referredBy,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 429) {
@@ -225,6 +233,7 @@ export default function PublicHome({
       if (!res.ok) throw new Error("Request failed");
       setPendingConfirm(Boolean(data?.pendingConfirmation));
       setAlreadyOnList(Boolean(data?.duplicate) || Boolean(data?.alreadyConfirmed));
+      setReferralCode(typeof data?.referralCode === "string" ? data.referralCode : null);
       setSubmitted(true);
     } catch {
       setSubmitError(t.waitlist.genericError);
@@ -232,6 +241,15 @@ export default function PublicHome({
       setSubmitting(false);
     }
   };
+
+  // Pick up ?ref=CODE from the URL — the referred-by code the visitor
+  // came in with. Stored in state so we can echo a "invited by a friend"
+  // banner and pass it to the waitlist submit.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = new URLSearchParams(window.location.search).get("ref");
+    if (raw && /^[A-Z0-9]{6,16}$/i.test(raw)) setReferredBy(raw.toUpperCase());
+  }, []);
 
   // Click-to-explain interactions
   const [modal, setModal] = useState<ModalContent | null>(null);
@@ -656,9 +674,52 @@ export default function PublicHome({
                         ? t.waitlist.successPendingBody
                         : t.waitlist.successOnBody}
                   </p>
+
+                  {referralCode && (
+                    <div className="mt-8 rounded-2xl border border-violet-400/25 bg-violet-500/[0.06] p-5 text-left">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-violet-300/80">
+                        🚀 {t.waitlist.referralTitle}
+                      </p>
+                      <p className="mt-2 text-xs text-white/60 leading-relaxed">
+                        {t.waitlist.referralBody}
+                      </p>
+                      {(() => {
+                        const origin =
+                          typeof window !== "undefined" ? window.location.origin : "https://assistantx.pl";
+                        const link = `${origin}/?ref=${referralCode}`;
+                        return (
+                          <div className="mt-3 flex items-center gap-2 rounded-xl border border-white/10 bg-black/40 p-2">
+                            <input
+                              readOnly
+                              value={link}
+                              className="flex-1 min-w-0 bg-transparent px-2 text-xs text-white/80 font-mono focus:outline-none"
+                              onFocus={(e) => e.currentTarget.select()}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(link).then(() => {
+                                  setCopied(true);
+                                  setTimeout(() => setCopied(false), 1600);
+                                });
+                              }}
+                              className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition bg-gradient-to-r from-violet-600 to-blue-600 hover:opacity-90"
+                            >
+                              {copied ? t.waitlist.copied : t.waitlist.copy}
+                            </button>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <form onSubmit={handleWaitlistSubmit} className="space-y-4">
+                  {referredBy && (
+                    <div className="rounded-xl border border-violet-400/25 bg-violet-500/[0.06] px-3 py-2 text-[11px] text-violet-100/80 text-center">
+                      {t.waitlist.referredByBanner}
+                    </div>
+                  )}
                   {/* Honeypot: hidden from humans, bots fill it → silently rejected. */}
                   <input
                     type="text"

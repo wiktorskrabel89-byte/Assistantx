@@ -118,6 +118,11 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
       disclaimer:
         "By joining the waitlist you agree to receive occasional email updates about AssistantX — you can unsubscribe at any time. Your first name (e.g. “Anna K.”) is announced in our Discord community; your email is never shown anywhere.",
       peopleWaiting: "people waiting",
+      referralTitle: "Your invite link",
+      referralBody: "Every friend that confirms bumps you up the queue. Share it anywhere.",
+      referredByBanner: "You were invited by a friend — they get a bump when you confirm. Thanks! 🙌",
+      copy: "Copy",
+      copied: "Copied!",
     },
     community: {
       heading: "Join the community.",
@@ -189,6 +194,11 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
       disclaimer:
         "Dołączając do listy oczekujących zgadzasz się na otrzymywanie okazjonalnych maili z aktualizacjami o AssistantX — możesz się wypisać w każdej chwili. Twoje imię (np. „Anna K.”) jest ogłaszane na naszym Discordzie; Twój email nie jest nigdzie pokazywany.",
       peopleWaiting: "osób w kolejce",
+      referralTitle: "Twój link z zaproszeniem",
+      referralBody: "Każdy znajomy, który potwierdzi, przesuwa Cię wyżej w kolejce. Wyślij dalej.",
+      referredByBanner: "Zaprosił Cię znajomy — po potwierdzeniu on też dostanie boost. Dzięki! 🙌",
+      copy: "Kopiuj",
+      copied: "Skopiowano!",
     },
     community: {
       heading: "Dołącz do społeczności.",
