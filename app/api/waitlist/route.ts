@@ -102,8 +102,39 @@ async function storeInFile(name: string, email: string): Promise<StoreResult> {
   return { stored: true, duplicate: false, alreadyConfirmed: false, rateLimited: false, total: entries.length, token: null };
 }
 
+const REF_CODE_RE = /^[A-Z0-9]{6,16}$/;
+
+async function attachReferral(email: string, referredBy: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+  // Validate the code exists before wiring it up (avoids polluting the FK
+  // with garbage from crafted URLs) — the SECURITY DEFINER RPC does the
+  // lookup without exposing the row.
+  const { data: exists } = await supabase.rpc("waitlist_referrer_exists", { p_code: referredBy });
+  if (!exists) return;
+  // Only set referred_by if it isn't already set (idempotent for confirm
+  // resends) and doesn't self-reference.
+  await supabase
+    .from("waitlist_signups")
+    .update({ referred_by: referredBy })
+    .eq("email", email)
+    .is("referred_by", null)
+    .neq("referral_code", referredBy);
+}
+
+async function getReferralCode(email: string): Promise<string | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("waitlist_signups")
+    .select("referral_code")
+    .eq("email", email)
+    .maybeSingle();
+  return (data?.referral_code as string | null) ?? null;
+}
+
 export async function POST(request: Request) {
-  let body: { name?: string; email?: string; website?: string };
+  let body: { name?: string; email?: string; website?: string; referred_by?: string };
   try {
     body = await request.json();
   } catch {
@@ -120,6 +151,10 @@ export async function POST(request: Request) {
   if (!isValidEmail(email)) {
     return NextResponse.json({ ok: false, error: "invalid email" }, { status: 400 });
   }
+
+  // Referral code from the form (came from ?ref=CODE in the URL).
+  const referredByRaw = (body.referred_by || "").toString().trim().toUpperCase();
+  const referredBy = REF_CODE_RE.test(referredByRaw) ? referredByRaw : null;
 
   const confirmMode = doubleOptInEnabled();
   const ipHash = hashIp(request);
@@ -140,6 +175,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // Attach referral if the query param brought one (validated server-side).
+  if (referredBy) {
+    await attachReferral(email, referredBy);
+  }
+
+  // Fetch this signup's own referral_code so the client can show a share link.
+  const referralCode = await getReferralCode(email);
+
   // Analytics — one event per signup, regardless of confirm/direct mode.
   await logEvent({
     name: result.duplicate ? "waitlist.duplicate" : "waitlist.joined",
@@ -148,6 +191,7 @@ export async function POST(request: Request) {
       confirm_mode: confirmMode,
       email_domain: email.split("@")[1] ?? null,
       already_confirmed: Boolean(result.alreadyConfirmed),
+      referred: Boolean(referredBy),
     },
     request,
   });
@@ -155,7 +199,7 @@ export async function POST(request: Request) {
   // ── Double opt-in: send a confirmation email; Discord fires on confirm. ──
   if (confirmMode) {
     if (result.alreadyConfirmed) {
-      return NextResponse.json({ ok: true, alreadyConfirmed: true, total: result.total });
+      return NextResponse.json({ ok: true, alreadyConfirmed: true, total: result.total, referralCode });
     }
     // Fresh signup OR pending duplicate → (re)send the confirmation email.
     if (result.token) {
@@ -163,14 +207,14 @@ export async function POST(request: Request) {
         console.error("[waitlist] confirmation email error:", e?.message);
         return false;
       });
-      return NextResponse.json({ ok: true, pendingConfirmation: true, emailSent: sent });
+      return NextResponse.json({ ok: true, pendingConfirmation: true, emailSent: sent, referralCode });
     }
-    return NextResponse.json({ ok: true, pendingConfirmation: true, emailSent: false });
+    return NextResponse.json({ ok: true, pendingConfirmation: true, emailSent: false, referralCode });
   }
 
   // ── Direct mode: confirmed immediately → notify Discord. ──
   if (result.duplicate) {
-    return NextResponse.json({ ok: true, delivered: true, total: result.total, duplicate: true });
+    return NextResponse.json({ ok: true, delivered: true, total: result.total, duplicate: true, referralCode });
   }
 
   const host = request.headers.get("host") || "unknown";
@@ -184,5 +228,5 @@ export async function POST(request: Request) {
     .map((r) => String(r.reason?.message || r.reason).slice(0, 200));
   if (failures.length) console.error("[waitlist] delivery failures:", failures);
 
-  return NextResponse.json({ ok: true, delivered, total: result.total });
+  return NextResponse.json({ ok: true, delivered, total: result.total, referralCode });
 }
