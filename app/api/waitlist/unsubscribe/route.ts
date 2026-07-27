@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { getServiceRoleClient } from "@/app/lib/supabase-admin";
 import { makeUnsubscribeToken } from "@/app/lib/launch-email-template";
 import { logEvent } from "@/app/lib/analytics-events";
+import { allowRequest } from "@/app/lib/rate-limit";
 
 function html(body: string, status = 200): NextResponse {
   return new NextResponse(body, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
@@ -33,6 +34,12 @@ function ipHashFromRequest(req: Request): string | null {
 }
 
 export async function GET(request: Request) {
+  // 30 requests/min per IP — plenty for real users clicking, hostile
+  // enough to make token brute-forcing pointless.
+  if (!(await allowRequest("waitlist.unsubscribe", request, 30))) {
+    return html(page("Slow down", "Too many requests from this address. Please wait a moment.", "error"), 429);
+  }
+
   const url = new URL(request.url);
   const email = (url.searchParams.get("email") || "").trim().toLowerCase();
   const token = (url.searchParams.get("token") || "").trim();
