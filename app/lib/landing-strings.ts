@@ -42,6 +42,11 @@ export type LandingStrings = {
     genericError: string;
     disclaimer: string;
     peopleWaiting: string;
+    referralTitle: string;
+    referralBody: string;
+    referredByBanner: string;
+    copy: string;
+    copied: string;
   };
   community: {
     heading: string;
