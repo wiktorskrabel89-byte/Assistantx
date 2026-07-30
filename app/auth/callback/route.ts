@@ -96,12 +96,15 @@ export async function GET(request: Request) {
   const provider = isOAuthProvider(typeof providerValue === "string" ? providerValue : null) ? providerValue : null;
 
   function applyProviderCookies(response: NextResponse) {
+    const setCookie = response.cookies?.set?.bind(response.cookies);
+    if (!setCookie) return;
+
     for (const candidate of ["google", "github"] as const) {
       const cookieName = getProviderTokenCookieName(candidate);
       const providerToken = candidate === provider ? data.session?.provider_token : null;
 
       if (providerToken) {
-        response.cookies.set(cookieName, providerToken, {
+        setCookie(cookieName, providerToken, {
           httpOnly: true,
           secure: isSecureRequest,
           sameSite: "lax",
@@ -109,7 +112,7 @@ export async function GET(request: Request) {
           maxAge: Math.max(data.session?.expires_in ?? 3600, 300),
         });
       } else {
-        response.cookies.set(cookieName, "", {
+        setCookie(cookieName, "", {
           maxAge: 0,
           path: "/",
           sameSite: "lax",

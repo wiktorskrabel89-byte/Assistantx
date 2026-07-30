@@ -220,6 +220,21 @@ describe('SidecarBridge mic capture', () => {
     expect(audioChunkPayloads()).toHaveLength(1);
   });
 
+  it('keeps capture live during TTS only when barge-in is explicitly enabled', async () => {
+    await bridge.startAudioCapture();
+    const track = mediaStreams[0].tracks[0];
+
+    bridge.setBargeInEnabled(true);
+    bridge.setPlaybackActive(true);
+
+    expect(track.enabled).toBe(true);
+    expect(sendMock).toHaveBeenCalledWith({ type: 'configure', bargeInEnabled: true });
+    expect(sendMock).toHaveBeenCalledWith({ type: 'playback_state', active: true });
+
+    driveAudio(new Float32Array(2048).fill(0.5));
+    expect(audioChunkPayloads()).toHaveLength(1);
+  });
+
   it('emits renderer-side mic levels for the Settings test-mic meter', async () => {
     await bridge.startAudioCapture();
     const levels = [];
@@ -250,6 +265,28 @@ describe('SidecarBridge mic capture', () => {
     expect(devices).toEqual([
       { deviceId: 'mic-1', label: 'Desk microphone' },
       { deviceId: 'mic-2', label: 'Microphone 2' },
+    ]);
+  });
+
+  it('preserves the sidecar STT fallback marker on final audio segments', () => {
+    const segments = [];
+    bridge.on('audio_segment', (payload) => segments.push(payload));
+
+    bridge._handleMessage({
+      type: 'audio_segment',
+      data: 'pcm',
+      format: 'audio/raw',
+      sampleRate: 16000,
+      sidecarSttFallback: true,
+    });
+
+    expect(segments).toEqual([
+      expect.objectContaining({
+        data: 'pcm',
+        format: 'audio/raw',
+        sampleRate: 16000,
+        sidecarSttFallback: true,
+      }),
     ]);
   });
 
