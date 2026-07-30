@@ -218,7 +218,11 @@ class SidecarBridge extends EventEmitter {
     // detector (ai-agent/main.py _check_barge_in) can actually see audio to
     // decide whether the user is talking over Jarvis. When false, falls
     // back to the original strict half-duplex mute.
-    this._bargeInEnabled = true;
+    // Default OFF: strict half-duplex. Barge-in keeps the mic hot while
+    // Jarvis speaks, which makes the assistant hear itself on any setup
+    // without solid echo cancellation, so it has to be opted into via
+    // setBargeInEnabled rather than being on out of the box.
+    this._bargeInEnabled = false;
     this._inputDeviceId = '';
     this._chunkBuffer = new Float32Array(0);
     this._pendingSettings = null;
@@ -381,6 +385,10 @@ class SidecarBridge extends EventEmitter {
           data: rest.data || '',
           format: rest.format || 'audio/raw',
           sampleRate: Number(rest.sampleRate) || AUDIO_SAMPLE_RATE,
+          // Set by the sidecar when its own STT produced nothing for this
+          // segment. Dropping the flag here made the gateway assume the
+          // sidecar still owned the audio, so the utterance was lost.
+          sidecarSttFallback: Boolean(rest.sidecarSttFallback),
         });
         break;
       case 'tts_audio':
