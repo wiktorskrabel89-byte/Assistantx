@@ -311,7 +311,6 @@ function LaptopMockup({
   screenRef,
   keysRef,
   flashRef,
-  baseRef,
 }: {
   stage: number;
   chassisRef: React.Ref<HTMLDivElement>;
@@ -320,7 +319,6 @@ function LaptopMockup({
   screenRef: React.Ref<HTMLDivElement>;
   keysRef: React.Ref<HTMLDivElement>;
   flashRef: React.Ref<HTMLDivElement>;
-  baseRef: React.Ref<HTMLDivElement>;
 }) {
   return (
     <div
@@ -330,7 +328,7 @@ function LaptopMockup({
       style={{
         transformStyle: "preserve-3d",
         // SSR pose = folded, matching scroll position 0 (see pose()).
-        transform: "scale(0.86) rotateX(30deg)",
+        transform: "scale(0.88) rotateX(18deg)",
         transition: "transform 60ms linear",
       }}
     >
@@ -418,15 +416,16 @@ function LaptopMockup({
       {/* BASE — keyboard deck. Hidden while folded, else it juts out below
           the lid and the machine stops reading as closed. */}
       <div
-        ref={baseRef}
         className="relative"
         style={{
           transformStyle: "preserve-3d",
           transformOrigin: "50% 0%",
-          transform: "rotateX(-76deg)",
+          // POSITIVE rotation, so the deck lies forward — toward the viewer —
+          // the way a real keyboard does. A negative angle swings it behind
+          // the screen instead, which is what made the laptop read as though
+          // it were facing away.
+          transform: "rotateX(72deg)",
           height: "clamp(120px, 34vw, 210px)",
-          opacity: 0,
-          transition: "opacity 120ms linear",
         }}
       >
         <div
@@ -478,7 +477,6 @@ function LaptopTour({
   const screenRef = useRef<HTMLDivElement | null>(null);
   const keysRef = useRef<HTMLDivElement | null>(null);
   const flashRef = useRef<HTMLDivElement | null>(null);
-  const baseRef = useRef<HTMLDivElement | null>(null);
   const [stage, setStage] = useState(0);
   const [opened, setOpened] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -511,21 +509,29 @@ function LaptopTour({
     // it so the opening and closing beats share identical geometry.
     const pose = (open: number, screenOn: number, flashAmt: number) => {
       if (lidRef.current) {
-        lidRef.current.style.transform = `rotateX(${(-74 + 74 * open).toFixed(2)}deg)`;
+        // Closed = -104deg: the lid has folded FORWARD onto the deck (which
+        // sits at +72deg), leaving a few degrees of gap so the two planes
+        // don't z-fight. Open = 0deg, upright and facing the reader.
+        // Folding forward past -90 also flips the lid, so the aluminium back
+        // with the logo is what faces you when it's shut — exactly like
+        // looking down at a closed laptop.
+        lidRef.current.style.transform = `rotateX(${(-104 + 104 * open).toFixed(2)}deg)`;
       }
       if (lidBackRef.current) {
         lidBackRef.current.style.opacity = (1 - Math.min(1, open / 0.55)).toFixed(3);
       }
       if (chassisRef.current) {
+        // Shut: viewed from a bit further above (18deg) so the folded slab
+        // reads as an object on a desk. Open: almost head-on.
         chassisRef.current.style.transform =
-          `scale(${(0.86 + 0.18 * open).toFixed(3)}) rotateX(${(30 - 30 * open).toFixed(2)}deg)`;
+          `scale(${(0.88 + 0.16 * open).toFixed(3)}) rotateX(${(18 - 14 * open).toFixed(2)}deg)`;
       }
       if (screenRef.current) screenRef.current.style.opacity = screenOn.toFixed(3);
       if (keysRef.current) keysRef.current.style.opacity = (0.12 + screenOn * 0.55).toFixed(3);
       if (flashRef.current) flashRef.current.style.opacity = flashAmt.toFixed(3);
-      if (baseRef.current) {
-        baseRef.current.style.opacity = Math.max(0, Math.min(1, (open - 0.06) / 0.3)).toFixed(3);
-      }
+      // The deck stays visible at every angle: shut, it IS the bottom case
+      // the folded lid is resting on, which is what sells "closed laptop"
+      // rather than "floating panel".
     };
 
     const update = () => {
@@ -637,7 +643,6 @@ function LaptopTour({
                   screenRef={screenRef}
                   keysRef={keysRef}
                   flashRef={flashRef}
-                  baseRef={baseRef}
                 />
               </div>
             </div>
