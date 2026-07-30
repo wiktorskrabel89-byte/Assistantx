@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import type { PublicUILanguage } from "@/app/lib/ui-language";
-import { STRINGS } from "@/app/lib/landing-strings";
+import { STRINGS, type LandingStrings } from "@/app/lib/landing-strings";
 import { LanguageSwitcher } from "@/app/components/LanguageSwitcher";
 import { LaunchCountdown } from "@/app/components/LaunchCountdown";
 function AnimatedSection({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
@@ -25,6 +25,50 @@ function GlowOrb({ className, color }: { className: string; color: string }) {
     />
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// Scroll-driven laptop tour.
+//
+// The section is ~5 viewports tall.  A sticky inner frame pins the laptop
+// while scroll drives a single pose() function through five beats:
+//
+//   0 → 20%    lid folds up, screen powers on (flash + keyboard bloom)
+//   20 → 86%   six real UI screenshots cross-fade inside the screen
+//   86 → 100%  lid folds back down, screen powers off
+//
+// Because opening and closing both go through pose(), they can never drift
+// apart.  Three constraints worth knowing before editing this:
+//
+//  * The page wrapper must NOT use overflow-x-hidden — that silently makes
+//    every descendant's position:sticky inert.  overflow-x-clip is fine.
+//  * The fold stops at -74deg, not -90deg: at a true right angle both lid
+//    faces get backface-culled and the laptop vanishes from the frame.
+//  * The chassis sits at zero rotation while stages show.  Any 3D rotation
+//    makes the compositor resample the screenshot and softens fine text.
+// ─────────────────────────────────────────────────────────────
+const TOUR_SHOTS = [
+  "/media/ui/01-coding.png",
+  "/media/ui/02-memory.png",
+  "/media/ui/03-desktop.png",
+  "/media/ui/04-reasoning.png",
+  "/media/ui/05-agents.png",
+  "/media/ui/06-voice.png",
+] as const;
+const TOUR_STAGE_COUNT = TOUR_SHOTS.length;
+const TOUR_OPEN_END = 0.2;
+const TOUR_CLOSE_START = 0.86;
+// Which stages render on the left of the laptop; the rest go right.
+const TOUR_LEFT = new Set(["coding", "memory", "desktop"]);
+// Arrow endpoints in the overlay's viewBox coordinate space.
+const TOUR_VB = { w: 1200, h: 500 };
+const TOUR_ARROWS: Record<string, { fromX: number; fromY: number; toX: number; toY: number }> = {
+  coding: { fromX: 300, fromY: 80, toX: 550, toY: 200 },
+  memory: { fromX: 300, fromY: 240, toX: 470, toY: 230 },
+  desktop: { fromX: 300, fromY: 400, toX: 560, toY: 380 },
+  reasoning: { fromX: 900, fromY: 80, toX: 640, toY: 155 },
+  agents: { fromX: 900, fromY: 240, toX: 730, toY: 260 },
+  voice: { fromX: 900, fromY: 400, toX: 650, toY: 400 },
+};
 
 const SHOWCASE_ITEMS = [
   {
@@ -187,6 +231,580 @@ type ModalContent = {
   icon?: string;
 };
 
+type TourStage = LandingStrings["tour"]["stages"][number];
+
+/**
+ * Each tour stage maps onto an existing SHOWCASE_ITEMS entry, so clicking a
+ * callout opens the same rich modal (body + bullets from SHOWCASE_DETAILS)
+ * that the old card grid used.  Keys are SHOWCASE_ITEMS titles.
+ */
+const TOUR_TO_SHOWCASE: Record<string, string> = {
+  coding: "Writes code",
+  memory: "Has memory",
+  desktop: "Controls your computer",
+  reasoning: "Thinks before acting",
+  agents: "Multi-Agent Intelligence",
+  voice: "Talk naturally",
+};
+
+/** One callout beside the laptop. Active stage gets a cyan glow + scale-up. */
+function TourCallout({
+  stage,
+  index,
+  side,
+  isActive,
+  learnMore,
+  comingSoonLabel,
+  onOpen,
+}: {
+  stage: TourStage;
+  index: number;
+  side: "left" | "right";
+  isActive: boolean;
+  learnMore: string;
+  comingSoonLabel: string;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group relative overflow-hidden rounded-2xl p-4 text-left backdrop-blur-sm transition-all duration-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+      style={{
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: isActive ? "rgba(0,240,255,0.6)" : "rgba(255,255,255,0.06)",
+        background: isActive ? "rgba(0,240,255,0.06)" : "rgba(255,255,255,0.02)",
+        opacity: isActive ? 1 : 0.42,
+        boxShadow: isActive ? "0 0 22px rgba(0,240,255,0.25)" : "none",
+        transform: isActive ? "scale(1.03)" : "scale(0.98)",
+      }}
+    >
+      <span
+        className={`absolute top-3 bottom-3 w-px bg-gradient-to-b from-transparent via-cyan-300 to-transparent ${side === "left" ? "right-0" : "left-0"}`}
+        style={{ opacity: isActive ? 1 : 0.25 }}
+      />
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/90">
+          // {String(index + 1).padStart(2, "0")} · {stage.label}
+        </span>
+        {stage.id === "voice" && (
+          <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300">
+            {comingSoonLabel}
+          </span>
+        )}
+      </div>
+      <h3 className="mt-1.5 text-sm font-bold tracking-tight text-white sm:text-base">{stage.title}</h3>
+      <p className="mt-1 hidden text-xs leading-relaxed text-white/55 lg:block">{stage.subtitle}</p>
+      {isActive && (
+        <span className="mt-2 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-cyan-300/80">
+          {learnMore}
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </span>
+      )}
+    </button>
+  );
+}
+
+/**
+ * CSS laptop chassis holding the real UI screenshots.  The parent drives
+ * every ref imperatively from the scroll handler, which keeps the animation
+ * off React's render path entirely.
+ */
+function LaptopMockup({
+  stage,
+  chassisRef,
+  lidRef,
+  lidBackRef,
+  screenRef,
+  keysRef,
+  flashRef,
+  baseRef,
+}: {
+  stage: number;
+  chassisRef: React.Ref<HTMLDivElement>;
+  lidRef: React.Ref<HTMLDivElement>;
+  lidBackRef: React.Ref<HTMLDivElement>;
+  screenRef: React.Ref<HTMLDivElement>;
+  keysRef: React.Ref<HTMLDivElement>;
+  flashRef: React.Ref<HTMLDivElement>;
+  baseRef: React.Ref<HTMLDivElement>;
+}) {
+  return (
+    <div
+      ref={chassisRef}
+      aria-hidden="true"
+      className="relative mx-auto w-full max-w-[960px]"
+      style={{
+        transformStyle: "preserve-3d",
+        // SSR pose = folded, matching scroll position 0 (see pose()).
+        transform: "scale(0.86) rotateX(30deg)",
+        transition: "transform 60ms linear",
+      }}
+    >
+      {/* LID — hinges on its bottom edge. */}
+      <div
+        ref={lidRef}
+        className="relative"
+        style={{
+          transformStyle: "preserve-3d",
+          transformOrigin: "50% 100%",
+          transform: "rotateX(-74deg)",
+          transition: "transform 60ms linear",
+        }}
+      >
+        {/* Front face: bezel + screen. */}
+        <div
+          className="relative overflow-hidden rounded-t-xl border border-white/10 bg-[#050508]"
+          style={{
+            backfaceVisibility: "hidden",
+            boxShadow:
+              "0 40px 80px -20px rgba(0,240,255,0.15), 0 20px 40px -10px rgba(120,80,220,0.2), inset 0 0 0 1px rgba(255,255,255,0.03)",
+          }}
+        >
+          <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#08080c]">
+            <div ref={screenRef} className="absolute inset-0" style={{ opacity: 0, transition: "opacity 200ms linear" }}>
+              {TOUR_SHOTS.map((src, i) => (
+                <Image
+                  key={src}
+                  src={src}
+                  alt=""
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 960px"
+                  priority={i === 0}
+                  className="object-cover"
+                  style={{ opacity: stage === i ? 1 : 0, transition: "opacity 450ms ease" }}
+                />
+              ))}
+            </div>
+            {/* Power-on burst the moment the panel wakes. */}
+            <div
+              ref={flashRef}
+              className="pointer-events-none absolute inset-0"
+              style={{
+                opacity: 0,
+                transition: "opacity 120ms linear",
+                background:
+                  "radial-gradient(ellipse 80% 60% at 50% 50%, rgba(210,250,255,0.95), rgba(0,240,255,0.35) 60%, transparent 85%)",
+              }}
+            />
+            {/* Faint corner sheen — kept light so screenshot detail survives. */}
+            <div className="pointer-events-none absolute top-0 left-0 h-1/3 w-1/3 bg-gradient-to-br from-white/[0.03] to-transparent" />
+          </div>
+        </div>
+
+        {/* Back face: aluminium cover with the brand mark, shown while folded.
+            Driven by opacity rather than backface-visibility, which some
+            compositors ignore inside nested preserve-3d subtrees. */}
+        <div
+          ref={lidBackRef}
+          className="absolute inset-0 flex flex-col items-center justify-center gap-5 overflow-hidden rounded-xl border border-white/[0.14]"
+          style={{
+            transform: "rotateX(180deg)",
+            backfaceVisibility: "hidden",
+            background: "linear-gradient(152deg, #1b1b25 0%, #0e0e15 40%, #08080d 70%, #12121b 100%)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
+            transition: "opacity 120ms linear",
+          }}
+        >
+          <span
+            className="pointer-events-none absolute inset-0 opacity-[0.07]"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(105deg, rgba(255,255,255,0.9) 0 1px, transparent 1px 3px)",
+            }}
+          />
+          <span className="relative flex h-20 w-20 items-center justify-center rounded-[22px] bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 shadow-[0_0_70px_rgba(120,80,220,0.65)]">
+            <Image src="/jarvis-logo.svg" alt="" width={44} height={44} />
+          </span>
+          <span className="relative font-mono text-[13px] uppercase tracking-[0.55em] text-white/25">
+            AssistantX
+          </span>
+        </div>
+      </div>
+
+      {/* BASE — keyboard deck. Hidden while folded, else it juts out below
+          the lid and the machine stops reading as closed. */}
+      <div
+        ref={baseRef}
+        className="relative"
+        style={{
+          transformStyle: "preserve-3d",
+          transformOrigin: "50% 0%",
+          transform: "rotateX(-76deg)",
+          height: "clamp(120px, 34vw, 210px)",
+          opacity: 0,
+          transition: "opacity 120ms linear",
+        }}
+      >
+        <div
+          className="absolute inset-0 rounded-b-2xl border border-white/10 border-t-white/20 px-[6%] pt-[3%]"
+          style={{
+            background: "linear-gradient(180deg, #191922 0%, #101016 60%, #0b0b10 100%)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+          }}
+        >
+          <div
+            ref={keysRef}
+            className="pointer-events-none absolute inset-x-[5%] top-[2%] h-[55%] rounded-lg"
+            style={{
+              opacity: 0.12,
+              transition: "opacity 200ms linear",
+              background:
+                "radial-gradient(ellipse 70% 90% at 50% 40%, rgba(0,240,255,0.35), rgba(120,80,220,0.15) 60%, transparent 80%)",
+              filter: "blur(10px)",
+            }}
+          />
+          <div className="relative grid gap-[3px]" style={{ height: "55%" }}>
+            {[14, 14, 13, 12, 9].map((cols, r) => (
+              <div key={r} className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+                {Array.from({ length: cols }, (_, k) => (
+                  <span key={k} className="rounded-[2px] border border-white/[0.06] bg-white/[0.045]" />
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="mx-auto mt-[2.5%] h-[26%] w-[34%] rounded-md border border-white/[0.08] bg-white/[0.03]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The whole sticky tour section. */
+function LaptopTour({
+  t,
+  onOpenStage,
+}: {
+  t: LandingStrings;
+  onOpenStage: (stage: TourStage) => void;
+}) {
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const chassisRef = useRef<HTMLDivElement | null>(null);
+  const lidRef = useRef<HTMLDivElement | null>(null);
+  const lidBackRef = useRef<HTMLDivElement | null>(null);
+  const screenRef = useRef<HTMLDivElement | null>(null);
+  const keysRef = useRef<HTMLDivElement | null>(null);
+  const flashRef = useRef<HTMLDivElement | null>(null);
+  const baseRef = useRef<HTMLDivElement | null>(null);
+  const [stage, setStage] = useState(0);
+  const [opened, setOpened] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  const stages = t.tour.stages;
+
+  useEffect(() => {
+    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
+
+  const goToStage = (k: number) => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const clamped = Math.max(0, Math.min(TOUR_STAGE_COUNT - 1, k));
+    const vh = window.innerHeight || 800;
+    const scrollable = Math.max(1, section.offsetHeight - vh);
+    const top = section.getBoundingClientRect().top + window.scrollY;
+    const p =
+      TOUR_OPEN_END +
+      ((clamped + 0.5) / TOUR_STAGE_COUNT) * (TOUR_CLOSE_START - TOUR_OPEN_END);
+    window.scrollTo({ top: top + p * scrollable, behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const smooth = (x: number) => x * x * (3 - 2 * x);
+
+    // `open` is 0 (folded) → 1 (fully open); every other value derives from
+    // it so the opening and closing beats share identical geometry.
+    const pose = (open: number, screenOn: number, flashAmt: number) => {
+      if (lidRef.current) {
+        lidRef.current.style.transform = `rotateX(${(-74 + 74 * open).toFixed(2)}deg)`;
+      }
+      if (lidBackRef.current) {
+        lidBackRef.current.style.opacity = (1 - Math.min(1, open / 0.55)).toFixed(3);
+      }
+      if (chassisRef.current) {
+        chassisRef.current.style.transform =
+          `scale(${(0.86 + 0.18 * open).toFixed(3)}) rotateX(${(30 - 30 * open).toFixed(2)}deg)`;
+      }
+      if (screenRef.current) screenRef.current.style.opacity = screenOn.toFixed(3);
+      if (keysRef.current) keysRef.current.style.opacity = (0.12 + screenOn * 0.55).toFixed(3);
+      if (flashRef.current) flashRef.current.style.opacity = flashAmt.toFixed(3);
+      if (baseRef.current) {
+        baseRef.current.style.opacity = Math.max(0, Math.min(1, (open - 0.06) / 0.3)).toFixed(3);
+      }
+    };
+
+    const update = () => {
+      const rect = section.getBoundingClientRect();
+      const vh = window.innerHeight || 800;
+      const scrollable = Math.max(1, rect.height - vh);
+      const p = Math.max(0, Math.min(0.9999, Math.max(0, -rect.top) / scrollable));
+
+      if (reducedMotion) {
+        pose(1, 1, 0);
+        setOpened(true);
+        const ns = Math.min(TOUR_STAGE_COUNT - 1, Math.floor(p * TOUR_STAGE_COUNT));
+        setStage((prev) => (prev === ns ? prev : ns));
+        return;
+      }
+
+      if (p < TOUR_OPEN_END) {
+        const x = smooth(p / TOUR_OPEN_END);
+        const on = Math.max(0, Math.min(1, (x - 0.6) / 0.32));
+        const flash = on > 0 && on < 0.45 ? ((0.45 - on) / 0.45) * 0.6 : 0;
+        pose(x, on, flash);
+        setOpened(false);
+        setStage((prev) => (prev === 0 ? prev : 0));
+      } else if (p < TOUR_CLOSE_START) {
+        const pb = (p - TOUR_OPEN_END) / (TOUR_CLOSE_START - TOUR_OPEN_END);
+        const ns = Math.min(TOUR_STAGE_COUNT - 1, Math.floor(pb * TOUR_STAGE_COUNT));
+        pose(1, 1, 0);
+        setOpened(true);
+        setStage((prev) => (prev === ns ? prev : ns));
+      } else {
+        const x = smooth((p - TOUR_CLOSE_START) / (1 - TOUR_CLOSE_START));
+        const off = 1 - Math.max(0, Math.min(1, (x - 0.05) / 0.35));
+        pose(1 - x, off, 0);
+        setOpened(false);
+        setStage((prev) => (prev === TOUR_STAGE_COUNT - 1 ? prev : TOUR_STAGE_COUNT - 1));
+      }
+    };
+
+    update();
+    // Deliberately no rAF throttle: rAF is paused in background/hidden
+    // frames, which strands the laptop mid-fold.  A single inline-style
+    // write per event batches into the compositor's own frame anyway.
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [reducedMotion]);
+
+  const activeId = stages[stage]?.id;
+
+  return (
+    <section
+      ref={sectionRef}
+      className="relative"
+      style={{ minHeight: `calc(110vh + ${TOUR_STAGE_COUNT * 55}vh)` }}
+    >
+      <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden px-4 py-8 sm:px-6">
+        <div className="mx-auto w-full max-w-7xl">
+          <div className="mb-6 text-center sm:mb-8">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-violet-300/70">
+              {t.tour.eyebrow}
+            </p>
+            <h2 className="text-3xl font-black tracking-[-0.03em] sm:text-4xl md:text-5xl">
+              <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+                {t.showcaseHeading.top}
+              </span>{" "}
+              <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+                {t.showcaseHeading.bottom}
+              </span>
+            </h2>
+          </div>
+
+          <div className="relative grid gap-3 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,3.5fr)_minmax(0,0.75fr)] lg:items-center lg:gap-4">
+            {/* Arrows — only the active stage's arrow is bright. */}
+            <svg
+              aria-hidden="true"
+              viewBox={`0 0 ${TOUR_VB.w} ${TOUR_VB.h}`}
+              preserveAspectRatio="none"
+              className="pointer-events-none absolute inset-0 z-20 hidden h-full w-full lg:block"
+            >
+              <defs>
+                <linearGradient id="tour-arrow" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0%" stopColor="rgba(0,240,255,0)" />
+                  <stop offset="60%" stopColor="rgba(0,240,255,0.6)" />
+                  <stop offset="100%" stopColor="rgba(0,240,255,1)" />
+                </linearGradient>
+                <marker id="tour-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="rgba(0,240,255,1)" />
+                </marker>
+              </defs>
+              {stages.map((s, i) => {
+                const a = TOUR_ARROWS[s.id];
+                if (!a) return null;
+                const midX = (a.fromX + a.toX) / 2;
+                const midY = (a.fromY + a.toY) / 2 + (i % 2 === 0 ? -30 : 30);
+                const isActive = s.id === activeId;
+                return (
+                  <path
+                    key={s.id}
+                    d={`M ${a.fromX} ${a.fromY} Q ${midX} ${midY} ${a.toX} ${a.toY}`}
+                    fill="none"
+                    stroke="url(#tour-arrow)"
+                    strokeWidth={isActive ? 2 : 1}
+                    strokeDasharray="3 4"
+                    markerEnd={isActive ? "url(#tour-arrowhead)" : undefined}
+                    style={{
+                      opacity: !opened ? 0 : isActive ? 1 : 0.14,
+                      transition: "opacity 500ms ease, stroke-width 500ms ease",
+                    }}
+                  />
+                );
+              })}
+            </svg>
+
+            {/* Left callouts (desktop only). */}
+            <div
+              className="order-2 hidden flex-col gap-3 transition-opacity duration-700 lg:order-1 lg:flex"
+              style={{ opacity: opened ? 1 : 0 }}
+            >
+              {stages.filter((s) => TOUR_LEFT.has(s.id)).map((s) => {
+                const idx = stages.findIndex((x) => x.id === s.id);
+                return (
+                  <TourCallout
+                    key={s.id}
+                    stage={s}
+                    index={idx}
+                    side="left"
+                    isActive={stage === idx}
+                    learnMore={t.tour.learnMore}
+                    comingSoonLabel={t.tour.comingSoon}
+                    onOpen={() => onOpenStage(s)}
+                  />
+                );
+              })}
+            </div>
+
+            {/* The laptop. */}
+            <div className="relative order-1 lg:order-2">
+              <div className="pointer-events-none absolute -inset-12 rounded-[4rem] bg-gradient-to-br from-violet-500/30 via-transparent to-cyan-500/30 blur-3xl" />
+              <div className="pointer-events-none absolute inset-x-0 -bottom-10 h-24 rounded-[100%] bg-cyan-400/15 blur-2xl" />
+              <div
+                className="relative"
+                style={{ perspective: "1400px", perspectiveOrigin: "50% 30%", transformStyle: "preserve-3d" }}
+              >
+                <LaptopMockup
+                  stage={stage}
+                  chassisRef={chassisRef}
+                  lidRef={lidRef}
+                  lidBackRef={lidBackRef}
+                  screenRef={screenRef}
+                  keysRef={keysRef}
+                  flashRef={flashRef}
+                  baseRef={baseRef}
+                />
+              </div>
+            </div>
+
+            {/* Right callouts (desktop only). */}
+            <div
+              className="order-3 hidden flex-col gap-3 transition-opacity duration-700 lg:flex"
+              style={{ opacity: opened ? 1 : 0 }}
+            >
+              {stages.filter((s) => !TOUR_LEFT.has(s.id)).map((s) => {
+                const idx = stages.findIndex((x) => x.id === s.id);
+                return (
+                  <TourCallout
+                    key={s.id}
+                    stage={s}
+                    index={idx}
+                    side="right"
+                    isActive={stage === idx}
+                    learnMore={t.tour.learnMore}
+                    comingSoonLabel={t.tour.comingSoon}
+                    onOpen={() => onOpenStage(s)}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Mobile: just the active callout, so the laptop always fits. */}
+            <div
+              className="order-2 transition-opacity duration-700 lg:hidden"
+              style={{ opacity: opened ? 1 : 0 }}
+            >
+              {stages[stage] && (
+                <TourCallout
+                  stage={stages[stage]}
+                  index={stage}
+                  side="left"
+                  isActive
+                  learnMore={t.tour.learnMore}
+                  comingSoonLabel={t.tour.comingSoon}
+                  onOpen={() => onOpenStage(stages[stage])}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Stage navigator: arrows + clickable segment track. */}
+          <div className="relative mx-auto mt-6 h-12 w-full max-w-md sm:mt-8">
+            <span
+              className="absolute inset-x-0 top-3 text-center font-mono text-[10px] uppercase tracking-[0.3em] text-cyan-300/60 transition-opacity duration-500"
+              style={{ opacity: opened ? 0 : 1 }}
+            >
+              {t.tour.scrollHint}
+            </span>
+            <div
+              className="flex items-center gap-4 transition-opacity duration-500"
+              style={{ opacity: opened ? 1 : 0, pointerEvents: opened ? "auto" : "none" }}
+            >
+              <button
+                type="button"
+                onClick={() => goToStage(stage - 1)}
+                disabled={stage === 0}
+                aria-label={stages[stage - 1]?.title ?? ""}
+                className="group flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.03] text-white/60 transition-all hover:border-cyan-300/60 hover:text-cyan-200 active:scale-90 disabled:pointer-events-none disabled:opacity-25"
+              >
+                <svg className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+              </button>
+
+              <div className="min-w-0 flex-1">
+                <div className="mb-1.5 flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.2em]">
+                  <span className="text-cyan-300/90">
+                    {String(stage + 1).padStart(2, "0")}
+                    <span className="text-white/25"> / {String(TOUR_STAGE_COUNT).padStart(2, "0")}</span>
+                  </span>
+                  <span className="truncate pl-3 text-white/60">{stages[stage]?.title}</span>
+                </div>
+                <div className="flex gap-1">
+                  {stages.map((s, i) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => goToStage(i)}
+                      aria-label={s.title}
+                      className="h-1.5 flex-1 cursor-pointer rounded-full transition-all duration-300 hover:!bg-cyan-300/60"
+                      style={{
+                        backgroundColor:
+                          i < stage ? "rgba(0,240,255,0.35)" : i === stage ? "rgb(0 240 255)" : "rgba(255,255,255,0.12)",
+                        boxShadow: i === stage ? "0 0 12px rgba(0,240,255,0.55)" : "none",
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => goToStage(stage + 1)}
+                disabled={stage === TOUR_STAGE_COUNT - 1}
+                aria-label={stages[stage + 1]?.title ?? ""}
+                className="group flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.03] text-white/60 transition-all hover:border-cyan-300/60 hover:text-cyan-200 active:scale-90 disabled:pointer-events-none disabled:opacity-25"
+              >
+                <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function PublicHome({
   lang = "en",
   waitlistCount: initialCount = 1,
@@ -298,7 +916,11 @@ export default function PublicHome({
   };
 
   return (
-    <div className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
+    // overflow-x-clip, NOT -hidden: `hidden` turns this into a scroll
+    // container, which silently makes position:sticky inert for every
+    // descendant — including the laptop tour. `clip` clips identically
+    // without creating the scroll container.
+    <div className="relative min-h-screen bg-[#050508] text-white overflow-x-clip">
       <LanguageSwitcher lang={lang} />
       <script
         type="application/ld+json"
@@ -420,58 +1042,28 @@ export default function PublicHome({
         </div>
       </section>
 
-      {/* ═══════════════ AI SHOWCASE ═══════════════ */}
-      <section id="showcase" className="relative py-32 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "1200px" }}>
-        <AnimatedSection className="text-center mb-24">
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-              {t.showcaseHeading.top}
-            </span>
-            <br />
-            <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
-              {t.showcaseHeading.bottom}
-            </span>
-          </h2>
-        </AnimatedSection>
-
-        <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {SHOWCASE_ITEMS.map((item, i) => (
-            <AnimatedSection key={item.title} delay={i * 0.05}>
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={`Learn more about ${item.title}`}
-                onClick={() => setModal({
-                  title: item.title,
-                  subtitle: item.subtitle,
-                  body: SHOWCASE_DETAILS[item.title]?.body ?? item.subtitle,
-                  bullets: SHOWCASE_DETAILS[item.title]?.bullets,
-                  gradient: item.gradient,
-                  icon: item.icon,
-                })}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
-                className="group relative h-full rounded-3xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-8 overflow-hidden hover:border-white/[0.14] transition-all duration-500 hover:-translate-y-1 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508]"
-              >
-                <div className={`absolute -top-20 -right-20 w-40 h-40 rounded-full bg-gradient-to-br ${item.gradient} opacity-0 group-hover:opacity-15 blur-3xl transition-opacity duration-700`} />
-                <div
-                  className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-6 ring-1 ring-white/20 ring-inset group-hover:scale-110 transition-transform duration-500`}
-                  style={{ boxShadow: `0 8px 32px ${item.glow}` }}
-                >
-                  <svg className="w-7 h-7 text-white drop-shadow" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold tracking-tight mb-2">{item.title}</h3>
-                <p className="text-sm text-white/40 leading-relaxed">{item.subtitle}</p>
-                <span className="absolute bottom-6 right-6 text-white/20 group-hover:text-white/60 transition-colors text-xs font-medium flex items-center gap-1">
-                  Learn more
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                </span>
-              </div>
-            </AnimatedSection>
-          ))}
-        </div>
-      </section>
+      {/* âââââââââââââââ AI SHOWCASE â scroll-driven laptop tour âââââââââââââââ */}
+      {/* Keeps the #showcase id (hero's secondary CTA links to it) and the
+          same heading strings.  The old 11-card grid is replaced by the tour;
+          clicking a callout still opens the SHOWCASE_DETAILS modal via
+          TOUR_TO_SHOWCASE. */}
+      <div id="showcase">
+        <LaptopTour
+          t={t}
+          onOpenStage={(stage) => {
+            const title = TOUR_TO_SHOWCASE[stage.id];
+            const item = SHOWCASE_ITEMS.find((s) => s.title === title);
+            setModal({
+              title: stage.title,
+              subtitle: stage.subtitle,
+              body: (title && SHOWCASE_DETAILS[title]?.body) || stage.subtitle,
+              bullets: title ? SHOWCASE_DETAILS[title]?.bullets : undefined,
+              gradient: item?.gradient ?? "from-violet-500 to-cyan-500",
+              icon: item?.icon,
+            });
+          }}
+        />
+      </div>
 
       {/* ═══════════════ DEMO VIDEOS ═══════════════ */}
       <section className="relative py-32 px-6" style={{ contentVisibility: "auto", containIntrinsicSize: "900px" }}>

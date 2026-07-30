@@ -9,6 +9,14 @@ export type LandingStrings = {
     demoCta: string;
   };
   showcaseHeading: { top: string; bottom: string };
+  /** Scroll-driven laptop tour: one entry per stage, in display order. */
+  tour: {
+    eyebrow: string;
+    scrollHint: string;
+    learnMore: string;
+    comingSoon: string;
+    stages: { id: string; label: string; title: string; subtitle: string }[];
+  };
   demos: {
     heading: string;
     subtitle: string;
@@ -71,21 +79,35 @@ export type LandingStrings = {
 export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
   en: {
     hero: {
-      titleTop: "The AI",
-      titleBottom: "Operating System.",
+      titleTop: "The AI that",
+      titleBottom: "actually does the work.",
       subtitle:
-        "AssistantX-Jarvis is the intelligence layer between you and your entire digital life. It thinks, acts, learns, and evolves.",
+        "AssistantX is the intelligence layer between you and your entire digital life. It thinks, acts, learns, and evolves.",
       joinCta: "Join Waitlist",
       demoCta: "Watch Demo",
     },
-    showcaseHeading: { top: "Not a chatbot.", bottom: "An operating system." },
+    showcaseHeading: { top: "Not a chatbot.", bottom: "An operator." },
+    tour: {
+      eyebrow: "What it does",
+      scrollHint: "Scroll",
+      learnMore: "Learn more",
+      comingSoon: "Coming soon",
+      stages: [
+        { id: "coding", label: "CODING", title: "Writes code", subtitle: "Multi-file edits with a plan and verification" },
+        { id: "memory", label: "MEMORY", title: "Remembers", subtitle: "Durable context across every conversation" },
+        { id: "desktop", label: "DESKTOP", title: "Runs your computer", subtitle: "Native app and workflow automation" },
+        { id: "reasoning", label: "REASONING", title: "Thinks before acting", subtitle: "Multi-step reasoning with confidence scoring" },
+        { id: "agents", label: "MULTIAGENT", title: "Multi-agent intelligence", subtitle: "Specialised agents working in parallel" },
+        { id: "voice", label: "VOICE", title: "Talks with you", subtitle: "Voice-first interaction, on-device" },
+      ],
+    },
     demos: {
       heading: "See it in action.",
-      subtitle: "Real demonstrations of what Jarvis can do.",
+      subtitle: "Real demonstrations of what AssistantX can do.",
       comingSoon: "Coming soon",
       filmSubtitle: "Demo film",
       filmBody:
-        "This demo film is in production. Join the waitlist and you'll be the first to see Jarvis in action — real tasks, real screen, no cuts.",
+        "This demo film is in production. Join the waitlist and you'll be the first to see AssistantX in action — real tasks, real screen, no cuts.",
       filmBullets: [
         "Recorded on real hardware, unscripted",
         "Narrated walkthrough of every step",
@@ -96,9 +118,9 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
     comparison: {
       heading: "Beyond chatbots.",
       subheading:
-        "AssistantX-Jarvis is not another AI chatbot. It is an AI Operating System.",
+        "AssistantX is not another AI chatbot. It is an operator that gets work done.",
       feature: "Feature",
-      jarvisCol: "Jarvis",
+      jarvisCol: "AssistantX",
       chatbotCol: "AI Chatbots",
     },
     waitlist: {
@@ -112,7 +134,7 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
       successPendingBody:
         "We sent you a confirmation link. Click it to lock in your spot — check spam if you don't see it.",
       successOn: "You're on the list!",
-      successOnBody: "We'll notify you when Jarvis is ready.",
+      successOnBody: "We'll notify you when AssistantX is ready.",
       namePh: "Your name",
       emailPh: "your@email.com",
       joining: "Joining…",
@@ -147,21 +169,35 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
   },
   pl: {
     hero: {
-      titleTop: "System operacyjny",
-      titleBottom: "sztucznej inteligencji.",
+      titleTop: "Sztuczna inteligencja,",
+      titleBottom: "która działa za Ciebie.",
       subtitle:
-        "AssistantX-Jarvis to warstwa inteligencji między Tobą a Twoim całym cyfrowym życiem. Myśli, działa, uczy się i ewoluuje.",
+        "AssistantX to warstwa inteligencji między Tobą a Twoim całym cyfrowym życiem. Myśli, działa, uczy się i ewoluuje.",
       joinCta: "Dołącz do listy",
       demoCta: "Zobacz demo",
     },
-    showcaseHeading: { top: "To nie chatbot.", bottom: "To system operacyjny." },
+    showcaseHeading: { top: "To nie chatbot.", bottom: "To operator." },
+    tour: {
+      eyebrow: "Co potrafi",
+      scrollHint: "Przewiń",
+      learnMore: "Zobacz więcej",
+      comingSoon: "Wkrótce",
+      stages: [
+        { id: "coding", label: "CODING", title: "Pisze kod", subtitle: "Wieloplikowa edycja z planem i weryfikacją" },
+        { id: "memory", label: "MEMORY", title: "Pamięta", subtitle: "Trwały kontekst między rozmowami" },
+        { id: "desktop", label: "DESKTOP", title: "Steruje Twoim komputerem", subtitle: "Natywna automatyzacja aplikacji i pulpitu" },
+        { id: "reasoning", label: "REASONING", title: "Myśli, zanim działa", subtitle: "Wielokrokowe rozumowanie z oceną pewności" },
+        { id: "agents", label: "MULTIAGENT", title: "Inteligencja wieloagentowa", subtitle: "Wyspecjalizowani agenci pracujący równolegle" },
+        { id: "voice", label: "VOICE", title: "Rozmawia z Tobą", subtitle: "Interfejs głosowy, na urządzeniu" },
+      ],
+    },
     demos: {
       heading: "Zobacz w akcji.",
-      subtitle: "Prawdziwe pokazy tego, co potrafi Jarvis.",
+      subtitle: "Prawdziwe pokazy tego, co potrafi AssistantX.",
       comingSoon: "Wkrótce",
       filmSubtitle: "Film demo",
       filmBody:
-        "Ten film demo jest w produkcji. Dołącz do listy oczekujących, a jako pierwszy zobaczysz Jarvisa w akcji — prawdziwe zadania, prawdziwy ekran, bez cięć.",
+        "Ten film demo jest w produkcji. Dołącz do listy oczekujących, a jako pierwszy zobaczysz AssistantX w akcji — prawdziwe zadania, prawdziwy ekran, bez cięć.",
       filmBullets: [
         "Nagrany na prawdziwym sprzęcie, bez scenariusza",
         "Narracyjny przegląd każdego kroku",
@@ -172,9 +208,9 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
     comparison: {
       heading: "Więcej niż chatbot.",
       subheading:
-        "AssistantX-Jarvis to nie kolejny chatbot AI. To system operacyjny AI.",
+        "AssistantX to nie kolejny chatbot AI. To operator, który realnie wykonuje zadania.",
       feature: "Funkcja",
-      jarvisCol: "Jarvis",
+      jarvisCol: "AssistantX",
       chatbotCol: "Chatboty AI",
     },
     waitlist: {
@@ -188,7 +224,7 @@ export const STRINGS: Record<PublicUILanguage, LandingStrings> = {
       successPendingBody:
         "Wysłaliśmy link potwierdzający. Kliknij, aby zabezpieczyć swoje miejsce — sprawdź spam, jeśli nie widzisz maila.",
       successOn: "Jesteś na liście!",
-      successOnBody: "Powiadomimy Cię, gdy Jarvis będzie gotowy.",
+      successOnBody: "Powiadomimy Cię, gdy AssistantX będzie gotowy.",
       namePh: "Twoje imię",
       emailPh: "twoj@email.com",
       joining: "Dołączanie…",
