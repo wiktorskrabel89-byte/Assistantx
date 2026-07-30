@@ -59,16 +59,6 @@ const TOUR_OPEN_END = 0.2;
 const TOUR_CLOSE_START = 0.86;
 // Which stages render on the left of the laptop; the rest go right.
 const TOUR_LEFT = new Set(["coding", "memory", "desktop"]);
-// Arrow endpoints in the overlay's viewBox coordinate space.
-const TOUR_VB = { w: 1200, h: 500 };
-const TOUR_ARROWS: Record<string, { fromX: number; fromY: number; toX: number; toY: number }> = {
-  coding: { fromX: 300, fromY: 80, toX: 550, toY: 200 },
-  memory: { fromX: 300, fromY: 240, toX: 470, toY: 230 },
-  desktop: { fromX: 300, fromY: 400, toX: 560, toY: 380 },
-  reasoning: { fromX: 900, fromY: 80, toX: 640, toY: 155 },
-  agents: { fromX: 900, fromY: 240, toX: 730, toY: 260 },
-  voice: { fromX: 900, fromY: 400, toX: 650, toY: 400 },
-};
 
 const SHOWCASE_ITEMS = [
   {
@@ -586,8 +576,6 @@ function LaptopTour({
     };
   }, [reducedMotion]);
 
-  const activeId = stages[stage]?.id;
-
   return (
     <section
       ref={sectionRef}
@@ -611,47 +599,6 @@ function LaptopTour({
           </div>
 
           <div className="relative grid gap-3 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,3.5fr)_minmax(0,0.75fr)] lg:items-center lg:gap-4">
-            {/* Arrows — only the active stage's arrow is bright. */}
-            <svg
-              aria-hidden="true"
-              viewBox={`0 0 ${TOUR_VB.w} ${TOUR_VB.h}`}
-              preserveAspectRatio="none"
-              className="pointer-events-none absolute inset-0 z-20 hidden h-full w-full lg:block"
-            >
-              <defs>
-                <linearGradient id="tour-arrow" x1="0" x2="1" y1="0" y2="0">
-                  <stop offset="0%" stopColor="rgba(0,240,255,0)" />
-                  <stop offset="60%" stopColor="rgba(0,240,255,0.6)" />
-                  <stop offset="100%" stopColor="rgba(0,240,255,1)" />
-                </linearGradient>
-                <marker id="tour-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-                  <path d="M0,0 L10,5 L0,10 z" fill="rgba(0,240,255,1)" />
-                </marker>
-              </defs>
-              {stages.map((s, i) => {
-                const a = TOUR_ARROWS[s.id];
-                if (!a) return null;
-                const midX = (a.fromX + a.toX) / 2;
-                const midY = (a.fromY + a.toY) / 2 + (i % 2 === 0 ? -30 : 30);
-                const isActive = s.id === activeId;
-                return (
-                  <path
-                    key={s.id}
-                    d={`M ${a.fromX} ${a.fromY} Q ${midX} ${midY} ${a.toX} ${a.toY}`}
-                    fill="none"
-                    stroke="url(#tour-arrow)"
-                    strokeWidth={isActive ? 2 : 1}
-                    strokeDasharray="3 4"
-                    markerEnd={isActive ? "url(#tour-arrowhead)" : undefined}
-                    style={{
-                      opacity: !opened ? 0 : isActive ? 1 : 0.14,
-                      transition: "opacity 500ms ease, stroke-width 500ms ease",
-                    }}
-                  />
-                );
-              })}
-            </svg>
-
             {/* Left callouts (desktop only). */}
             <div
               className="order-2 hidden flex-col gap-3 transition-opacity duration-700 lg:order-1 lg:flex"
