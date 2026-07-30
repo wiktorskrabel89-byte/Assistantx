@@ -33,10 +33,19 @@ const eslintConfig = defineConfig([
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
+    "node_modules/**",
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local/generated artifacts that should not be linted as application code.
+    ".claude/**",
+    ".agents/**",
+    "coverage/**",
+    "dist/**",
+    "playwright-report/**",
+    "test-results/**",
+    "jarvis/desktop/dist/**",
   ]),
 ]);
 

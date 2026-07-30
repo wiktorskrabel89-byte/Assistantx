@@ -50,6 +50,11 @@ function parseRedirectQuery(location: string): URLSearchParams {
   return url.searchParams;
 }
 
+function extractDesktopAuthUrl(html: string): string {
+  const match = html.match(/var url = ("[^"]+");/);
+  return match?.[1] ? JSON.parse(match[1]) : "";
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
@@ -188,8 +193,8 @@ describe("GET /auth/callback", () => {
       client: "jarvis-desktop",
       redirect_to: "assistantx://auth/callback",
     }));
-    expect(res.status).toBe(307);
-    const location = res.headers.get("location") ?? "";
+    expect(res.status).toBe(200);
+    const location = extractDesktopAuthUrl(await res.text());
     expect(location).toContain("assistantx://auth/callback?");
     const queryParams = parseRedirectQuery(location);
     expect(queryParams.get("access_token")).toBe("session-token-123");
@@ -223,7 +228,8 @@ describe("GET /auth/callback", () => {
       desktop_state: "desktop-state-abc",
       redirect_to: "assistantx://auth/callback",
     }));
-    const location = res.headers.get("location") ?? "";
+    expect(res.status).toBe(200);
+    const location = extractDesktopAuthUrl(await res.text());
     expect(location).toContain("assistantx://auth/callback?");
     const queryParams = parseRedirectQuery(location);
     expect(queryParams.get("desktop_state")).toBe("desktop-state-abc");
@@ -256,7 +262,8 @@ describe("GET /auth/callback", () => {
       state: "desktop-state-legacy",
       redirect_to: "assistantx://auth/callback",
     }));
-    const location = res.headers.get("location") ?? "";
+    expect(res.status).toBe(200);
+    const location = extractDesktopAuthUrl(await res.text());
     const queryParams = parseRedirectQuery(location);
     expect(queryParams.get("desktop_state")).toBe("desktop-state-legacy");
     expect(queryParams.get("state")).toBe("desktop-state-legacy");
@@ -319,7 +326,8 @@ describe("GET /auth/callback", () => {
       code: "valid-code",
       redirect_to: "assistantx://auth/callback",
     }));
-    const location = res.headers.get("location") ?? "";
+    expect(res.status).toBe(200);
+    const location = extractDesktopAuthUrl(await res.text());
     expect(location).toContain("assistantx://auth/callback?");
     const queryParams = parseRedirectQuery(location);
     expect(queryParams.get("access_token")).toBe("session-token-123");

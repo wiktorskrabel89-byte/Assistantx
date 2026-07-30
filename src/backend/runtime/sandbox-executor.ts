@@ -117,6 +117,7 @@ export async function executeSandboxCode({
         cwd: workdir,
         env,
         stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
       });
 
       let stdout = "";

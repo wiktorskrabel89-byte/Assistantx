@@ -33,7 +33,10 @@ jobs:
           python -m pip install --upgrade pip
           # Only the deps the pipeline tests touch — heavier ML models are
           # injected via the score_fn / fake-model hooks.
-          pip install numpy
+          # `websockets` is needed because test_audio_pipeline_integration
+          # imports main.py, which imports it at module scope; without it the
+          # suite dies at collection with ModuleNotFoundError.
+          pip install numpy websockets
 
       - name: Run pipeline unit + integration tests
         working-directory: ai-agent

@@ -867,13 +867,35 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
                             )
                         except Exception as exc:
                             logger.debug("Segment denoise error: %s", exc)
-                    encoded = base64.b64encode(segment).decode("ascii")
-                    await _send(ws, {
-                        "type": "audio_segment",
-                        "data": encoded,
-                        "format": "audio/raw",
-                        "sampleRate": state.sample_rate,
-                    }, state)
+                    sidecar_stt_finished = False
+                    if state.stt_enabled:
+                        try:
+                            stt = _get_stt_engine()
+                            result = await loop.run_in_executor(
+                                None, stt.transcribe_chunk, segment, state.language, state.sample_rate
+                            )
+                            text = str((result or {}).get("text", "")).strip()
+                            if text:
+                                await _send(ws, {
+                                    "type": "stt_result",
+                                    "text": text,
+                                    "isFinal": True,
+                                    "confidence": (result or {}).get("confidence"),
+                                    "provider": _stt_backend_name,
+                                }, state)
+                                sidecar_stt_finished = True
+                        except Exception as exc:
+                            logger.debug("Final segment STT error: %s", exc)
+
+                    if not sidecar_stt_finished:
+                        encoded = base64.b64encode(segment).decode("ascii")
+                        await _send(ws, {
+                            "type": "audio_segment",
+                            "data": encoded,
+                            "format": "audio/raw",
+                            "sampleRate": state.sample_rate,
+                            "sidecarSttFallback": bool(state.stt_enabled),
+                        }, state)
                 state.reset_command_capture()
                 try:
                     _get_vad_engine().reset()
@@ -883,7 +905,7 @@ async def _handle_audio_chunk(ws: WebSocketServerProtocol, state: ConnectionStat
             logger.debug("VAD processing error: %s", exc)
 
     # Legacy local STT fallback path — disabled by default
-    if state.stt_enabled and state.listening_for_command:
+    if state.stt_enabled and state.listening_for_command and not state.vad_enabled:
         try:
             stt = _get_stt_engine()
             combined = b"".join(state.audio_buffer)

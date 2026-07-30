@@ -171,7 +171,11 @@ class VoiceGateway extends EventEmitter {
     // once, explicitly, who owns this segment.
     const route = decideSttRoute({
       sidecarConnected: Boolean(this._sidecar?.isConnected?.()),
-      sidecarHandlesStt: Boolean(this._sidecar?.getCapabilities?.()?.sttAvailable),
+      // `sidecarSttFallback` means the sidecar tried its own STT for this
+      // segment and got nothing back, so it handed the raw audio over. In
+      // that case the sidecar is explicitly NOT the owner and we must take
+      // the remote route, otherwise the utterance is silently dropped.
+      sidecarHandlesStt: Boolean(this._sidecar?.getCapabilities?.()?.sttAvailable) && !payload.sidecarSttFallback,
       remoteConfigured: this._settings.providerMode === PROVIDER_MODE_SERVER,
     });
     this.emit('route', { mode: `stt-${route.route}`, reason: route.reason });
