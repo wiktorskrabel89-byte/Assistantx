@@ -1,228 +1,43 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
-function AnimatedSection({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
-  return (
-    <div
-      className={`section-reveal ${className}`}
-      style={{ animationDelay: `${delay}s` }}
-    >
-      {children}
-    </div>
-  );
-}
+import { forwardRef, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import type { PublicUILanguage } from "@/app/lib/ui-language";
+import { getLandingCopy, type FeatureCopy, type LandingCopy } from "@/app/lib/landing-copy";
+import { LandingLanguageToggle } from "@/app/components/LandingLanguageToggle";
 
-function GlowOrb({ className, color }: { className: string; color: string }) {
-  return (
-    <div
-      className={`pointer-events-none absolute rounded-full blur-[120px] ${className}`}
-      style={{ background: color }}
-    />
-  );
-}
+// ─────────────────────────────────────────────────────────────
+// PublicHome — the assistantx.pl landing page.
+//
+// Structure top-to-bottom:
+//   1. Hero           — minimal: nav with logo + language toggle, status
+//                       pill, H1 + CTA, scroll hint.  No video, no intro
+//                       splash (both were tried and removed).
+//   2. FeatureTour    — sticky laptop that opens on scroll, cycles 6 real
+//                       UI screenshots, then closes again.
+//   3. Comparison     — AssistantX vs AI Chatbots table
+//   4. Waitlist       — name + email, GDPR text (not checkbox), live
+//                       counter, name-mechanic explanation, honeypot
+//   5. Community      — Discord / Docs / Roadmap cards
+//   6. Footer
+//
+// All visible strings live in `app/lib/landing-copy.ts` (EN + PL).  The
+// language is chosen server-side from cookie / Accept-Language and passed
+// in as a prop; the toggle component writes the cookie + reloads so the
+// server-rendered copy re-picks.
+// ─────────────────────────────────────────────────────────────
 
-const SHOWCASE_ITEMS = [
-  {
-    title: "Talk naturally",
-    subtitle: "Voice-first interaction with context awareness",
-    gradient: "from-violet-500 to-fuchsia-500",
-    glow: "rgba(168,85,247,0.35)",
-    icon: "M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z",
-  },
-  {
-    title: "Thinks before acting",
-    subtitle: "Multi-step reasoning with confidence scoring",
-    gradient: "from-blue-500 to-cyan-500",
-    glow: "rgba(59,130,246,0.35)",
-    icon: "M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.383a14.406 14.406 0 0 1-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 1 0-7.517 0c.85.493 1.509 1.333 1.509 2.316V18",
-  },
-  {
-    title: "Controls your computer",
-    subtitle: "Native desktop automation and app control",
-    gradient: "from-emerald-500 to-teal-500",
-    glow: "rgba(16,185,129,0.35)",
-    icon: "M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25",
-  },
-  {
-    title: "Uses your apps",
-    subtitle: "Deep integration with every tool you use",
-    gradient: "from-amber-500 to-orange-500",
-    glow: "rgba(245,158,11,0.35)",
-    icon: "M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z",
-  },
-  {
-    title: "Browses the internet",
-    subtitle: "Real-time research and web intelligence",
-    gradient: "from-rose-500 to-pink-500",
-    glow: "rgba(244,63,94,0.35)",
-    icon: "M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418",
-  },
-  {
-    title: "Writes code",
-    subtitle: "Full-stack development with live preview",
-    gradient: "from-indigo-500 to-violet-500",
-    glow: "rgba(99,102,241,0.35)",
-    icon: "M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5",
-  },
-  {
-    title: "Creates images",
-    subtitle: "Generate and edit visuals with AI models",
-    gradient: "from-fuchsia-500 to-pink-500",
-    glow: "rgba(217,70,239,0.35)",
-    icon: "m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z",
-  },
-  {
-    title: "Generates videos",
-    subtitle: "AI-powered video creation and editing",
-    gradient: "from-cyan-500 to-blue-500",
-    glow: "rgba(6,182,212,0.35)",
-    icon: "m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z",
-  },
-  {
-    title: "Learns from you",
-    subtitle: "Adaptive intelligence that evolves over time",
-    gradient: "from-green-500 to-emerald-500",
-    glow: "rgba(34,197,94,0.35)",
-    icon: "M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5",
-  },
-  {
-    title: "Has memory",
-    subtitle: "Persistent context across all conversations",
-    gradient: "from-purple-500 to-indigo-500",
-    glow: "rgba(147,51,234,0.35)",
-    icon: "M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125",
-  },
-  {
-    title: "Multi-Agent Intelligence",
-    subtitle: "Orchestrated AI agents working in parallel",
-    gradient: "from-red-500 to-orange-500",
-    glow: "rgba(239,68,68,0.35)",
-    icon: "M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z",
-  },
-];
+type Props = { language: PublicUILanguage };
 
-const SHOWCASE_DETAILS: Record<string, { body: string; bullets: string[] }> = {
-  "Talk naturally": {
-    body: "Jarvis listens for a wake word, verifies it's really you speaking, and understands commands in natural language — no rigid syntax. A 10-stage audio pipeline filters noise, matches your voice profile and adapts its sensitivity to the room you're in.",
-    bullets: ["Wake-word activation with speaker verification", "Noise suppression tuned to your environment", "Natural language — just say what you want"],
-  },
-  "Thinks before acting": {
-    body: "Before executing anything, Jarvis scores its own confidence, runs a reality check against known facts, and escalates to deeper reasoning when a task is ambiguous. Low confidence means it asks — instead of guessing.",
-    bullets: ["Confidence scoring on every decision", "Reality Check blocks unrealistic plans", "Devil's Advocate challenges risky choices"],
-  },
-  "Controls your computer": {
-    body: "From launching apps to orchestrating whole workflows, Jarvis operates your desktop natively — clicking, typing and moving files with your permission, never behind your back.",
-    bullets: ["Native app launching and control", "Permission-gated automation", "Works across your entire desktop"],
-  },
-  "Uses your apps": {
-    body: "Jarvis plugs into the tools you already use — calendars, mail, editors, browsers — and coordinates them in a single conversation instead of making you jump between windows.",
-    bullets: ["Deep integrations, not shallow shortcuts", "Cross-app workflows in one command", "Extensible connector system"],
-  },
-  "Browses the internet": {
-    body: "Real-time web research with source tracking: Jarvis searches, reads and synthesizes multiple pages in the background, then reports back with just the essentials.",
-    bullets: ["Background research — no popup windows", "Multi-source synthesis", "Cited, verifiable answers"],
-  },
-  "Writes code": {
-    body: "A full coding agent: it plans the change, edits across files, runs the code and verifies the output before telling you it's done. Not autocomplete — an engineer.",
-    bullets: ["Multi-file editing with a plan", "Syntax and output verification", "Live preview of every change"],
-  },
-  "Creates images": {
-    body: "Generate and edit visuals through conversation — from quick concept art to polished brand assets, automatically routed to the best available image model.",
-    bullets: ["Text-to-image generation", "Editing and variations", "Smart model routing for best quality"],
-  },
-  "Generates videos": {
-    body: "Turn a prompt or a still image into motion. Jarvis orchestrates video models for teasers, product demos and social clips — cinematic by default.",
-    bullets: ["Text-to-video and image-to-video", "Cinematic presets", "Automatic aspect-ratio handling"],
-  },
-  "Learns from you": {
-    body: "Every success and failure is analyzed, classified and turned into lessons. Skills version like software — improving with use, never silently changing behavior.",
-    bullets: ["Lessons from failures and successes", "Versioned skill evolution with rollback", "Anti-poisoning validation of what it learns"],
-  },
-  "Has memory": {
-    body: "Jarvis remembers context across conversations: your preferences, projects and past decisions — all recallable, inspectable and editable. Never a black box.",
-    bullets: ["Conversation + long-term memory layers", "Decision memory with a full audit trail", "You can inspect and delete anything"],
-  },
-  "Multi-Agent Intelligence": {
-    body: "For big tasks, Jarvis spins up specialist agents that work in parallel — researcher, coder, reviewer — coordinated by a trust-scored orchestration layer. Arriving in v2.0.",
-    bullets: ["Parallel specialist agents", "Trust-scored autonomy per agent", "Adversarial verification of results"],
-  },
-};
+const WAITLIST_START_COUNT = 128431; // Kept from the previous landing.
+const SMOOTH_SCROLL_TARGET = "waitlist";
 
-const TIMELINE_ITEMS = [
-  { label: "Voice", desc: "Natural speech interaction", detail: "Wake word, speaker verification and noise-robust transcription — hands-free from across the room." },
-  { label: "Memory", desc: "Persistent knowledge", detail: "Layered memory that persists across sessions and projects, with full user control." },
-  { label: "Agents", desc: "Multi-agent orchestration", detail: "Specialist agents coordinated in parallel on complex missions, each earning trust over time." },
-  { label: "Automation", desc: "Desktop & workflow control", detail: "Desktop and workflow automation with permission gates on every real-world action." },
-  { label: "Coding", desc: "Full-stack development", detail: "A coding agent that plans, edits, runs and verifies — across your whole stack." },
-  { label: "Research", desc: "Deep web intelligence", detail: "Multi-source web research running in the background, synthesized with citations." },
-  { label: "Planning", desc: "Strategic project execution", detail: "Long-horizon projects decomposed into verifiable steps with progress tracking." },
-  { label: "Image Gen", desc: "Visual creation", detail: "Visual creation routed to the best model for each job — concepts, assets, edits." },
-  { label: "Video Gen", desc: "AI video production", detail: "Cinematic video generation from prompts and stills, with automatic formatting." },
-  { label: "Desktop Control", desc: "Native OS automation", detail: "Native OS-level control: apps, files, windows — operated like a human assistant would." },
-  { label: "Cloud Intelligence", desc: "Distributed AI processing", detail: "Local-first processing with cloud escalation only when a task truly demands it." },
-];
+export default function PublicHome({ language }: Props) {
+  const copy = getLandingCopy(language);
 
-const COMPARISON = [
-  { feature: "Understands context", jarvis: true, chatbot: false, why: "Jarvis keeps project, memory and screen context. Chatbots start from zero with every message." },
-  { feature: "Controls your computer", jarvis: true, chatbot: false, why: "Chatbots can only talk about it. Jarvis actually clicks, types, launches and automates." },
-  { feature: "Remembers everything", jarvis: true, chatbot: false, why: "Persistent layered memory — versus a context window that forgets as soon as it fills up." },
-  { feature: "Multi-agent reasoning", jarvis: true, chatbot: false, why: "Parallel specialist agents cross-check each other's work instead of one model guessing alone." },
-  { feature: "Voice-first interface", jarvis: true, chatbot: false, why: "An always-listening wake word with speaker verification — not a push-to-talk gimmick." },
-  { feature: "Learns from mistakes", jarvis: true, chatbot: false, why: "Failures become versioned lessons that change future behavior. Chatbots repeat the same errors." },
-  { feature: "Executes real actions", jarvis: true, chatbot: false, why: "Files, apps, code, web — real side effects, protected by permission gates you control." },
-  { feature: "Works offline", jarvis: true, chatbot: false, why: "Local models keep working with no internet — and your data stays on your machine." },
-];
-
-type ModalContent = {
-  title: string;
-  subtitle?: string;
-  body: string;
-  bullets?: string[];
-  gradient: string;
-  icon?: string;
-};
-
-export default function PublicHome() {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const [waitlistCount] = useState(128431);
-  const [formName, setFormName] = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formWebsite, setFormWebsite] = useState(""); // honeypot — stays empty
-  const [submitted, setSubmitted] = useState(false);
-  const [alreadyOnList, setAlreadyOnList] = useState(false);
-  const [pendingConfirm, setPendingConfirm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  const handleWaitlistSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (submitting) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const res = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: formName, email: formEmail, website: formWebsite }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 429) {
-        setSubmitError("Too many signups from your network — please try again in a little while.");
-        return;
-      }
-      if (!res.ok) throw new Error("Request failed");
-      setPendingConfirm(Boolean(data?.pendingConfirmation));
-      setAlreadyOnList(Boolean(data?.duplicate) || Boolean(data?.alreadyConfirmed));
-      setSubmitted(true);
-    } catch {
-      setSubmitError("Something went wrong — please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  // Mouse-parallax on the ambient glow orbs — same trick as the old hero,
+  // but subtler now that the star of the show is the video.
+  const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       setMousePos({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
@@ -231,590 +46,1408 @@ export default function PublicHome() {
     return () => window.removeEventListener("mousemove", handler);
   }, []);
 
-  // Click-to-explain interactions
-  const [modal, setModal] = useState<ModalContent | null>(null);
-  const [expandedTimeline, setExpandedTimeline] = useState<number | null>(null);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
-
+  // Modal state for the feature-explainer cards.
+  const [openFeature, setOpenFeature] = useState<FeatureCopy | null>(null);
   useEffect(() => {
-    if (!modal) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setModal(null); };
+    if (!openFeature) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenFeature(null); };
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [modal]);
+  }, [openFeature]);
+
+  // Expandable "why" text on comparison rows.
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  // Fade the scroll-hint arrow once the user actually starts scrolling.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <div ref={containerRef} className="relative min-h-screen bg-[#050508] text-white overflow-x-hidden">
-      {/* Animated background mesh */}
-      <div className="fixed inset-0 pointer-events-none">
+    // overflow-x-clip, NOT -hidden: hidden creates a scroll container that
+    // silently breaks position:sticky for every descendant (the laptop tour
+    // pins with sticky).  clip clips without the side effect.
+    <div className="relative min-h-screen overflow-x-clip bg-[#050508] text-white">
+
+      {/* Ambient background — mouse parallax + dot grid.  Same visual
+          language as the old hero so section transitions feel continuous. */}
+      <div className="pointer-events-none fixed inset-0">
         <div
-          className="absolute inset-0 opacity-30"
+          className="absolute inset-0 opacity-30 transition-[background] duration-500"
           style={{
             background: `radial-gradient(ellipse 80% 50% at ${50 + mousePos.x * 10}% ${30 + mousePos.y * 10}%, rgba(120,80,220,0.15), transparent)`,
-            transition: "background 0.3s ease",
           }}
         />
-        <div className="absolute inset-0 opacity-20" style={{ background: "radial-gradient(ellipse 60% 40% at 70% 60%, rgba(0,180,255,0.1), transparent)" }} />
-        <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{ background: "radial-gradient(ellipse 60% 40% at 70% 60%, rgba(0,180,255,0.1), transparent)" }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }}
+        />
       </div>
 
-      {/* CSS animations for hero entrance */}
-      <style>{`
-        @keyframes hero-fade-up { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes hero-scale-in { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
-        @keyframes hero-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
-        .hero-logo { animation: hero-scale-in 1s cubic-bezier(0.25,0.46,0.45,0.94) both; }
-        .hero-title { animation: hero-fade-up 1s cubic-bezier(0.25,0.46,0.45,0.94) 0.2s both; }
-        .hero-subtitle { animation: hero-fade-up 0.8s cubic-bezier(0.25,0.46,0.45,0.94) 0.5s both; }
-        .hero-cta { animation: hero-fade-up 0.8s cubic-bezier(0.25,0.46,0.45,0.94) 0.7s both; }
-        .hero-scroll { animation: hero-fade-up 0.8s cubic-bezier(0.25,0.46,0.45,0.94) 1.5s both; }
-        .hero-scroll-bounce { animation: hero-bounce 2s ease-in-out infinite; }
-        @keyframes section-fade-up {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .section-reveal {
-          animation: section-fade-up 0.8s cubic-bezier(0.25,0.46,0.45,0.94) both;
-        }
-        @keyframes modal-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes modal-card-in {
-          from { opacity: 0; transform: translateY(24px) scale(0.96); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .modal-backdrop { animation: modal-backdrop-in 0.25s ease both; }
-        .modal-card { animation: modal-card-in 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both; }
-        @keyframes detail-enter {
-          from { opacity: 0; transform: translateY(-4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .timeline-detail-enter { animation: detail-enter 0.3s ease both; }
-      `}</style>
+      <SectionReveal>
+        <Hero copy={copy} scrolled={scrolled} initialLanguage={language} />
+      </SectionReveal>
 
-      {/* ═══════════════ HERO ═══════════════ */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden">
-        {/* Cinematic backdrop */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/media/hero-bg.png"
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none"
+      <SectionReveal>
+        <FeatureTourSection copy={copy} onOpen={setOpenFeature} />
+      </SectionReveal>
+
+      <SectionReveal>
+        <ComparisonSection copy={copy} expandedRow={expandedRow} onToggleRow={setExpandedRow} />
+      </SectionReveal>
+
+      <SectionReveal id={SMOOTH_SCROLL_TARGET}>
+        <WaitlistSection copy={copy} />
+      </SectionReveal>
+
+      <SectionReveal>
+        <CommunitySection copy={copy} />
+      </SectionReveal>
+
+      <FeatureModal copy={copy} feature={openFeature} onClose={() => setOpenFeature(null)} />
+
+      <Footer copy={copy} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Section reveal — small scroll-triggered fade-up.  Kept simple so we don't
+// pull in a heavier animation lib just for the landing.  Respects
+// reduced-motion by starting elements visible from the get-go.
+// ─────────────────────────────────────────────────────────────
+function SectionReveal({ children, id }: { children: React.ReactNode; id?: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
+
+  useEffect(() => {
+    if (reducedMotion) { setVisible(true); return; }
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); io.disconnect(); }
+    }, { rootMargin: "-80px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [reducedMotion]);
+
+  return (
+    <div
+      ref={ref}
+      id={id}
+      style={{
+        opacity: visible || reducedMotion ? 1 : 0,
+        transform: visible || reducedMotion ? "translateY(0)" : "translateY(30px)",
+        transition: "opacity 0.7s ease, transform 0.7s ease",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Hero — minimal: nav + H1 + single CTA + scroll hint.  Background is
+// the root-level ambient gradient (see PublicHome), so this section is
+// intentionally transparent and just lays out the copy.
+// ─────────────────────────────────────────────────────────────
+function Hero({
+  copy,
+  scrolled,
+  initialLanguage,
+}: {
+  copy: LandingCopy;
+  scrolled: boolean;
+  initialLanguage: PublicUILanguage;
+}) {
+  return (
+    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 pt-24">
+      {/* Nav row — logo left, language toggle right. */}
+      <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-6 py-5 sm:px-10">
+        <div className="flex items-center gap-3">
+          <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 shadow-lg shadow-purple-500/25">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/jarvis-logo.svg" alt={copy.hero.logoAlt} className="h-6 w-6" />
+          </span>
+          <span className="text-sm font-semibold tracking-wide text-white/80">AssistantX</span>
+        </div>
+        <LandingLanguageToggle
+          initialLanguage={initialLanguage}
+          ariaLabel={copy.nav.langToggleAria}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#050508]/60 via-transparent to-[#050508] pointer-events-none" />
-        <GlowOrb className="w-[800px] h-[800px] -top-40 left-1/2 -translate-x-1/2 opacity-20" color="rgba(120,80,220,0.4)" />
-        <GlowOrb className="w-[600px] h-[600px] top-1/3 -right-40 opacity-15" color="rgba(0,180,255,0.3)" />
-        <GlowOrb className="w-[500px] h-[500px] bottom-20 -left-40 opacity-10" color="rgba(255,100,200,0.2)" />
+      </div>
 
-        {/* Logo */}
-        <div className="mb-8 hero-logo">
-          <div className="relative">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 flex items-center justify-center shadow-2xl shadow-purple-500/20">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/jarvis-logo.svg" alt="AssistantX-Jarvis logo" className="w-12 h-12" />
-            </div>
-            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 opacity-20 blur-xl" />
-          </div>
+      {/* Hero copy on top of the video/scrim. */}
+      <div className="relative z-10 mx-auto max-w-3xl text-center">
+        {/* Status pill — small signal above the H1: "waitlist open".
+            Cheap to read, buys the reader a reason to keep going. */}
+        <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-[11px] font-medium text-white/70 backdrop-blur-sm">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/80 opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          </span>
+          <span className="tracking-wide">{copy.hero.statusPill}</span>
         </div>
 
-        {/* Title */}
-        <h1 className="text-center hero-title">
-          <span className="block text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-[-0.04em] leading-[0.9]">
-            <span className="bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">The AI</span>
+        <h1 className="text-5xl font-black leading-[0.95] tracking-[-0.04em] sm:text-6xl md:text-7xl lg:text-8xl">
+          <span className="block bg-gradient-to-r from-white via-white to-white/70 bg-clip-text text-transparent">
+            {copy.hero.headlineLead}
           </span>
-          <span className="block text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-[-0.04em] leading-[0.9] mt-2">
-            <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">Operating System.</span>
+          <span className="mt-2 block bg-gradient-to-r from-violet-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            {copy.hero.headlineAccent}
           </span>
         </h1>
-
-        {/* Subtitle */}
-        <p className="mt-8 text-lg sm:text-xl text-white/50 max-w-2xl text-center leading-relaxed hero-subtitle">
-          AssistantX-Jarvis is the intelligence layer between you and your entire digital life.
-          It thinks, acts, learns, and evolves.
+        <p className="mx-auto mt-8 max-w-xl text-base leading-relaxed text-white/60 sm:text-lg">
+          {copy.hero.subtitle}
         </p>
-
-        {/* CTA Buttons */}
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4 hero-cta">
+        <div className="mt-10 flex flex-col items-center gap-3">
           <a
-            href="#waitlist"
-            className="group relative px-8 py-4 rounded-full text-sm font-semibold overflow-hidden transition-transform hover:scale-105 active:scale-95"
+            href={`#${SMOOTH_SCROLL_TARGET}`}
+            className="group relative inline-flex items-center overflow-hidden rounded-full px-9 py-4 text-sm font-semibold transition-transform hover:scale-105 active:scale-95"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-blue-600" />
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="absolute inset-0 shadow-[0_0_40px_rgba(120,80,220,0.4)]" />
-            <span className="relative z-10">Join Waitlist</span>
+            <span className="absolute inset-0 bg-gradient-to-r from-violet-600 to-blue-600" />
+            <span className="absolute inset-0 bg-gradient-to-r from-violet-500 to-blue-500 opacity-0 transition-opacity group-hover:opacity-100" />
+            <span className="absolute inset-0 shadow-[0_0_40px_rgba(120,80,220,0.4)]" />
+            <span className="relative z-10 flex items-center gap-2">
+              {copy.hero.ctaJoin}
+              <svg className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </span>
           </a>
-          <a
-            href="#showcase"
-            className="px-8 py-4 rounded-full text-sm font-semibold border border-white/10 bg-white/[0.03] backdrop-blur-sm hover:border-white/20 hover:bg-white/[0.06] transition-all"
-          >
-            Watch Demo
-          </a>
+          <span className="text-xs text-white/35">{copy.hero.ctaHint}</span>
         </div>
+      </div>
 
-        {/* Scroll indicator */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 hero-scroll">
-          <div className="w-6 h-10 rounded-full border-2 border-white/20 flex items-start justify-center p-1.5 hero-scroll-bounce">
-            <div className="w-1.5 h-2.5 rounded-full bg-white/40" />
+      {/* Scroll hint — subtle, fades out once the user starts scrolling.
+          NOT a scroll-jacking anchor; just a visual cue there's more. */}
+      <a
+        href={`#${SMOOTH_SCROLL_TARGET}`}
+        aria-label={copy.hero.scrollHint}
+        className={`absolute bottom-8 left-1/2 z-10 -translate-x-1/2 flex flex-col items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-white/40 transition-opacity duration-500 ${scrolled ? "opacity-0" : "opacity-100"}`}
+      >
+        <span>{copy.hero.scrollHint}</span>
+        <span className="flex h-8 w-5 items-start justify-center rounded-full border border-white/25 p-1">
+          <span className="h-2 w-1 animate-bounce rounded-full bg-white/50" />
+        </span>
+      </a>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// FeatureTour — cinematic MULTI-STAGE scroll narrative.
+//
+// The section is 6× viewport tall.  Inside sits a sticky container that
+// stays pinned while the user scrolls through 6 stages — one per feature.
+// Each stage:
+//   1. Swaps the laptop's on-screen mockup (chat/code, memory, desktop,
+//      reasoning, agents, voice) with a cross-fade.
+//   2. Highlights the matching callout (cyan border + glow + scale up)
+//      and dims the other five.
+//   3. Only the active-stage arrow is bright; the rest fade to ~12%.
+//   4. Progress dots at the bottom light up like a stepper.
+// The whole chassis has a small sine-wobble on rotateY so the laptop
+// never sits static.
+//
+// Reduced-motion → no wobble, no fade transitions on screens (still
+// visually stages correctly, just snaps).  Everything is respectful of
+// scroll — the sticky-then-release pattern means users retain scroll
+// control and the tour ends the moment they scroll past.
+// ─────────────────────────────────────────────────────────────
+
+const TOUR_FEATURE_IDS = ["coding", "memory", "desktop", "reasoning", "multiagent", "voice"] as const;
+type TourFeatureId = (typeof TOUR_FEATURE_IDS)[number];
+const TOUR_LEFT_IDS = new Set<TourFeatureId>(["coding", "memory", "desktop"]);
+const TOUR_STAGE_COUNT = TOUR_FEATURE_IDS.length; // 6
+// Fraction of the section's scroll room spent on the lid-opening act; the
+// rest is split evenly across the six UI stages.  Shared by the scroll
+// handler and the click-to-stage math so they can't drift apart.
+// No dead "hold" frames at either end: the laptop is folded at the very
+// start, opens, cycles the stages, and folds back on the way out.
+const TOUR_SHUT_HOLD = 0;
+const TOUR_OPEN_END = 0.2;
+const TOUR_CLOSE_START = 0.86;
+const TOUR_SHUT_END = 1;
+
+// SVG viewBox for the arrow-overlay canvas.  Matches the CSS grid: 1200
+// wide (left column 300 + laptop 600 + right column 300), 500 tall (about
+// laptop height incl. padding).  Everything below uses %-of-viewBox so
+// arrows track the layout at any resolution.
+const TOUR_VB = { w: 1200, h: 500 } as const;
+
+type ArrowSpec = {
+  id: string;
+  // Callout anchor — edge of the callout that meets the laptop (inner edge).
+  fromX: number; fromY: number;
+  // Screen region anchor — center of the highlighted mockup region.
+  toX: number; toY: number;
+};
+
+const TOUR_ARROWS: ArrowSpec[] = [
+  // Left callouts (fromX = right edge of left column) → left half of screen.
+  { id: "coding",     fromX: 300, fromY: 80,  toX: 550, toY: 200 }, // → chat/code area
+  { id: "memory",     fromX: 300, fromY: 240, toX: 470, toY: 230 }, // → left rail (memory nav)
+  { id: "desktop",    fromX: 300, fromY: 400, toX: 560, toY: 380 }, // → footer status bar
+  // Right callouts (fromX = left edge of right column) → right half of screen.
+  { id: "reasoning",  fromX: 900, fromY: 80,  toX: 640, toY: 155 }, // → thinking indicator top bar
+  { id: "multiagent", fromX: 900, fromY: 240, toX: 730, toY: 260 }, // → task activity panel
+  { id: "voice",      fromX: 900, fromY: 400, toX: 650, toY: 400 }, // → voice indicator
+];
+
+function FeatureTourSection({
+  copy,
+  onOpen,
+}: {
+  copy: LandingCopy;
+  onOpen: (f: FeatureCopy) => void;
+}) {
+  const items = TOUR_FEATURE_IDS
+    .map((id) => copy.features.items.find((it) => it.id === id))
+    .filter(Boolean) as FeatureCopy[];
+
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const chassisRef = useRef<HTMLDivElement | null>(null);
+  const lidRef = useRef<HTMLDivElement | null>(null);
+  const screenRef = useRef<HTMLDivElement | null>(null);
+  const keysRef = useRef<HTMLDivElement | null>(null);
+  const flashRef = useRef<HTMLDivElement | null>(null);
+  const baseRef = useRef<HTMLDivElement | null>(null);
+  const lidBackRef = useRef<HTMLDivElement | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [stage, setStage] = useState(0);
+  const [opened, setOpened] = useState(false);
+
+  useEffect(() => {
+    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
+
+  // Click-nav for the arrow controls under the laptop: smooth-scrolls the
+  // page to the middle of stage k's scroll slice.  The scroll handler then
+  // drives the laptop/stage state exactly as if the user scrolled by hand —
+  // no separate animation path, no scroll-jacking (user-initiated only).
+  const goToStage = (k: number) => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const clamped = Math.max(0, Math.min(TOUR_STAGE_COUNT - 1, k));
+    const vh = window.innerHeight || 800;
+    const scrollable = Math.max(1, section.offsetHeight - vh);
+    const sectionTop = section.getBoundingClientRect().top + window.scrollY;
+    // Land in the middle of stage k's slice of the *stage* range (beat 3),
+    // not of the whole section — otherwise clicks drift into the open/close
+    // beats and the laptop is mid-fold when you arrive.
+    const p =
+      TOUR_OPEN_END +
+      ((clamped + 0.5) / TOUR_STAGE_COUNT) * (TOUR_CLOSE_START - TOUR_OPEN_END);
+    window.scrollTo({ top: sectionTop + p * scrollable, behavior: "smooth" });
+  };
+
+  // Scroll choreography, in five beats:
+  //   0 → SHUT_HOLD          laptop sits FULLY shut on the desk (held, so
+  //                          the reader registers it before anything moves)
+  //   SHUT_HOLD → OPEN_END   lid swings up 90°, view sweeps from top-down to
+  //                          eye level, screen powers on with a flash
+  //   OPEN_END → CLOSE_START six UI screenshots cross-fade (laptop dead
+  //                          still + zero rotation = sharpest text)
+  //   CLOSE_START → SHUT_END lid folds back down, screen powers off
+  //   SHUT_END → 1           laptop sits FULLY shut again (held)
+  // Reduced-motion skips straight to the open pose and only cycles stages.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const smooth = (t: number) => t * t * (3 - 2 * t); // smoothstep
+
+    // Writes one coherent pose.  `open` is 0 (fully shut) → 1 (fully open);
+    // everything else is derived from it, so the opening and closing beats
+    // can share the exact same geometry and never drift apart.
+    const pose = (open: number, screenOn: number, flashAmt: number) => {
+      const lid = lidRef.current;
+      const chassis = chassisRef.current;
+      const screen = screenRef.current;
+      const keys = keysRef.current;
+      const flash = flashRef.current;
+      const base = baseRef.current;
+      const lidBack = lidBackRef.current;
+      // Fold stops at -74°, not -90°: at a true right angle BOTH lid faces
+      // end up backface-culled and the laptop disappears from the frame.
+      // -74° still reads as "nearly shut" and always stays visible.
+      if (lid) lid.style.transform = `rotateX(${(-74 + 74 * open).toFixed(2)}deg)`;
+      // The lid's aluminum back is only visible while the laptop is mostly
+      // folded.  We drive it explicitly instead of trusting
+      // `backface-visibility`, which some compositors ignore inside nested
+      // preserve-3d subtrees — it was bleeding the logo through the screen.
+      if (lidBack) lidBack.style.opacity = (1 - Math.min(1, open / 0.55)).toFixed(3);
+      if (chassis) {
+        // Folded: 0.86 scale at 30° top-down.  Open: full size, dead flat,
+        // facing the reader (zero rotation keeps the screenshots sharp).
+        chassis.style.transform =
+          `scale(${(0.86 + 0.18 * open).toFixed(3)}) rotateX(${(30 - 30 * open).toFixed(2)}deg)`;
+      }
+      if (screen) screen.style.opacity = screenOn.toFixed(3);
+      if (keys) keys.style.opacity = (0.12 + screenOn * 0.55).toFixed(3);
+      if (flash) flash.style.opacity = flashAmt.toFixed(3);
+      // The keyboard deck must be INVISIBLE while shut — otherwise it pokes
+      // out below the folded lid and the laptop never reads as closed.
+      // It fades in over the first third of the opening travel.
+      if (base) base.style.opacity = Math.max(0, Math.min(1, (open - 0.06) / 0.3)).toFixed(3);
+    };
+
+    const update = () => {
+      const rect = section.getBoundingClientRect();
+      const vh = window.innerHeight || 800;
+      const scrollable = Math.max(1, rect.height - vh);
+      const scrolled = Math.max(0, -rect.top);
+      const p = Math.max(0, Math.min(0.9999, scrolled / scrollable));
+
+      if (reducedMotion) {
+        pose(1, 1, 0);
+        const ns = Math.min(TOUR_STAGE_COUNT - 1, Math.floor(p * TOUR_STAGE_COUNT));
+        setOpened(true);
+        setStage((prev) => (prev === ns ? prev : ns));
+        return;
+      }
+
+      if (p < TOUR_SHUT_HOLD) {
+        // ── Beat 1: held fully shut ──
+        pose(0, 0, 0);
+        setOpened(false);
+        setStage((prev) => (prev === 0 ? prev : 0));
+      } else if (p < TOUR_OPEN_END) {
+        // ── Beat 2: opening ──
+        const t = smooth((p - TOUR_SHUT_HOLD) / (TOUR_OPEN_END - TOUR_SHUT_HOLD));
+        // Screen wakes at 60% open, fully lit at 92%.
+        const on = Math.max(0, Math.min(1, (t - 0.6) / 0.32));
+        // Power-on flash: bright burst the instant the panel lights.
+        const flashAmt = on > 0 && on < 0.45 ? ((0.45 - on) / 0.45) * 0.6 : 0;
+        pose(t, on, flashAmt);
+        setOpened(false);
+        setStage((prev) => (prev === 0 ? prev : 0));
+      } else if (p < TOUR_CLOSE_START) {
+        // ── Beat 3: stages ──
+        const pb = (p - TOUR_OPEN_END) / (TOUR_CLOSE_START - TOUR_OPEN_END);
+        const ns = Math.min(TOUR_STAGE_COUNT - 1, Math.floor(pb * TOUR_STAGE_COUNT));
+        pose(1, 1, 0);
+        setOpened(true);
+        setStage((prev) => (prev === ns ? prev : ns));
+      } else if (p < TOUR_SHUT_END) {
+        // ── Beat 4: closing (mirror of beat 2) ──
+        const t = smooth((p - TOUR_CLOSE_START) / (TOUR_SHUT_END - TOUR_CLOSE_START));
+        const off = 1 - Math.max(0, Math.min(1, (t - 0.05) / 0.35));
+        pose(1 - t, off, 0);
+        setOpened(false);
+        setStage((prev) => (prev === TOUR_STAGE_COUNT - 1 ? prev : TOUR_STAGE_COUNT - 1));
+      } else {
+        // ── Beat 5: held fully shut again ──
+        pose(0, 0, 0);
+        setOpened(false);
+      }
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [reducedMotion]);
+
+  const activeId = items[stage]?.id;
+
+  return (
+    <section
+      ref={sectionRef}
+      className="relative"
+      // 110vh for the lid-opening act + ~55vh of scroll per UI stage.
+      // Tighter than a full 100vh/stage so the tour releases promptly and
+      // the next section doesn't feel a mile away.
+      style={{ minHeight: `calc(110vh + ${TOUR_STAGE_COUNT * 55}vh)` }}
+    >
+      {/* Sticky viewport — pins the tour centered while section scrolls. */}
+      <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden px-4 py-8 sm:px-6">
+        <div className="mx-auto w-full max-w-7xl">
+          {/* Header */}
+          <div className="mb-6 text-center sm:mb-8">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-violet-300/70">
+              {copy.features.eyebrow}
+            </p>
+            <h2 className="text-3xl font-black tracking-[-0.03em] sm:text-4xl md:text-5xl">
+              <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+                {copy.features.headlineLead}
+              </span>{" "}
+              <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+                {copy.features.headlineAccent}
+              </span>
+            </h2>
+          </div>
+
+          {/* Grid: left callouts / laptop / right callouts.  Center column
+              is dominant (0.75fr / 3.5fr / 0.75fr) — laptop takes most of
+              the width so screenshot detail reads sharply. */}
+          <div className="relative grid gap-3 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,3.5fr)_minmax(0,0.75fr)] lg:items-center lg:gap-4">
+            {/* SVG arrows — only active-stage arrow gets full opacity. */}
+            <svg
+              aria-hidden="true"
+              viewBox={`0 0 ${TOUR_VB.w} ${TOUR_VB.h}`}
+              preserveAspectRatio="none"
+              className="pointer-events-none absolute inset-0 z-20 hidden h-full w-full lg:block"
+            >
+              <defs>
+                <linearGradient id="arrow-cyan" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0%" stopColor="rgba(0,240,255,0)" />
+                  <stop offset="60%" stopColor="rgba(0,240,255,0.6)" />
+                  <stop offset="100%" stopColor="rgba(0,240,255,1)" />
+                </linearGradient>
+                <marker
+                  id="arrow-head"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="8"
+                  markerHeight="8"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0,0 L10,5 L0,10 z" fill="rgba(0,240,255,1)" />
+                </marker>
+              </defs>
+              {TOUR_ARROWS.map((a, i) => {
+                const midX = (a.fromX + a.toX) / 2;
+                const midY = (a.fromY + a.toY) / 2 + (i % 2 === 0 ? -30 : 30);
+                const d = `M ${a.fromX} ${a.fromY} Q ${midX} ${midY} ${a.toX} ${a.toY}`;
+                const isActive = a.id === activeId;
+                return (
+                  <path
+                    key={a.id}
+                    d={d}
+                    fill="none"
+                    stroke="url(#arrow-cyan)"
+                    strokeWidth={isActive ? 2 : 1}
+                    strokeDasharray="3 4"
+                    markerEnd={isActive ? "url(#arrow-head)" : undefined}
+                    style={{
+                      opacity: !opened ? 0 : isActive ? 1 : 0.14,
+                      transition: "opacity 500ms ease, stroke-width 500ms ease",
+                    }}
+                  />
+                );
+              })}
+            </svg>
+
+            {/* LEFT callouts — desktop only; on mobile a single compact
+                active-callout card renders under the laptop instead.
+                Hidden (opacity) during the lid-opening act. */}
+            <div
+              className="order-2 hidden flex-col gap-3 transition-opacity duration-700 lg:order-1 lg:flex"
+              style={{ opacity: opened ? 1 : 0 }}
+            >
+              {items
+                .filter((it) => TOUR_LEFT_IDS.has(it.id as TourFeatureId))
+                .map((item) => {
+                  const idx = items.findIndex((x) => x.id === item.id);
+                  return (
+                    <TourCallout
+                      key={item.id}
+                      item={item}
+                      index={idx}
+                      side="left"
+                      onOpen={onOpen}
+                      isActive={stage === idx}
+                      comingSoonLabel={copy.features.comingSoonLabel}
+                      learnMore={copy.features.learnMore}
+                    />
+                  );
+                })}
+            </div>
+
+            {/* CENTER: laptop */}
+            <div className="relative order-1 lg:order-2">
+              {/* Ambient halo — stronger than a typical card glow; the
+                  laptop is the hero object of the whole page. */}
+              <div className="pointer-events-none absolute -inset-12 rounded-[4rem] bg-gradient-to-br from-violet-500/30 via-transparent to-cyan-500/30 blur-3xl" />
+              <div className="pointer-events-none absolute inset-x-0 -bottom-10 h-24 rounded-[100%] bg-cyan-400/15 blur-2xl" />
+              <div
+                className="relative"
+                style={{
+                  perspective: "1400px",
+                  perspectiveOrigin: "50% 30%",
+                  transformStyle: "preserve-3d",
+                }}
+              >
+                <LaptopMockup
+                  ref={chassisRef}
+                  lidRef={lidRef}
+                  screenRef={screenRef}
+                  keysRef={keysRef}
+                  flashRef={flashRef}
+                  baseRef={baseRef}
+                  lidBackRef={lidBackRef}
+                  stage={stage}
+                />
+              </div>
+            </div>
+
+            {/* RIGHT callouts — desktop only. */}
+            <div
+              className="order-3 hidden flex-col gap-3 transition-opacity duration-700 lg:flex"
+              style={{ opacity: opened ? 1 : 0 }}
+            >
+              {items
+                .filter((it) => !TOUR_LEFT_IDS.has(it.id as TourFeatureId))
+                .map((item) => {
+                  const idx = items.findIndex((x) => x.id === item.id);
+                  return (
+                    <TourCallout
+                      key={item.id}
+                      item={item}
+                      index={idx}
+                      side="right"
+                      onOpen={onOpen}
+                      isActive={stage === idx}
+                      comingSoonLabel={copy.features.comingSoonLabel}
+                      learnMore={copy.features.learnMore}
+                    />
+                  );
+                })}
+            </div>
+
+            {/* MOBILE: single active callout under the laptop — keeps the
+                sticky viewport short enough that the laptop stays visible. */}
+            <div
+              className="order-2 transition-opacity duration-700 lg:hidden"
+              style={{ opacity: opened ? 1 : 0 }}
+            >
+              {items[stage] && (
+                <TourCallout
+                  key={items[stage].id}
+                  item={items[stage]}
+                  index={stage}
+                  side="left"
+                  onOpen={onOpen}
+                  isActive
+                  comingSoonLabel={copy.features.comingSoonLabel}
+                  learnMore={copy.features.learnMore}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Stage navigator — chevron arrows + clickable segment track.
+              During the opening act it's swapped for a scroll hint. */}
+          <div className="relative mx-auto mt-6 h-12 w-full max-w-md sm:mt-8">
+            <span
+              className="absolute inset-x-0 top-3 text-center font-mono text-[10px] uppercase tracking-[0.3em] text-cyan-300/60 transition-opacity duration-500"
+              style={{ opacity: opened ? 0 : 1 }}
+            >
+              {copy.hero.scrollHint}
+            </span>
+
+            <div
+              className="flex items-center gap-4 transition-opacity duration-500"
+              style={{ opacity: opened ? 1 : 0, pointerEvents: opened ? "auto" : "none" }}
+            >
+              {/* Prev arrow */}
+              <button
+                type="button"
+                onClick={() => goToStage(stage - 1)}
+                disabled={stage === 0}
+                aria-label={items[stage - 1]?.title ?? ""}
+                className="group flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.03] text-white/60 transition-all hover:border-cyan-300/60 hover:text-cyan-200 hover:shadow-[0_0_16px_rgba(0,240,255,0.25)] active:scale-90 disabled:pointer-events-none disabled:opacity-25"
+              >
+                <svg className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+              </button>
+
+              {/* Label + segment track */}
+              <div className="min-w-0 flex-1">
+                <div className="mb-1.5 flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.2em]">
+                  <span className="text-cyan-300/90">
+                    {String(stage + 1).padStart(2, "0")}
+                    <span className="text-white/25"> / {String(TOUR_STAGE_COUNT).padStart(2, "0")}</span>
+                  </span>
+                  <span key={items[stage]?.id} className="truncate pl-3 text-white/60">
+                    {items[stage]?.title}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  {items.map((it, i) => (
+                    <button
+                      key={it.id}
+                      type="button"
+                      onClick={() => goToStage(i)}
+                      aria-label={it.title}
+                      className="h-1.5 flex-1 cursor-pointer rounded-full transition-all duration-300 hover:!bg-cyan-300/60"
+                      style={{
+                        backgroundColor:
+                          i < stage ? "rgba(0,240,255,0.35)"
+                          : i === stage ? "rgb(0 240 255)"
+                          : "rgba(255,255,255,0.12)",
+                        boxShadow: i === stage ? "0 0 12px rgba(0,240,255,0.55)" : "none",
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Next arrow */}
+              <button
+                type="button"
+                onClick={() => goToStage(stage + 1)}
+                disabled={stage === TOUR_STAGE_COUNT - 1}
+                aria-label={items[stage + 1]?.title ?? ""}
+                className="group flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.03] text-white/60 transition-all hover:border-cyan-300/60 hover:text-cyan-200 hover:shadow-[0_0_16px_rgba(0,240,255,0.25)] active:scale-90 disabled:pointer-events-none disabled:opacity-25"
+              >
+                <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* ═══════════════ AI SHOWCASE ═══════════════ */}
-      <section id="showcase" className="relative py-32 px-6">
-        <AnimatedSection className="text-center mb-24">
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-              Not a chatbot.
-            </span>
-            <br />
-            <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
-              An operating system.
-            </span>
-          </h2>
-        </AnimatedSection>
+// ─────────────────────────────────────────────────────────────
+// LaptopMockup — CSS laptop chassis with REAL AssistantX UI screenshots
+// inside (captured from the desktop app's Meridian shell at 1440×900,
+// which is exactly the 16:10 screen aspect).  Six images swap based on
+// `stage` with a cross-fade.  All six render stacked so the browser
+// preloads them — no flash on first stage switch.
+// ─────────────────────────────────────────────────────────────
+const TOUR_SCREENSHOTS = [
+  "/media/ui/01-coding.png",
+  "/media/ui/02-memory.png",
+  "/media/ui/03-desktop.png",
+  "/media/ui/04-reasoning.png",
+  "/media/ui/05-agents.png",
+  "/media/ui/06-voice.png",
+] as const;
 
-        <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {SHOWCASE_ITEMS.map((item, i) => (
-            <AnimatedSection key={item.title} delay={i * 0.05}>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setModal({
-                  title: item.title,
-                  subtitle: item.subtitle,
-                  body: SHOWCASE_DETAILS[item.title]?.body ?? item.subtitle,
-                  bullets: SHOWCASE_DETAILS[item.title]?.bullets,
-                  gradient: item.gradient,
-                  icon: item.icon,
-                })}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
-                className="group relative h-full rounded-3xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-8 overflow-hidden hover:border-white/[0.14] transition-all duration-500 hover:-translate-y-1 cursor-pointer active:scale-[0.98]"
-              >
-                <div className={`absolute -top-20 -right-20 w-40 h-40 rounded-full bg-gradient-to-br ${item.gradient} opacity-0 group-hover:opacity-15 blur-3xl transition-opacity duration-700`} />
-                <div
-                  className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-6 ring-1 ring-white/20 ring-inset group-hover:scale-110 transition-transform duration-500`}
-                  style={{ boxShadow: `0 8px 32px ${item.glow}` }}
-                >
-                  <svg className="w-7 h-7 text-white drop-shadow" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold tracking-tight mb-2">{item.title}</h3>
-                <p className="text-sm text-white/40 leading-relaxed">{item.subtitle}</p>
-                <span className="absolute bottom-6 right-6 text-white/20 group-hover:text-white/60 transition-colors text-xs font-medium flex items-center gap-1">
-                  Learn more
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                </span>
-              </div>
-            </AnimatedSection>
-          ))}
-        </div>
-      </section>
+type LaptopMockupProps = {
+  stage: number;
+  lidRef: React.Ref<HTMLDivElement>;
+  screenRef: React.Ref<HTMLDivElement>;
+  keysRef: React.Ref<HTMLDivElement>;
+  flashRef: React.Ref<HTMLDivElement>;
+  baseRef: React.Ref<HTMLDivElement>;
+  lidBackRef: React.Ref<HTMLDivElement>;
+};
 
-      {/* ═══════════════ DEMO VIDEOS ═══════════════ */}
-      <section className="relative py-32 px-6">
-        <GlowOrb className="w-[600px] h-[600px] top-0 left-1/4 opacity-10" color="rgba(120,80,220,0.3)" />
-        <AnimatedSection className="text-center mb-16">
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">See it in action.</span>
-          </h2>
-          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">Real demonstrations of what Jarvis can do.</p>
-        </AnimatedSection>
+// The lid rotates around its BOTTOM edge (the hinge).  Closed = rotateX
+// around -84° (screen folded down onto the deck, aluminum back facing the
+// viewer from above); open = 0°.  The parent scroll handler drives lidRef's
+// transform; SSR ships the closed pose so there's no flash of an open
+// laptop before hydration.
+const LaptopMockup = forwardRef<HTMLDivElement, LaptopMockupProps>(function LaptopMockup(
+  { stage, lidRef, screenRef, keysRef, flashRef, baseRef, lidBackRef },
+  ref,
+) {
+  return (
+    <div
+      ref={ref}
+      aria-hidden="true"
+      className="relative mx-auto w-full max-w-[960px]"
+      style={{
+        transformStyle: "preserve-3d",
+        // SSR pose = fully closed on a desk, viewed from high above, so
+        // the first paint matches scroll position 0 exactly (see pose()).
+        transform: "scale(0.86) rotateX(30deg)",
+        transition: "transform 60ms linear",
+      }}
+    >
 
-        <div className="max-w-5xl mx-auto grid gap-8 md:grid-cols-2">
-          {[
-            { title: "Voice Command Demo", image: "/media/demo-voice.png" },
-            { title: "Desktop Automation", image: "/media/demo-automation.png" },
-            { title: "Multi-Agent Research", image: "/media/demo-agents.png" },
-            { title: "Code Generation", image: "/media/demo-code.png" },
-          ].map((demo, i) => (
-            <AnimatedSection key={demo.title} delay={i * 0.1}>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setModal({
-                  title: demo.title,
-                  subtitle: "Demo film",
-                  body: "This demo film is in production. Join the waitlist and you'll be the first to see Jarvis in action — real tasks, real screen, no cuts.",
-                  bullets: ["Recorded on real hardware, unscripted", "Narrated walkthrough of every step", "Premieres to waitlist members first"],
-                  gradient: "from-violet-500 to-blue-500",
-                })}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
-                className="group relative aspect-video rounded-2xl border border-white/[0.06] overflow-hidden hover:border-white/[0.12] transition-all cursor-pointer active:scale-[0.99]"
-              >
+      {/* ── LID — rotates on the hinge (bottom edge). ── */}
+      <div
+        ref={lidRef}
+        className="relative"
+        style={{
+          transformStyle: "preserve-3d",
+          transformOrigin: "50% 100%",
+          transform: "rotateX(-90deg)",
+          transition: "transform 60ms linear",
+        }}
+      >
+        {/* Front face — bezel + screen. Hidden when the lid shows its back. */}
+        <div
+          className="relative overflow-hidden rounded-t-xl border border-white/10 bg-[#050508]"
+          style={{
+            backfaceVisibility: "hidden",
+            boxShadow:
+              "0 40px 80px -20px rgba(0,240,255,0.15), 0 20px 40px -10px rgba(120,80,220,0.2), inset 0 0 0 1px rgba(255,255,255,0.03)",
+          }}
+        >
+          <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#08080c]">
+            {/* Lid emblem — sits UNDER the screenshot stack, so it reads as
+                the aluminum cover while the laptop is closed / screen off,
+                and the powering-on screen simply covers it.  Zero JS. */}
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-4"
+              style={{
+                background: "linear-gradient(145deg, #16161f 0%, #0c0c13 45%, #111119 100%)",
+              }}
+            >
+              <span className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 shadow-[0_0_60px_rgba(120,80,220,0.6)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={demo.image}
-                  alt={demo.title}
-                  className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"
-                />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-16 h-16 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/20 group-hover:scale-110 transition-transform">
-                    <div className="w-0 h-0 border-l-[12px] border-l-white/80 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent ml-1" />
-                  </div>
-                </div>
-                <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-black/80 to-transparent">
-                  <p className="text-sm font-semibold">{demo.title}</p>
-                  <p className="text-xs text-white/40 mt-1">Coming soon</p>
-                </div>
-              </div>
-            </AnimatedSection>
-          ))}
-        </div>
-      </section>
-
-      {/* ═══════════════ FEATURE TIMELINE ═══════════════ */}
-      <section className="relative py-32 px-6">
-        <AnimatedSection className="text-center mb-20">
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">The full stack of intelligence.</span>
-          </h2>
-        </AnimatedSection>
-
-        <div className="max-w-3xl mx-auto relative">
-          {/* Timeline line */}
-          <div className="absolute left-6 top-0 bottom-0 w-px bg-gradient-to-b from-violet-500/50 via-blue-500/50 to-cyan-500/50" />
-
-          {TIMELINE_ITEMS.map((item, i) => (
-            <AnimatedSection key={item.label} delay={i * 0.05} className="relative pl-16 pb-10 last:pb-0">
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setExpandedTimeline(expandedTimeline === i ? null : i)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedTimeline(expandedTimeline === i ? null : i); } }}
-                className="group cursor-pointer -m-2 p-2 rounded-xl hover:bg-white/[0.03] transition-colors"
-              >
-                <div className={`absolute left-4 top-1 w-4 h-4 rounded-full border-2 bg-[#050508] transition-colors ${expandedTimeline === i ? "border-cyan-400" : "border-violet-400/60"}`}>
-                  <div className={`absolute inset-1 rounded-full transition-colors ${expandedTimeline === i ? "bg-cyan-400/70" : "bg-violet-400/40"}`} />
-                </div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold tracking-tight">{item.label}</h3>
-                  <svg
-                    className={`w-3.5 h-3.5 text-white/30 group-hover:text-white/60 transition-all ${expandedTimeline === i ? "rotate-90 text-cyan-400/80" : ""}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                  </svg>
-                </div>
-                <p className="text-sm text-white/40 mt-1">{item.desc}</p>
-                {expandedTimeline === i && (
-                  <p className="text-sm text-cyan-100/60 mt-3 pl-3 border-l-2 border-cyan-400/40 leading-relaxed timeline-detail-enter">
-                    {item.detail}
-                  </p>
-                )}
-              </div>
-            </AnimatedSection>
-          ))}
-        </div>
-      </section>
-
-      {/* ═══════════════ WHY ASSISTANTX ═══════════════ */}
-      <section className="relative py-32 px-6">
-        <GlowOrb className="w-[700px] h-[700px] top-1/4 right-0 opacity-10" color="rgba(0,180,255,0.2)" />
-        <AnimatedSection className="text-center mb-16">
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Beyond chatbots.</span>
-          </h2>
-          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">AssistantX-Jarvis is not another AI chatbot. It is an AI Operating System.</p>
-        </AnimatedSection>
-
-        <div className="max-w-2xl mx-auto">
-          <div className="rounded-3xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm overflow-hidden">
-            {/* Header */}
-            <div className="grid grid-cols-3 px-8 py-5 border-b border-white/[0.06]">
-              <span className="text-sm text-white/40 font-medium">Feature</span>
-              <span className="text-sm font-bold text-center bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">Jarvis</span>
-              <span className="text-sm text-white/30 text-center">AI Chatbots</span>
+                <img src="/jarvis-logo.svg" alt="" className="h-11 w-11" />
+              </span>
+              <span className="font-mono text-[11px] uppercase tracking-[0.5em] text-white/30">
+                AssistantX
+              </span>
             </div>
-            {/* Rows */}
-            {COMPARISON.map((row, i) => (
-              <AnimatedSection key={row.feature} delay={i * 0.03}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setExpandedRow(expandedRow === i ? null : i)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedRow(expandedRow === i ? null : i); } }}
-                  className="border-b border-white/[0.03] last:border-b-0 hover:bg-white/[0.02] transition-colors cursor-pointer"
-                >
-                  <div className="grid grid-cols-3 px-8 py-4">
-                    <span className={`text-sm transition-colors flex items-center gap-2 ${expandedRow === i ? "text-white" : "text-white/60"}`}>
-                      <svg
-                        className={`w-3 h-3 shrink-0 text-white/25 transition-transform ${expandedRow === i ? "rotate-90 text-violet-300" : ""}`}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                      </svg>
-                      {row.feature}
-                    </span>
-                    <span className="text-center text-lg">
-                      <span className="inline-flex w-6 h-6 rounded-full bg-emerald-500/20 items-center justify-center">
-                        <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                      </span>
-                    </span>
-                    <span className="text-center text-lg">
-                      <span className="inline-flex w-6 h-6 rounded-full bg-red-500/10 items-center justify-center">
-                        <svg className="w-3.5 h-3.5 text-red-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                      </span>
-                    </span>
-                  </div>
-                  {expandedRow === i && (
-                    <div className="px-8 pb-4 timeline-detail-enter">
-                      <p className="text-sm text-violet-100/60 pl-5 border-l-2 border-violet-400/40 leading-relaxed">{row.why}</p>
-                    </div>
-                  )}
-                </div>
-              </AnimatedSection>
+            {/* Screen content wrapper — parent fades this in as the laptop
+                "powers on" mid-way through the lid opening. */}
+            <div ref={screenRef} className="absolute inset-0" style={{ opacity: 0, transition: "opacity 200ms linear" }}>
+              {TOUR_SCREENSHOTS.map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={src}
+                  src={src}
+                  alt=""
+                  loading={i === 0 ? "eager" : "lazy"}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{
+                    opacity: stage === i ? 1 : 0,
+                    transition: "opacity 450ms ease",
+                  }}
+                />
+              ))}
+            </div>
+            {/* Power-on flash — bright cyan-white burst the moment the
+                panel wakes, fading as the picture settles.  Driven by the
+                scroll handler via flashRef. */}
+            <div
+              ref={flashRef}
+              className="pointer-events-none absolute inset-0"
+              style={{
+                opacity: 0,
+                background:
+                  "radial-gradient(ellipse 80% 60% at 50% 50%, rgba(210,250,255,0.95), rgba(0,240,255,0.35) 60%, transparent 85%)",
+                transition: "opacity 120ms linear",
+              }}
+            />
+            {/* Very light corner sheen — kept intentionally faint so it
+                doesn't wash any detail out of the actual screenshots. */}
+            <div className="pointer-events-none absolute top-0 left-0 h-1/3 w-1/3 bg-gradient-to-br from-white/[0.03] to-transparent" />
+          </div>
+        </div>
+
+        {/* Back face — machined aluminum lid cover with the glowing brand
+            mark.  rotateX(180) so it faces the viewer while the lid is
+            closed; this is the whole "hero object on a desk" shot. */}
+        <div
+          ref={lidBackRef}
+          className="absolute inset-0 flex flex-col items-center justify-center gap-5 rounded-xl border border-white/[0.14]"
+          style={{
+            transform: "rotateX(180deg)",
+            backfaceVisibility: "hidden",
+            background:
+              "linear-gradient(152deg, #1b1b25 0%, #0e0e15 40%, #08080d 70%, #12121b 100%)",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(255,255,255,0.04)",
+            transition: "opacity 120ms linear",
+          }}
+        >
+          {/* Brushed-metal micro-grain — sells "aluminum", costs nothing. */}
+          <span
+            className="pointer-events-none absolute inset-0 rounded-xl opacity-[0.07]"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(105deg, rgba(255,255,255,0.9) 0 1px, transparent 1px 3px)",
+            }}
+          />
+          <span className="relative flex h-20 w-20 items-center justify-center rounded-[22px] bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 shadow-[0_0_70px_rgba(120,80,220,0.65)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/jarvis-logo.svg" alt="" className="h-11 w-11" />
+          </span>
+          <span className="relative font-mono text-[13px] uppercase tracking-[0.55em] text-white/25">
+            AssistantX
+          </span>
+        </div>
+      </div>
+
+      {/* ── BASE — keyboard deck, foreshortened flat toward the viewer.
+              Starts invisible: while the lid is shut it would otherwise
+              stick out below the fold and break the "closed" illusion. ── */}
+      <div
+        ref={baseRef}
+        className="relative"
+        style={{
+          transformStyle: "preserve-3d",
+          transformOrigin: "50% 0%",
+          transform: "rotateX(-76deg)",
+          height: "clamp(120px, 34vw, 210px)",
+          opacity: 0,
+          transition: "opacity 120ms linear",
+        }}
+      >
+        <div
+          className="absolute inset-0 rounded-b-2xl border border-white/10 border-t-white/20 px-[6%] pt-[3%]"
+          style={{
+            background: "linear-gradient(180deg, #191922 0%, #101016 60%, #0b0b10 100%)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+          }}
+        >
+          {/* Keyboard backlight bloom — parent brightens it as the screen
+              powers on.  It's the one flourish people remember. */}
+          <div
+            ref={keysRef}
+            className="pointer-events-none absolute inset-x-[5%] top-[2%] h-[55%] rounded-lg"
+            style={{
+              opacity: 0.15,
+              transition: "opacity 200ms linear",
+              background:
+                "radial-gradient(ellipse 70% 90% at 50% 40%, rgba(0,240,255,0.35), rgba(120,80,220,0.15) 60%, transparent 80%)",
+              filter: "blur(10px)",
+            }}
+          />
+          {/* Key grid — 5 rows.  Pure CSS, reads as a keyboard at a glance. */}
+          <div className="relative grid gap-[3px]" style={{ height: "55%" }}>
+            {[14, 14, 13, 12, 9].map((cols, r) => (
+              <div key={r} className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+                {Array.from({ length: cols }, (_, k) => (
+                  <span
+                    key={k}
+                    className="rounded-[2px] border border-white/[0.06] bg-white/[0.045]"
+                  />
+                ))}
+              </div>
             ))}
           </div>
+          {/* Trackpad. */}
+          <div className="mx-auto mt-[2.5%] h-[26%] w-[34%] rounded-md border border-white/[0.08] bg-white/[0.03]" />
         </div>
-      </section>
+      </div>
+    </div>
+  );
+});
 
-      {/* ═══════════════ WAITLIST ═══════════════ */}
-      <section id="waitlist" className="relative py-32 px-6">
-        <GlowOrb className="w-[800px] h-[800px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-15" color="rgba(120,80,220,0.3)" />
+// One callout box on the feature tour.  Active callout gets a cyan glow +
+// scale-up + full-opacity treatment; the other five dim to ~42%.
+function TourCallout({
+  item,
+  index,
+  side,
+  onOpen,
+  isActive,
+  comingSoonLabel,
+  learnMore,
+}: {
+  item: FeatureCopy;
+  index: number;
+  side: "left" | "right";
+  onOpen: (f: FeatureCopy) => void;
+  isActive: boolean;
+  comingSoonLabel: string;
+  learnMore: string;
+}) {
+  const label = String(index + 1).padStart(2, "0");
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      className="group relative overflow-hidden rounded-2xl p-4 text-left backdrop-blur-sm transition-all duration-500"
+      style={{
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: isActive ? "rgba(0,240,255,0.6)" : "rgba(255,255,255,0.06)",
+        background: isActive ? "rgba(0,240,255,0.06)" : "rgba(255,255,255,0.02)",
+        opacity: isActive ? 1 : 0.42,
+        boxShadow: isActive ? "0 0 22px rgba(0,240,255,0.25)" : "none",
+        transform: isActive ? "scale(1.03)" : "scale(0.98)",
+      }}
+    >
+      <span
+        className={`absolute top-3 bottom-3 w-px bg-gradient-to-b from-transparent via-cyan-300 to-transparent ${side === "left" ? "right-0" : "left-0"}`}
+        style={{ opacity: isActive ? 1 : 0.25 }}
+      />
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/90">
+          // {label} · {item.id.toUpperCase()}
+        </span>
+        {item.comingSoon && (
+          <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300">
+            {comingSoonLabel}
+          </span>
+        )}
+      </div>
+      <h3 className="mt-1.5 text-sm font-bold tracking-tight text-white sm:text-base">{item.title}</h3>
+      <p className="mt-1 hidden text-xs leading-relaxed text-white/55 lg:block">{item.subtitle}</p>
+      {isActive && (
+        <span className="mt-2 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-cyan-300/80">
+          {learnMore}
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </span>
+      )}
+    </button>
+  );
+}
 
-        <AnimatedSection className="text-center mb-12">
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Be first in line.</span>
+// ─────────────────────────────────────────────────────────────
+// Comparison table — the original "Beyond chatbots" table, minus the
+// "operating system" language, minus the "Jarvis" column name.
+// ─────────────────────────────────────────────────────────────
+function ComparisonSection({
+  copy,
+  expandedRow,
+  onToggleRow,
+}: {
+  copy: LandingCopy;
+  expandedRow: number | null;
+  onToggleRow: (n: number | null) => void;
+}) {
+  return (
+    <section className="relative px-6 py-32">
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-14 text-center">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.3em] text-violet-300/70">
+            AssistantX vs.
+          </p>
+          <h2 className="text-4xl font-black tracking-[-0.03em] sm:text-5xl">
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+              {copy.comparison.headlineLead}
+            </span>{" "}
+            <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+              {copy.comparison.headlineAccent}
+            </span>
           </h2>
-          <p className="mt-4 text-white/40 text-lg max-w-xl mx-auto">Join the waitlist and get early access to the future of computing.</p>
-        </AnimatedSection>
+          <p className="mx-auto mt-5 max-w-xl text-white/45">{copy.comparison.subtitle}</p>
+        </div>
 
-        <AnimatedSection delay={0.2}>
-          <div className="max-w-md mx-auto">
-            <div className="rounded-3xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl p-8 shadow-2xl shadow-purple-500/5">
-              {submitted ? (
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                  </div>
-                  <h3 className="text-xl font-bold">
-                    {alreadyOnList
-                      ? "You're already on the list!"
-                      : pendingConfirm
-                        ? "Check your email 📬"
-                        : "You're on the list!"}
-                  </h3>
-                  <p className="text-sm text-white/40 mt-2">
-                    {alreadyOnList
-                      ? "This email is already registered — no need to sign up twice."
-                      : pendingConfirm
-                        ? "We sent you a confirmation link. Click it to lock in your spot — check spam if you don't see it."
-                        : "We'll notify you when Jarvis is ready."}
-                  </p>
-                </div>
-              ) : (
-                <form onSubmit={handleWaitlistSubmit} className="space-y-4">
-                  {/* Honeypot: hidden from humans, bots fill it → silently rejected. */}
-                  <input
-                    type="text"
-                    name="website"
-                    tabIndex={-1}
-                    autoComplete="off"
-                    value={formWebsite}
-                    onChange={(e) => setFormWebsite(e.target.value)}
-                    aria-hidden="true"
-                    style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
-                  />
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Your name"
-                      value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
-                      required
-                      className="w-full px-5 py-3.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm placeholder:text-white/25 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="email"
-                      placeholder="your@email.com"
-                      value={formEmail}
-                      onChange={(e) => setFormEmail(e.target.value)}
-                      required
-                      className="w-full px-5 py-3.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm placeholder:text-white/25 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 transition-all"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="group relative w-full py-4 rounded-xl text-sm font-semibold overflow-hidden transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
+        <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm">
+          <div className="grid grid-cols-3 border-b border-white/[0.06] px-8 py-5">
+            <span className="text-sm font-medium text-white/40">{copy.comparison.columnFeature}</span>
+            <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-center text-sm font-bold text-transparent">
+              {copy.comparison.columnUs}
+            </span>
+            <span className="text-center text-sm text-white/30">{copy.comparison.columnThem}</span>
+          </div>
+          {copy.comparison.rows.map((row, i) => {
+            const open = expandedRow === i;
+            return (
+              <button
+                key={row.feature}
+                type="button"
+                onClick={() => onToggleRow(open ? null : i)}
+                className="block w-full cursor-pointer border-b border-white/[0.03] text-left transition-colors last:border-b-0 hover:bg-white/[0.02]"
+              >
+                <div className="grid grid-cols-3 px-8 py-4">
+                  <span
+                    className={`flex items-center gap-2 text-sm transition-colors ${open ? "text-white" : "text-white/60"}`}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-blue-600" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="absolute inset-0 shadow-[0_0_60px_rgba(120,80,220,0.4)] group-hover:shadow-[0_0_80px_rgba(120,80,220,0.6)] transition-shadow" />
-                    <span className="relative z-10">{submitting ? "Joining…" : "Join Waitlist"}</span>
-                  </button>
-                  {submitError && (
-                    <p className="text-xs text-red-400/80 text-center">{submitError}</p>
-                  )}
-                  <p className="text-[11px] text-white/25 text-center leading-relaxed">
-                    When you join, your first name (e.g. &quot;Anna K.&quot;) is announced in our Discord community.
-                    Your email is never shown anywhere.
-                  </p>
-                </form>
-              )}
-
-              {/* Live counter */}
-              <div className="mt-6 pt-5 border-t border-white/[0.06] text-center">
-                <div className="inline-flex items-center gap-2">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400" />
+                    <svg
+                      className={`h-3 w-3 shrink-0 transition-transform ${open ? "rotate-90 text-violet-300" : "text-white/25"}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
+                    {row.feature}
                   </span>
-                  <span className="text-sm text-white/50">
-                    <span className="font-bold text-white/80">{waitlistCount.toLocaleString()}</span> people waiting
+                  <span className="text-center text-lg">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/20">
+                      <svg className="h-3.5 w-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                  </span>
+                  <span className="text-center text-lg">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500/10">
+                      <svg className="h-3.5 w-3.5 text-red-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </span>
                   </span>
                 </div>
+                {open && (
+                  <div className="px-8 pb-4">
+                    <p className="border-l-2 border-violet-400/40 pl-5 text-sm leading-relaxed text-violet-100/60">
+                      {row.why}
+                    </p>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Waitlist — form + counter + name-mechanic + GDPR disclosure text.
+// ─────────────────────────────────────────────────────────────
+function WaitlistSection({ copy }: { copy: LandingCopy }) {
+  const [waitlistCount] = useState(WAITLIST_START_COUNT);
+  const [formName, setFormName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formWebsite, setFormWebsite] = useState(""); // honeypot — always empty
+  const [submitting, setSubmitting] = useState(false);
+  const [state, setState] = useState<"idle" | "success-first" | "success-already" | "pending" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: formName, email: formEmail, website: formWebsite }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 429) {
+        setState("error");
+        setErrorMsg(copy.waitlist.errorRateLimited);
+        return;
+      }
+      if (!res.ok) throw new Error("request failed");
+      if (data?.pendingConfirmation) setState("pending");
+      else if (data?.duplicate || data?.alreadyConfirmed) setState("success-already");
+      else setState("success-first");
+    } catch {
+      setState("error");
+      setErrorMsg(copy.waitlist.errorGeneric);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const showForm = state === "idle" || state === "error";
+
+  return (
+    <section className="relative px-6 py-32">
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute top-1/2 left-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-20 blur-[120px]"
+          style={{ background: "rgba(120,80,220,0.35)" }}
+        />
+      </div>
+
+      <div className="relative mx-auto max-w-md">
+        <div className="mb-12 text-center">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.3em] text-violet-300/70">
+            {copy.waitlist.eyebrow}
+          </p>
+          <h2 className="text-4xl font-black tracking-[-0.03em] sm:text-5xl">
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+              {copy.waitlist.headlineLead}
+            </span>{" "}
+            <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+              {copy.waitlist.headlineAccent}
+            </span>
+          </h2>
+          <p className="mx-auto mt-5 max-w-sm text-white/50">{copy.waitlist.subtitle}</p>
+        </div>
+
+        {/* Corner accent stripes — cyan lines at TL + BR give the card a
+            circuit-diagram look without overwhelming.  Absolute pseudo-
+            corners on the same element the border already lives on. */}
+        <div className="relative rounded-3xl border border-white/[0.1] bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-8 shadow-2xl shadow-purple-500/10 backdrop-blur-xl">
+          <span className="pointer-events-none absolute -top-px -left-px h-8 w-8 rounded-tl-3xl border-t-2 border-l-2 border-cyan-300/50" />
+          <span className="pointer-events-none absolute -right-px -bottom-px h-8 w-8 rounded-br-3xl border-r-2 border-b-2 border-violet-400/50" />
+          {!showForm && (
+            <div className="py-6 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20">
+                <svg className="h-8 w-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
               </div>
+              <h3 className="text-xl font-bold">
+                {state === "pending" ? copy.waitlist.pendingTitle
+                  : state === "success-already" ? copy.waitlist.successTitleAlready
+                  : copy.waitlist.successTitleFirst}
+              </h3>
+              <p className="mt-2 text-sm text-white/40">
+                {state === "pending" ? copy.waitlist.pendingBody
+                  : state === "success-already" ? copy.waitlist.successBodyAlready
+                  : copy.waitlist.successBodyFirst}
+              </p>
+            </div>
+          )}
+
+          {showForm && (
+            <form onSubmit={onSubmit} className="space-y-4" noValidate>
+              {/* Honeypot — hidden from humans, filled by naive bots.  If
+                  present at all we drop the submit server-side. */}
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                value={formWebsite}
+                onChange={(e) => setFormWebsite(e.target.value)}
+                style={{ position: "absolute", left: "-9999px", height: 1, width: 1, opacity: 0 }}
+              />
+              <input
+                type="text"
+                required
+                placeholder={copy.waitlist.namePlaceholder}
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.05] px-5 py-3.5 text-sm placeholder:text-white/25 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20"
+              />
+              <input
+                type="email"
+                required
+                placeholder={copy.waitlist.emailPlaceholder}
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
+                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.05] px-5 py-3.5 text-sm placeholder:text-white/25 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20"
+              />
+              <button
+                type="submit"
+                disabled={submitting}
+                className="group relative w-full overflow-hidden rounded-xl py-4 text-sm font-semibold transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60"
+              >
+                <span className="absolute inset-0 bg-gradient-to-r from-violet-600 to-blue-600" />
+                <span className="absolute inset-0 bg-gradient-to-r from-violet-500 to-blue-500 opacity-0 transition-opacity group-hover:opacity-100" />
+                <span className="absolute inset-0 shadow-[0_0_60px_rgba(120,80,220,0.4)] transition-shadow group-hover:shadow-[0_0_80px_rgba(120,80,220,0.6)]" />
+                <span className="relative z-10">{submitting ? copy.waitlist.submitLoading : copy.waitlist.submitIdle}</span>
+              </button>
+              {errorMsg && <p className="text-center text-xs text-red-400/80">{errorMsg}</p>}
+              {/* Two distinct disclosures — the name-mechanic one and the
+                  GDPR one — deliberately shown side by side per the brief. */}
+              <p className="text-center text-[11px] leading-relaxed text-white/40">
+                {copy.waitlist.disclosureName}
+              </p>
+              <p className="text-center text-[11px] leading-relaxed text-white/30">
+                {copy.waitlist.disclosureGdprPrefix}
+                {/* TODO(Owner): replace #privacy with the real Privacy
+                    Policy URL once the document exists. Do NOT generate
+                    the policy text automatically — legal doc. */}
+                <a href="#privacy" className="underline decoration-white/20 underline-offset-2 hover:text-white/60">
+                  {copy.waitlist.disclosureGdprLink}
+                </a>
+                {copy.waitlist.disclosureGdprSuffix}
+              </p>
+            </form>
+          )}
+
+          {/* Live counter — kept from the previous landing.  Static number
+              from a client hook, no backend fetch (was static before too). */}
+          <div className="mt-6 border-t border-white/[0.06] pt-5 text-center">
+            <div className="inline-flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              </span>
+              <span className="text-sm text-white/50">
+                <span className="font-bold text-white/80">{waitlistCount.toLocaleString()}</span>{" "}
+                {copy.waitlist.counterSuffix}
+              </span>
             </div>
           </div>
-        </AnimatedSection>
-      </section>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-      {/* ═══════════════ COMMUNITY ═══════════════ */}
-      <section className="relative py-24 px-6">
-        <AnimatedSection className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-black tracking-[-0.03em]">
-            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Join the community.</span>
+// ─────────────────────────────────────────────────────────────
+// Community section — Discord + Docs + Roadmap.
+// Docs still points at "#" pending a real docs site — that's a TODO(Owner).
+// ─────────────────────────────────────────────────────────────
+function CommunitySection({ copy }: { copy: LandingCopy }) {
+  const cards = [
+    {
+      label: copy.community.cards.discord.label,
+      desc: copy.community.cards.discord.desc,
+      href: "https://discord.gg/mpjHw5QD",
+      gradient: "from-indigo-500 to-violet-500",
+      icon: (
+        <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+        </svg>
+      ),
+    },
+    {
+      label: copy.community.cards.docs.label,
+      desc: copy.community.cards.docs.desc,
+      // TODO(Owner): replace with the real docs URL once /docs exists.
+      href: "#docs",
+      gradient: "from-blue-500 to-cyan-500",
+      icon: (
+        <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+        </svg>
+      ),
+    },
+    {
+      label: copy.community.cards.roadmap.label,
+      desc: copy.community.cards.roadmap.desc,
+      href: "/roadmap",
+      gradient: "from-violet-500 to-fuchsia-500",
+      icon: (
+        <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <section className="relative px-6 py-24">
+      <div className="mx-auto max-w-2xl">
+        <div className="mb-12 text-center">
+          <h2 className="text-3xl font-black tracking-[-0.03em] sm:text-4xl">
+            <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+              {copy.community.headlineLead}
+            </span>
           </h2>
-        </AnimatedSection>
-
-        <div className="max-w-2xl mx-auto grid gap-4 sm:grid-cols-3">
-          {[
-            {
-              label: "Discord",
-              desc: "Chat with builders",
-              href: "https://discord.gg/mpjHw5QD",
-              gradient: "from-indigo-500 to-violet-500",
-              icon: (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
-                </svg>
-              ),
-            },
-            {
-              label: "Documentation",
-              desc: "Learn how it works",
-              href: "#",
-              gradient: "from-blue-500 to-cyan-500",
-              icon: (
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-                </svg>
-              ),
-            },
-            {
-              label: "Roadmap",
-              desc: "See what's next",
-              href: "/roadmap",
-              gradient: "from-violet-500 to-fuchsia-500",
-              icon: (
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
-                </svg>
-              ),
-            },
-          ].map((item, i) => (
-            <AnimatedSection key={item.label} delay={i * 0.1}>
-              <a
-                href={item.href}
-                target={item.href.startsWith("http") ? "_blank" : undefined}
-                rel={item.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                className="block rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 text-center hover:border-white/[0.14] hover:bg-white/[0.04] hover:-translate-y-0.5 transition-all group"
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {cards.map((c) => (
+            <a
+              key={c.label}
+              href={c.href}
+              target={c.href.startsWith("http") ? "_blank" : undefined}
+              rel={c.href.startsWith("http") ? "noopener noreferrer" : undefined}
+              className="group block rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 text-center transition-all hover:-translate-y-0.5 hover:border-white/[0.14] hover:bg-white/[0.04]"
+            >
+              <span
+                className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${c.gradient} opacity-90 ring-1 ring-inset ring-white/20 transition-all group-hover:scale-110 group-hover:opacity-100`}
               >
-                <span className={`inline-flex w-10 h-10 rounded-xl bg-gradient-to-br ${item.gradient} items-center justify-center mb-3 ring-1 ring-white/20 ring-inset opacity-90 group-hover:opacity-100 group-hover:scale-110 transition-all`}>
-                  {item.icon}
-                </span>
-                <h3 className="font-bold text-sm tracking-tight group-hover:text-violet-300 transition-colors">{item.label}</h3>
-                <p className="text-xs text-white/30 mt-1">{item.desc}</p>
-              </a>
-            </AnimatedSection>
+                {c.icon}
+              </span>
+              <h3 className="text-sm font-bold tracking-tight transition-colors group-hover:text-violet-300">{c.label}</h3>
+              <p className="mt-1 text-xs text-white/30">{c.desc}</p>
+            </a>
           ))}
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      {/* ═══════════════ EXPLAINER MODAL ═══════════════ */}
-      {modal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6"
-          onClick={() => setModal(null)}
+// ─────────────────────────────────────────────────────────────
+// Feature explainer modal — opens when a feature card is clicked.
+// ─────────────────────────────────────────────────────────────
+function FeatureModal({
+  feature,
+  copy,
+  onClose,
+}: {
+  feature: FeatureCopy | null;
+  copy: LandingCopy;
+  onClose: () => void;
+}) {
+  if (!feature) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={feature.title}
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/[0.1] bg-[#0a0a12] p-8 shadow-2xl shadow-purple-500/10"
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/50 transition-all hover:border-white/25 hover:text-white active:scale-90"
         >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-md modal-backdrop" />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={modal.title}
-            onClick={(e) => e.stopPropagation()}
-            className="relative max-w-lg w-full rounded-3xl border border-white/[0.1] bg-[#0a0a12] p-8 shadow-2xl shadow-purple-500/10 modal-card max-h-[85vh] overflow-y-auto"
-          >
-            <button
-              onClick={() => setModal(null)}
-              aria-label="Close"
-              className="absolute top-5 right-5 w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center text-white/50 hover:text-white hover:border-white/25 transition-all active:scale-90"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
 
-            <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${modal.gradient} flex items-center justify-center mb-6 ring-1 ring-white/20 ring-inset`}>
-              {modal.icon ? (
-                <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d={modal.icon} />
+        <div
+          className={`mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${feature.gradient} ring-1 ring-inset ring-white/20`}
+        >
+          <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d={feature.icon} />
+          </svg>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <h3 className="text-2xl font-black tracking-tight">{feature.title}</h3>
+          {feature.comingSoon && (
+            <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+              {copy.features.comingSoonLabel}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-white/40">{feature.subtitle}</p>
+        <p className="mt-5 text-[15px] leading-relaxed text-white/70">{feature.body}</p>
+        <ul className="mt-6 space-y-3">
+          {feature.bullets.map((b) => (
+            <li key={b} className="flex items-start gap-3 text-sm text-white/60">
+              <span
+                className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${feature.gradient} opacity-80`}
+              >
+                <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-              ) : (
-                <div className="w-0 h-0 border-l-[14px] border-l-white border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent ml-1" />
-              )}
-            </div>
-
-            <h3 className="text-2xl font-black tracking-tight">{modal.title}</h3>
-            {modal.subtitle && <p className="text-sm text-white/40 mt-1">{modal.subtitle}</p>}
-            <p className="text-[15px] text-white/70 leading-relaxed mt-5">{modal.body}</p>
-
-            {modal.bullets && (
-              <ul className="mt-6 space-y-3">
-                {modal.bullets.map((b) => (
-                  <li key={b} className="flex items-start gap-3 text-sm text-white/60">
-                    <span className={`mt-0.5 inline-flex w-5 h-5 shrink-0 rounded-full bg-gradient-to-br ${modal.gradient} opacity-80 items-center justify-center`}>
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    </span>
-                    {b}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <a
-              href="#waitlist"
-              onClick={() => setModal(null)}
-              className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-violet-300 hover:text-violet-200 transition-colors"
-            >
-              Get early access
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-            </a>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════ FOOTER ═══════════════ */}
-      <footer className="relative border-t border-white/[0.05] py-10 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/jarvis-logo.svg" alt="" className="w-5 h-5" />
-            </div>
-            <span className="text-sm text-white/40">AssistantX-Jarvis</span>
-          </div>
-          <div className="text-xs text-white/20">
-            &copy; {new Date().getFullYear()} Acrux.pl Sp. z o.o. All rights reserved.
-          </div>
-        </div>
-      </footer>
+              </span>
+              {b}
+            </li>
+          ))}
+        </ul>
+        <a
+          href={`#${SMOOTH_SCROLL_TARGET}`}
+          onClick={onClose}
+          className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-violet-300 transition-colors hover:text-violet-200"
+        >
+          {copy.hero.ctaJoin}
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </a>
+      </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Footer — logo + product name + copyright.  Branding sanitized to
+// "AssistantX" only per the brief (no compound "AssistantX-Jarvis").
+// ─────────────────────────────────────────────────────────────
+function Footer({ copy }: { copy: LandingCopy }) {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="relative border-t border-white/[0.05] px-6 py-10">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
+        <Link href="/" className="flex items-center gap-3">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-blue-600">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/jarvis-logo.svg" alt="" className="h-[18px] w-[18px]" />
+          </span>
+          <span className="text-sm text-white/40">{copy.footer.tagline}</span>
+        </Link>
+        <div className="text-xs text-white/20">
+          {copy.footer.copyright.replace("{year}", String(year))}
+        </div>
+      </div>
+    </footer>
   );
 }
