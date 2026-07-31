@@ -328,7 +328,7 @@ function LaptopMockup({
       style={{
         transformStyle: "preserve-3d",
         // SSR pose = folded, matching scroll position 0 (see pose()).
-        transform: "scale(0.88) rotateX(18deg)",
+        transform: "scale(0.92) rotateX(6deg) rotateY(-14deg)",
         transition: "transform 60ms linear",
       }}
     >
@@ -424,7 +424,11 @@ function LaptopMockup({
           // the way a real keyboard does. A negative angle swings it behind
           // the screen instead, which is what made the laptop read as though
           // it were facing away.
-          transform: "rotateX(72deg)",
+          //
+          // 55deg, not 72: once the chassis tilt is added on top, anything
+          // steeper pushes the deck past 80deg total and it collapses to a
+          // near-invisible edge. 55 keeps real surface area on screen.
+          transform: "rotateX(55deg)",
           height: "clamp(120px, 34vw, 210px)",
         }}
       >
@@ -509,22 +513,28 @@ function LaptopTour({
     // it so the opening and closing beats share identical geometry.
     const pose = (open: number, screenOn: number, flashAmt: number) => {
       if (lidRef.current) {
-        // Closed = -104deg: the lid has folded FORWARD onto the deck (which
-        // sits at +72deg), leaving a few degrees of gap so the two planes
-        // don't z-fight. Open = 0deg, upright and facing the reader.
-        // Folding forward past -90 also flips the lid, so the aluminium back
-        // with the logo is what faces you when it's shut — exactly like
-        // looking down at a closed laptop.
-        lidRef.current.style.transform = `rotateX(${(-104 + 104 * open).toFixed(2)}deg)`;
+        // Closed = -122deg. The deck sits at +55, and a lid lying flat on it
+        // is that minus a half turn: 55 - 180 = -125. We stop 3deg short so
+        // the two planes don't z-fight and the fold reads as "just shut".
+        // Open = 0deg, upright and facing the reader.
+        //
+        // Folding forward past -90 flips the lid, so the aluminium back with
+        // the logo is what faces you when it's shut — exactly like looking
+        // down at a closed laptop.
+        lidRef.current.style.transform = `rotateX(${(-122 + 122 * open).toFixed(2)}deg)`;
       }
       if (lidBackRef.current) {
         lidBackRef.current.style.opacity = (1 - Math.min(1, open / 0.55)).toFixed(3);
       }
       if (chassisRef.current) {
-        // Shut: viewed from a bit further above (18deg) so the folded slab
-        // reads as an object on a desk. Open: almost head-on.
+        // Shut: a three-quarter view — 6deg down plus 14deg around Y. The
+        // Y turn is what gives the closed slab depth; a straight-on fold
+        // reads as a flat rectangle no matter how the X angles are tuned.
+        // Open: everything returns to exactly 0, because any residual
+        // rotation makes the compositor resample the screenshot and softens
+        // its text.
         chassisRef.current.style.transform =
-          `scale(${(0.88 + 0.16 * open).toFixed(3)}) rotateX(${(18 - 14 * open).toFixed(2)}deg)`;
+          `scale(${(0.92 + 0.12 * open).toFixed(3)}) rotateX(${(6 - 6 * open).toFixed(2)}deg) rotateY(${(-14 + 14 * open).toFixed(2)}deg)`;
       }
       if (screenRef.current) screenRef.current.style.opacity = screenOn.toFixed(3);
       if (keysRef.current) keysRef.current.style.opacity = (0.12 + screenOn * 0.55).toFixed(3);
