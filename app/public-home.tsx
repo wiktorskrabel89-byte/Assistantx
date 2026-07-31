@@ -324,8 +324,15 @@ function LaptopMockup({
     <div
       ref={chassisRef}
       aria-hidden="true"
-      className="relative mx-auto w-full max-w-[960px]"
+      className="relative mx-auto w-full"
+      // Layout height is width x 0.625 (the 16:10 lid) + width x 0.2625 (the
+      // deck) ~= width x 0.89, and the header/navigator/padding take roughly
+      // 260px. 3D rotation does NOT shrink a layout box, so without this cap
+      // the assembly overflows the sticky h-screen frame and gets clipped at
+      // the bottom. Solving width x 0.89 + 260 <= viewport height gives the
+      // 1.12 factor. svh keeps mobile browser chrome from cutting it too.
       style={{
+        maxWidth: "min(960px, calc((100svh - 260px) * 1.12))",
         transformStyle: "preserve-3d",
         // SSR pose = folded, matching scroll position 0 (see pose()).
         transform: "scale(0.92) rotateX(6deg) rotateY(-14deg)",
@@ -352,7 +359,13 @@ function LaptopMockup({
               "0 40px 80px -20px rgba(0,240,255,0.15), 0 20px 40px -10px rgba(120,80,220,0.2), inset 0 0 0 1px rgba(255,255,255,0.03)",
           }}
         >
-          <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#08080c]">
+          {/* Bezel — a real lid has a black frame around the panel, and the
+              screenshot butting straight up against the chassis edge was the
+              main thing making this read as a pasted-in image rather than a
+              screen. The camera dot sells it further. */}
+          <div className="relative aspect-[16/10] w-full overflow-hidden bg-black p-[1.6%] pt-[2.6%]">
+            <span className="absolute top-[1%] left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-white/20" />
+            <div className="relative h-full w-full overflow-hidden rounded-[3px] bg-[#08080c]">
             <div ref={screenRef} className="absolute inset-0" style={{ opacity: 0, transition: "opacity 200ms linear" }}>
               {TOUR_SHOTS.map((src, i) => (
                 <Image
@@ -380,6 +393,7 @@ function LaptopMockup({
             />
             {/* Faint corner sheen — kept light so screenshot detail survives. */}
             <div className="pointer-events-none absolute top-0 left-0 h-1/3 w-1/3 bg-gradient-to-br from-white/[0.03] to-transparent" />
+            </div>
           </div>
         </div>
 
@@ -429,7 +443,10 @@ function LaptopMockup({
           // steeper pushes the deck past 80deg total and it collapses to a
           // near-invisible edge. 55 keeps real surface area on screen.
           transform: "rotateX(55deg)",
-          height: "clamp(120px, 34vw, 210px)",
+          // Sized off the laptop's own width rather than the viewport, so the
+          // whole assembly's layout height stays a fixed multiple of its
+          // width. That's what lets the max-width below guarantee it fits.
+          aspectRatio: "16 / 4.2",
         }}
       >
         <div
@@ -598,7 +615,11 @@ function LaptopTour({
       className="relative"
       style={{ minHeight: `calc(110vh + ${TOUR_STAGE_COUNT * 55}vh)` }}
     >
-      <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden px-4 py-8 sm:px-6">
+      {/* overflow-x-clip, not overflow-hidden: `hidden` clips vertically too
+          and was slicing the bottom off the deck. `clip` on a single axis
+          leaves the other one visible, so the rotated deck can still bleed
+          past the frame without a horizontal scrollbar appearing. */}
+      <div className="sticky top-0 flex h-screen flex-col justify-center overflow-x-clip px-4 py-8 sm:px-6">
         <div className="mx-auto w-full max-w-7xl">
           <div className="mb-6 text-center sm:mb-8">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-violet-300/70">
